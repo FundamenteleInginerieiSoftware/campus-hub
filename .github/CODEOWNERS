@@ -1,0 +1,36 @@
+# Who reviews what. GitHub automatically requests a review from the owners of the files a PR changes.
+# Each area has its owner + a review buddy, so either of them can approve
+# (nobody can approve their own PR). Buddies: Liviu <-> Calin, Stefania <-> Matei.
+# Files not listed here (docs, documentation, README, migrations) need 1 approval from anyone.
+# The last matching rule wins.
+#
+# Matei      @matei-necula     platform, security, cloud
+# Liviu      @NliviuN          catalog & inventory
+# Calin      @Swiorx           reservations & scheduling
+# Stefania   @m1runa-stefan1a  incidents, reassignment, frontend
+
+# Platform (Matei) - build, config, CI/CD, infrastructure
+/backend/pom.xml                                   @matei-necula @m1runa-stefan1a
+/backend/src/main/resources/application*.yml       @matei-necula @m1runa-stefan1a
+/backend/src/*/java/com/campus/config/             @matei-necula @m1runa-stefan1a
+/backend/src/*/java/com/campus/common/             @matei-necula @m1runa-stefan1a
+/backend/src/*/java/com/campus/user/               @matei-necula @m1runa-stefan1a
+/backend/src/*/java/com/campus/storage/            @matei-necula @m1runa-stefan1a
+/backend/src/*/java/com/campus/notification/       @matei-necula @m1runa-stefan1a
+/backend/src/*/java/com/campus/messaging/          @matei-necula @m1runa-stefan1a
+/.github/                                          @matei-necula @m1runa-stefan1a
+/infra/                                            @matei-necula @m1runa-stefan1a
+/docker-compose.yml                                @matei-necula @m1runa-stefan1a
+
+# Catalog & Inventory (Liviu)
+/backend/src/*/java/com/campus/catalog/            @NliviuN @Swiorx
+
+# Reservations & Scheduling (Calin)
+/backend/src/*/java/com/campus/reservation/        @Swiorx @NliviuN
+
+# Incidents, Reassignment (Stefania)
+/backend/src/*/java/com/campus/incident/           @m1runa-stefan1a @matei-necula
+/backend/src/*/java/com/campus/reassignment/       @m1runa-stefan1a @matei-necula
+
+# Frontend (Stefania)
+/frontend/                                         @m1runa-stefan1a @matei-necula
