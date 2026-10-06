@@ -78,20 +78,18 @@ Goal: everyone learns the branch → PR → review flow before writing real code
 ```bash
 git checkout main
 git pull
-git checkout -b docs/readme-add-<your-name>
+git checkout -b docs/<your-name>-intro
 ```
 
-1. Add yourself to the **Team** table at the bottom of this README.
+1. Create your personal documentation folder: `documentation/<Surname_Name>/README.md` (see `documentation/Necula_Matei/` for an example). Write 3–5 lines: your role and what you will work on in weeks 1–2.
 2. Commit and push:
    ```bash
-   git add README.md
-   git commit -m "docs(readme): add <your name> to team"
-   git push -u origin docs/readme-add-<your-name>
+   git add documentation/
+   git commit -m "docs(<your-name>): add personal documentation folder"
+   git push -u origin docs/<your-name>-intro
    ```
-3. On GitHub, open a **Pull Request** into `main` and request a review from a teammate.
+3. On GitHub, open a **Pull Request** into `main` and request a review from your **review buddy** (see the Team table).
 4. After 1 approval, merge with **Squash and merge**. The branch is deleted automatically.
-
-If two people edit the same line at the same time, you get a **merge conflict**. That's expected, and it's good practice. Resolve it together.
 
 ---
 
@@ -133,9 +131,11 @@ campus-hub/
 
 ## 6. Team
 
-| Member | Role | GitHub |
-|---|---|---|
-| Matei | Cloud, Security, User & Platform | [@matei-necula](https://github.com/matei-necula) |
-| | Asset Catalog & Inventory | |
-| | Reservations & Scheduling | |
-| | Incidents, Reassignment & Frontend | |
+| # | Member | Role | Owns (code) | GitHub | Review buddy |
+|---|---|---|---|---|---|
+| 1 | Matei Necula | Cloud, Security, User & Platform | `pom.xml`, `config/`, `common/`, `user/`, `storage/`, `notification/`, `messaging/`, CI/CD, `infra/` | [@matei-necula](https://github.com/matei-necula) | Stefania |
+| 2 | Liviu Nedelcu | Asset Catalog & Inventory | `catalog/` | [@NliviuN](https://github.com/NliviuN) | Calin |
+| 3 | Calin Murariu | Reservations & Scheduling | `reservation/` | [@Swiorx](https://github.com/Swiorx) | Liviu |
+| 4 | Stefania | Incidents, Reassignment & Frontend | `incident/`, `reassignment/`, `frontend/` | [@m1runa-stefan1a](https://github.com/m1runa-stefan1a) | Matei |
+
+Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHub requests the right reviewer automatically through `.github/CODEOWNERS`.
