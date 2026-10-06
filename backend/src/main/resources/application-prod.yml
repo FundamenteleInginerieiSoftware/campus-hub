@@ -1,0 +1,20 @@
+# Every value comes from environment variables (see .env.example). No secrets in git.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+app:
+  aws-region: ${AWS_REGION}
+  jwt:
+    secret: ${JWT_SECRET}
+  storage:
+    photo-bucket: ${PHOTO_BUCKET}
+  messaging:
+    queue-url: ${SQS_QUEUE_URL}
+  mail:
+    from: ${MAIL_FROM}
+  admin:
+    email: ${ADMIN_EMAIL:}        # ":" = empty default; admin is bootstrapped only if set
+    password: ${ADMIN_PASSWORD:}

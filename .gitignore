@@ -1,0 +1,27 @@
+# Backend
+backend/target/
+backend/data/
+backend/uploads/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.mv.db
+*.trace.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE / OS
+.idea/
+*.iml
+out/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets & infra
+.env
+*.env.local
+infra/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars

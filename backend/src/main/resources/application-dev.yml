@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/campusdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+  jpa:
+    show-sql: true
+
+app:
+  jwt:
+    secret: dev-only-secret-change-me-dev-only-secret-change-me-0123456789   # fake, >= 32 bytes for HS256
+  storage:
+    local-dir: ./uploads
