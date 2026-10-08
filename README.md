@@ -98,7 +98,7 @@ git checkout -b docs/<your-name>-intro
 
 ## 4. Rules (short version)
 
-The full rules are in the team handbook. The most important ones:
+The full rules are in the [team handbook](docs/plan/00-TEAM-HANDBOOK.md) (your own week-by-week guide is next to it in [`docs/plan/`](docs/plan/README.md)). The most important ones:
 
 - `main` is protected: **no direct pushes**, every change goes through a PR with **1 approval**.
 - **One branch per task**, from a fresh `main`: `feat/<module>-<desc>`, `fix/…`, `test/…`, `docs/…`, `chore/…`
@@ -127,7 +127,7 @@ campus-hub/
 │           ├── application-prod.yml     AWS (everything from env vars)
 │           └── db/migration/            Flyway SQL migrations
 ├── frontend/                 React app (coming soon)
-├── docs/                     requirements, diagrams, decisions, meeting notes
+├── docs/                     plan/ (team handbook + member guides), requirements, diagrams, decisions, meeting notes
 ├── infra/                    Terraform for AWS (Matei)
 ├── .github/                  CODEOWNERS, PR template, issue templates (bug, task, user story)
 └── CONTRIBUTING.md           Git, code, database and test rules (read before your first PR)
