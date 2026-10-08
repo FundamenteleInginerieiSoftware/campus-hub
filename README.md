@@ -133,9 +133,9 @@ campus-hub/
 
 | # | Member | Role | Owns (code) | GitHub | Review buddy |
 |---|---|---|---|---|---|
-| 1 | Matei Necula | Cloud, Security, User & Platform | `pom.xml`, `config/`, `common/`, `user/`, `storage/`, `notification/`, `messaging/`, CI/CD, `infra/` | [@matei-necula](https://github.com/matei-necula) | Stefania |
-| 2 | Liviu Nedelcu | Asset Catalog & Inventory | `catalog/` | [@NliviuN](https://github.com/NliviuN) | Calin |
-| 3 | Calin Murariu | Reservations & Scheduling | `reservation/` | [@Swiorx](https://github.com/Swiorx) | Liviu |
-| 4 | Stefania | Incidents, Reassignment & Frontend | `incident/`, `reassignment/`, `frontend/` | [@m1runa-stefan1a](https://github.com/m1runa-stefan1a) | Matei |
+| 1 | Matei Necula | Cloud, Security, User & Platform | `pom.xml`, `config/`, `common/`, `user/`, `storage/`, `notification/`, `messaging/`, CI/CD, `infra/` | [@matei-necula](https://github.com/matei-necula) | Liviu |
+| 2 | Liviu Nedelcu | Asset Catalog & Inventory | `catalog/` | [@NliviuN](https://github.com/NliviuN) | Matei |
+| 3 | Calin Murariu | Reservations & Scheduling | `reservation/` | [@Swiorx](https://github.com/Swiorx) | Stefania |
+| 4 | Stefania | Incidents, Reassignment & Frontend | `incident/`, `reassignment/`, `frontend/` | [@m1runa-stefan1a](https://github.com/m1runa-stefan1a) | Calin |
 
 Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHub requests the right reviewer automatically through `.github/CODEOWNERS`.
