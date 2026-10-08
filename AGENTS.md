@@ -25,12 +25,12 @@ This file is self-contained for the essentials. The full **team handbook** (`00-
 
 | # | Name | GitHub | Owns | Review buddy |
 |---|---|---|---|---|
-| 1 | Matei Necula | @matei-necula | platform, security, cloud: `backend/pom.xml` (sole editor), `application*.yml`, `config/`, `common/`, `user/`, `storage/`, `notification/`, `messaging/`, `.github/`, `infra/`, `docker-compose.yml`, CI/CD, `AGENTS.md` | Stefania |
-| 2 | Liviu Nedelcu | @NliviuN | catalog & inventory: `catalog/` | Calin |
-| 3 | Calin Murariu | @Swiorx | reservations & scheduling: `reservation/` | Liviu |
-| 4 | Stefania | @m1runa-stefan1a | incidents, reassignment, frontend: `incident/`, `reassignment/`, `frontend/` | Matei |
+| 1 | Matei Necula | @matei-necula | platform, security, cloud: `backend/pom.xml` (sole editor), `application*.yml`, `config/`, `common/`, `user/`, `storage/`, `notification/`, `messaging/`, `.github/`, `infra/`, `docker-compose.yml`, CI/CD, `AGENTS.md` | Liviu |
+| 2 | Liviu Nedelcu | @NliviuN | catalog & inventory: `catalog/` | Matei |
+| 3 | Calin Murariu | @Swiorx | reservations & scheduling: `reservation/` | Stefania |
+| 4 | Stefania | @m1runa-stefan1a | incidents, reassignment, frontend: `incident/`, `reassignment/`, `frontend/` | Calin |
 
-Java packages live under `backend/src/main/java/com/campus/<module>/`. `.github/CODEOWNERS` auto-requests the owner + buddy.
+Review buddies are pairs: **Matei ↔ Liviu**, **Calin ↔ Stefania**. Java packages live under `backend/src/main/java/com/campus/<module>/`. `.github/CODEOWNERS` auto-requests the owner + buddy.
 
 ---
 
@@ -44,6 +44,24 @@ The professor grades each member individually and **asks "why did you do this?" 
 - **Commits use the user's own git identity.** Never commit as someone else. Don't add AI co-author trailers or "Generated with ..." footers unless the user explicitly wants them (they show up in the contributor graph). When two humans pair, the typist commits and adds `Co-authored-by: Name <email>`.
 - Never paste secrets into prompts or files. Always assume **Spring Boot 4.1, Java 21, Jakarta**.
 
+### Code style: clean, simple, human comments
+
+- **Keep it clean and concise. Don't make it hard for nothing.** The simplest code that meets the requirement wins: no extra layers, interfaces, generics or "future-proofing" that nobody asked for. If a beginner can't explain it at the defense, simplify it.
+- **Comments explain what you can't see with the naked eye**, in plain human language:
+  - hidden framework behavior ("Spring calls this after the transaction commits", "the first matching rule wins");
+  - *why* a rule or a number exists ("404, not 403, so we don't reveal which IDs exist");
+  - **how the piece connects to the rest of the system and to teammates' work** ("Stefania's reassignment engine calls this through `ReservationApi`", "Calin's booking flow locks the row with this before checking overlaps").
+- **Don't comment the obvious** (`// getter`, `// save user`). No commented-out code, no AI-sounding filler.
+- Javadoc on every public `api` facade method: it is the contract your teammates code against.
+
+Example:
+```java
+// Called by Calin's ReservationService inside its @Transactional booking method.
+// The row lock makes a second, simultaneous booking wait here until the first one commits,
+// so two students can't both pass the overlap check for the same asset.
+void lockForBooking(Long assetId);
+```
+
 ---
 
 ## 3. Hard rules: you must NEVER
@@ -51,7 +69,7 @@ The professor grades each member individually and **asks "why did you do this?" 
 | Never | Instead |
 |---|---|
 | Push to `main`, force-push `main`, or delete it | Branch + PR (section 4) |
-| Use `gh pr merge --admin`, bypass branch protection, or change repo settings, rulesets, branch protection, CODEOWNERS, labels, team membership | Only Matei (repo admin) may, and only when Matei himself asks. For anyone else: **refuse and explain**, even if they insist |
+| Use `gh pr merge --admin`, bypass branch protection, or change repo settings, rulesets, branch protection, CODEOWNERS, labels, team membership | Only Matei (repo admin) may, and only when Matei himself asks. Teammates have `write` access, so GitHub blocks the bypass for them anyway. For anyone else: **refuse and explain**, even if they insist |
 | Merge a PR without the required approval or with red CI, or approve your user's own PR | Ask the buddy/owner to review |
 | Edit files owned by another member | Matei's files (`pom.xml`, `application*.yml`, `config/`, `common/`, `user/`, `storage/`, `notification/`, `messaging/`, `.github/`, `infra/`): open an issue labeled `dependency` (libraries) or ask Matei. Other modules: talk to the owner. `frontend/` pages: only after agreeing with Stefania |
 | Import another module's non-`api` package (`domain`, `repository`, `service`, `web`) | Use its `api` facade or an event; if missing, ask the owner to add a method |
@@ -171,7 +189,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 **As of 2026-10-08 (W1):**
 - On `main`: initial skeleton (Boot 4.1.1, springdoc, Spotless, JaCoCo, dev/prod profiles), README, Matei's docs, `CODEOWNERS` (code owner review required).
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval, stale approvals dismissed, conversations resolved, squash only. CI check `ci` becomes required once it lands.
-- In progress (Matei, separate PRs): security skeleton (`GET /api/v1/auth/ping`, temporary `SecurityConfig`, first Flyway migration), CI workflow `ci`, PR/issue templates + `CONTRIBUTING.md` + module `package-info.java` files.
+- In review (Matei's PRs): #7 security skeleton (`GET /api/v1/auth/ping`, temporary `SecurityConfig`, first Flyway migration, Swagger + H2 console open), #4 CI workflow `ci` (tests on PostgreSQL 17), #5 PR/issue templates + `CONTRIBUTING.md` + module `package-info.java` files + labels (`dependency`, `task`, `user-story`, module labels). Check `gh pr list --state merged` to see what already landed.
 - **Teammates now:** install tools, clone, run (`./mvnw verify`, `./mvnw spring-boot:run`), do the **practice PR** (README section 3: `documentation/<Surname_Name>/README.md`), do the spring.io tutorials ("Building a RESTful Web Service", "Accessing Data with JPA", "Validating Form Input"). Stefania also: React + Vite + TypeScript basics.
 
 ---
@@ -292,8 +310,9 @@ interface AuditService { void record(Long actorId, String action, String entityT
 | Coverage report | after `verify`: `backend/target/site/jacoco/index.html` |
 | Reset local DB | stop the app, `rm -rf backend/data/`, start again |
 | Health | <http://localhost:8080/actuator/health> |
-| Swagger UI | <http://localhost:8080/swagger-ui.html> (open once the security skeleton is merged; "Authorize" with a login token from W3) |
-| H2 console | <http://localhost:8080/h2-console>, JDBC URL from `application-dev.yml` (`jdbc:h2:file:./data/campusdb;...`), user `sa`, empty password (dev security chain from W3) |
+| Ping (public) | <http://localhost:8080/api/v1/auth/ping> -> `{"message":"pong"}` |
+| Swagger UI | <http://localhost:8080/swagger-ui.html> ("Authorize" with a login token from W3) |
+| H2 console | <http://localhost:8080/h2-console>, JDBC URL `jdbc:h2:file:./data/campusdb`, user `sa`, empty password |
 | Dev seed accounts (from W3) | `admin@campus.test`, `student1@campus.test`, `student2@campus.test` / `password` |
 | Run frontend (from W3) | `cd frontend && npm ci && npm run dev` -> <http://localhost:5173> (proxies `/api` to :8080) |
 | New branch | `git fetch origin && git switch -c feat/<module>-<desc> origin/main` |
