@@ -120,6 +120,7 @@ campus-hub/
 │   ├── pom.xml               (Matei only)
 │   └── src/main/
 │       ├── java/com/campus/  one package per module: user, catalog, reservation, incident, ...
+│       │                     (each has a package-info.java: purpose, owner, allowed dependencies)
 │       └── resources/
 │           ├── application.yml          shared settings
 │           ├── application-dev.yml      local dev (H2, default profile)
@@ -127,8 +128,12 @@ campus-hub/
 │           └── db/migration/            Flyway SQL migrations
 ├── frontend/                 React app (coming soon)
 ├── docs/                     requirements, diagrams, decisions, meeting notes
-└── infra/                    Terraform for AWS (Matei)
+├── infra/                    Terraform for AWS (Matei)
+├── .github/                  CODEOWNERS, PR template, issue templates (bug, task, user story)
+└── CONTRIBUTING.md           Git, code, database and test rules (read before your first PR)
 ```
+
+Inside every module the code is split the same way: `api/` (the only package other modules may import), `domain/`, `repository/`, `service/`, `web/`. Details in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
