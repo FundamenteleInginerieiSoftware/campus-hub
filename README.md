@@ -50,13 +50,16 @@ On Windows (PowerShell / cmd) use `mvnw.cmd verify` and `mvnw.cmd spring-boot:ru
 
 The first build downloads dependencies and takes a few minutes. Later builds are fast.
 
-**Check that it works:** open <http://localhost:8080/actuator/health>.
-For now, Spring Security protects everything with a temporary login:
+**Check that it works** (no login needed):
 
-- username: `user`
-- password: printed in the console at startup (`Using generated security password: …`)
+| Open | You should see |
+|---|---|
+| <http://localhost:8080/api/v1/auth/ping> | `{"message":"pong"}` |
+| <http://localhost:8080/actuator/health> | `{"status":"UP"}` |
+| <http://localhost:8080/swagger-ui.html> | Swagger UI with the API endpoints |
+| <http://localhost:8080/h2-console> | H2 login: JDBC URL `jdbc:h2:file:./data/campusdb`, user `sa`, empty password |
 
-You should see `{"status":"UP"}`. Login with real accounts, Swagger UI and the H2 console are coming in week 3.
+Every other endpoint answers `401 Unauthorized` until login (JWT) arrives in week 3.
 
 **Reset the local database:** stop the app, delete `backend/data/`, start again.
 
