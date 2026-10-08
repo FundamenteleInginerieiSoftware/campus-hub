@@ -38,7 +38,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-    # Spring Boot reads environment variables before application-dev.yml,
+    # Environment variables override the values in application-dev.yml,
     # so these replace the local H2 URL: @SpringBootTest and Flyway run against PostgreSQL.
     # @DataJpaTest tests still use their own embedded H2 database by design.
     env:
