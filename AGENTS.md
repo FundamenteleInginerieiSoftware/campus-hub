@@ -4,7 +4,7 @@ You are an AI assistant (Claude Code, Codex, Copilot, Cursor, Gemini, ...) helpi
 
 Stack: **Spring Boot 4.1 / Java 21** modular monolith in `backend/` (Maven wrapper), React + Vite + TypeScript in `frontend/` (from W3), H2 locally, PostgreSQL 17 in CI/AWS. Only Matei touches AWS.
 
-This file is self-contained for the essentials. The full **team handbook** (`00-TEAM-HANDBOOK.md`) and the **member guides** (`01-`...`04-MEMBER*.md`) were shared by Matei outside the repo. If the user has them locally, ask for the path and read the handbook plus their own guide before planning work. If this file and the handbook disagree, the handbook and `docs/decisions.md` win; tell the user.
+This file holds the essentials. The full plan is in [`docs/plan/`](docs/plan/README.md): the **team handbook** (`docs/plan/00-TEAM-HANDBOOK.md`) and one **member guide** per person (`docs/plan/01-`...`04-MEMBER*.md`, week-by-week steps, API drafts, pitfalls). Before planning work, read the handbook sections you need and **the user's own guide**. The plan was written before week 1: if it disagrees with the repo (`README.md`, `CONTRIBUTING.md`, `CODEOWNERS`, this file, `docs/decisions.md`), the repo wins; tell the user.
 
 ---
 
@@ -21,7 +21,7 @@ This file is self-contained for the essentials. The full **team handbook** (`00-
    gh issue list --assignee @me
    git log --oneline -15 origin/main
    ```
-4. Look up the week (section 8), what they own, and whether they must **WAIT** for someone (section 9). Then propose the next concrete step.
+4. Look up the week (section 8) and the matching week in **their guide** (`docs/plan/0N-MEMBER*.md`), what they own, and whether they must **WAIT** for someone (section 9). Then propose the next concrete step.
 
 | # | Name | GitHub | Owns | Review buddy |
 |---|---|---|---|---|
@@ -187,9 +187,9 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 ## 7. Status (update when milestones land)
 
 **As of 2026-10-08 (W1):**
-- On `main`: initial skeleton (Boot 4.1.1, springdoc, Spotless, JaCoCo, dev/prod profiles), README, Matei's docs, `CODEOWNERS` (code owner review required).
-- Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval, stale approvals dismissed, conversations resolved, squash only. CI check `ci` becomes required once it lands.
-- In review (Matei's PRs): #7 security skeleton (`GET /api/v1/auth/ping`, temporary `SecurityConfig`, first Flyway migration, Swagger + H2 console open), #4 CI workflow `ci` (tests on PostgreSQL 17), #5 PR/issue templates + `CONTRIBUTING.md` + module `package-info.java` files + labels (`dependency`, `task`, `user-story`, module labels). Check `gh pr list --state merged` to see what already landed.
+- On `main`: skeleton (Boot 4.1.1, springdoc, Spotless, JaCoCo, dev/prod profiles), CI workflow `ci` (build + tests on PostgreSQL 17), temporary `SecurityConfig` + public `GET /api/v1/auth/ping` + first Flyway migration (Swagger and H2 console open), `CODEOWNERS`, PR/issue templates, `CONTRIBUTING.md`, module `package-info.java` files, labels (`dependency`, `task`, `user-story`, module labels), the plan in `docs/plan/`, this file.
+- Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
+- Next for Matei: W2 security rules + error format in `docs/api-contract.md`, `common` design, contracts session, entity freeze prep; W3 login/JWT and the shared `common` pieces (section 9).
 - **Teammates now:** install tools, clone, run (`./mvnw verify`, `./mvnw spring-boot:run`), do the **practice PR** (README section 3: `documentation/<Surname_Name>/README.md`), do the spring.io tutorials ("Building a RESTful Web Service", "Accessing Data with JPA", "Validating Form Input"). Stefania also: React + Vite + TypeScript basics.
 
 ---

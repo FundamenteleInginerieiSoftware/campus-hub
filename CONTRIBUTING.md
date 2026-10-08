@@ -1,6 +1,6 @@
 # Contributing to Campus Hub
 
-Short version of the team handbook rules (§7 Git, §8 database, §9 code, §13 Boot 4).
+Short version of the [team handbook](docs/plan/00-TEAM-HANDBOOK.md) rules (§7 Git, §8 database, §9 code, §13 Boot 4).
 **Setup and how to run the app:** see [README.md](README.md).
 
 ---
