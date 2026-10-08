@@ -114,6 +114,8 @@ The owner (or their review buddy) must approve changes in their area. `.github/C
 
 | Rule | Details |
 |---|---|
+| Keep it simple | Clean, concise code. No extra layers, interfaces or "future-proofing" nobody asked for. If you can't explain it at the defense, simplify it. |
+| Comments | Explain what you can't see in the code: hidden framework behavior, *why* a rule exists, and **how the piece connects to other modules / teammates' work** (e.g. "Calin's booking flow calls this through `CatalogApi`"). Don't comment the obvious. Javadoc on every `api` facade method. |
 | Thin controllers | `@Valid` input, call the service, map to a response DTO. No business logic. |
 | DTOs are `record`s in `web/` | `CreateReservationRequest`, `ReservationResponse.from(entity)`. Never return or accept an `@Entity`. |
 | Constructor injection | `@RequiredArgsConstructor` + `private final`. Never `@Autowired` on fields. |
