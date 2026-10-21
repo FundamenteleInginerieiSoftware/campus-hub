@@ -55,7 +55,7 @@ On 8 October we emptied the repository (#10) to start clean. This week I rebuilt
 
 Outcome: don't merge #11; once #13 is on `main`, Liviu moves the code into `backend/src/main/java/com/campus/catalog/`.
 
-### PR #12: repo guides (merged with admin bypass)
+### PR #12: repo guides
 
 Restored and updated for v2: `AGENTS.md`, `CLAUDE.md`, `README.md` (JDK 25 + PostgreSQL 18 setup per OS), `CONTRIBUTING.md`, `.github/CODEOWNERS`, PR/issue templates, `.github/workflows/ci.yml`, `.gitignore`, `.gitattributes`, `.editorconfig`. The `ci` workflow skips backend/frontend steps until those projects exist, so docs-only PRs still pass the required check.
 
