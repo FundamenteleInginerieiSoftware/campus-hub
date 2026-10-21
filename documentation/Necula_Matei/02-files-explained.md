@@ -1,0 +1,140 @@
+# What each file does (Necula Matei)
+
+Every file in the repository after #12, plus the backend from PR #13, explained twice: first in simple terms, then technically.
+For the story of how and why it was set up, see `01-project-setup-v2.md`.
+
+```
+campus-hub/
+├── README.md  CONTRIBUTING.md  AGENTS.md  CLAUDE.md
+├── .gitignore  .gitattributes  .editorconfig
+├── .github/
+│   ├── CODEOWNERS  pull_request_template.md
+│   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
+│   └── workflows/ci.yml
+├── documentation/Necula_Matei/
+└── backend/                                              (PR #13)
+    ├── build.gradle  settings.gradle
+    ├── gradlew  gradlew.bat  gradle/wrapper/
+    └── src/
+        ├── main/java/com/campus/  CampusHubApplication.java, config/SecurityConfig.java,
+        │                          user/web/AuthController.java, <module>/package-info.java
+        ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
+        │                    db/migration/V2026_10_21_1500__platform_init.sql
+        ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest
+        └── test/resources/application-test.yml
+```
+
+---
+
+## Part 1: In simple terms
+
+### Repository root
+| File | What it does |
+|---|---|
+| `README.md` | The welcome page: what the project is, what to install (Java 25, PostgreSQL 18 + pgAdmin), how to create the database, how to run the app, and the first practice task. |
+| `CONTRIBUTING.md` | The team rules in short: how to use Git, who owns which folder, database rules, code and test rules. |
+| `AGENTS.md` | Instructions for the AI assistants each of us uses, so they follow the same rules: who owns what, what never to do, what to wait for. |
+| `CLAUDE.md` | One line that tells Claude Code to read `AGENTS.md`. |
+| `.gitignore` | Files Git must never upload: build output, editor settings, passwords. |
+| `.gitattributes` | Same line endings on Windows, Mac and Linux, so files don't look "completely changed". |
+| `.editorconfig` | Same formatting basics in every editor (spaces, indentation, encoding). |
+
+### `.github/` (GitHub settings stored as files)
+| File | What it does |
+|---|---|
+| `CODEOWNERS` | Says who must review changes in each folder. GitHub asks them automatically. |
+| `pull_request_template.md` | The form every pull request starts with: what, why, how to test, a checklist. |
+| `ISSUE_TEMPLATE/` | Forms for new issues: bug, task, user story. |
+| `workflows/ci.yml` | The robot that builds and tests every pull request. It must be green before merging. |
+
+### Backend: build (PR #13)
+| File | What it does |
+|---|---|
+| `build.gradle` | The project's "shopping list": libraries, Java version, and the formatting and coverage tools. |
+| `settings.gradle` | The project name, plus a helper that downloads Java 25 if a laptop doesn't have it. |
+| `gradlew`, `gradlew.bat`, `gradle/wrapper/` | A small launcher for the build tool. Nobody installs Gradle: it downloads the right version itself. |
+
+### Backend: settings (PR #13)
+| File | What it does |
+|---|---|
+| `application.yml` | Settings for every environment: time zone, upload limit, login lifetime. |
+| `application-dev.yml` | Laptop settings: our local PostgreSQL database and a fake secret. |
+| `application-prod.yml` | Cloud settings: no real values, everything is read from AWS at startup. |
+| `application-test.yml` | Test settings: tests use a separate `campus_test` database, so they never touch our data. |
+| `db/migration/…platform_init.sql` | The first database script. It only starts the history of database changes. |
+
+### Backend: code and tests (PR #13)
+| File | What it does |
+|---|---|
+| `CampusHubApplication.java` | The "start button" of the server. |
+| `SecurityConfig.java` | The guard at the door: decides which addresses are public and which need a login token. |
+| `AuthController.java` | A "ping" address that answers `pong`, to check the app runs. Login comes here next. |
+| `package-info.java` (one per module) | A label on each folder: what it does, who owns it, what it may use. |
+| `CampusHubApplicationTests` | Checks the app can start at all. |
+| `SecurityConfigTest` | Checks public pages are open and everything else is locked. |
+| `AuthControllerTest` | Checks the ping answers `pong` without a login. |
+
+### Not uploaded to GitHub (local only)
+| What | Why |
+|---|---|
+| `backend/build/`, `backend/.gradle/` | Build output and Gradle's cache, recreated on every build. |
+| `.idea/` | My IntelliJ settings. |
+| `CLAUDE.local.md` | My private notes for Claude, hidden through `.git/info/exclude`. |
+| `backend/uploads/` | Photos uploaded while testing locally. |
+
+---
+
+## Part 2: Technical details
+
+### Repository root and `.github/`
+| File | Key points |
+|---|---|
+| `AGENTS.md` | Starts with an override table: the plan PDFs say Maven / Java 21 / H2, the repo uses **Gradle / Java 25 / PostgreSQL 18**. Then: session start checks, the v2 ownership table, the "never" list, workflow, architecture rules, week plan, WAIT-or-go checks (`onmain`/`inmain` shell helpers), cross-module contracts. |
+| `CODEOWNERS` | Every line is owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania), so either can approve. **The last matching rule wins**, so specific paths (`user/admin/`, `workflows/ci.yml`) come after general ones (`user/`, `.github/`). `ci.yml` also lists me because it is a required check. |
+| `ci.yml` | One job named **`ci`**, which is the exact name the `protect-main` ruleset requires. A `postgres:18` service container with `campus_test`; `SPRING_DATASOURCE_*` env vars point the tests at it. Java 25 (Temurin) + `gradle/actions/setup-gradle@v6`, then `./gradlew build` and the JaCoCo report as an artifact. Every backend step has `if: hashFiles('backend/gradlew') != ''` and every frontend step `hashFiles('frontend/package.json')`, so docs-only PRs (like #12) still pass. |
+| Templates | PR checklist uses `./gradlew build`; the task template's Definition of Done says "works from a fresh database (reset in pgAdmin)". |
+| `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |
+
+### `build.gradle`
+| Part | What and why |
+|---|---|
+| Plugins | `java`, `jacoco`, `org.springframework.boot` 4.1.1, `io.spring.dependency-management` (manages library versions), `com.diffplug.spotless` 8.10.4. |
+| `java.toolchain` | `JavaLanguageVersion.of(25)`: compiles with JDK 25 whatever JDK runs Gradle. |
+| Dependencies | Boot starters: webmvc, data-jpa, validation, security, oauth2-resource-server (JWT), flyway + `flyway-database-postgresql`, actuator. Plus springdoc **3.1.1** (the line for Boot 4), Lombok (compile only), DevTools (dev only), the PostgreSQL driver (runtime), and the matching `-test` starters. No H2. |
+| `spotless` | palantir-java-format 2.102.0 + remove unused imports. `build` runs `spotlessCheck`, so unformatted code fails CI; fix with `./gradlew spotlessApply`. |
+| `test` task | `systemProperty 'spring.profiles.active', 'test'` makes every test use `application-test.yml`. `finalizedBy jacocoTestReport` writes coverage to `build/reports/jacoco/test/html/`. |
+
+### `settings.gradle` and the wrapper
+- `foojay-resolver-convention` 1.0.0 lets Gradle download a JDK 25 for the toolchain if none is installed. Without it, a laptop with only JDK 21 fails with "Cannot find a Java installation … matching languageVersion=25".
+- Wrapper: Gradle 9.8.1. `gradlew` must be committed as **executable (mode 100755)**. IntelliJ generated it from Windows without the bit, and `./gradlew` failed with "Permission denied" until I ran `chmod +x`.
+
+### Configuration files
+| File | Setting | Why |
+|---|---|---|
+| `application.yml` | `profiles.default: dev` | "default", not "active": prod (and tests) can switch profile without editing the file. |
+| | `jpa.open-in-view: false` | No lazy loading in controllers; entities are mapped to DTOs inside the service transaction. |
+| | `hibernate.ddl-auto: validate` | Only Flyway creates tables; Hibernate checks the entities match and stops the app if not. |
+| | `mvc.problemdetails.enabled: true` | Errors as RFC 9457 `ProblemDetail` JSON. |
+| | `management…include: health,info` | Only the health check is exposed (the AWS load balancer uses it). |
+| | `app.messaging.sqs.enabled: false` | Stretch-goal switch: false = Calin's local event listener triggers reassignment, true = my SQS bridge. Never both. |
+| `application-dev.yml` | `url: ${DB_URL:jdbc:postgresql://localhost:5432/campus}` (+ `DB_USERNAME`, `DB_PASSWORD`, default `campus`) | Works with zero setup on every laptop; anyone with a different setup overrides it in their run configuration, never in git. |
+| `application-prod.yml` | `${DB_URL}`, `${JWT_SECRET}`, `${PHOTO_BUCKET}`…; `${SQS_QUEUE_URL:}` | All secrets come from AWS. The `:` gives an empty default for optional values (SQS is a stretch goal). |
+| `application-test.yml` | `campus_test` database | Tests never touch dev data. CI overrides the URL with env vars. |
+| | `spring.test.database.replace: none` | `@DataJpaTest` would otherwise look for an embedded database (we have none) and fail. |
+| Migration | `V2026_10_21_1500__platform_init.sql` → `SELECT 1;` | Starts `flyway_schema_history`. Name = `V` + timestamp + `__` + module + description, so two people never pick the same version. |
+
+### Code
+| File | Key points |
+|---|---|
+| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), everything else needs a valid JWT. `JwtDecoder` checks the HS256 signature with `app.jwt.secret` (≥ 32 bytes); defining it also stops Boot from creating a default user with a random password. Next: login (JWT encoder), roles, the `/api/v1/admin/**` rule and 401/403 as ProblemDetail JSON. |
+| `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. |
+| `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
+
+### Tests
+| Test | What it proves |
+|---|---|
+| `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
+| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; `/api/v1/assets` without a token, or with a fake one, returns 401. |
+| `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. |
+
+Result: `./gradlew build` → BUILD SUCCESSFUL, 6 tests, locally on PostgreSQL 18 and in CI.
