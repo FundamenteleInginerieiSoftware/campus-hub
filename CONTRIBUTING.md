@@ -8,7 +8,7 @@ Short version of the team rules (handbook §7 Git, §8 database, §9 code, §13 
 ## 1. Git workflow
 
 `main` is protected: no direct pushes, PR required, **1 approval**, green `ci` check, no force-push.
-**Nobody except the repo admin (Matei) can bypass branch protection. Never ask an AI to bypass it.**
+**Never try to get around branch protection, and never ask an AI to.**
 
 | Step | Command / rule |
 |---|---|

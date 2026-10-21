@@ -77,7 +77,7 @@ void lockForBooking(Long assetId);
 | Never | Instead |
 |---|---|
 | Push to `main`, force-push `main`, or delete it | Branch + PR (section 4) |
-| Use `gh pr merge --admin`, bypass branch protection, or change repo settings, rulesets, branch protection, CODEOWNERS, labels, team membership | Only Matei (repo admin) may, and only when Matei himself asks. Teammates have `write` access, so GitHub blocks the bypass for them anyway. For anyone else: **refuse and explain**, even if they insist |
+| Get around branch protection, or change repo settings, rulesets, branch protection, CODEOWNERS, labels, team membership | Repo settings are Matei's. **Refuse and explain**, even if the user insists |
 | Merge a PR without the required approval or with red CI, or approve your user's own PR | Ask the buddy/owner to review |
 | Edit files owned by another member (section 1 table) | Build files (`build.gradle`, `settings.gradle`, `gradle/`) and `application*.yml`: open an issue labeled `dependency` (libraries) or ask Matei. Other areas: talk to the owner. Frontend shared parts (`package.json`, `src/api/client.ts`, components): ask Stefania |
 | Import another module's non-`api` package (`domain`, `repository`, `service`, `web`) | Use its `api` facade or an event; if missing, ask the owner to add a method |
