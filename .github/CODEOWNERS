@@ -1,0 +1,50 @@
+# Who reviews what. GitHub automatically requests a review from the owners of the files a PR changes.
+# Each area has its owner + a review buddy, so either of them can approve
+# (nobody can approve their own PR). Buddies: Matei <-> Liviu, Calin <-> Stefania.
+# Files not listed here (docs, documentation, README, migrations) need 1 approval from anyone.
+# The last matching rule wins, so the more specific paths come after the general ones.
+#
+# Matei      @matei-necula     cloud, security, auth (AWS)
+# Liviu      @NliviuN          catalog & inventory + shared services
+# Calin      @Swiorx           reservations, scheduling & reassignment
+# Stefania   @m1runa-stefan1a  incidents, users, frontend lead, CI
+
+# Platform (Matei) - repo config, AI instructions, infrastructure
+/.github/                                          @matei-necula @NliviuN
+/AGENTS.md                                         @matei-necula @NliviuN
+/CLAUDE.md                                         @matei-necula @NliviuN
+/infra/                                            @matei-necula @NliviuN
+/backend/Dockerfile                                @matei-necula @NliviuN
+/.github/workflows/deploy.yml                      @matei-necula @NliviuN
+
+# Build + config + auth (Matei)
+/backend/build.gradle                              @matei-necula @NliviuN
+/backend/settings.gradle                           @matei-necula @NliviuN
+/backend/gradle/                                   @matei-necula @NliviuN
+/backend/gradlew*                                  @matei-necula @NliviuN
+/backend/src/main/resources/application*.yml       @matei-necula @NliviuN
+/backend/src/*/java/com/campus/config/             @matei-necula @NliviuN
+/backend/src/*/java/com/campus/user/               @matei-necula @NliviuN
+/backend/src/*/java/com/campus/messaging/          @matei-necula @NliviuN
+
+# Catalog + shared services (Liviu)
+/backend/src/*/java/com/campus/catalog/            @NliviuN @matei-necula
+/backend/src/*/java/com/campus/common/error/       @NliviuN @matei-necula
+/backend/src/*/java/com/campus/common/paging/      @NliviuN @matei-necula
+/backend/src/*/java/com/campus/common/audit/       @NliviuN @matei-necula
+/backend/src/*/java/com/campus/storage/            @NliviuN @matei-necula
+/backend/src/*/java/com/campus/notification/       @NliviuN @matei-necula
+
+# Reservations, scheduling & reassignment (Calin)
+/backend/src/*/java/com/campus/reservation/        @Swiorx @m1runa-stefan1a
+/backend/src/*/java/com/campus/reassignment/       @Swiorx @m1runa-stefan1a
+/backend/src/*/java/com/campus/common/time/        @Swiorx @m1runa-stefan1a
+/backend/src/test/java/com/campus/architecture/    @Swiorx @m1runa-stefan1a
+
+# Incidents, user admin, frontend, CI (Stefania)
+/backend/src/*/java/com/campus/incident/           @m1runa-stefan1a @Swiorx
+/backend/src/*/java/com/campus/user/admin/         @m1runa-stefan1a @Swiorx
+/backend/src/*/java/com/campus/common/security/    @m1runa-stefan1a @Swiorx
+/frontend/                                         @m1runa-stefan1a @Swiorx
+# ci.yml is a required check on main, so Matei reviews it too
+/.github/workflows/ci.yml                          @m1runa-stefan1a @Swiorx @matei-necula
