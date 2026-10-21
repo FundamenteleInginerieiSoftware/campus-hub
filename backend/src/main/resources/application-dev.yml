@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    # Local PostgreSQL 18 with the shared dev login from README section 1.1.
+    # If your setup differs, set DB_URL / DB_USERNAME / DB_PASSWORD in your run configuration (never commit them).
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/campus}
+    username: ${DB_USERNAME:campus}
+    password: ${DB_PASSWORD:campus}
+  jpa:
+    show-sql: true
+
+app:
+  jwt:
+    secret: dev-only-secret-change-me-dev-only-secret-change-me-0123456789   # fake, >= 32 bytes for HS256
+  storage:
+    local-dir: ./uploads

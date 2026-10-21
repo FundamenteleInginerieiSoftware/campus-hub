@@ -1,0 +1,6 @@
+plugins {
+    // If JDK 25 isn't installed, Gradle downloads it for the build (see java.toolchain in build.gradle).
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'campus-hub'
