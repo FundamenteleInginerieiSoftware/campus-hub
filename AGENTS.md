@@ -29,7 +29,26 @@ If the repo (`README.md`, `CONTRIBUTING.md`, `CODEOWNERS`, this file, `docs/deci
    gh issue list --assignee @me
    git log --oneline -15 origin/main
    ```
-4. Look up the week (section 8), what they own, and whether they must **WAIT** for someone (section 9). Then propose the next concrete step.
+4. **Brief them on what's new** since their last session, so nobody misses a team decision or a request aimed at them:
+   ```bash
+   seen="$(git rev-parse --git-common-dir)/campus-last-seen"     # personal marker, never committed
+   last=$(cat "$seen" 2>/dev/null)
+   git cat-file -e "$last^{commit}" 2>/dev/null || last=$(git rev-list -1 --before="14 days ago" origin/main)
+   [ -n "$last" ] || last=$(git rev-list --max-parents=0 origin/main | tail -1)
+   git log --oneline "$last"..origin/main -- docs AGENTS.md README.md CONTRIBUTING.md
+   git diff "$last" origin/main -- docs AGENTS.md README.md CONTRIBUTING.md
+   git grep -nE '🟡|⏳' origin/main -- docs/decisions.md         # still waiting for the team
+   gh issue list --search "mentions:@me"                        # open issues that name them
+   ```
+   Give a **short brief** (at most ~10 bullets), in this order:
+   - **For you:** anything that names the user ("Liviu: ...", `@NliviuN`), or touches what they own (section 1 table).
+   - **New team decisions** (new ✅ rows in `docs/decisions.md`) and rule changes in this file.
+   - **Still to decide:** the 🟡/⏳ rows. Say which ones block their current task and who leads them. Never decide them yourself; suggest raising them at the next meeting or with the owner.
+   - **Don't forget:** reviews they owe, issues assigned to them or mentioning them (from step 3 and above).
+
+   Then save the marker: `git rev-parse origin/main > "$seen"`. If nothing changed, say so in one line.
+   **Writing for teammates:** when a doc change needs a specific person, name them in the text ("Liviu: same for the audit table") so this brief picks it up.
+5. Look up the week (section 8), what they own, and whether they must **WAIT** for someone (section 9). Then propose the next concrete step.
 
 | # | Name | GitHub | Owns | Review buddy |
 |---|---|---|---|---|
