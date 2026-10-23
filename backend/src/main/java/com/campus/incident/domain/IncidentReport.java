@@ -1,12 +1,11 @@
 package com.campus.incident.domain;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.AccessLevel;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "incident_reports")
@@ -58,10 +57,15 @@ public class IncidentReport {
     private Long version;
 
     public enum IncidentStatus {
-        OPEN, IN_REPAIR, RESOLVED, REJECTED
+        OPEN,
+        IN_REPAIR,
+        RESOLVED,
+        REJECTED
     }
 
     public enum Severity {
-        LOW, MEDIUM, HIGH
+        LOW,
+        MEDIUM,
+        HIGH
     }
 }
