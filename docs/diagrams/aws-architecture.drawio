@@ -1,0 +1,136 @@
+<mxfile host="drawio" version="24.7.17">
+  <diagram id="aws-architecture" name="AWS architecture">
+    <mxGraphModel dx="1250" dy="820" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1240" pageHeight="830" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Groups (drawn first so they stay in the background) -->
+        <mxCell id="cloud" value="AWS Cloud (account mateinpunct)" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud_alt;strokeColor=#232F3E;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#232F3E;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="160" y="20" width="1060" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="region" value="Region eu-central-1 (Frankfurt)" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_region;strokeColor=#00A4A6;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="60" width="840" height="660" as="geometry" />
+        </mxCell>
+        <mxCell id="vpc" value="VPC (no NAT gateway)" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#8C4FFF;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#8C4FFF;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="380" y="200" width="720" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="public" value="Public subnet" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#7AA116;fillColor=#F2F6E8;verticalAlign=top;align=left;spacingLeft=30;fontColor=#248814;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="400" y="240" width="320" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="private" value="Private DB subnets (2 AZs)" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#00A4A6;fillColor=#E6F6F7;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="760" y="240" width="320" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="ec2" value="EC2 t3.small + Elastic IP" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;container=0;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_ec2_instance_contents;strokeColor=#ED7100;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#ED7100;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="450" y="300" width="250" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="docker" value="&lt;b&gt;Docker container&lt;/b&gt;&lt;br&gt;Spring Boot app&lt;br&gt;(REST API + React build)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#1D63ED;fontColor=#232F3E;fontSize=12;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="340" width="210" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Outside AWS -->
+        <mxCell id="users" value="Students + admins&lt;br&gt;(browser)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3E;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.users;" vertex="1" parent="1">
+          <mxGeometry x="50" y="335" width="60" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="github" value="&lt;b&gt;GitHub Actions&lt;/b&gt;&lt;br&gt;deploy.yml&lt;br&gt;(OIDC, no AWS keys)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#24292F;fontColor=#24292F;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="10" y="570" width="140" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Entry -->
+        <mxCell id="cloudfront" value="CloudFront&lt;br&gt;free HTTPS on&lt;br&gt;*.cloudfront.net" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;" vertex="1" parent="1">
+          <mxGeometry x="200" y="335" width="60" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Database -->
+        <mxCell id="rds" value="&lt;b&gt;RDS PostgreSQL 18&lt;/b&gt;&lt;br&gt;db.t4g.micro, single-AZ,&lt;br&gt;encrypted, not public" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" vertex="1" parent="1">
+          <mxGeometry x="890" y="320" width="60" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Top row: services the app calls -->
+        <mxCell id="s3" value="S3 (private)&lt;br&gt;incident photos" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7AA116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;labelPosition=right;verticalAlign=middle;align=left;spacingLeft=6;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" vertex="1" parent="1">
+          <mxGeometry x="560" y="100" width="48" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ses" value="SES (sandbox)&lt;br&gt;notification emails" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;labelPosition=right;verticalAlign=middle;align=left;spacingLeft=6;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.simple_email_service;" vertex="1" parent="1">
+          <mxGeometry x="750" y="100" width="48" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="logs" value="CloudWatch Logs&lt;br&gt;7-day retention" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;labelPosition=right;verticalAlign=middle;align=left;spacingLeft=6;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;" vertex="1" parent="1">
+          <mxGeometry x="950" y="100" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- Bottom row: deploy -->
+        <mxCell id="ecr" value="ECR&lt;br&gt;Docker images&lt;br&gt;(tag = commit SHA)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;labelPosition=right;verticalAlign=middle;align=left;spacingLeft=6;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;" vertex="1" parent="1">
+          <mxGeometry x="450" y="580" width="48" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ssm" value="Systems Manager&lt;br&gt;Parameter Store (secrets)&lt;br&gt;Run Command (deploy)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;labelPosition=right;verticalAlign=middle;align=left;spacingLeft=6;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;" vertex="1" parent="1">
+          <mxGeometry x="700" y="580" width="48" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- Request path -->
+        <mxCell id="e-users-cf" value="HTTPS" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeWidth=2;" edge="1" parent="1" source="users" target="cloudfront">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-cf-ec2" value="HTTP :8080" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="cloudfront" target="ec2">
+          <mxGeometry x="-0.55" relative="1" as="geometry">
+            <mxPoint as="offset" y="-12" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ec2-rds" value="SQL :5432" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeWidth=2;exitX=1;exitY=0.385;entryX=0;entryY=0.5;" edge="1" parent="1" source="ec2" target="rds">
+          <mxGeometry x="0.2" relative="1" as="geometry">
+            <mxPoint as="offset" y="-12" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- App calls AWS services with the EC2 instance role (no keys on the server) -->
+        <mxCell id="e-ec2-s3" style="edgeStyle=none;html=1;endArrow=block;endFill=1;strokeColor=#7AA116;exitX=0.536;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="ec2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ec2-ses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#DD344C;exitX=0.84;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="ec2" target="ses">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="660" y="180" />
+              <mxPoint x="774" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ec2-logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#E7157B;dashed=1;exitX=0.96;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="ec2" target="logs">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="690" y="170" />
+              <mxPoint x="974" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ecr-ec2" value="pull image" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeColor=#ED7100;exitX=0.5;exitY=0;entryX=0.096;entryY=1;" edge="1" parent="1" source="ecr" target="ec2">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint as="offset" x="38" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ssm-ec2" value="secrets +&lt;br&gt;deploy command" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeColor=#E7157B;exitX=0.5;exitY=0;entryX=0.9;entryY=1;" edge="1" parent="1" source="ssm" target="ec2">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint as="offset" x="-62" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Deploy path -->
+        <mxCell id="e-gh-ecr" value="1. push image" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="github" target="ecr">
+          <mxGeometry x="-0.55" relative="1" as="geometry">
+            <mxPoint as="offset" y="-10" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-gh-ssm" value="2. run deploy script" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;dashed=1;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="github" target="ssm">
+          <mxGeometry x="0.25" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="80" y="690" />
+              <mxPoint x="724" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Notes -->
+        <mxCell id="notes" value="&lt;b&gt;Firewall (security groups):&lt;/b&gt; EC2 port 8080 open only to CloudFront (AWS prefix list); RDS port 5432 open only to the EC2 security group; no SSH (Session Manager).&lt;br&gt;&lt;b&gt;Not on AWS:&lt;/b&gt; development and tests run fully local (PostgreSQL 18 on each laptop).&lt;br&gt;&lt;b&gt;Not drawn (stretch):&lt;/b&gt; SQS queue for the reassignment trigger, behind app.messaging.sqs.enabled.&lt;br&gt;&lt;b&gt;Guardrails:&lt;/b&gt; budget campus-hub-monthly ($5 / $20 / $40 alerts); stop EC2 + RDS when idle; terraform destroy after grading." style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=11;fontColor=#545B64;" vertex="1" parent="1">
+          <mxGeometry x="160" y="752" width="1060" height="70" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

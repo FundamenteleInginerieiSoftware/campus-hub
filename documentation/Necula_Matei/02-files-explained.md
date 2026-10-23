@@ -11,6 +11,9 @@ campus-hub/
 │   ├── CODEOWNERS  pull_request_template.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
 │   └── workflows/ci.yml
+├── docs/  decisions.md  api-contract.md
+│   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
+│   └── diagrams/  aws-architecture.drawio  aws-architecture.png
 ├── documentation/Necula_Matei/
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
@@ -74,6 +77,12 @@ campus-hub/
 | `SecurityConfigTest` | Checks public pages are open and everything else is locked. |
 | `AuthControllerTest` | Checks the ping answers `pong` without a login. |
 
+### `docs/`: AWS architecture (doc `09-aws-architecture.md`)
+| File | What it does |
+|---|---|
+| `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
+| `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
+
 ### Not uploaded to GitHub (local only)
 | What | Why |
 |---|---|
@@ -129,6 +138,12 @@ campus-hub/
 | `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), everything else needs a valid JWT. `JwtDecoder` checks the HS256 signature with `app.jwt.secret` (≥ 32 bytes); defining it also stops Boot from creating a default user with a random password. Next: login (JWT encoder), roles, the `/api/v1/admin/**` rule and 401/403 as ProblemDetail JSON. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
+
+### `docs/adr/` and the AWS diagram
+| File | Key points |
+|---|---|
+| `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
+| ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
 
 ### Tests
 | Test | What it proves |
