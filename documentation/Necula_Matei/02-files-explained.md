@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13 and the users table (`03-user-entity.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -17,10 +17,14 @@ campus-hub/
     ├── gradlew  gradlew.bat  gradle/wrapper/
     └── src/
         ├── main/java/com/campus/  CampusHubApplication.java, config/SecurityConfig.java,
-        │                          user/web/AuthController.java, <module>/package-info.java
+        │                          user/web/AuthController.java, <module>/package-info.java,
+        │                          user/api/Role.java, user/domain/User.java,
+        │                          user/repository/UserRepository.java
         ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
         │                    db/migration/V2026_10_21_1500__platform_init.sql
-        ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest
+        │                    db/migration/V2026_10_21_1528__user_create_users.sql
+        ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
+        │                          UserRepositoryTest
         └── test/resources/application-test.yml
 ```
 
@@ -62,6 +66,7 @@ campus-hub/
 | `application-prod.yml` | Cloud settings: no real values, everything is read from AWS at startup. |
 | `application-test.yml` | Test settings: tests use a separate `campus_test` database, so they never touch our data. |
 | `db/migration/…platform_init.sql` | The first database script. It only starts the history of database changes. |
+| `db/migration/…user_create_users.sql` | Creates the table of people who can log in. |
 
 ### Backend: code and tests (PR #13)
 | File | What it does |
@@ -73,6 +78,14 @@ campus-hub/
 | `CampusHubApplicationTests` | Checks the app can start at all. |
 | `SecurityConfigTest` | Checks public pages are open and everything else is locked. |
 | `AuthControllerTest` | Checks the ping answers `pong` without a login. |
+
+### Backend: users (`03-user-entity.md`)
+| File | What it does |
+|---|---|
+| `Role.java` | The two kinds of user: student and admin. |
+| `User.java` | One user as the code sees it: email, scrambled password, name, role, blocked or not. |
+| `UserRepository.java` | Finds a user by email, whatever capitals were typed. |
+| `UserRepositoryTest` | Checks the lookup ignores capitals and that the same email can't be used twice. |
 
 ### Not uploaded to GitHub (local only)
 | What | Why |
@@ -122,12 +135,16 @@ campus-hub/
 | `application-test.yml` | `campus_test` database | Tests never touch dev data. CI overrides the URL with env vars. |
 | | `spring.test.database.replace: none` | `@DataJpaTest` would otherwise look for an embedded database (we have none) and fail. |
 | Migration | `V2026_10_21_1500__platform_init.sql` → `SELECT 1;` | Starts `flyway_schema_history`. Name = `V` + timestamp + `__` + module + description, so two people never pick the same version. |
+| Migration | `V2026_10_21_1528__user_create_users.sql` | `users` table: `email` UNIQUE (stored lowercase), `password_hash`, `full_name`, `role VARCHAR(32)`, `enabled`, `created_at TIMESTAMP`. First in the FK order. Details in `03-user-entity.md`. |
 
 ### Code
 | File | Key points |
 |---|---|
 | `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), everything else needs a valid JWT. `JwtDecoder` checks the HS256 signature with `app.jwt.secret` (≥ 32 bytes); defining it also stops Boot from creating a default user with a random password. Next: login (JWT encoder), roles, the `/api/v1/admin/**` rule and 401/403 as ProblemDetail JSON. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. |
+| `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
+| `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
+| `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
 
 ### Tests
@@ -136,5 +153,6 @@ campus-hub/
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
 | `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; `/api/v1/assets` without a token, or with a fake one, returns 401. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. |
+| `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |
 
-Result: `./gradlew build` → BUILD SUCCESSFUL, 6 tests, locally on PostgreSQL 18 and in CI.
+Result: `./gradlew build` → BUILD SUCCESSFUL, 8 tests (6 after #13, +2 for users), locally on PostgreSQL 18.
