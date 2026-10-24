@@ -78,6 +78,7 @@ The professor grades each member individually and **asks "why did you do this?" 
   - hidden framework behavior ("Spring calls this after the transaction commits", "the first matching rule wins");
   - *why* a rule or a number exists ("404, not 403, so we don't reveal which IDs exist");
   - **how the piece connects to the rest of the system and to teammates' work** ("Calin's reassignment engine calls this through `CatalogApi`", "Calin's booking flow locks the row with this before checking overlaps").
+  - **bug fixes:** when you fix a bug or something that didn't work, leave a short comment at the fix saying what was wrong and why the fix works ("Bug fixed: reading the field on the Spring proxy always gave null. Fix: read it through a method, which the proxy passes on to the real object."). The author can then explain it at the defense.
 - **Don't comment the obvious** (`// getter`, `// save user`). No commented-out code, no AI-sounding filler.
 - Javadoc on every public `api` facade method: it is the contract your teammates code against.
 
