@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13 and the users table (`03-user-entity.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -11,6 +11,7 @@ campus-hub/
 │   ├── CODEOWNERS  pull_request_template.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
 │   └── workflows/ci.yml
+├── docs/prototype/campus-hub-prototype.html             (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
@@ -87,6 +88,11 @@ campus-hub/
 | `UserRepository.java` | Finds a user by email, whatever capitals were typed. |
 | `UserRepositoryTest` | Checks the lookup ignores capitals and that the same email can't be used twice. |
 
+### Prototype mockup (`10-prototype-mockup.md`)
+| File | What it does |
+|---|---|
+| `docs/prototype/campus-hub-prototype.html` | A clickable preview of the whole app with fake data. Open it by double-clicking; it needs no server. |
+
 ### Not uploaded to GitHub (local only)
 | What | Why |
 |---|---|
@@ -146,6 +152,11 @@ campus-hub/
 | `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
 | `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
+
+### Prototype mockup
+| File | Key points |
+|---|---|
+| `campus-hub-prototype.html` | One file, plain HTML/CSS/JS, no libraries. In-memory fake data from `seed()`, clock fixed at Mon 2 Nov 2026 09:15. Every click goes through `api()`, which logs the REST call from `docs/api-contract.md` and shows errors as ProblemDetail with a `code`. Booking checks follow Calin's order; the engine tries `SameModelStrategy` then `SameCategoryStrategy`, else force-cancels. Rule numbers sit in `RULES` (🟡 in `docs/decisions.md` §5). Details in `10-prototype-mockup.md`. |
 
 ### Tests
 | Test | What it proves |
