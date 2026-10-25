@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -18,6 +18,7 @@ campus-hub/
     ├── gradlew  gradlew.bat  gradle/wrapper/
     └── src/
         ├── main/java/com/campus/  CampusHubApplication.java, config/SecurityConfig.java,
+        │                          config/OpenApiConfig.java,
         │                          user/web/AuthController.java, <module>/package-info.java,
         │                          user/api/Role.java, user/domain/User.java,
         │                          user/repository/UserRepository.java
@@ -73,11 +74,11 @@ campus-hub/
 | File | What it does |
 |---|---|
 | `CampusHubApplication.java` | The "start button" of the server. |
-| `SecurityConfig.java` | The guard at the door: decides which addresses are public and which need a login token. |
+| `SecurityConfig.java` | The guard at the door: decides which addresses are public, which need a login token and which are for admins only. Also scrambles passwords and signs login tokens (`04-password-jwt-roles.md`). |
 | `AuthController.java` | A "ping" address that answers `pong`, to check the app runs. Login comes here next. |
 | `package-info.java` (one per module) | A label on each folder: what it does, who owns it, what it may use. |
 | `CampusHubApplicationTests` | Checks the app can start at all. |
-| `SecurityConfigTest` | Checks public pages are open and everything else is locked. |
+| `SecurityConfigTest` | Checks public pages are open, everything else is locked, and students can't open admin pages. |
 | `AuthControllerTest` | Checks the ping answers `pong` without a login. |
 
 ### Backend: users (`03-user-entity.md`)
@@ -87,6 +88,11 @@ campus-hub/
 | `User.java` | One user as the code sees it: email, scrambled password, name, role, blocked or not. |
 | `UserRepository.java` | Finds a user by email, whatever capitals were typed. |
 | `UserRepositoryTest` | Checks the lookup ignores capitals and that the same email can't be used twice. |
+
+### Backend: login foundations (`04-password-jwt-roles.md`)
+| File | What it does |
+|---|---|
+| `OpenApiConfig.java` | Adds the "Authorize" button to Swagger: paste a login token once, and every test call sends it. |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -146,7 +152,8 @@ campus-hub/
 ### Code
 | File | Key points |
 |---|---|
-| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), everything else needs a valid JWT. `JwtDecoder` checks the HS256 signature with `app.jwt.secret` (≥ 32 bytes); defining it also stops Boot from creating a default user with a random password. Next: login (JWT encoder), roles, the `/api/v1/admin/**` rule and 401/403 as ProblemDetail JSON. |
+| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), then `/api/v1/admin/**` → `hasRole("ADMIN")` (must stay above the next rule), `/api/v1/**` → any valid JWT, anything else → `denyAll()`. `JwtDecoder` and `JwtEncoder` share one HS256 key from `app.jwt.secret` (≥ 32 bytes); defining the decoder also stops Boot from creating a default user with a random password. The roles converter reads the `roles` claim and adds `ROLE_`. `PasswordEncoder` = delegating encoder (`{bcrypt}` hashes). Next: 401/403 as ProblemDetail JSON. |
+| `OpenApiConfig` | Annotations only: `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` + `@OpenAPIDefinition(security = @SecurityRequirement(name = "bearerAuth"))`, so the scheme applies to every endpoint and teammates don't annotate controllers. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. |
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
 | `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
@@ -162,8 +169,8 @@ campus-hub/
 | Test | What it proves |
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
-| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; `/api/v1/assets` without a token, or with a fake one, returns 401. |
+| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; `/api/v1/assets` without a token, or with a fake one, returns 401. With real tokens signed by our `JwtEncoder`: a student gets 403 on `/api/v1/admin/**`, an admin gets through, any token gets 403 outside `/api/v1/`. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. |
 | `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |
 
-Result: `./gradlew build` → BUILD SUCCESSFUL, 8 tests (6 after #13, +2 for users), locally on PostgreSQL 18.
+Result: `./gradlew build` → BUILD SUCCESSFUL, 23 tests (6 after #13, +2 for users, +9 from Liviu's #22, +6 for login foundations), locally on PostgreSQL 18.
