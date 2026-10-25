@@ -13,6 +13,7 @@ import jakarta.persistence.EntityNotFoundException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +26,14 @@ public class IncidentService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
+    @Autowired
     public IncidentService(
-            IncidentReportRepository incidentReportRepository, ApplicationEventPublisher eventPublisher, Clock clock) {
+            IncidentReportRepository incidentReportRepository,
+            ApplicationEventPublisher eventPublisher,
+            @Autowired(required = false) Clock clock) {
         this.incidentReportRepository = incidentReportRepository;
         this.eventPublisher = eventPublisher;
-        this.clock = clock;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     public IncidentResponse reportIncident(CreateIncidentRequest request, CurrentUser currentUser) {
@@ -83,7 +87,6 @@ public class IncidentService {
 
         IncidentReport updated = incidentReportRepository.save(report);
 
-        // markAvailable action via domain event for modular architecture
         eventPublisher.publishEvent(
                 new AssetRepairedEvent(updated.getId(), updated.getAssetId(), updated.getResolvedById(), now));
 

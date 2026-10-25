@@ -1,16 +1,22 @@
 package com.campus.incident.domain;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Table(name = "incident_reports")
 @Getter
 @Setter
-@NoArgsConstructor
 public class IncidentReport {
 
     @Id
@@ -54,6 +60,8 @@ public class IncidentReport {
 
     @Version
     private Long version;
+
+    public IncidentReport() {}
 
     public enum IncidentStatus {
         OPEN,
