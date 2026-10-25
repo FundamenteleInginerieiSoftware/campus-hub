@@ -2,49 +2,107 @@ package com.campus.incident.service;
 
 import com.campus.common.security.CurrentUser;
 import com.campus.incident.api.AssetDamagedEvent;
+import com.campus.incident.api.AssetRepairedEvent;
 import com.campus.incident.domain.IncidentReport;
 import com.campus.incident.domain.IncidentReport.IncidentStatus;
 import com.campus.incident.repository.IncidentReportRepository;
 import com.campus.incident.web.CreateIncidentRequest;
 import com.campus.incident.web.IncidentResponse;
+import com.campus.incident.web.ResolveIncidentRequest;
+import jakarta.persistence.EntityNotFoundException;
+import java.time.Clock;
 import java.time.LocalDateTime;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
+@Transactional
 public class IncidentService {
 
-    private final IncidentReportRepository incidentRepository;
+    private final IncidentReportRepository incidentReportRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
-    @Transactional
+    public IncidentService(
+            IncidentReportRepository incidentReportRepository, ApplicationEventPublisher eventPublisher, Clock clock) {
+        this.incidentReportRepository = incidentReportRepository;
+        this.eventPublisher = eventPublisher;
+        this.clock = clock;
+    }
+
     public IncidentResponse reportIncident(CreateIncidentRequest request, CurrentUser currentUser) {
-        // 1. Creăm entitatea JPA pe baza datelor primite și a utilizatorului logat
-        IncidentReport incident = new IncidentReport();
-        incident.setAssetId(request.assetId());
-        incident.setReportedById(currentUser.id());
-        incident.setReservationId(request.reservationId());
-        incident.setDescription(request.description());
-        incident.setSeverity(request.severity());
-        incident.setPhotoKey(request.photoKey());
-        incident.setStatus(IncidentStatus.OPEN);
-        incident.setCreatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now(clock);
 
-        // 2. Salvăm incidentul în baza de date PostgreSQL
-        IncidentReport savedIncident = incidentRepository.save(incident);
+        IncidentReport report = new IncidentReport();
+        report.setAssetId(request.assetId());
+        report.setReportedById(currentUser.id());
+        report.setReservationId(request.reservationId());
+        report.setDescription(request.description());
+        report.setSeverity(request.severity());
+        report.setPhotoKey(request.photoKey());
+        report.setStatus(IncidentStatus.OPEN);
+        report.setCreatedAt(now);
 
-        // 3. Publicăm evenimentul public AssetDamagedEvent pentru celelalte module
-        AssetDamagedEvent event = new AssetDamagedEvent(
-                savedIncident.getId(),
-                savedIncident.getAssetId(),
-                savedIncident.getReportedById(),
-                savedIncident.getCreatedAt());
-        eventPublisher.publishEvent(event);
+        IncidentReport saved = incidentReportRepository.save(report);
 
-        // 4. Returnăm DTO-ul de răspuns către controler
-        return IncidentResponse.fromEntity(savedIncident);
+        eventPublisher.publishEvent(
+                new AssetDamagedEvent(saved.getId(), saved.getAssetId(), saved.getReportedById(), now));
+
+        return toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<IncidentResponse> getAllIncidents(IncidentStatus status) {
+        List<IncidentReport> reports;
+        if (status != null) {
+            reports = incidentReportRepository.findByStatusOrderByCreatedAtDesc(status);
+        } else {
+            reports = incidentReportRepository.findAllByOrderByCreatedAtDesc();
+        }
+        return reports.stream().map(this::toResponse).toList();
+    }
+
+    public IncidentResponse resolveIncident(Long incidentId, ResolveIncidentRequest request, CurrentUser adminUser) {
+        IncidentReport report = incidentReportRepository
+                .findById(incidentId)
+                .orElseThrow(() -> new EntityNotFoundException("Incident report not found with id: " + incidentId));
+
+        if (report.getStatus() == IncidentStatus.RESOLVED) {
+            return toResponse(report);
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        report.setStatus(IncidentStatus.RESOLVED);
+        report.setResolvedAt(now);
+        report.setResolvedById(adminUser.id());
+        if (request != null && request.resolutionNotes() != null) {
+            report.setResolutionNote(request.resolutionNotes());
+        }
+
+        IncidentReport updated = incidentReportRepository.save(report);
+
+        // markAvailable action via domain event for modular architecture
+        eventPublisher.publishEvent(
+                new AssetRepairedEvent(updated.getId(), updated.getAssetId(), updated.getResolvedById(), now));
+
+        return toResponse(updated);
+    }
+
+    private IncidentResponse toResponse(IncidentReport report) {
+        return new IncidentResponse(
+                report.getId(),
+                report.getAssetId(),
+                report.getReportedById(),
+                report.getReservationId(),
+                report.getDescription(),
+                report.getSeverity(),
+                report.getPhotoKey(),
+                report.getStatus(),
+                report.getCreatedAt(),
+                report.getResolvedAt(),
+                report.getResolvedById(),
+                report.getResolutionNote());
     }
 }
