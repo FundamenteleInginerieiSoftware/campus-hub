@@ -68,14 +68,14 @@ class IncidentServiceTest {
         assertThat(response.status()).isEqualTo(IncidentStatus.RESOLVED);
         assertThat(response.resolvedById()).isEqualTo(adminUser.id());
         assertThat(response.resolvedAt()).isEqualTo(LocalDateTime.now(clock));
-        assertThat(response.resolutionNotes()).isEqualTo("Replaced display panel");
+        assertThat(response.resolutionNote()).isEqualTo("Replaced display panel");
 
         ArgumentCaptor<AssetRepairedEvent> eventCaptor = ArgumentCaptor.forClass(AssetRepairedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         AssetRepairedEvent publishedEvent = eventCaptor.getValue();
         assertThat(publishedEvent.incidentId()).isEqualTo(incidentId);
         assertThat(publishedEvent.assetId()).isEqualTo(10L);
-        assertThat(publishedEvent.repairedById()).isEqualTo(adminUser.id());
+        assertThat(publishedEvent.resolvedById()).isEqualTo(adminUser.id());
     }
 
     @Test
