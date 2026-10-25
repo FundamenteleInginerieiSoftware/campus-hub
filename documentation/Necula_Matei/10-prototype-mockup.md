@@ -65,6 +65,7 @@ Rigol DS1054Z no. 1 is the demo asset. Reporting it shows all three engine outco
 | Check | Result |
 |---|---|
 | `node --check` on the page's script | Syntax OK |
+| Headless Chromium (Playwright) clicking the whole demo script, desktop + phone width (390 px) in dark mode | Every step gives the expected toast; reporting Rigol no. 1 handles 3 bookings and Student One gets the "moved" notification; admin resolve, check out, return, duplicate serial (`409 SERIAL_NUMBER_TAKEN`) work; no console errors; no sideways scrolling after the fix below |
 | Node script running the demo story on the page's functions | book 201 → same slot `409 RESERVATION_CONFLICT` → third item `409 RESERVATION_LIMIT_REACHED` → report Rigol no. 1: 201 and the three outcomes in the table above → booking it `409 ASSET_NOT_BOOKABLE` |
 
 ### Problems hit
@@ -72,3 +73,5 @@ Rigol DS1054Z no. 1 is the demo asset. Reporting it shows all three engine outco
 | Problem | Fix |
 |---|---|
 | The first version was written for a hosted preview that adds `<!doctype>`, `<head>` and a CSS reset itself; opened as a file it would have lacked them | Added the doctype, `<head>` with charset + viewport, and the reset (`body { margin: 0 }`, `[hidden] { display: none !important }`) |
+| At phone width the top bar (clock, bell, name, Sign out) didn't wrap and made the page 30 px wider than the screen | `.right` wraps now, and the name is hidden below 520 px (the role tag stays) |
+| Selecting your own booking said "overlaps a booking" | It now says "you already booked this slot" |
