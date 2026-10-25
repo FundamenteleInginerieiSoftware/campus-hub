@@ -236,12 +236,12 @@ public class ReservationService implements ReservationApi {
     // causing UnexpectedRollbackException on commit.
     @Override
     @Transactional(noRollbackFor = SubstituteNoLongerFreeException.class)
-    public void moveToAsset(Long reservationId, Long newAssetId, String reason) {
+    public boolean moveToAsset(Long reservationId, Long newAssetId, String reason) {
         Reservation r = reservationRepository.findById(reservationId).orElse(null);
         // Rare race: if the booking was cancelled or checked out right after findUpcomingActiveByAsset,
-        // return as a no-op (the caller still records the reassignment attempt).
+        // return false so the caller does not log a false reassignment or send a misleading email.
         if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
-            return;
+            return false;
         }
 
         catalogApi.lockForBooking(newAssetId);
@@ -254,18 +254,20 @@ public class ReservationService implements ReservationApi {
 
         r.moveTo(newAssetId);
         auditService.record(null, "REASSIGN_RESERVATION", "Reservation", r.getId(), reason);
+        return true;
     }
 
     @Override
     @Transactional
-    public void forceCancel(Long reservationId, String reason) {
+    public boolean forceCancel(Long reservationId, String reason) {
         Reservation r = reservationRepository.findById(reservationId).orElse(null);
         if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
-            return;
+            return false;
         }
 
         r.forceCancel(LocalDateTime.now(clock), reason);
         auditService.record(null, "FORCE_CANCEL_RESERVATION", "Reservation", r.getId(), reason);
+        return true;
     }
 
     @Override
