@@ -1,25 +1,22 @@
 package com.campus.common.security;
 
-import java.util.Collections;
-import java.util.Set;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 
-/**
- * Represents the authenticated user extracted from the security context / JWT.
- */
-public record CurrentUser(Long id, String email, Set<String> roles) {
-    public CurrentUser {
-        roles = roles == null ? Collections.emptySet() : Collections.unmodifiableSet(roles);
-    }
+public record CurrentUser(Long id, String email, boolean isAdmin) {
 
-    public boolean hasRole(String role) {
-        if (role == null) {
-            return false;
+    public static CurrentUser fromSecurityContext() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            throw new IllegalStateException("No authenticated JWT found in SecurityContext");
         }
-        String normalized = role.startsWith("ROLE_") ? role : "ROLE_" + role;
-        return roles.contains(role) || roles.contains(normalized);
-    }
 
-    public boolean isAdmin() {
-        return hasRole("ROLE_ADMIN") || hasRole("ADMIN");
+        Long userId = Long.valueOf(jwt.getSubject());
+        String email = jwt.getClaimAsString("email");
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(grantedAuthority -> "ROLE_ADMIN".equals(grantedAuthority.getAuthority()));
+
+        return new CurrentUser(userId, email, isAdmin);
     }
 }
