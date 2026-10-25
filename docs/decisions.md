@@ -43,6 +43,11 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 
 | Date | Decision | Status | Notes |
 |---|---|---|---|
+| 2026-10-23 | **AWS: one EC2 instance (Docker) behind CloudFront + RDS PostgreSQL 18**; no ECS, ALB or NAT gateway | ✅ | [ADR-002](adr/002-single-ec2-behind-cloudfront.md), diagram `docs/diagrams/aws-architecture.drawio`. Replaces ECS Fargate + ALB from the plan PDFs. ~$35/month at most, paid by the credits |
+| 2026-10-23 | In prod, the Spring Boot app also serves the React build (one Docker image, one origin) | 🟡 | ADR-002. Stefania: please confirm. Dev is unchanged (Vite proxy); Matei's Dockerfile runs `npm ci && npm run build` and copies `frontend/dist` into the image |
+| 2026-10-23 | Prod secrets in **SSM Parameter Store** `SecureString` (`/campus/*`), not Secrets Manager | ✅ | [ADR-003](adr/003-ssm-parameter-store-for-secrets.md). Free; no rotation (documented limitation) |
+| 2026-10-23 | **Local-first:** everyone works locally; AWS only for deploys (W7–W9) and the demo, all through Terraform | ✅ | [ADR-001](adr/001-local-first.md) |
+| 2026-10-23 | AWS account stays on the **Free plan** ($100 credits until 17 Mar 2027), no AWS Organizations / Identity Center; budget alerts $5 / $20 / $40 | ✅ | [ADR-005](adr/005-aws-account-free-plan.md). Only Matei has AWS access |
 | 2026-10-21 | Row timestamps (`created_at`, …): **`LocalDateTime` + `TIMESTAMP`**, campus local time from `LocalDateTime.now(clock)` | ✅ | Replaces the `Instant` idea below for table columns: one time type in entities and JSON, and `ddl-auto: validate` would reject an `Instant` field on a plain `TIMESTAMP` column. First used by `users.created_at`. Liviu: same for the audit table |
 | 2026-10-21 | **SQS is a stretch goal**, behind `app.messaging.sqs.enabled` (default `false`) | ✅ | `false`: Calin's local `@TransactionalEventListener(AFTER_COMMIT)` runs the engine, also in prod. `true`: Matei's SQS bridge. Never both |
 | 2026-10-06 | Modular monolith: modules talk only through their `api` package or events | ✅ | Enforced by Calin's ArchUnit rules (freeze mode from W4, strict after M1) |

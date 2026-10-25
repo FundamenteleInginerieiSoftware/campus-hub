@@ -11,7 +11,10 @@ campus-hub/
 │   ├── CODEOWNERS  pull_request_template.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
 │   └── workflows/ci.yml
-├── docs/prototype/campus-hub-prototype.html             (10-prototype-mockup.md)
+├── docs/  decisions.md  api-contract.md
+│   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
+│   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
+│   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
@@ -99,6 +102,12 @@ campus-hub/
 |---|---|
 | `docs/prototype/campus-hub-prototype.html` | A clickable preview of the whole app with fake data. Open it by double-clicking; it needs no server. |
 
+### `docs/`: AWS architecture (doc `09-aws-architecture.md`)
+| File | What it does |
+|---|---|
+| `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
+| `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
+
 ### Not uploaded to GitHub (local only)
 | What | Why |
 |---|---|
@@ -164,6 +173,12 @@ campus-hub/
 | File | Key points |
 |---|---|
 | `campus-hub-prototype.html` | One file, plain HTML/CSS/JS, no libraries. In-memory fake data from `seed()`, clock fixed at Mon 2 Nov 2026 09:15. Every click goes through `api()`, which logs the REST call from `docs/api-contract.md` and shows errors as ProblemDetail with a `code`. Booking checks follow Calin's order; the engine tries `SameModelStrategy` then `SameCategoryStrategy`, else force-cancels. Rule numbers sit in `RULES` (🟡 in `docs/decisions.md` §5). Details in `10-prototype-mockup.md`. |
+
+### `docs/adr/` and the AWS diagram
+| File | Key points |
+|---|---|
+| `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
+| ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
 
 ### Tests
 | Test | What it proves |
