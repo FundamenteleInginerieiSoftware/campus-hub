@@ -2,6 +2,7 @@ package com.campus.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -55,13 +57,18 @@ class SecurityConfigTest {
 
     @Test
     void otherEndpointsNeedAToken() throws Exception {
-        mockMvc.perform(get("/api/v1/assets")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/assets"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.instance").value("/api/v1/assets"));
     }
 
     @Test
     void invalidTokenIsRejected() throws Exception {
         mockMvc.perform(get("/api/v1/assets").header("Authorization", "Bearer not-a-real-token"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
@@ -73,7 +80,10 @@ class SecurityConfigTest {
     @Test
     void studentIsForbiddenOnAdminPaths() throws Exception {
         mockMvc.perform(get("/api/v1/admin/assets").header("Authorization", bearer("STUDENT")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
