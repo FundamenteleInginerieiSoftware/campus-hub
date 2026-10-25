@@ -13,8 +13,6 @@ import com.campus.incident.web.ResolveIncidentRequest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,27 +27,18 @@ public class IncidentService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
-    @Autowired
     public IncidentService(
-            IncidentReportRepository incidentReportRepository,
-            ApplicationEventPublisher eventPublisher,
-            @Autowired(required = false) Clock clock) {
+            IncidentReportRepository incidentReportRepository, ApplicationEventPublisher eventPublisher, Clock clock) {
         this.incidentReportRepository = incidentReportRepository;
         this.eventPublisher = eventPublisher;
-        this.clock = (clock != null) ? clock : Clock.system(ZoneId.of("Europe/Bucharest"));
+        this.clock = clock;
     }
 
     public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId) {
         Instant now = clock.instant();
 
         IncidentReport report = new IncidentReport(
-                request.assetId(),
-                request.reservationId(),
-                reporterId,
-                request.description(),
-                request.severity(),
-                request.photoKey(),
-                now);
+                request.assetId(), null, reporterId, request.description(), request.severity(), null, now);
 
         IncidentReport saved = incidentReportRepository.save(report);
 

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
@@ -32,6 +33,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class IncidentServiceTest {
@@ -55,12 +57,11 @@ class IncidentServiceTest {
 
     @Test
     void reportIncident_shouldSaveWithOpenStatusAndPublishAssetDamagedEvent() {
-        CreateIncidentRequest request =
-                new CreateIncidentRequest(10L, 5L, "Display cracked", IncidentSeverity.HIGH, "incidents/img1.png");
+        CreateIncidentRequest request = new CreateIncidentRequest(10L, "Display cracked", IncidentSeverity.HIGH);
 
         when(incidentReportRepository.save(any(IncidentReport.class))).thenAnswer(invocation -> {
             IncidentReport report = invocation.getArgument(0);
-            report.setId(100L);
+            ReflectionTestUtils.setField(report, "id", 100L);
             return report;
         });
 
@@ -91,7 +92,7 @@ class IncidentServiceTest {
                 IncidentSeverity.HIGH,
                 null,
                 clock.instant().minusSeconds(3600));
-        existingReport.setId(incidentId);
+        ReflectionTestUtils.setField(existingReport, "id", incidentId);
 
         when(incidentReportRepository.findById(incidentId)).thenReturn(Optional.of(existingReport));
         when(incidentReportRepository.save(any(IncidentReport.class)))
@@ -115,19 +116,19 @@ class IncidentServiceTest {
     }
 
     @Test
-    void resolveIncident_shouldThrowIllegalStateException_whenRejected() {
+    void resolveIncident_shouldThrowInvalidStateTransitionException_whenRejected() {
         Long incidentId = 2L;
         IncidentReport rejectedReport =
                 new IncidentReport(10L, 5L, reporterId, "Not an issue", IncidentSeverity.LOW, null, clock.instant());
-        rejectedReport.setId(incidentId);
-        rejectedReport.setStatus(IncidentStatus.REJECTED);
+        ReflectionTestUtils.setField(rejectedReport, "id", incidentId);
+        ReflectionTestUtils.setField(rejectedReport, "status", IncidentStatus.REJECTED);
 
         when(incidentReportRepository.findById(incidentId)).thenReturn(Optional.of(rejectedReport));
 
         ResolveIncidentRequest request = new ResolveIncidentRequest("Try to resolve");
 
         assertThatThrownBy(() -> incidentService.resolveIncident(incidentId, request, adminId))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidStateTransitionException.class)
                 .hasMessageContaining("Incident cannot be resolved from status: REJECTED");
     }
 
@@ -147,7 +148,7 @@ class IncidentServiceTest {
     void getAllIncidents_shouldFilterByStatusAndReturnPageResponse() {
         IncidentReport report = new IncidentReport(
                 20L, null, reporterId, "Keyboard issue", IncidentSeverity.LOW, null, clock.instant());
-        report.setId(5L);
+        ReflectionTestUtils.setField(report, "id", 5L);
 
         Pageable pageable = PageRequest.of(0, 20);
         Page<IncidentReport> page = new PageImpl<>(List.of(report), pageable, 1);
