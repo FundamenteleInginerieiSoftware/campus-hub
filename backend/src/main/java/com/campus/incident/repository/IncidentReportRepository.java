@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface IncidentReportRepository extends JpaRepository<IncidentReport, Long> {
 
-    List<IncidentReport> findAllByOrderByCreatedAtDesc();
-
     List<IncidentReport> findByStatusOrderByCreatedAtDesc(IncidentStatus status);
+
+    List<IncidentReport> findAllByOrderByCreatedAtDesc();
 }
