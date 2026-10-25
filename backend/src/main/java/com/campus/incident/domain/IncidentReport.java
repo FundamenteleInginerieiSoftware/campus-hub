@@ -1,5 +1,6 @@
 package com.campus.incident.domain;
 
+import com.campus.common.error.InvalidStateTransitionException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,12 +14,10 @@ import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "incident_reports")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IncidentReport {
 
@@ -35,15 +34,15 @@ public class IncidentReport {
     @Column(name = "reported_by_id", nullable = false)
     private Long reportedById;
 
-    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "severity", nullable = false, length = 32)
+    @Column(nullable = false, length = 32)
     private IncidentSeverity severity;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 32)
+    @Column(nullable = false, length = 32)
     private IncidentStatus status;
 
     @Column(name = "photo_key")
@@ -62,7 +61,7 @@ public class IncidentReport {
     private String resolutionNotes;
 
     @Version
-    private Long version;
+    private Long version = 0L;
 
     public IncidentReport(
             Long assetId,
@@ -77,30 +76,31 @@ public class IncidentReport {
         this.reportedById = reportedById;
         this.description = description;
         this.severity = severity;
-        this.photoKey = photoKey;
         this.status = IncidentStatus.OPEN;
+        this.photoKey = photoKey;
         this.createdAt = createdAt;
     }
 
-    public void resolve(Long adminId, String notes, Instant resolvedAt) {
-        if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
-            throw new IllegalStateException("Incident cannot be resolved from status: " + this.status);
+    public void resolve(Long adminId, String resolutionNotes, Instant resolvedAt) {
+        if (this.status != IncidentStatus.OPEN) {
+            throw new InvalidStateTransitionException("Incident cannot be resolved from status: " + this.status);
         }
         this.status = IncidentStatus.RESOLVED;
         this.resolvedById = adminId;
-        this.resolutionNotes = notes;
+        this.resolutionNotes = resolutionNotes;
         this.resolvedAt = resolvedAt;
     }
 
     public enum IncidentSeverity {
         LOW,
         MEDIUM,
-        HIGH
+        HIGH,
+        CRITICAL
     }
 
     public enum IncidentStatus {
         OPEN,
-        IN_REPAIR,
+        IN_PROGRESS,
         RESOLVED,
         REJECTED
     }
