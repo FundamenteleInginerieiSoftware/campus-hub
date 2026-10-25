@@ -19,6 +19,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Who may call what. Every HTTP request passes through the filter chain below before it reaches
@@ -31,7 +32,10 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain apiChain(HttpSecurity http, JsonMapper jsonMapper) throws Exception {
+        // Turns 401 and 403 into ProblemDetail JSON instead of an empty body.
+        SecurityErrorHandler errors = new SecurityErrorHandler(jsonMapper);
+
         // The API keeps no session and uses no cookies: every request carries its own token.
         // CSRF attacks abuse cookies the browser sends automatically, so the protection isn't needed.
         http.csrf(AbstractHttpConfigurer::disable)
@@ -54,8 +58,12 @@ public class SecurityConfig {
                         .anyRequest()
                         .denyAll())
                 // Reads "Authorization: Bearer <token>" and validates it with jwtDecoder() below.
-                // Missing or invalid token -> 401 before the request reaches any controller.
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(rolesFromToken())));
+                // An invalid or expired token is answered here, with our 401 JSON.
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(rolesFromToken()))
+                        .authenticationEntryPoint(errors))
+                // No token at all (401), or a role that isn't enough (403).
+                .exceptionHandling(
+                        handling -> handling.authenticationEntryPoint(errors).accessDeniedHandler(errors));
         return http.build();
     }
 
