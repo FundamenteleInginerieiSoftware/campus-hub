@@ -9,14 +9,17 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Table(name = "incident_reports")
 @Getter
 @Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IncidentReport {
 
     @Id
@@ -26,53 +29,79 @@ public class IncidentReport {
     @Column(name = "asset_id", nullable = false)
     private Long assetId;
 
-    @Column(name = "reported_by_id", nullable = false)
-    private Long reportedById;
-
     @Column(name = "reservation_id")
     private Long reservationId;
 
-    @Column(nullable = false, length = 2000)
+    @Column(name = "reported_by_id", nullable = false)
+    private Long reportedById;
+
+    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private Severity severity;
+    @Column(name = "severity", nullable = false, length = 32)
+    private IncidentSeverity severity;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    private IncidentStatus status;
 
     @Column(name = "photo_key")
     private String photoKey;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    private IncidentStatus status;
-
     @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @Column(name = "resolved_at")
-    private LocalDateTime resolvedAt;
+    private Instant resolvedAt;
 
     @Column(name = "resolved_by_id")
     private Long resolvedById;
 
-    @Column(name = "resolution_note", length = 1000)
-    private String resolutionNote;
+    @Column(name = "resolution_notes", columnDefinition = "TEXT")
+    private String resolutionNotes;
 
     @Version
     private Long version;
 
-    public IncidentReport() {}
+    public IncidentReport(
+            Long assetId,
+            Long reservationId,
+            Long reportedById,
+            String description,
+            IncidentSeverity severity,
+            String photoKey,
+            Instant createdAt) {
+        this.assetId = assetId;
+        this.reservationId = reservationId;
+        this.reportedById = reportedById;
+        this.description = description;
+        this.severity = severity;
+        this.photoKey = photoKey;
+        this.status = IncidentStatus.OPEN;
+        this.createdAt = createdAt;
+    }
+
+    public void resolve(Long adminId, String notes, Instant resolvedAt) {
+        if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
+            throw new IllegalStateException("Incident cannot be resolved from status: " + this.status);
+        }
+        this.status = IncidentStatus.RESOLVED;
+        this.resolvedById = adminId;
+        this.resolutionNotes = notes;
+        this.resolvedAt = resolvedAt;
+    }
+
+    public enum IncidentSeverity {
+        LOW,
+        MEDIUM,
+        HIGH
+    }
 
     public enum IncidentStatus {
         OPEN,
         IN_REPAIR,
         RESOLVED,
         REJECTED
-    }
-
-    public enum Severity {
-        LOW,
-        MEDIUM,
-        HIGH
     }
 }
