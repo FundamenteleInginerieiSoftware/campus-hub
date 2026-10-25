@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Campus Hub Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: app shell. Sticky top bar, one content column (max 1120px), lab-bench panels; every asset carries its property tag (inventory number + barcode). */
+:root {
+  --paper: #f2f4f7; --surface: #ffffff; --sunk: #e8ecf1; --ink: #142031; --muted: #586577; --line: #d6dde6;
+  --accent: #1d58cc; --accent-soft: #e2eafb; --on-accent: #ffffff;
+  --ok: #1b7a43; --ok-soft: #dff2e6; --warn: #8f5b0c; --warn-soft: #faedd3; --bad: #bb3127; --bad-soft: #fae2df; --off: #66717f; --off-soft: #e9ecf0;
+  --tag: #fff6d2; --tag-ink: #3b3214; --tag-line: #d9c98c;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0e131a; --surface: #161d27; --sunk: #1d2531; --ink: #e5eaf1; --muted: #98a5b5; --line: #2a3442;
+  --accent: #6e9cff; --accent-soft: #1d2a45; --on-accent: #0b1220;
+  --ok: #5cc68a; --ok-soft: #15301f; --warn: #e3ad4c; --warn-soft: #33270f; --bad: #f07a6f; --bad-soft: #3a1c19; --off: #8c97a5; --off-soft: #232b36;
+  --tag: #2b2614; --tag-ink: #efe2b0; --tag-line: #5c5126; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --paper: #0e131a; --surface: #161d27; --sunk: #1d2531; --ink: #e5eaf1; --muted: #98a5b5; --line: #2a3442;
+  --accent: #6e9cff; --accent-soft: #1d2a45; --on-accent: #0b1220;
+  --ok: #5cc68a; --ok-soft: #15301f; --warn: #e3ad4c; --warn-soft: #33270f; --bad: #f07a6f; --bad-soft: #3a1c19; --off: #8c97a5; --off-soft: #232b36;
+  --tag: #2b2614; --tag-ink: #efe2b0; --tag-line: #5c5126; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 1.75rem; font-weight: 800; }
+h2 { font-size: 1.15rem; font-weight: 700; }
+h3 { font-size: 1rem; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-size: 0.86em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 12px 20px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 8px; font-family: var(--f-display); font-weight: 800; font-size: 1.1rem; white-space: nowrap; }
+.brand b { color: var(--accent); }
+.nav { display: flex; gap: 4px; overflow-x: auto; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
+.nav button { border: 0; background: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; color: var(--muted); font-weight: 500; }
+.nav button:hover { background: var(--sunk); color: var(--ink); }
+.nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+.right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.clock { font-family: var(--f-mono); font-size: 0.78rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+.iconbtn { position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; width: 34px; height: 32px; display: grid; place-items: center; cursor: pointer; }
+.iconbtn svg { width: 17px; height: 17px; }
+.badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+.who { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+.who .role { font-family: var(--f-mono); font-size: 0.72rem; letter-spacing: 0.06em; padding: 1px 6px; border-radius: 4px; background: var(--sunk); color: var(--muted); }
+.strip { background: var(--tag); color: var(--tag-ink); border-bottom: 1px solid var(--tag-line); font-size: 0.82rem; }
+.strip .wrap { display: flex; gap: 8px 16px; align-items: center; padding-block: 6px; flex-wrap: wrap; }
+.strip button { border: 1px solid var(--tag-line); background: transparent; border-radius: 5px; padding: 1px 8px; cursor: pointer; font-size: 0.8rem; }
+
+/* Notifications */
+.notif { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(100% + 6px); width: min(380px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 10px 30px rgba(10, 20, 40, 0.18); max-height: 60vh; overflow: auto; }
+.notif header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+.notif article { padding: 10px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+.notif article:last-child { border-bottom: 0; }
+
+/* Buttons + fields */
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+.btn.danger.armed { background: var(--bad); color: #fff; }
+.btn.sm { padding: 3px 10px; font-size: 0.85rem; }
+.link { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-weight: 500; }
+label.f { display: grid; gap: 4px; font-size: 0.85rem; font-weight: 500; }
+input[type=text], input[type=email], input[type=password], input[type=search], select, textarea {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; width: 100%; min-width: 0;
+}
+textarea { resize: vertical; min-height: 84px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 0.88rem; }
+
+/* Page */
+main { padding-block: 24px 40px; }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 18px; }
+.head p { color: var(--muted); margin-top: 4px; max-width: 62ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.panel > header { display: grid; gap: 2px; }
+.cols { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 18px; }
+
+/* Pills */
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ok { color: var(--ok); background: var(--ok-soft); }
+.warn { color: var(--warn); background: var(--warn-soft); }
+.bad { color: var(--bad); background: var(--bad-soft); }
+.off { color: var(--off); background: var(--off-soft); }
+.info { color: var(--accent); background: var(--accent-soft); }
+
+/* Property tag */
+.tag { display: inline-grid; grid-template-columns: auto auto; align-items: center; gap: 0 8px; background: var(--tag); color: var(--tag-ink); border: 1px solid var(--tag-line); border-radius: 4px; padding: 4px 8px; font-family: var(--f-mono); line-height: 1.2; }
+.tag .org { grid-column: 1 / -1; font-size: 0.58rem; letter-spacing: 0.14em; opacity: 0.8; }
+.tag svg { width: 64px; height: 16px; }
+.tag .sn { font-size: 0.78rem; font-weight: 500; }
+
+/* Catalog */
+.filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-bottom: 16px; }
+@media (max-width: 640px) { .filters { grid-template-columns: 1fr; } }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.card { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; cursor: pointer; align-content: start; }
+.card:hover { border-color: var(--accent); }
+.card .meta { font-size: 0.82rem; color: var(--muted); }
+.card .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.empty { padding: 28px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--r); }
+
+/* Asset */
+.back { margin-bottom: 14px; }
+.asset-head { display: flex; gap: 18px; align-items: start; flex-wrap: wrap; margin-bottom: 18px; }
+.asset-head .t { display: grid; gap: 6px; min-width: 0; flex: 1 1 300px; }
+.asset-head .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.88rem; color: var(--muted); }
+.days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.day { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 9px; cursor: pointer; display: grid; text-align: center; line-height: 1.2; flex: 0 0 auto; }
+.day small { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.day b { font-family: var(--f-display); font-size: 1.05rem; }
+.day.closed { opacity: 0.5; }
+.day[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.day[aria-pressed="true"] small { color: var(--accent); }
+.times { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.times label.f { width: 110px; }
+.summary { font-size: 0.9rem; }
+.summary.clash { color: var(--bad); }
+
+/* Day timeline 08:00-20:00 */
+.tl { position: relative; height: 46px; background: var(--sunk); border-radius: 6px; overflow: hidden; }
+.tl .hr { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+.tl .hr.half { border-left-style: dotted; opacity: 0.6; }
+.tl .past { position: absolute; left: 0; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 7px); }
+.tl .busy { position: absolute; top: 7px; bottom: 7px; background: var(--off-soft); border: 1px solid var(--off); border-radius: 4px; font-size: 0.7rem; color: var(--off); padding: 0 5px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+.tl .busy.mine { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.tl .sel { position: absolute; top: 2px; bottom: 2px; border: 2px solid var(--accent); border-radius: 5px; }
+.tl .sel.clash { border-color: var(--bad); background: var(--bad-soft); opacity: 0.85; }
+.tl .now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--bad); }
+.axis { position: relative; height: 16px; font-family: var(--f-mono); font-size: 0.68rem; color: var(--muted); }
+.axis span { position: absolute; transform: translateX(-50%); }
+.axis span:first-child { transform: none; }
+.axis span:last-child { transform: translateX(-100%); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; border: 1px solid; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg label { padding: 5px 12px; cursor: pointer; font-size: 0.85rem; border-right: 1px solid var(--line); }
+.seg label:last-child { border-right: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.photo { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.photo img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.callout { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--surface); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; margin-bottom: 18px; }
+.callout.warnc { border-left-color: var(--warn); }
+.callout ul { margin: 0; padding-left: 18px; }
+
+/* Lists + tables */
+.list { display: grid; gap: 10px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+@media (max-width: 560px) { .item { grid-template-columns: 50px minmax(0, 1fr); } .item .act { grid-column: 1 / -1; justify-self: start; } }
+.date { text-align: center; border: 1px solid var(--line); border-radius: 6px; padding: 4px 0; line-height: 1.15; }
+.date small { display: block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.date b { font-family: var(--f-display); font-size: 1.3rem; }
+.item .body { display: grid; gap: 3px; min-width: 0; }
+.item .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.act { display: flex; gap: 8px; flex-wrap: wrap; }
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; background: var(--sunk); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
+.sec-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
+.sec-title:first-child { margin-top: 0; }
+.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+
+/* Login */
+.login { min-height: 100%; display: grid; place-items: center; padding-block: 40px; }
+.login .box { display: grid; grid-template-columns: 1fr 1fr; gap: 0; max-width: 880px; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+@media (max-width: 760px) { .login .box { grid-template-columns: 1fr; } }
+.login .intro { background: var(--accent); color: var(--on-accent); padding: 32px; display: grid; gap: 16px; align-content: space-between; }
+.login .intro h1 { font-size: 2.1rem; line-height: 1.05; }
+.login .intro p { opacity: 0.92; max-width: 40ch; }
+.login .intro .tag { justify-self: start; }
+.login form { padding: 32px; display: grid; gap: 14px; align-content: start; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; padding: 8px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.quick { display: grid; gap: 6px; }
+.quick button { display: flex; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; cursor: pointer; text-align: left; }
+.quick button:hover { border-color: var(--accent); }
+
+/* Toast */
+.toast { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(520px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 8px; padding: 10px 14px; box-shadow: 0 10px 30px rgba(10, 20, 40, 0.2); display: grid; gap: 2px; }
+.toast.err { border-left-color: var(--bad); }
+.toast .code { font-family: var(--f-mono); font-size: 0.78rem; font-weight: 500; }
+.toast.err .code { color: var(--bad); }
+.toast:not(.err) .code { color: var(--ok); }
+
+/* Footer tools */
+.foot { border-top: 1px solid var(--line); padding-block: 20px 32px; display: grid; gap: 10px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+details > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; font-size: 0.9rem; }
+details .in { padding: 0 14px 14px; display: grid; gap: 10px; min-width: 0; }
+details ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 0.9rem; }
+pre { margin: 0; font-family: var(--f-mono); font-size: 0.78rem; background: var(--sunk); border-radius: 6px; padding: 10px; overflow-x: auto; }
+.st { font-family: var(--f-mono); font-weight: 500; }
+.st.e { color: var(--bad); }
+.st.s { color: var(--ok); }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: rise 0.18s ease-out; } @keyframes rise { from { transform: translate(-50%, 8px); opacity: 0; } } }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+// Clickable mockup of Campus Equipment & Incident Hub. Everything runs in this tab with fake data:
+// the rules and error codes copy docs/api-contract.md and the proposed numbers in docs/decisions.md.
+
+// Fixed campus clock, like the shared Clock bean in tests: Monday 2 Nov 2026, 09:15 Europe/Bucharest.
+const NOW = new Date(2026, 10, 2, 9, 15);
+const DAY_MS = 86400000;
+const ACTIVE = ['CONFIRMED', 'CHECKED_OUT', 'OVERDUE'];
+const RULES = { maxActive: 2, horizonDays: 14, minMin: 30, maxMin: 240, open: 8, close: 20 };
+
+const pad = n => String(n).padStart(2, '0');
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const hm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+const dlabel = d => `${WD[d.getDay()]} ${d.getDate()} ${MO[d.getMonth()]}`;
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${hm(d)}:00`;
+const dkey = d => iso(d).slice(0, 10);
+const at = (key, time = '00:00') => { const [y, m, d] = key.split('-').map(Number); const [h, mi] = time.split(':').map(Number); return new Date(y, m - 1, d, h, mi); };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const N = (d, h, m = 0) => new Date(2026, 10, d, h, m);
+const O = (d, h, m = 0) => new Date(2026, 9, d, h, m);
+const tagNo = id => 'CEH-' + String(id).padStart(4, '0');
+const dur = (a, b) => { const m = (b - a) / 60000; return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min`.replace(/^0 h /, '') : `${m / 60} h`; };
+
+function seed() {
+  return {
+    users: [
+      { id: 1, email: 'admin@campus.test', fullName: 'Campus Admin', role: 'ADMIN', password: 'password' },
+      { id: 2, email: 'student1@campus.test', fullName: 'Student One', role: 'STUDENT', password: 'password' },
+      { id: 3, email: 'student2@campus.test', fullName: 'Student Two', role: 'STUDENT', password: 'password' },
+      { id: 4, email: 'student3@campus.test', fullName: 'Student Three', role: 'STUDENT', password: 'password' },
+      { id: 5, email: 'student4@campus.test', fullName: 'Student Four', role: 'STUDENT', password: 'password' },
+      { id: 6, email: 'student5@campus.test', fullName: 'Student Five', role: 'STUDENT', password: 'password' },
+    ],
+    categories: [{ id: 1, name: 'Microcontroller kits' }, { id: 2, name: 'Oscilloscopes' }, { id: 3, name: 'VR headsets' }, { id: 4, name: 'Cameras' }],
+    rooms: [{ id: 1, name: 'EC 105', label: 'Electronics lab' }, { id: 2, name: 'EC 203', label: 'Embedded lab' }, { id: 3, name: 'ED 011', label: 'Media lab' }],
+    assets: [
+      { id: 1, name: 'Arduino Uno R4 kit A', model: 'Arduino Uno R4 WiFi', categoryId: 1, labRoomId: 2, serial: 'ABX00087-1021', status: 'AVAILABLE' },
+      { id: 2, name: 'Arduino Uno R4 kit B', model: 'Arduino Uno R4 WiFi', categoryId: 1, labRoomId: 2, serial: 'ABX00087-1022', status: 'AVAILABLE' },
+      { id: 3, name: 'Arduino Uno R4 kit C', model: 'Arduino Uno R4 WiFi', categoryId: 1, labRoomId: 2, serial: 'ABX00087-1023', status: 'AVAILABLE' },
+      { id: 4, name: 'Raspberry Pi 5 kit A', model: 'Raspberry Pi 5 8GB', categoryId: 1, labRoomId: 2, serial: 'RPI5-8G-40311', status: 'AVAILABLE' },
+      { id: 5, name: 'Raspberry Pi 5 kit B', model: 'Raspberry Pi 5 8GB', categoryId: 1, labRoomId: 2, serial: 'RPI5-8G-40312', status: 'UNDER_MAINTENANCE' },
+      { id: 6, name: 'Arduino Uno R3 kit (old)', model: 'Arduino Uno R3', categoryId: 1, labRoomId: 2, serial: 'A000066-0457', status: 'RETIRED' },
+      { id: 7, name: 'Rigol DS1054Z no. 1', model: 'Rigol DS1054Z', categoryId: 2, labRoomId: 1, serial: 'DS1ZA2419003', status: 'AVAILABLE' },
+      { id: 8, name: 'Rigol DS1054Z no. 2', model: 'Rigol DS1054Z', categoryId: 2, labRoomId: 1, serial: 'DS1ZA2419004', status: 'AVAILABLE' },
+      { id: 9, name: 'Tektronix TBS1052C', model: 'Tektronix TBS1052C', categoryId: 2, labRoomId: 1, serial: 'C051284', status: 'AVAILABLE' },
+      { id: 10, name: 'Meta Quest 3 no. 1', model: 'Meta Quest 3', categoryId: 3, labRoomId: 3, serial: '2G0YC1ZF8B0321', status: 'AVAILABLE' },
+      { id: 11, name: 'Meta Quest 3 no. 2', model: 'Meta Quest 3', categoryId: 3, labRoomId: 3, serial: '2G0YC1ZF8B0322', status: 'AVAILABLE' },
+      { id: 12, name: 'HTC Vive Pro 2', model: 'HTC Vive Pro 2', categoryId: 3, labRoomId: 3, serial: 'HTCVP2-77812', status: 'AVAILABLE' },
+      { id: 13, name: 'Sony Alpha 7 IV', model: 'Sony Alpha 7 IV', categoryId: 4, labRoomId: 3, serial: 'S01-4398812', status: 'AVAILABLE' },
+      { id: 14, name: 'Canon EOS R6 Mark II', model: 'Canon EOS R6 Mark II', categoryId: 4, labRoomId: 3, serial: '0832004417', status: 'AVAILABLE' },
+    ],
+    // Rigol no. 1 is the demo asset: reporting it shows all three engine outcomes
+    // (same model -> Rigol no. 2, same category -> Tektronix, nothing free -> force-cancelled).
+    reservations: [
+      { id: 1, userId: 2, assetId: 7, start: N(3, 10), end: N(3, 12), status: 'CONFIRMED' },
+      { id: 2, userId: 3, assetId: 8, start: N(3, 14), end: N(3, 16), status: 'CONFIRMED' },
+      { id: 3, userId: 4, assetId: 7, start: N(4, 9), end: N(4, 11), status: 'CONFIRMED' },
+      { id: 4, userId: 5, assetId: 8, start: N(4, 10), end: N(4, 12), status: 'CONFIRMED' },
+      { id: 5, userId: 5, assetId: 7, start: N(5, 14), end: N(5, 16), status: 'CONFIRMED' },
+      { id: 6, userId: 1, assetId: 8, start: N(5, 13), end: N(5, 15), status: 'CONFIRMED' },
+      { id: 7, userId: 1, assetId: 9, start: N(5, 14), end: N(5, 16), status: 'CONFIRMED' },
+      { id: 8, userId: 4, assetId: 2, start: N(2, 8), end: N(2, 9), status: 'OVERDUE', checkedOutAt: N(2, 7, 55) },
+      { id: 9, userId: 3, assetId: 3, start: N(2, 9, 30), end: N(2, 11), status: 'CONFIRMED' },
+      { id: 10, userId: 2, assetId: 1, start: O(30, 10), end: O(30, 12), status: 'RETURNED', checkedOutAt: O(30, 9, 58), returnedAt: O(30, 11, 50) },
+      { id: 11, userId: 2, assetId: 12, start: O(29, 12), end: O(29, 13), status: 'CANCELLED', cancelReason: 'Cancelled by the student' },
+      { id: 12, userId: 6, assetId: 1, start: N(3, 13), end: N(3, 15), status: 'CONFIRMED' },
+      { id: 13, userId: 6, assetId: 10, start: N(4, 12), end: N(4, 14), status: 'CONFIRMED' },
+    ],
+    incidents: [
+      { id: 1, assetId: 5, reportedById: 3, description: 'SD card slot is cracked, the board does not boot.', severity: 'MEDIUM', status: 'OPEN', createdAt: O(30, 16, 20), photo: null },
+    ],
+    rlog: [], notes: [], log: [],
+    seq: { asset: 15, res: 14, inc: 2, rlog: 1, note: 1 },
+  };
+}
+
+let D = seed();
+let S = { det: {}, me: null, view: 'login', assetId: null, book: null, flash: null, q: '', cat: '', onlyFree: false, authTab: 'login', notifOpen: false, armed: null, photo: null, lastError: null };
+
+const user = id => D.users.find(u => u.id === id);
+const asset = id => D.assets.find(a => a.id === id);
+const cat = id => D.categories.find(c => c.id === id);
+const room = id => D.rooms.find(r => r.id === id);
+const me = () => user(S.me);
+const isAdmin = () => me()?.role === 'ADMIN';
+const byStart = (a, b) => a.start - b.start;
+
+const LBL = {
+  AVAILABLE: ['Available', 'ok'], UNDER_MAINTENANCE: ['Under maintenance', 'warn'], RETIRED: ['Retired', 'off'],
+  CONFIRMED: ['Confirmed', 'info'], CHECKED_OUT: ['Checked out', 'ok'], RETURNED: ['Returned', 'off'], CANCELLED: ['Cancelled', 'off'],
+  FORCE_CANCELLED: ['Force-cancelled', 'bad'], OVERDUE: ['Overdue', 'bad'], NO_SHOW: ['No-show', 'off'],
+  OPEN: ['Open', 'bad'], IN_REPAIR: ['In repair', 'warn'], RESOLVED: ['Resolved', 'ok'], REJECTED: ['Rejected', 'off'],
+  LOW: ['Low', 'off'], MEDIUM: ['Medium', 'warn'], HIGH: ['High', 'bad'],
+  REASSIGNED: ['Reassigned', 'ok'],
+};
+const pill = s => `<span class="pill ${LBL[s][1]}">${LBL[s][0]}</span>`;
+
+function barcode(seedText) {
+  let x = 0, bars = '';
+  for (const ch of seedText + seedText.split('').reverse().join('')) {
+    const c = ch.charCodeAt(0), w = 1 + (c % 3), g = 1 + ((c >> 2) % 2);
+    bars += `<rect x="${x}" y="0" width="${w}" height="16"/>`;
+    x += w + g;
+  }
+  return `<svg viewBox="0 0 ${x} 16" preserveAspectRatio="none" fill="currentColor" aria-hidden="true">${bars}</svg>`;
+}
+const tag = a => `<span class="tag" title="Inventory tag"><span class="org">CAMPUS HUB · PROPERTY</span>${barcode(a.serial)}<span class="sn">${tagNo(a.id)}</span></span>`;
+
+// ---------- fake API: every action is logged as the request the real frontend would send ----------
+const TITLES = { 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 409: 'Conflict', 413: 'Content Too Large' };
+const fail = (status, code, detail, errors) => ({ status, code, detail, errors });
+function api(method, path, fn, okMsg) {
+  const res = fn() || { status: 200 };
+  const entry = { at: new Date(), method, path, status: res.status, code: res.code || '' };
+  if (res.status >= 400) {
+    entry.body = { type: 'about:blank', title: TITLES[res.status], status: res.status, detail: res.detail, instance: path.split('?')[0], code: res.code };
+    if (res.errors) entry.body.errors = res.errors;
+    S.lastError = entry;
+    toast(`${res.status} ${res.code}`, res.detail, true);
+  } else if (okMsg) {
+    toast(`${res.status} ${{ 200: 'OK', 201: 'Created', 204: 'No Content' }[res.status]}`, typeof okMsg === 'function' ? okMsg(res) : okMsg, false);
+  }
+  D.log.unshift(entry);
+  return res;
+}
+function logEvent(text) { D.log.unshift({ at: new Date(), method: 'EVENT', path: text, status: '', code: '' }); }
+
+let toastTimer;
+function toast(code, msg, isErr) {
+  const el = document.getElementById('toast');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.innerHTML = `<span class="code">${esc(code)}</span><span>${esc(msg)}</span>`;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), isErr ? 6500 : 4000);
+}
+
+function notify(userId, subject, body) {
+  D.notes.unshift({ id: D.seq.note++, userId, subject, body, at: new Date(NOW), read: false });
+}
+
+// ---------- business rules (Calin's booking order: validate, bookable, overlap, limit) ----------
+const activeOn = (assetId, ignoreId = -1) => D.reservations.filter(r => r.assetId === assetId && ACTIVE.includes(r.status) && r.id !== ignoreId);
+const overlap = (assetId, start, end, ignoreId = -1) => activeOn(assetId, ignoreId).find(r => r.start < end && r.end > start);
+const isFree = (assetId, start, end, ignoreId) => !overlap(assetId, start, end, ignoreId);
+
+function createReservation(u, assetId, start, end) {
+  const a = asset(assetId);
+  if (end <= start) return fail(400, 'INVALID_TIME_RANGE', 'The end time must be after the start time.');
+  if (start < NOW) return fail(409, 'BOOKING_IN_PAST', 'This slot has already started. Pick a later time.');
+  const mins = (end - start) / 60000;
+  if (mins < RULES.minMin || mins > RULES.maxMin) return fail(400, 'INVALID_DURATION', 'A booking lasts between 30 minutes and 4 hours.');
+  const daysAhead = Math.round((at(dkey(start)) - at(dkey(NOW))) / DAY_MS);
+  if (daysAhead > RULES.horizonDays) return fail(409, 'BOOKING_TOO_FAR_AHEAD', 'You can book at most 14 days ahead.');
+  const wd = start.getDay();
+  if (wd === 0 || wd === 6 || start.getHours() < RULES.open || end > at(dkey(start), RULES.close + ':00')) return fail(409, 'OUTSIDE_OPENING_HOURS', 'Labs are open Monday to Friday, 08:00 to 20:00.');
+  if (a.status !== 'AVAILABLE') return fail(409, 'ASSET_NOT_BOOKABLE', `${a.name} is ${LBL[a.status][0].toLowerCase()} and can't be booked right now.`);
+  const o = overlap(assetId, start, end);
+  if (o) return fail(409, 'RESERVATION_CONFLICT', `${a.name} is already booked between ${hm(o.start)} and ${hm(o.end)}.`);
+  const mine = D.reservations.filter(r => r.userId === u.id && ACTIVE.includes(r.status)).length;
+  if (u.role !== 'ADMIN' && mine >= RULES.maxActive) return fail(409, 'RESERVATION_LIMIT_REACHED', 'You already have 2 active reservations. Cancel one or wait until one ends.');
+  const r = { id: D.seq.res++, userId: u.id, assetId, start, end, status: 'CONFIRMED' };
+  D.reservations.push(r);
+  return { status: 201, r };
+}
+
+// Reassignment engine: runs after the incident is saved (AssetDamagedEvent, AFTER_COMMIT).
+// Strategies are tried in order; the first free candidate wins, same lab room preferred.
+const STRATEGIES = [
+  ['SameModelStrategy', d => D.assets.filter(a => a.model === d.model)],
+  ['SameCategoryStrategy', d => D.assets.filter(a => a.categoryId === d.categoryId)],
+];
+function runEngine(inc) {
+  const damaged = asset(inc.assetId);
+  logEvent(`AssetDamagedEvent(incidentId=${inc.id}, assetId=${damaged.id}) → reassignment engine`);
+  const upcoming = D.reservations.filter(r => r.assetId === damaged.id && r.status === 'CONFIRMED' && r.start >= NOW).sort(byStart);
+  const results = [];
+  for (const r of upcoming) {
+    let found = null, strategy = null;
+    for (const [name, candidates] of STRATEGIES) {
+      found = candidates(damaged)
+        .filter(a => a.id !== damaged.id && a.status === 'AVAILABLE')
+        .sort((a, b) => (a.labRoomId !== damaged.labRoomId) - (b.labRoomId !== damaged.labRoomId))
+        .find(a => isFree(a.id, r.start, r.end, r.id));
+      if (found) { strategy = name; break; }
+    }
+    const when = `${dlabel(r.start)}, ${hm(r.start)}–${hm(r.end)}`;
+    if (found) {
+      r.originalAssetId = r.originalAssetId ?? r.assetId;
+      r.assetId = found.id;
+      D.rlog.unshift({ id: D.seq.rlog++, incidentId: inc.id, reservationId: r.id, userId: r.userId, fromId: damaged.id, toId: found.id, outcome: 'REASSIGNED', strategy, at: new Date(NOW) });
+      notify(r.userId, 'Your booking was moved', `${damaged.name} was reported broken. Your booking on ${when} is now on ${found.name} (${room(found.labRoomId).name}).`);
+    } else {
+      r.status = 'FORCE_CANCELLED';
+      r.cancelReason = `${damaged.name} was reported broken and no matching item was free`;
+      D.rlog.unshift({ id: D.seq.rlog++, incidentId: inc.id, reservationId: r.id, userId: r.userId, fromId: damaged.id, toId: null, outcome: 'FORCE_CANCELLED', strategy: null, at: new Date(NOW) });
+      notify(r.userId, 'Your booking was cancelled', `${damaged.name} was reported broken and no matching item is free on ${when}. Please book another slot.`);
+    }
+    results.push({ r, found, strategy });
+  }
+  return results;
+}
+
+function reportIncident(u, assetId, description, severity, photo) {
+  const a = asset(assetId);
+  if (!description.trim()) return fail(400, 'VALIDATION_FAILED', 'Validation failed', [{ field: 'description', message: 'must not be blank' }]);
+  if (a.status === 'RETIRED') return fail(409, 'ASSET_RETIRED', `${a.name} is retired, so it can't be reported.`);
+  if (photo && photo.size > 5 * 1024 * 1024) return fail(413, 'PHOTO_TOO_LARGE', 'The photo is larger than 5 MB.');
+  if (photo && !['image/jpeg', 'image/png', 'image/webp'].includes(photo.type)) return fail(400, 'INVALID_PHOTO_TYPE', 'Use a JPEG, PNG or WebP photo.');
+  const inc = { id: D.seq.inc++, assetId, reportedById: u.id, description: description.trim(), severity, status: 'OPEN', createdAt: new Date(NOW), photo: photo?.url || null };
+  D.incidents.push(inc);
+  a.status = 'UNDER_MAINTENANCE';
+  return { status: 201, inc };
+}
+
+// ---------- views ----------
+function render() {
+  const app = document.getElementById('app');
+  if (!S.me) { app.innerHTML = viewLogin(); return; }
+  const views = { catalog: viewCatalog, asset: viewAsset, mine: viewMine, myinc: viewMyIncidents, desk: viewDesk, queue: viewQueue, rlog: viewRlog, inventory: viewInventory };
+  app.innerHTML = shell((views[S.view] || viewCatalog)());
+}
+
+function shell(content) {
+  const u = me();
+  const nav = isAdmin()
+    ? [['catalog', 'Catalog'], ['desk', 'Reservations desk'], ['queue', 'Incident queue'], ['rlog', 'Reassignment log'], ['inventory', 'Inventory']]
+    : [['catalog', 'Catalog'], ['mine', 'My reservations'], ['myinc', 'My incidents']];
+  const current = S.view === 'asset' ? 'catalog' : S.view;
+  const notes = D.notes.filter(n => n.userId === u.id);
+  const unread = notes.filter(n => !n.read).length;
+  return `
+  <header class="top">
+    <div class="wrap">
+      <div class="brand">Campus <b>Hub</b></div>
+      <nav class="nav" aria-label="Main">${nav.map(([v, l]) => `<button data-act="go" data-view="${v}" ${v === current ? 'aria-current="page"' : ''}>${l}</button>`).join('')}</nav>
+      <div class="right">
+        <span class="clock" title="Campus time, Europe/Bucharest">${dlabel(NOW)} · ${hm(NOW)}</span>
+        <button class="iconbtn" data-act="notif" aria-label="Notifications${unread ? `, ${unread} unread` : ''}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          ${unread ? `<span class="badge">${unread}</span>` : ''}
+        </button>
+        <span class="who"><span>${esc(u.fullName)}</span><span class="role">${u.role}</span></span>
+        <button class="btn sm" data-act="logout">Sign out</button>
+      </div>
+    </div>
+    ${S.notifOpen ? `<div class="notif" role="dialog" aria-label="Notifications">
+      <header><b>Notifications</b><span class="muted small">Sent by email in the real app</span></header>
+      ${notes.length ? notes.map(n => `<article><b>${esc(n.subject)}</b><span class="small">${esc(n.body)}</span><span class="muted small mono">${dlabel(n.at)} ${hm(n.at)}</span></article>`).join('') : '<article class="muted small">Nothing yet. If an item you booked breaks, you hear about it here.</article>'}
+    </div>` : ''}
+  </header>
+  <div class="strip"><div class="wrap">
+    <span><b>Prototype.</b> Fake data in this browser tab, no backend. The clock is fixed at Mon 2 Nov, 09:15.</span>
+    <button data-act="reset">Reset data</button>
+  </div></div>
+  <main class="wrap">${content}</main>
+  ${footer()}`;
+}
+
+function viewLogin() {
+  const reg = S.authTab === 'register';
+  const devs = D.users.slice(0, 3);
+  return `<div class="wrap login"><div class="box">
+    <div class="intro">
+      <div style="display:grid;gap:14px">
+        <span class="tag"><span class="org">CAMPUS HUB · PROPERTY</span>${barcode('CAMPUSHUB')}<span class="sn">CEH-0000</span></span>
+        <h1>Book lab equipment. Report what's broken.</h1>
+        <p>Reserve oscilloscopes, kits and headsets by the half hour. If something breaks, report it with a photo and every upcoming booking moves to a matching item on its own.</p>
+      </div>
+      <p class="small">Prototype with fake data. Nothing leaves this browser tab.</p>
+    </div>
+    <form id="auth" novalidate>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-act="tab" data-tab="login" aria-selected="${!reg}">Sign in</button>
+        <button type="button" role="tab" data-act="tab" data-tab="register" aria-selected="${reg}">Create account</button>
+      </div>
+      ${reg ? `<label class="f">Full name<input id="a-name" type="text" autocomplete="name" placeholder="Maria Ionescu"></label>` : ''}
+      <label class="f">University email<input id="a-email" type="email" autocomplete="username" value="${reg ? '' : 'student1@campus.test'}"></label>
+      <label class="f">Password<input id="a-pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" value="${reg ? '' : 'password'}" placeholder="${reg ? '8 to 72 characters' : ''}"></label>
+      <button class="btn primary" type="submit">${reg ? 'Create account' : 'Sign in'}</button>
+      ${reg ? '<p class="muted small">New accounts are always students. Admins are created by an admin.</p>' : `
+      <div class="quick"><span class="muted small">Dev accounts (password <span class="mono">password</span>)</span>
+        ${devs.map(u => `<button type="button" data-act="quick" data-email="${u.email}"><span class="mono">${u.email}</span><span class="muted small">${u.role === 'ADMIN' ? 'Admin' : 'Student'}</span></button>`).join('')}
+      </div>`}
+    </form>
+  </div></div>${footer()}`;
+}
+
+function nextBooking(a) {
+  const r = activeOn(a.id).filter(r => r.end > NOW).sort(byStart)[0];
+  return r ? `Next booked ${dlabel(r.start)}, ${hm(r.start)}–${hm(r.end)}` : 'No upcoming bookings';
+}
+function catalogResults() {
+  const q = S.q.trim().toLowerCase();
+  const list = D.assets.filter(a =>
+    (!q || (a.name + ' ' + a.model).toLowerCase().includes(q)) &&
+    (!S.cat || a.categoryId === Number(S.cat)) &&
+    (!S.onlyFree || a.status === 'AVAILABLE') &&
+    (isAdmin() || a.status !== 'RETIRED'));
+  if (!list.length) return `<div class="empty">No equipment matches. Clear the search or pick another category.</div>`;
+  return list.map(a => `<button class="card" data-act="open" data-id="${a.id}">
+      <div class="row">${tag(a)}${pill(a.status)}</div>
+      <h3>${esc(a.name)}</h3>
+      <div class="meta"><span class="mono">${esc(a.model)}</span></div>
+      <div class="meta">${cat(a.categoryId).name} · ${room(a.labRoomId).name} ${room(a.labRoomId).label}</div>
+      <div class="meta">${nextBooking(a)}</div>
+    </button>`).join('');
+}
+function viewCatalog() {
+  const visible = D.assets.filter(a => isAdmin() || a.status !== 'RETIRED').length;
+  return `<div class="head"><div><h1>Equipment</h1><p>${visible} items in ${D.rooms.length} labs. Open one to see its free slots and book it.</p></div></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search by name or model, e.g. Rigol" value="${esc(S.q)}" aria-label="Search equipment">
+      <select id="cat" aria-label="Category"><option value="">All categories</option>${D.categories.map(c => `<option value="${c.id}" ${String(c.id) === S.cat ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
+      <label class="check"><input id="onlyFree" type="checkbox" ${S.onlyFree ? 'checked' : ''}> Only bookable</label>
+    </div>
+    <div id="results" class="grid">${catalogResults()}</div>`;
+}
+
+function dayChoices() {
+  const out = [];
+  for (let i = 0; i <= RULES.horizonDays + 1; i++) out.push(new Date(at(dkey(NOW)).getTime() + i * DAY_MS));
+  return out;
+}
+function timeOptions(sel, from, to) {
+  let html = '';
+  for (let m = from * 60; m <= to * 60; m += 30) { const v = pad(Math.floor(m / 60)) + ':' + pad(m % 60); html += `<option ${v === sel ? 'selected' : ''}>${v}</option>`; }
+  return html;
+}
+function bookingPanel() {
+  const a = asset(S.assetId), b = S.book;
+  const start = at(b.day, b.start), end = at(b.day, b.end);
+  const day0 = at(b.day, '08:00'), span = 12 * 60;
+  const pct = d => Math.max(0, Math.min(100, ((d - day0) / 60000) / span * 100));
+  const clash = end > start && overlap(a.id, start, end);
+  const blocks = activeOn(a.id).filter(r => dkey(r.start) === b.day).sort(byStart);
+  const isToday = b.day === dkey(NOW);
+  const past = isToday ? pct(NOW) : (at(b.day) < at(dkey(NOW)) ? 100 : 0);
+  let hours = '';
+  for (let h = 8; h < 20; h++) { hours += `<span class="hr" style="left:${(h - 8) / 12 * 100}%"></span><span class="hr half" style="left:${(h - 7.5) / 12 * 100}%"></span>`; }
+  const axis = [8, 10, 12, 14, 16, 18, 20].map(h => `<span style="left:${(h - 8) / 12 * 100}%">${pad(h)}:00</span>`).join('');
+  return `
+    <div class="days" role="group" aria-label="Day">${dayChoices().map(d => {
+      const k = dkey(d), closed = d.getDay() === 0 || d.getDay() === 6;
+      return `<button class="day ${closed ? 'closed' : ''}" data-act="day" data-day="${k}" aria-pressed="${k === b.day}" ${closed ? 'title="Labs are closed at weekends"' : ''}><small>${WD[d.getDay()]}</small><b>${d.getDate()}</b></button>`;
+    }).join('')}</div>
+    <div>
+      <div class="tl" aria-label="Bookings on ${dlabel(start)}">
+        ${hours}
+        ${past ? `<span class="past" style="width:${past}%"></span>` : ''}
+        ${blocks.map(r => `<span class="busy ${r.userId === S.me ? 'mine' : ''}" style="left:${pct(r.start)}%;width:${pct(r.end) - pct(r.start)}%">${r.userId === S.me ? 'Yours' : 'Booked'} ${hm(r.start)}–${hm(r.end)}</span>`).join('')}
+        ${end > start ? `<span class="sel ${clash ? 'clash' : ''}" style="left:${pct(start)}%;width:${pct(end) - pct(start)}%"></span>` : ''}
+        ${isToday ? `<span class="now" style="left:${pct(NOW)}%" title="Now ${hm(NOW)}"></span>` : ''}
+      </div>
+      <div class="axis">${axis}</div>
+    </div>
+    <div class="legend"><span><i style="background:var(--off-soft);border-color:var(--off)"></i>Booked</span><span><i style="background:var(--accent-soft);border-color:var(--accent)"></i>Your booking</span><span><i style="border-color:var(--accent);border-width:2px"></i>Your selection</span></div>
+    <div class="times">
+      <label class="f">From<select id="bk-start">${timeOptions(b.start, 8, 19.5)}</select></label>
+      <label class="f">To<select id="bk-end">${timeOptions(b.end, 8.5, 20)}</select></label>
+      <button class="btn primary" data-act="book">Book this slot</button>
+    </div>
+    <p class="summary ${clash ? 'clash' : ''}">${dlabel(start)}, ${b.start}–${b.end}${end > start ? ` · ${dur(start, end)}` : ''}${clash ? ` · overlaps a booking (${hm(clash.start)}–${hm(clash.end)})` : ''}</p>
+    <p class="muted small">Bookings start and end on the hour or half hour, last 30 min to 4 h, up to 14 days ahead. Students can hold 2 active bookings.</p>`;
+}
+function viewAsset() {
+  const a = asset(S.assetId);
+  const f = S.flash && S.flash.assetId === a.id ? S.flash : null;
+  let flash = '';
+  if (f) {
+    const own = f.results.filter(x => x.r.userId === S.me);
+    flash = `<div class="callout warnc"><b>Incident #${f.incidentId} reported. ${esc(a.name)} is now under maintenance.</b>
+      <span>${f.results.length ? `${f.results.length} upcoming booking${f.results.length > 1 ? 's were' : ' was'} handled automatically.` : 'It had no upcoming bookings.'}</span>
+      ${own.length ? `<ul>${own.map(x => `<li>Your booking on ${dlabel(x.r.start)}, ${hm(x.r.start)}–${hm(x.r.end)} ${x.found ? `moved to <b>${esc(x.found.name)}</b>` : 'was cancelled: no matching item was free'}.</li>`).join('')}</ul>` : ''}
+      ${isAdmin() ? '<button class="link" data-act="go" data-view="rlog">See the reassignment log</button>' : ''}</div>`;
+  }
+  const notice = a.status !== 'AVAILABLE' ? `<p class="small" style="color:var(--warn)">${a.status === 'RETIRED' ? 'This item is retired.' : 'This item is being repaired.'} New bookings are refused until it is available again.</p>` : '';
+  return `<div class="back"><button class="link" data-act="go" data-view="catalog">← All equipment</button></div>
+    <div class="asset-head">${tag(a)}
+      <div class="t"><div class="line" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h1>${esc(a.name)}</h1>${pill(a.status)}</div>
+        <div class="facts"><span class="mono">${esc(a.model)}</span><span>${cat(a.categoryId).name}</span><span>${room(a.labRoomId).name} · ${room(a.labRoomId).label}</span><span>S/N <span class="mono">${esc(a.serial)}</span></span></div>
+      </div></div>
+    ${flash}
+    <div class="cols">
+      <section class="panel"><header><h2>Book a slot</h2>${notice}</header><div id="bk" class="stack" style="gap:12px">${bookingPanel()}</div></section>
+      <form class="panel" id="report" novalidate>
+        <header><h2>Report a problem</h2><p class="muted small">The item is taken out of service right away. Upcoming bookings move to a matching item if one is free; otherwise they are cancelled and the students are told.</p></header>
+        <label class="f">What's wrong?<textarea id="r-desc" maxlength="1000" placeholder="e.g. Channel 2 shows no signal, probe connector is loose"></textarea></label>
+        <div class="f" style="display:grid;gap:4px;font-size:0.85rem;font-weight:500">Severity
+          <div class="seg">${['LOW', 'MEDIUM', 'HIGH'].map(s => `<label><input type="radio" name="sev" value="${s}" ${s === 'MEDIUM' ? 'checked' : ''}>${LBL[s][0]}</label>`).join('')}</div></div>
+        <div class="photo"><label class="btn sm" for="r-photo">Add photo</label><input id="r-photo" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          ${S.photo ? `<img src="${S.photo.url}" alt="Photo preview"><span class="small muted">${esc(S.photo.name)}</span><button type="button" class="link small" data-act="nophoto">Remove</button>` : '<span class="muted small">Optional. JPEG, PNG or WebP, up to 5 MB.</span>'}</div>
+        <div><button class="btn danger" type="submit">Report problem</button></div>
+      </form>
+    </div>`;
+}
+
+function dateBox(d) { return `<div class="date"><small>${WD[d.getDay()]}</small><b>${d.getDate()}</b><small>${MO[d.getMonth()]}</small></div>`; }
+function resItem(r, actions) {
+  const a = asset(r.assetId), orig = r.originalAssetId ? asset(r.originalAssetId) : null;
+  return `<div class="item">${dateBox(r.start)}
+    <div class="body"><div class="line"><b>${esc(a.name)}</b>${pill(r.status)}${orig ? `<span class="pill info">Moved from ${esc(orig.name)}</span>` : ''}</div>
+      <span class="small muted">${hm(r.start)}–${hm(r.end)} · ${room(a.labRoomId).name} ${room(a.labRoomId).label}${r.cancelReason ? ` · ${esc(r.cancelReason)}` : ''}</span></div>
+    <div class="act">${actions || ''}</div></div>`;
+}
+function viewMine() {
+  const mine = D.reservations.filter(r => r.userId === S.me).sort(byStart);
+  const up = mine.filter(r => ACTIVE.includes(r.status));
+  const past = mine.filter(r => !ACTIVE.includes(r.status)).reverse();
+  const cancelBtn = r => r.status === 'CONFIRMED' && r.start > NOW
+    ? `<button class="btn danger sm ${S.armed === 'c' + r.id ? 'armed' : ''}" data-act="cancel" data-id="${r.id}">${S.armed === 'c' + r.id ? 'Confirm cancel' : 'Cancel'}</button>` : '';
+  return `<div class="head"><div><h1>My reservations</h1><p>${up.length} of ${RULES.maxActive} active bookings used. You can cancel until the slot starts.</p></div><button class="btn" data-act="go" data-view="catalog">Book equipment</button></div>
+    <div class="sec-title"><h2>Upcoming</h2></div>
+    <div class="list">${up.length ? up.map(r => resItem(r, cancelBtn(r))).join('') : '<div class="empty">No upcoming bookings. Pick an item in the catalog to book a slot.</div>'}</div>
+    <div class="sec-title"><h2>History</h2></div>
+    <div class="list">${past.length ? past.map(r => resItem(r)).join('') : '<div class="empty">Nothing here yet.</div>'}</div>`;
+}
+function viewMyIncidents() {
+  const list = D.incidents.filter(i => i.reportedById === S.me).sort((a, b) => b.createdAt - a.createdAt);
+  return `<div class="head"><div><h1>My incidents</h1><p>Problems you reported and where the repair stands.</p></div></div>
+    <div class="list">${list.length ? list.map(i => `<div class="item">${dateBox(i.createdAt)}
+      <div class="body"><div class="line"><b>#${i.id} · ${esc(asset(i.assetId).name)}</b>${pill(i.status)}${pill(i.severity)}</div><span class="small">${esc(i.description)}</span>${i.resolutionNote ? `<span class="small muted">Admin note: ${esc(i.resolutionNote)}</span>` : ''}</div>
+      <div class="act">${i.photo ? `<img class="thumb" src="${i.photo}" alt="Photo of the problem">` : ''}</div></div>`).join('') : '<div class="empty">You haven\'t reported anything. Open an item in the catalog and use "Report a problem".</div>'}</div>`;
+}
+
+// Matei's page: today's pickups and returns at the lab desk.
+function viewDesk() {
+  const today = D.reservations.filter(r => dkey(r.start) === dkey(NOW) && r.status === 'CONFIRMED').sort(byStart);
+  const out = D.reservations.filter(r => r.status === 'CHECKED_OUT' || r.status === 'OVERDUE').sort((a, b) => a.end - b.end);
+  const row = (r, btn) => `<tr><td class="num">${hm(r.start)}–${hm(r.end)}</td><td>${esc(asset(r.assetId).name)}<br><span class="muted small">${room(asset(r.assetId).labRoomId).name}</span></td><td>${esc(user(r.userId).fullName)}<br><span class="muted small mono">${user(r.userId).email}</span></td><td>${pill(r.status)}</td><td>${btn}</td></tr>`;
+  return `<div class="head"><div><h1>Reservations desk</h1><p>${dlabel(NOW)}. Hand items out at pickup (from 15 min before the start until 30 min after) and take them back on return.</p></div></div>
+    <div class="sec-title"><h2>Pickups today</h2><span class="muted small">${today.length}</span></div>
+    <div class="tablebox"><table><thead><tr><th>Slot</th><th>Item</th><th>Student</th><th>Status</th><th></th></tr></thead><tbody>
+      ${today.length ? today.map(r => row(r, `<button class="btn sm primary" data-act="checkout" data-id="${r.id}">Check out</button>`)).join('') : '<tr><td colspan="5" class="muted">No more pickups today.</td></tr>'}
+    </tbody></table></div>
+    <div class="sec-title"><h2>Out now</h2><span class="muted small">Overdue = still out after its end time</span></div>
+    <div class="tablebox"><table><thead><tr><th>Slot</th><th>Item</th><th>Student</th><th>Status</th><th></th></tr></thead><tbody>
+      ${out.length ? out.map(r => row(r, `<button class="btn sm" data-act="return" data-id="${r.id}">Mark returned</button>`)).join('') : '<tr><td colspan="5" class="muted">Nothing is out right now.</td></tr>'}
+    </tbody></table></div>`;
+}
+
+const ORDER = { OPEN: 0, IN_REPAIR: 1, RESOLVED: 2, REJECTED: 3 }, SEV = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+function viewQueue() {
+  const list = [...D.incidents].sort((a, b) => ORDER[a.status] - ORDER[b.status] || SEV[a.severity] - SEV[b.severity] || b.createdAt - a.createdAt);
+  const open = list.filter(i => i.status === 'OPEN' || i.status === 'IN_REPAIR').length;
+  return `<div class="head"><div><h1>Incident queue</h1><p>${open} need attention. Open first, high severity first. Resolving the last open incident on an item makes it bookable again.</p></div></div>
+    <div class="tablebox"><table><thead><tr><th>#</th><th>Item</th><th>Problem</th><th>Severity</th><th>Status</th><th>Reported</th><th>Actions</th></tr></thead><tbody>
+    ${list.map(i => {
+      const live = i.status === 'OPEN' || i.status === 'IN_REPAIR';
+      return `<tr><td class="num mono">${i.id}</td>
+        <td>${esc(asset(i.assetId).name)}<br>${pill(asset(i.assetId).status)}</td>
+        <td style="min-width:220px"><div style="display:flex;gap:8px">${i.photo ? `<img class="thumb" src="${i.photo}" alt="Photo">` : ''}<span>${esc(i.description)}</span></div>${i.resolutionNote ? `<span class="muted small">Note: ${esc(i.resolutionNote)}</span>` : ''}</td>
+        <td>${pill(i.severity)}</td><td>${pill(i.status)}</td>
+        <td class="num">${dlabel(i.createdAt)} ${hm(i.createdAt)}<br><span class="muted small">${esc(user(i.reportedById).fullName)}</span></td>
+        <td>${live ? `<div style="display:grid;gap:6px;min-width:190px">
+          <input id="note-${i.id}" type="text" placeholder="Note (e.g. probe replaced)" aria-label="Resolution note">
+          <div class="act">${i.status === 'OPEN' ? `<button class="btn sm" data-act="inc" data-op="start-repair" data-id="${i.id}">Start repair</button>` : ''}
+          <button class="btn sm primary" data-act="inc" data-op="resolve" data-id="${i.id}">Resolve</button>
+          ${i.status === 'OPEN' ? `<button class="btn sm" data-act="inc" data-op="reject" data-id="${i.id}">Reject</button>` : ''}</div></div>` : '<span class="muted small">Closed</span>'}</td></tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+}
+
+function viewRlog() {
+  return `<div class="head"><div><h1>Reassignment log</h1><p>What the engine did after each incident. Strategies run in order: same model first, then same category, preferring the same lab room. If nothing is free, the booking is force-cancelled.</p></div></div>
+    <div class="tablebox"><table><thead><tr><th>Incident</th><th>Student</th><th>Slot</th><th>From → to</th><th>Outcome</th><th>Strategy</th></tr></thead><tbody>
+    ${D.rlog.length ? D.rlog.map(l => { const r = D.reservations.find(x => x.id === l.reservationId); return `<tr>
+      <td class="num mono">#${l.incidentId}</td><td>${esc(user(l.userId).fullName)}</td><td class="num">${dlabel(r.start)} ${hm(r.start)}–${hm(r.end)}</td>
+      <td>${esc(asset(l.fromId).name)} → ${l.toId ? `<b>${esc(asset(l.toId).name)}</b>` : '<span class="muted">none</span>'}</td>
+      <td>${pill(l.outcome)}</td><td class="mono small">${l.strategy || '–'}</td></tr>`; }).join('')
+      : '<tr><td colspan="6" class="muted">Empty so far. Report a booked item (try Rigol DS1054Z no. 1) to see the engine at work.</td></tr>'}
+    </tbody></table></div>`;
+}
+
+function viewInventory() {
+  return `<div class="head"><div><h1>Inventory</h1><p>Add equipment and retire what's gone. Items are never deleted, because bookings and incidents still point to them.</p></div></div>
+    <form id="add" class="panel" novalidate style="margin-bottom:18px">
+      <header><h2>Add an item</h2></header>
+      <div class="formgrid">
+        <label class="f">Name<input id="n-name" type="text" placeholder="Rigol DS1054Z no. 3"></label>
+        <label class="f">Model<input id="n-model" type="text" placeholder="Rigol DS1054Z"></label>
+        <label class="f">Serial number<input id="n-serial" type="text" placeholder="DS1ZA2419005"></label>
+        <label class="f">Category<select id="n-cat">${D.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select></label>
+        <label class="f">Lab room<select id="n-room">${D.rooms.map(r => `<option value="${r.id}">${r.name} ${r.label}</option>`).join('')}</select></label>
+        <div><button class="btn primary" type="submit">Add item</button></div>
+      </div>
+    </form>
+    <div class="tablebox"><table><thead><tr><th>Tag</th><th>Name</th><th>Model</th><th>Category</th><th>Room</th><th>Status</th><th></th></tr></thead><tbody>
+    ${D.assets.map(a => `<tr><td class="mono small">${tagNo(a.id)}</td><td>${esc(a.name)}<br><span class="muted small mono">S/N ${esc(a.serial)}</span></td><td class="mono small">${esc(a.model)}</td><td>${cat(a.categoryId).name}</td><td>${room(a.labRoomId).name}</td><td>${pill(a.status)}</td>
+      <td>${a.status !== 'RETIRED' ? `<button class="btn danger sm ${S.armed === 'r' + a.id ? 'armed' : ''}" data-act="retire" data-id="${a.id}">${S.armed === 'r' + a.id ? 'Confirm retire' : 'Retire'}</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function footer() {
+  const rows = D.log.slice(0, 40);
+  return `<footer class="foot wrap">
+    <details id="d-script" ${S.det['d-script'] ? 'open' : ''}><summary>Demo script</summary><div class="in"><ol>
+      <li>Sign in as <span class="mono">student1@campus.test</span>.</li>
+      <li>Open <b>Arduino Uno R4 kit A</b>, keep Tue 3, 10:00–12:00 and book it: <span class="mono">201</span>.</li>
+      <li>Book the same slot again: <span class="mono">409 RESERVATION_CONFLICT</span>.</li>
+      <li>Try a third item: <span class="mono">409 RESERVATION_LIMIT_REACHED</span> (2 active). Cancel the Arduino booking in My reservations.</li>
+      <li>Open <b>Rigol DS1054Z no. 1</b> (you have it Tue 10:00–12:00) and report a problem.</li>
+      <li>The bell shows your booking moved to Rigol no. 2. Booking Rigol no. 1 now gives <span class="mono">409 ASSET_NOT_BOOKABLE</span>.</li>
+      <li>Sign in as <span class="mono">admin@campus.test</span>: the reassignment log shows all three outcomes; resolve the incident in the queue and Rigol no. 1 is available again.</li>
+    </ol></div></details>
+    <details id="d-log" ${S.det['d-log'] ? 'open' : ''}><summary>Requests this mockup would send (${D.log.length})</summary><div class="in">
+      <p class="muted small">Each action maps to the REST API in docs/api-contract.md. Errors use the ProblemDetail shape with a <span class="mono">code</span>.</p>
+      <div class="tablebox"><table><thead><tr><th>Time</th><th>Request</th><th>Result</th></tr></thead><tbody>
+        ${rows.length ? rows.map(l => `<tr><td class="num mono small">${hm(l.at)}:${pad(l.at.getSeconds())}</td><td class="mono small">${l.method === 'EVENT' ? '<span class="muted">event</span> ' : l.method + ' '}${esc(l.path)}</td><td class="mono small">${l.status ? `<span class="st ${l.status >= 400 ? 'e' : 's'}">${l.status}</span> ${l.code}` : ''}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">No requests yet.</td></tr>'}
+      </tbody></table></div>
+      ${S.lastError ? `<span class="small muted">Last error response body</span><pre>${esc(JSON.stringify(S.lastError.body, null, 2))}</pre>` : ''}
+    </div></details>
+  </footer>`;
+}
+
+// ---------- events ----------
+function go(view) { S.view = view; S.notifOpen = false; S.armed = null; render(); window.scrollTo(0, 0); }
+function openAsset(id) {
+  if (!S.book || S.book.assetId !== id) S.book = { assetId: id, day: dkey(N(3, 0)), start: '10:00', end: '12:00' };
+  S.assetId = id; S.photo = null;
+  if (S.flash && S.flash.assetId !== id) S.flash = null;
+  api('GET', `/api/v1/assets/${id}`, () => ({ status: 200 }));
+  go('asset');
+}
+const rerenderBooking = () => { const el = document.getElementById('bk'); if (el) el.innerHTML = bookingPanel(); };
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) { if (S.notifOpen && !e.target.closest('.notif')) { S.notifOpen = false; render(); } return; }
+  const id = Number(el.dataset.id), act = el.dataset.act;
+  if (act !== 'cancel' && act !== 'retire') S.armed = null;
+  switch (act) {
+    case 'go': go(el.dataset.view); break;
+    case 'open': openAsset(id); break;
+    case 'tab': S.authTab = el.dataset.tab; render(); break;
+    case 'quick': document.getElementById('a-email').value = el.dataset.email; document.getElementById('a-pass').value = 'password'; doLogin(); break;
+    case 'logout': S.me = null; S.flash = null; S.book = null; S.authTab = 'login'; go('login'); break;
+    case 'reset': D = seed(); S.flash = null; S.book = null; S.lastError = null; toast('Reset', 'Fake data restored to the starting state.', false); go(S.view === 'asset' ? 'catalog' : S.view); break;
+    case 'notif': S.notifOpen = !S.notifOpen; render(); if (S.notifOpen) D.notes.filter(n => n.userId === S.me).forEach(n => (n.read = true)); break;
+    case 'day': S.book.day = el.dataset.day; rerenderBooking(); break;
+    case 'book': {
+      const b = S.book;
+      const res = api('POST', '/api/v1/reservations', () => createReservation(me(), b.assetId, at(b.day, b.start), at(b.day, b.end)),
+        r => `Booked ${asset(r.r.assetId).name}, ${dlabel(r.r.start)} ${hm(r.r.start)}–${hm(r.r.end)}.`);
+      if (res.status === 201) rerenderBooking(); else render();
+      break;
+    }
+    case 'cancel':
+      if (S.armed !== 'c' + id) { S.armed = 'c' + id; render(); break; }
+      S.armed = null;
+      api('POST', `/api/v1/reservations/${id}/cancel`, () => {
+        const r = D.reservations.find(x => x.id === id);
+        if (r.status !== 'CONFIRMED' || r.start <= NOW) return fail(409, 'CANCELLATION_NOT_ALLOWED', 'This booking can no longer be cancelled.');
+        r.status = 'CANCELLED'; r.cancelReason = 'Cancelled by the student';
+        return { status: 204 };
+      }, 'Booking cancelled. The slot is free for others.');
+      render(); break;
+    case 'checkout':
+      api('POST', `/api/v1/admin/reservations/${id}/checkout`, () => {
+        const r = D.reservations.find(x => x.id === id);
+        if (NOW < new Date(r.start - 15 * 60000) || NOW > new Date(r.start.getTime() + 30 * 60000)) return fail(409, 'CHECKOUT_WINDOW_CLOSED', 'Pickup is possible from 15 minutes before the start until 30 minutes after.');
+        r.status = 'CHECKED_OUT'; r.checkedOutAt = new Date(NOW);
+        return { status: 200 };
+      }, 'Checked out. The student has the item.');
+      render(); break;
+    case 'return':
+      api('POST', `/api/v1/admin/reservations/${id}/return`, () => {
+        const r = D.reservations.find(x => x.id === id);
+        r.status = 'RETURNED'; r.returnedAt = new Date(NOW);
+        return { status: 200 };
+      }, 'Returned. The item is back on the shelf.');
+      render(); break;
+    case 'inc': {
+      const op = el.dataset.op, note = document.getElementById('note-' + id)?.value.trim() || '';
+      api('POST', `/api/v1/admin/incidents/${id}/${op}`, () => {
+        const i = D.incidents.find(x => x.id === id), a = asset(i.assetId);
+        if (op === 'start-repair') { i.status = 'IN_REPAIR'; return { status: 200 }; }
+        i.status = op === 'resolve' ? 'RESOLVED' : 'REJECTED';
+        i.resolutionNote = note || null;
+        // Back to AVAILABLE only when no other open incident remains on the same item.
+        const others = D.incidents.some(x => x.assetId === a.id && x.id !== i.id && (x.status === 'OPEN' || x.status === 'IN_REPAIR'));
+        if (!others && a.status === 'UNDER_MAINTENANCE') a.status = 'AVAILABLE';
+        notify(i.reportedById, `Incident #${i.id} ${i.status === 'RESOLVED' ? 'resolved' : 'closed'}`, `${a.name}: ${note || (i.status === 'RESOLVED' ? 'fixed and back in service.' : 'no fault found.')}`);
+        return { status: 200 };
+      }, op === 'start-repair' ? 'Repair started.' : op === 'resolve' ? 'Resolved. The item is bookable again if nothing else is open on it.' : 'Rejected. The item is bookable again.');
+      render(); break;
+    }
+    case 'retire':
+      if (S.armed !== 'r' + id) { S.armed = 'r' + id; render(); break; }
+      S.armed = null;
+      api('POST', `/api/v1/admin/assets/${id}/retire`, () => { asset(id).status = 'RETIRED'; return { status: 200 }; }, `${asset(id).name} retired. Students no longer see it.`);
+      render(); break;
+    case 'nophoto': S.photo = null; render(); break;
+  }
+});
+
+// Keep the footer panels open across re-renders (toggle doesn't bubble, so listen in the capture phase).
+document.addEventListener('toggle', e => { if (e.target.id) S.det[e.target.id] = e.target.open; }, true);
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { S.q = e.target.value; document.getElementById('results').innerHTML = catalogResults(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'cat') { S.cat = t.value; document.getElementById('results').innerHTML = catalogResults(); }
+  if (t.id === 'onlyFree') { S.onlyFree = t.checked; document.getElementById('results').innerHTML = catalogResults(); }
+  if (t.id === 'bk-start') { S.book.start = t.value; rerenderBooking(); }
+  if (t.id === 'bk-end') { S.book.end = t.value; rerenderBooking(); }
+  if (t.id === 'r-photo' && t.files[0]) {
+    const file = t.files[0], reader = new FileReader();
+    const desc = document.getElementById('r-desc').value;
+    const sev = document.querySelector('input[name=sev]:checked').value;
+    reader.onload = () => {
+      S.photo = { name: file.name, size: file.size, type: file.type, url: reader.result };
+      render();
+      document.getElementById('r-desc').value = desc;
+      document.querySelector(`input[name=sev][value=${sev}]`).checked = true;
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+function doLogin() {
+  const email = document.getElementById('a-email').value.trim().toLowerCase(), pass = document.getElementById('a-pass').value;
+  const res = api('POST', '/api/v1/auth/login', () => {
+    const u = D.users.find(x => x.email === email);
+    // Same answer for an unknown email and a wrong password, so nobody can probe which emails exist.
+    if (!u || u.password !== pass) return fail(401, 'INVALID_CREDENTIALS', 'Email or password is wrong.');
+    return { status: 200, u };
+  });
+  if (res.status === 200) { S.me = res.u.id; go('catalog'); toast('200 OK', `Signed in as ${res.u.fullName}. Token valid for 8 hours.`, false); }
+  else render();
+}
+
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  if (e.target.id === 'auth') {
+    if (S.authTab === 'login') return doLogin();
+    const name = document.getElementById('a-name').value.trim(), email = document.getElementById('a-email').value.trim().toLowerCase(), pass = document.getElementById('a-pass').value;
+    const res = api('POST', '/api/v1/auth/register', () => {
+      const errors = [];
+      if (!name || name.length > 100) errors.push({ field: 'fullName', message: 'size must be between 1 and 100' });
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors.push({ field: 'email', message: 'must be a well-formed email address' });
+      if (pass.length < 8 || pass.length > 72) errors.push({ field: 'password', message: 'size must be between 8 and 72' });
+      if (errors.length) return fail(400, 'VALIDATION_FAILED', errors.map(x => `${x.field} ${x.message}`).join('; '), errors);
+      if (D.users.some(u => u.email === email)) return fail(409, 'EMAIL_TAKEN', 'An account with this email already exists. Sign in instead.');
+      D.users.push({ id: D.users.length + 1, email, fullName: name, role: 'STUDENT', password: pass });
+      return { status: 201 };
+    }, 'Account created. Sign in with your new password.');
+    if (res.status === 201) { S.authTab = 'login'; render(); document.getElementById('a-email').value = email; document.getElementById('a-pass').value = ''; document.getElementById('a-pass').focus(); }
+    else render();
+  }
+  if (e.target.id === 'report') {
+    const desc = document.getElementById('r-desc').value, sev = document.querySelector('input[name=sev]:checked').value;
+    const res = api('POST', '/api/v1/incidents', () => reportIncident(me(), S.assetId, desc, sev, S.photo), 'Problem reported. Thank you.');
+    if (res.status === 201) {
+      const results = runEngine(res.inc);
+      S.flash = { assetId: S.assetId, incidentId: res.inc.id, results };
+      S.photo = null;
+      render(); window.scrollTo(0, 0);
+    } else { render(); document.getElementById('r-desc').value = desc; }
+  }
+  if (e.target.id === 'add') {
+    const v = id => document.getElementById(id).value.trim();
+    const res = api('POST', '/api/v1/admin/assets', () => {
+      const errors = ['name', 'model', 'serial'].filter(f => !v('n-' + f)).map(f => ({ field: f === 'serial' ? 'serialNumber' : f, message: 'must not be blank' }));
+      if (errors.length) return fail(400, 'VALIDATION_FAILED', errors.map(x => `${x.field} ${x.message}`).join('; '), errors);
+      if (D.assets.some(a => a.serial.toLowerCase() === v('n-serial').toLowerCase())) return fail(409, 'SERIAL_NUMBER_TAKEN', `Serial number ${v('n-serial')} is already in the inventory.`);
+      const a = { id: D.seq.asset++, name: v('n-name'), model: v('n-model'), serial: v('n-serial'), categoryId: Number(v('n-cat')), labRoomId: Number(v('n-room')), status: 'AVAILABLE' };
+      D.assets.push(a);
+      return { status: 201, a };
+    }, r => `${r.a.name} added as ${tagNo(r.a.id)}.`);
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
