@@ -4,10 +4,13 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.NotFoundException;
+import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
+import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.CreateReservationRequest;
@@ -20,6 +23,9 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,6 +84,65 @@ public class ReservationService implements ReservationApi {
         auditService.record(userId, "CREATE_RESERVATION", "Reservation", saved.getId(), "Asset " + req.assetId());
 
         return ReservationResponse.from(saved);
+    }
+
+    /**
+     * Retrieves a paginated list of reservations for the current authenticated user.
+     */
+    public PageResponse<ReservationResponse> getMyReservations(ReservationStatus status, int page, int size) {
+        Long userId = currentUser.id();
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<Reservation> reservationPage = status == null
+                ? reservationRepository.findByUserIdOrderByStartTimeAsc(userId, pageable)
+                : reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(userId, status, pageable);
+
+        return PageResponse.from(reservationPage, ReservationResponse::from);
+    }
+
+    /**
+     * Retrieves a reservation by ID ensuring ownership or admin privileges.
+     *
+     * <p>SECURITY NOTE: Throws 404 (NotFoundException) instead of 403 for unauthorized users
+     * to prevent IDOR enumeration.
+     */
+    public ReservationResponse getById(Long id) {
+        Reservation reservation = loadOwnedOrAdmin(id);
+        return ReservationResponse.from(reservation);
+    }
+
+    /**
+     * Cancels a CONFIRMED reservation.
+     */
+    @Transactional
+    public ReservationResponse cancelReservation(Long id) {
+        Reservation r = loadOwnedOrAdmin(id);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        if (!currentUser.isAdmin() && !now.isBefore(r.getStartTime())) {
+            throw new ConflictException(
+                    "CANCELLATION_NOT_ALLOWED", "Students can only cancel before the reservation start time");
+        }
+
+        if (r.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new ConflictException("CANCELLATION_NOT_ALLOWED", "Only CONFIRMED reservations can be cancelled");
+        }
+
+        r.cancel(now, "Cancelled by user");
+        auditService.record(currentUser.id(), "CANCEL_RESERVATION", "Reservation", r.getId(), "Cancelled by user");
+        return ReservationResponse.from(r);
+    }
+
+    private Reservation loadOwnedOrAdmin(Long id) {
+        Reservation reservation = reservationRepository
+                .findById(id)
+                .orElseThrow(() -> new NotFoundException("Reservation not found: " + id));
+
+        if (!reservation.getUserId().equals(currentUser.id()) && !currentUser.isAdmin()) {
+            throw new NotFoundException("Reservation not found: " + id);
+        }
+
+        return reservation;
     }
 
     private void validateReservationRequest(CreateReservationRequest req, LocalDateTime now) {
@@ -146,7 +211,10 @@ public class ReservationService implements ReservationApi {
 
     @Override
     public List<ReservationSummary> findUpcomingActiveByAsset(Long assetId, LocalDateTime from) {
-        return List.of();
+        return reservationRepository.findUpcomingConfirmedByAsset(assetId, from).stream()
+                .map(r -> new ReservationSummary(
+                        r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()))
+                .toList();
     }
 
     @Override
@@ -158,17 +226,41 @@ public class ReservationService implements ReservationApi {
     @Override
     @Transactional
     public void moveToAsset(Long reservationId, Long newAssetId, String reason) {
-        // Full logic will be added with reassignment engine
+        Reservation r = reservationRepository.findById(reservationId).orElse(null);
+        if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
+            return;
+        }
+
+        catalogApi.lockForBooking(newAssetId);
+
+        long ignoreId = r.getId() == null ? -1L : r.getId();
+        if (!catalogApi.isBookable(newAssetId)
+                || reservationRepository.existsOverlap(
+                        newAssetId, r.getStartTime(), r.getEndTime(), ReservationStatus.ACTIVE_STATUSES, ignoreId)) {
+            throw new SubstituteNoLongerFreeException("Substitute asset " + newAssetId + " is not free");
+        }
+
+        r.moveTo(newAssetId);
+        auditService.record(null, "REASSIGN_RESERVATION", "Reservation", r.getId(), reason);
     }
 
     @Override
     @Transactional
     public void forceCancel(Long reservationId, String reason) {
-        // Full logic will be added with reassignment engine
+        Reservation r = reservationRepository.findById(reservationId).orElse(null);
+        if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
+            return;
+        }
+
+        r.forceCancel(LocalDateTime.now(clock), reason);
+        auditService.record(null, "FORCE_CANCEL_RESERVATION", "Reservation", r.getId(), reason);
     }
 
     @Override
     public Optional<ReservationSummary> findCurrentCheckout(Long assetId) {
-        return Optional.empty();
+        return reservationRepository
+                .findFirstByAssetIdAndStatus(assetId, ReservationStatus.CHECKED_OUT)
+                .map(r -> new ReservationSummary(
+                        r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
     }
 }

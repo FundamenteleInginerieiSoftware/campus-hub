@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -16,8 +17,11 @@ import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.api.ReservationSummary;
+import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.CreateReservationRequest;
@@ -26,6 +30,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +39,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 class ReservationServiceTest {
@@ -336,5 +344,320 @@ class ReservationServiceTest {
                 .hasFieldOrPropertyWithValue("code", "RESERVATION_LIMIT_REACHED");
 
         verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("getMyReservations returns paginated user reservations without status filter")
+    void getMyReservationsWithoutStatus() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findByUserIdOrderByStartTimeAsc(eq(USER_ID), any()))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
+
+        PageResponse<ReservationResponse> result = reservationService.getMyReservations(null, 0, 10);
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).userId()).isEqualTo(USER_ID);
+        verify(reservationRepository).findByUserIdOrderByStartTimeAsc(eq(USER_ID), any());
+    }
+
+    @Test
+    @DisplayName("getMyReservations returns paginated user reservations with status filter")
+    void getMyReservationsWithStatus() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(
+                        eq(USER_ID), eq(ReservationStatus.CONFIRMED), any()))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
+
+        PageResponse<ReservationResponse> result =
+                reservationService.getMyReservations(ReservationStatus.CONFIRMED, 0, 10);
+
+        assertThat(result.content()).hasSize(1);
+        verify(reservationRepository)
+                .findByUserIdAndStatusOrderByStartTimeAsc(eq(USER_ID), eq(ReservationStatus.CONFIRMED), any());
+    }
+
+    @Test
+    @DisplayName("getById allows owner to view own reservation")
+    void getByIdOwnerAllowed() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        ReservationResponse response = reservationService.getById(1L);
+
+        assertThat(response.userId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("getById allows admin to view another student's reservation")
+    void getByIdAdminAllowed() {
+        when(currentUser.id()).thenReturn(999L);
+        when(currentUser.isAdmin()).thenReturn(true);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        ReservationResponse response = reservationService.getById(1L);
+
+        assertThat(response.userId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("getById enforces IDOR protection: throws 404 NotFound when another student views it")
+    void getByIdIdorProtectionThrows404() {
+        when(currentUser.id()).thenReturn(999L); // Student B
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID, // Student A
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.getById(1L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Reservation not found: 1");
+    }
+
+    @Test
+    @DisplayName("cancelReservation succeeds for owner before start time")
+    void cancelReservationOwnerBeforeStartSucceeds() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0), // Start is 14:00 (clock is 10:00)
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        ReservationResponse response = reservationService.cancelReservation(1L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelReservation succeeds for admin even after start time")
+    void cancelReservationAdminAfterStartSucceeds() {
+        when(currentUser.id()).thenReturn(999L);
+        when(currentUser.isAdmin()).thenReturn(true);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0), // Start was 09:00 (clock is 10:00)
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        ReservationResponse response = reservationService.cancelReservation(1L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("cancelReservation rejects student trying to cancel after start time")
+    void cancelReservationStudentAfterStartFails() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0), // In past relative to clock 10:00
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.cancelReservation(1L))
+                .isInstanceOf(ConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "CANCELLATION_NOT_ALLOWED");
+    }
+
+    @Test
+    @DisplayName("cancelReservation rejects cancelling a non-CONFIRMED reservation")
+    void cancelReservationNonConfirmedFails() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0)); // status is now CHECKED_OUT
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.cancelReservation(1L))
+                .isInstanceOf(ConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "CANCELLATION_NOT_ALLOWED");
+    }
+
+    @Test
+    @DisplayName("cancelReservation IDOR protection throws 404 for other student")
+    void cancelReservationIdorProtectionThrows404() {
+        when(currentUser.id()).thenReturn(999L);
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.cancelReservation(1L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Reservation not found: 1");
+    }
+
+    @Test
+    @DisplayName("ReservationApi: findUpcomingActiveByAsset maps confirmed reservations")
+    void findUpcomingActiveByAssetMapsProperly() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        LocalDateTime from = LocalDateTime.of(2026, 11, 2, 10, 0);
+        when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, from)).thenReturn(List.of(r));
+
+        List<ReservationSummary> summaries = reservationService.findUpcomingActiveByAsset(ASSET_ID, from);
+
+        assertThat(summaries).hasSize(1);
+        assertThat(summaries.get(0).assetId()).isEqualTo(ASSET_ID);
+        assertThat(summaries.get(0).status()).isEqualTo(ReservationStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("ReservationApi: isAssetFree returns correct boolean based on overlap query")
+    void isAssetFreeChecksOverlap() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isTrue();
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 5L))
+                .thenReturn(true);
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 5L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("ReservationApi: moveToAsset successfully moves asset when substitute is free")
+    void moveToAssetSucceedsWhenFree() {
+        Long newAssetId = 20L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(newAssetId)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(newAssetId), any(), any(), eq(ReservationStatus.ACTIVE_STATUSES), anyLong()))
+                .thenReturn(false);
+
+        reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
+
+        assertThat(r.getAssetId()).isEqualTo(newAssetId);
+        assertThat(r.getOriginalAssetId()).isEqualTo(ASSET_ID);
+        verify(catalogApi).lockForBooking(newAssetId);
+        verify(auditService).record(isNull(), eq("REASSIGN_RESERVATION"), eq("Reservation"), any(), any());
+    }
+
+    @Test
+    @DisplayName("ReservationApi: moveToAsset throws SubstituteNoLongerFreeException when substitute not free")
+    void moveToAssetFailsWhenNotFree() {
+        Long newAssetId = 20L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(newAssetId)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.moveToAsset(1L, newAssetId, "Damaged"))
+                .isInstanceOf(SubstituteNoLongerFreeException.class);
+    }
+
+    @Test
+    @DisplayName("ReservationApi: moveToAsset returns silently if reservation not CONFIRMED")
+    void moveToAssetSilentlyReturnsWhenNotConfirmed() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        reservationService.moveToAsset(1L, 20L, "Damaged");
+
+        verify(catalogApi, never()).lockForBooking(anyLong());
+    }
+
+    @Test
+    @DisplayName("ReservationApi: forceCancel successfully cancels confirmed reservation")
+    void forceCancelSucceedsForConfirmed() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        reservationService.forceCancel(1L, "Damaged beyond repair");
+
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.FORCE_CANCELLED);
+        verify(auditService).record(isNull(), eq("FORCE_CANCEL_RESERVATION"), eq("Reservation"), any(), any());
+    }
+
+    @Test
+    @DisplayName("ReservationApi: findCurrentCheckout maps checked-out reservation")
+    void findCurrentCheckoutMapsProperly() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
+        when(reservationRepository.findFirstByAssetIdAndStatus(ASSET_ID, ReservationStatus.CHECKED_OUT))
+                .thenReturn(Optional.of(r));
+
+        Optional<ReservationSummary> current = reservationService.findCurrentCheckout(ASSET_ID);
+
+        assertThat(current).isPresent();
+        assertThat(current.get().status()).isEqualTo(ReservationStatus.CHECKED_OUT);
     }
 }
