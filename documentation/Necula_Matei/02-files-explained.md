@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -22,6 +22,7 @@ campus-hub/
     └── src/
         ├── main/java/com/campus/  CampusHubApplication.java, config/SecurityConfig.java,
         │                          config/OpenApiConfig.java, config/SecurityErrorHandler.java,
+        │                          config/AsyncConfig.java,
         │                          user/web/AuthController.java, <module>/package-info.java,
         │                          user/api/Role.java, user/domain/User.java,
         │                          user/repository/UserRepository.java
@@ -29,7 +30,7 @@ campus-hub/
         │                    db/migration/V2026_10_21_1500__platform_init.sql
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
-        │                          UserRepositoryTest
+        │                          UserRepositoryTest, AsyncConfigTest
         └── test/resources/application-test.yml
 ```
 
@@ -66,7 +67,7 @@ campus-hub/
 ### Backend: settings (PR #13)
 | File | What it does |
 |---|---|
-| `application.yml` | Settings for every environment: time zone, upload limit, login lifetime. |
+| `application.yml` | Settings for every environment: time zone, upload limit, login lifetime, background threads. |
 | `application-dev.yml` | Laptop settings: our local PostgreSQL database and a fake secret. |
 | `application-prod.yml` | Cloud settings: no real values, everything is read from AWS at startup. |
 | `application-test.yml` | Test settings: tests use a separate `campus_test` database, so they never touch our data. |
@@ -92,11 +93,13 @@ campus-hub/
 | `UserRepository.java` | Finds a user by email, whatever capitals were typed. |
 | `UserRepositoryTest` | Checks the lookup ignores capitals and that the same email can't be used twice. |
 
-### Backend: login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`)
+### Backend: login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`)
 | File | What it does |
 |---|---|
 | `OpenApiConfig.java` | Adds the "Authorize" button to Swagger: paste a login token once, and every test call sends it. |
 | `SecurityErrorHandler.java` | When the guard refuses someone ("log in first" or "not allowed"), it writes a clear error message with a short code, like every other error in the app. |
+| `AsyncConfig.java` | Lets the app do work in the background or on a timer (late-return checks, moving bookings after damage). In tests, that work runs immediately. |
+| `AsyncConfigTest` | Checks background work is switched on and runs immediately in tests. |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -151,6 +154,7 @@ campus-hub/
 | | `hibernate.ddl-auto: validate` | Only Flyway creates tables; Hibernate checks the entities match and stops the app if not. |
 | | `mvc.problemdetails.enabled: true` | Errors as RFC 9457 `ProblemDetail` JSON. |
 | | `management…include: health,info` | Only the health check is exposed (the AWS load balancer uses it). |
+| | `spring.task.execution` (`thread-name-prefix: campus-async-`, `pool.core-size: 2`) | The `@Async` pool Boot creates: small, and named so log lines show which ran in the background. |
 | | `app.messaging.sqs.enabled: false` | Stretch-goal switch: false = Calin's local event listener triggers reassignment, true = my SQS bridge. Never both. |
 | `application-dev.yml` | `url: ${DB_URL:jdbc:postgresql://localhost:5432/campus}` (+ `DB_USERNAME`, `DB_PASSWORD`, default `campus`) | Works with zero setup on every laptop; anyone with a different setup overrides it in their run configuration, never in git. |
 | `application-prod.yml` | `${DB_URL}`, `${JWT_SECRET}`, `${PHOTO_BUCKET}`…; `${SQS_QUEUE_URL:}` | All secrets come from AWS. The `:` gives an empty default for optional values (SQS is a stretch goal). |
@@ -164,6 +168,7 @@ campus-hub/
 |---|---|
 | `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), then `/api/v1/admin/**` → `hasRole("ADMIN")` (must stay above the next rule), `/api/v1/**` → any valid JWT, anything else → `denyAll()`. `JwtDecoder` and `JwtEncoder` share one HS256 key from `app.jwt.secret` (≥ 32 bytes); defining the decoder also stops Boot from creating a default user with a random password. The roles converter reads the `roles` claim and adds `ROLE_`. `PasswordEncoder` = delegating encoder (`{bcrypt}` hashes). 401/403 go to `SecurityErrorHandler` (wired on both the resource server and `exceptionHandling`). |
 | `SecurityErrorHandler` | Implements `AuthenticationEntryPoint` (401 `UNAUTHORIZED`) and `AccessDeniedHandler` (403 `FORBIDDEN`), writing `ProblemDetail`-shaped JSON (`application/problem+json`) with Boot's Jackson 3 `JsonMapper`. Needed because filter errors never reach Liviu's `@RestControllerAdvice`. Created with `new` in `SecurityConfig`, so `@WebMvcTest` + `@Import(SecurityConfig.class)` still works. |
+| `AsyncConfig` | `@EnableAsync` + `@EnableScheduling` (both off by default). A `@Profile("test")` `SyncTaskExecutor` bean makes `@Async` run on the caller's thread in tests, and replaces Boot's pool there. |
 | `OpenApiConfig` | Annotations only: `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` + `@OpenAPIDefinition(security = @SecurityRequirement(name = "bearerAuth"))`, so the scheme applies to every endpoint and teammates don't annotate controllers. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. |
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
@@ -187,7 +192,8 @@ campus-hub/
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
 | `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; `/api/v1/assets` without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. With real tokens signed by our `JwtEncoder`: a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/**`, an admin gets through, any token gets 403 outside `/api/v1/`. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
+| `AsyncConfigTest` | `@SpringBootTest` with a test-only `@Async` bean: it is a proxy (async on) and runs on the test thread (sync executor). Its value is read through a method, because fields of a Spring proxy stay empty. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. |
 | `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |
 
-Result: `./gradlew build` → BUILD SUCCESSFUL, 23 tests (6 after #13, +2 for users, +9 from Liviu's #22, +6 for login foundations), locally on PostgreSQL 18.
+Result: `./gradlew build` → BUILD SUCCESSFUL, 24 tests (6 after #13, +2 for users, +9 from Liviu's #22, +7 for login foundations), locally on PostgreSQL 18.
