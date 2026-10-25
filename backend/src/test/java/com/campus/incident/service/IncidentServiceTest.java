@@ -10,7 +10,6 @@ import com.campus.common.security.CurrentUser;
 import com.campus.incident.api.AssetRepairedEvent;
 import com.campus.incident.domain.IncidentReport;
 import com.campus.incident.domain.IncidentReport.IncidentStatus;
-import com.campus.incident.domain.IncidentReport.Severity;
 import com.campus.incident.repository.IncidentReportRepository;
 import com.campus.incident.web.IncidentResponse;
 import com.campus.incident.web.ResolveIncidentRequest;
@@ -23,13 +22,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class IncidentServiceTest {
@@ -38,84 +35,76 @@ class IncidentServiceTest {
     private IncidentReportRepository incidentReportRepository;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
-    private final Clock clock = Clock.fixed(Instant.parse("2026-10-25T10:00:00Z"), ZoneId.of("UTC"));
-
+    private Clock clock;
     private IncidentService incidentService;
-
     private CurrentUser adminUser;
 
     @BeforeEach
     void setUp() {
+        clock = Clock.fixed(Instant.parse("2026-10-25T12:00:00Z"), ZoneId.of("UTC"));
         incidentService = new IncidentService(incidentReportRepository, eventPublisher, clock);
-        adminUser = new CurrentUser(99L, "admin@campus.com", Set.of("ROLE_ADMIN"));
+        adminUser = new CurrentUser(99L, "admin@campus.local", Set.of("ROLE_ADMIN"));
     }
 
     @Test
-    @DisplayName("resolveIncident - happy path updates status and publishes AssetRepairedEvent")
-    void resolveIncident_happyPath() {
+    void resolveIncident_shouldResolveAndPublishEvent_whenOpen() {
         Long incidentId = 1L;
         IncidentReport existingReport = new IncidentReport();
         existingReport.setId(incidentId);
-        existingReport.setAssetId(42L);
-        existingReport.setReportedById(10L);
-        existingReport.setDescription("Broken screen");
-        existingReport.setSeverity(Severity.HIGH);
+        existingReport.setAssetId(10L);
         existingReport.setStatus(IncidentStatus.OPEN);
         existingReport.setCreatedAt(LocalDateTime.now(clock).minusDays(1));
 
         when(incidentReportRepository.findById(incidentId)).thenReturn(Optional.of(existingReport));
-        when(incidentReportRepository.save(any(IncidentReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(incidentReportRepository.save(any(IncidentReport.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         ResolveIncidentRequest request = new ResolveIncidentRequest("Replaced display panel");
 
         IncidentResponse response = incidentService.resolveIncident(incidentId, request, adminUser);
 
-        assertThat(response).isNotNull();
         assertThat(response.status()).isEqualTo(IncidentStatus.RESOLVED);
-        assertThat(response.resolvedById()).isEqualTo(99L);
-        assertThat(response.resolutionNote()).isEqualTo("Replaced display panel");
-        assertThat(response.resolvedAt()).isNotNull();
+        assertThat(response.resolvedById()).isEqualTo(adminUser.id());
+        assertThat(response.resolvedAt()).isEqualTo(LocalDateTime.now(clock));
+        assertThat(response.resolutionNotes()).isEqualTo("Replaced display panel");
 
         ArgumentCaptor<AssetRepairedEvent> eventCaptor = ArgumentCaptor.forClass(AssetRepairedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         AssetRepairedEvent publishedEvent = eventCaptor.getValue();
         assertThat(publishedEvent.incidentId()).isEqualTo(incidentId);
-        assertThat(publishedEvent.assetId()).isEqualTo(42L);
-        assertThat(publishedEvent.resolvedById()).isEqualTo(99L);
+        assertThat(publishedEvent.assetId()).isEqualTo(10L);
+        assertThat(publishedEvent.repairedById()).isEqualTo(adminUser.id());
     }
 
     @Test
-    @DisplayName("resolveIncident - failure case throws EntityNotFoundException when incident does not exist")
-    void resolveIncident_notFound() {
-        Long missingId = 999L;
+    void resolveIncident_shouldThrowEntityNotFound_whenMissing() {
+        Long missingId = 404L;
         when(incidentReportRepository.findById(missingId)).thenReturn(Optional.empty());
 
         ResolveIncidentRequest request = new ResolveIncidentRequest("Fixed");
 
         assertThatThrownBy(() -> incidentService.resolveIncident(missingId, request, adminUser))
-            .isInstanceOf(EntityNotFoundException.class)
-            .hasMessageContaining("Incident report not found with id: " + missingId);
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("Incident report not found with id: " + missingId);
     }
 
     @Test
-    @DisplayName("getAllIncidents - returns mapped list")
-    void getAllIncidents_returnsList() {
+    void getAllIncidents_shouldFilterByStatusAndMapToResponse() {
         IncidentReport report = new IncidentReport();
-        report.setId(1L);
-        report.setAssetId(5L);
-        report.setReportedById(2L);
-        report.setDescription("Issue");
-        report.setSeverity(Severity.LOW);
+        report.setId(5L);
+        report.setAssetId(20L);
         report.setStatus(IncidentStatus.OPEN);
         report.setCreatedAt(LocalDateTime.now(clock));
 
-        when(incidentReportRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(report));
+        when(incidentReportRepository.findByStatusOrderByCreatedAtDesc(IncidentStatus.OPEN))
+                .thenReturn(List.of(report));
 
-        List<IncidentResponse> list = incidentService.getAllIncidents(null);
+        List<IncidentResponse> results = incidentService.getAllIncidents(IncidentStatus.OPEN);
 
-        assertThat(list).hasSize(1);
-        assertThat(list.get(0).id()).isEqualTo(1L);
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).id()).isEqualTo(5L);
+        assertThat(results.get(0).status()).isEqualTo(IncidentStatus.OPEN);
     }
 }
