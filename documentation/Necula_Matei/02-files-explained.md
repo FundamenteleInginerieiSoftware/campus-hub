@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`) and the prototype mockup (`10-prototype-mockup.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -25,7 +25,8 @@ campus-hub/
         │                          config/AsyncConfig.java,
         │                          user/web/AuthController.java, <module>/package-info.java,
         │                          user/api/Role.java, user/domain/User.java,
-        │                          user/repository/UserRepository.java
+        │                          user/repository/UserRepository.java,
+        │                          user/api/UserApi.java, user/api/UserSummary.java
         ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
         │                    db/migration/V2026_10_21_1500__platform_init.sql
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
@@ -92,8 +93,10 @@ campus-hub/
 | `User.java` | One user as the code sees it: email, scrambled password, name, role, blocked or not. |
 | `UserRepository.java` | Finds a user by email, whatever capitals were typed. |
 | `UserRepositoryTest` | Checks the lookup ignores capitals and that the same email can't be used twice. |
+| `UserApi.java` | The "front desk" other parts of the app ask about users ("who is user 5, what's their e-mail?"). |
+| `UserSummary.java` | The answer they get: id, e-mail, name, role. Never the password. |
 
-### Backend: login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`)
+### Backend: login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`)
 | File | What it does |
 |---|---|
 | `OpenApiConfig.java` | Adds the "Authorize" button to Swagger: paste a login token once, and every test call sends it. |
@@ -174,6 +177,7 @@ campus-hub/
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
 | `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
 | `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
+| `UserApi` / `UserSummary` | The agreed facade: `getById(id)` (throws `NotFoundException` `USER_NOT_FOUND`), `exists(id)`. The only user types other modules may import. Interface only for now: the implementation waits for Liviu's `NotFoundException`. |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
 
 ### Prototype mockup
