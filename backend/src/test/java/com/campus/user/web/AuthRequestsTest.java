@@ -37,7 +37,19 @@ class AuthRequestsTest {
     void rejectsPasswordLongerThan72Characters() {
         RegisterRequest request = new RegisterRequest("ana@campus.test", "a".repeat(73), "Ana Pop");
 
-        assertThat(invalidFields(validator.validate(request))).containsExactly("password");
+        // 73 ASCII letters are also 73 bytes, so the byte check fails too.
+        assertThat(invalidFields(validator.validate(request)))
+                .containsExactlyInAnyOrder("password", "passwordWithinBcryptLimit");
+    }
+
+    @Test
+    void rejectsPasswordLongerThan72BytesEvenIfShortInCharacters() {
+        // 40 characters pass @Size, but "ș" takes 2 bytes in UTF-8: 80 bytes, too long for BCrypt.
+        RegisterRequest tooLong = new RegisterRequest("ana@campus.test", "ș".repeat(40), "Ana Pop");
+        RegisterRequest exactly72Bytes = new RegisterRequest("ana@campus.test", "ș".repeat(36), "Ana Pop");
+
+        assertThat(invalidFields(validator.validate(tooLong))).containsExactly("passwordWithinBcryptLimit");
+        assertThat(validator.validate(exactly72Bytes)).isEmpty();
     }
 
     @Test
