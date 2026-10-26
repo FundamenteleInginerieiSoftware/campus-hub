@@ -11,7 +11,6 @@ import com.campus.incident.web.CreateIncidentRequest;
 import com.campus.incident.web.IncidentResponse;
 import com.campus.incident.web.ResolveIncidentRequest;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -35,14 +34,19 @@ public class IncidentService {
     }
 
     public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId) {
-        Instant now = clock.instant();
-
         IncidentReport report = new IncidentReport(
-                request.assetId(), null, reporterId, request.description(), request.severity(), null, now);
+                request.assetId(),
+                null,
+                reporterId,
+                request.description(),
+                request.severity(),
+                null,
+                LocalDateTime.now(clock));
 
         IncidentReport saved = incidentReportRepository.save(report);
 
-        eventPublisher.publishEvent(new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, now));
+        eventPublisher.publishEvent(
+                new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, clock.instant()));
 
         return toResponse(saved);
     }
@@ -50,18 +54,18 @@ public class IncidentService {
     public IncidentResponse resolveIncident(Long incidentId, ResolveIncidentRequest request, Long adminId) {
         IncidentReport report = incidentReportRepository
                 .findById(incidentId)
-                .orElseThrow(() -> new NotFoundException("Incident report not found with id: " + incidentId));
+                .orElseThrow(() -> new NotFoundException(
+                        "INCIDENT_NOT_FOUND", "Incident report not found with id: " + incidentId));
 
         if (report.getStatus() == IncidentStatus.RESOLVED) {
             return toResponse(report);
         }
 
-        Instant now = clock.instant();
+        LocalDateTime now = LocalDateTime.now(clock);
         report.resolve(adminId, request.resolutionNotes(), now);
         IncidentReport updated = incidentReportRepository.save(report);
 
-        eventPublisher.publishEvent(
-                new AssetRepairedEvent(updated.getId(), updated.getAssetId(), adminId, LocalDateTime.now(clock)));
+        eventPublisher.publishEvent(new AssetRepairedEvent(updated.getId(), updated.getAssetId(), adminId, now));
 
         return toResponse(updated);
     }
