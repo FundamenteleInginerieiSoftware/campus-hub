@@ -1,5 +1,15 @@
 spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
   flyway:
     enabled: true
     validate-on-migrate: false
-    ignore-migration-patterns: "*:missing,*:mismatch"
+
+app:
+  jwt:
+    secret: "very-secure-and-long-secret-key-that-exceeds-thirty-two-bytes-length"
+    expiration: 8h
+  time-zone: Europe/Bucharest
