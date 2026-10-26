@@ -11,9 +11,9 @@ spring:
     multipart:
       max-file-size: 5MB
       max-request-size: 6MB
-  mvc:
-    problemdetails:
-      enabled: true
+  # Bug fixed: spring.mvc.problemdetails.enabled=true added Spring Boot's own error handler, which runs
+  # before Liviu's GlobalExceptionHandler, so validation errors, bad JSON and unknown paths came back
+  # without our "code" (and without the "errors" field list). Left off, every error goes through Liviu's handler.
   task:
     execution:
       thread-name-prefix: campus-async-   # shows in the logs which lines came from an @Async listener

@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) and the user lookup (`11-user-service.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) and the error-code fix (`12-error-codes-fix.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -32,7 +32,8 @@ campus-hub/
         │                    db/migration/V2026_10_21_1500__platform_init.sql
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
-        │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest
+        │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
+        │                          ErrorJsonTest
         └── test/resources/application-test.yml
 ```
 
@@ -109,6 +110,7 @@ campus-hub/
 | `SecurityErrorHandler.java` | When the guard refuses someone ("log in first" or "not allowed"), it writes a clear error message with a short code, like every other error in the app. |
 | `AsyncConfig.java` | Lets the app do work in the background or on a timer (late-return checks, moving bookings after damage). In tests, that work runs immediately. |
 | `AsyncConfigTest` | Checks background work is switched on and runs immediately in tests. |
+| `ErrorJsonTest` | Checks that wrong input (a missing field, broken data, a page that doesn't exist) still gets an error with its short code (`12-error-codes-fix.md`). |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -161,7 +163,7 @@ campus-hub/
 | `application.yml` | `profiles.default: dev` | "default", not "active": prod (and tests) can switch profile without editing the file. |
 | | `jpa.open-in-view: false` | No lazy loading in controllers; entities are mapped to DTOs inside the service transaction. |
 | | `hibernate.ddl-auto: validate` | Only Flyway creates tables; Hibernate checks the entities match and stops the app if not. |
-| | `mvc.problemdetails.enabled: true` | Errors as RFC 9457 `ProblemDetail` JSON. |
+| | no `mvc.problemdetails.enabled` (removed in `12-error-codes-fix.md`) | Turning it on adds Boot's own error handler, which answers MVC errors before Liviu's `GlobalExceptionHandler` and drops our `code`. Liviu's handler already writes RFC 9457 `ProblemDetail` JSON. |
 | | `management…include: health,info` | Only the health check is exposed (the AWS load balancer uses it). |
 | | `spring.task.execution` (`thread-name-prefix: campus-async-`, `pool.core-size: 2`) | The `@Async` pool Boot creates: small, and named so log lines show which ran in the background. |
 | | `app.messaging.sqs.enabled: false` | Stretch-goal switch: false = Calin's local event listener triggers reassignment, true = my SQS bridge. Never both. |
@@ -205,6 +207,7 @@ campus-hub/
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
 | `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; `/api/v1/assets` without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. With real tokens signed by our `JwtEncoder`: a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/**`, an admin gets through, any token gets 403 outside `/api/v1/`. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
+| `ErrorJsonTest` | `@SpringBootTest` + MockMvc with a test-only `@RestController` (`@Import`, since `main` has no `@Valid` endpoint yet) and `jwt()` from spring-security-test as the token: blank field → 400 `VALIDATION_FAILED` + `errors[].field`; broken JSON → 400 `MALFORMED_REQUEST`; unknown path → 404 `NOT_FOUND`. All three failed before the fix. |
 | `AsyncConfigTest` | `@SpringBootTest` with a test-only `@Async` bean: it is a proxy (async on) and runs on the test thread (sync executor). Its value is read through a method, because fields of a Spring proxy stay empty. |
 | `AuthRequestsTest` | Plain unit test (no Spring, `Validation.buildDefaultValidatorFactory()`): the record rules and the `UserResponse` mapper. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. |
