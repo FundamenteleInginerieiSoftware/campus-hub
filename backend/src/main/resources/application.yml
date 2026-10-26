@@ -19,8 +19,6 @@ spring:
       thread-name-prefix: campus-async-   # shows in the logs which lines came from an @Async listener
       pool:
         core-size: 2        # small: only a few listeners (reassignment, notifications) run in the background
-  flyway:
-    clean-disabled: false
 
 management:
   endpoints:

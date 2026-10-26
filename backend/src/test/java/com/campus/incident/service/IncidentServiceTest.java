@@ -20,6 +20,7 @@ import com.campus.incident.web.IncidentResponse;
 import com.campus.incident.web.ResolveIncidentRequest;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -70,7 +71,7 @@ class IncidentServiceTest {
         assertThat(response.id()).isEqualTo(100L);
         assertThat(response.status()).isEqualTo(IncidentStatus.OPEN);
         assertThat(response.reportedById()).isEqualTo(reporterId);
-        assertThat(response.createdAt()).isEqualTo(clock.instant());
+        assertThat(response.createdAt()).isEqualTo(LocalDateTime.now(clock));
 
         ArgumentCaptor<AssetDamagedEvent> eventCaptor = ArgumentCaptor.forClass(AssetDamagedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -91,7 +92,7 @@ class IncidentServiceTest {
                 "Defect",
                 IncidentSeverity.HIGH,
                 null,
-                clock.instant().minusSeconds(3600));
+                LocalDateTime.now(clock).minusHours(1));
         ReflectionTestUtils.setField(existingReport, "id", incidentId);
 
         when(incidentReportRepository.findById(incidentId)).thenReturn(Optional.of(existingReport));
@@ -104,7 +105,7 @@ class IncidentServiceTest {
 
         assertThat(response.status()).isEqualTo(IncidentStatus.RESOLVED);
         assertThat(response.resolvedById()).isEqualTo(adminId);
-        assertThat(response.resolvedAt()).isEqualTo(clock.instant());
+        assertThat(response.resolvedAt()).isEqualTo(LocalDateTime.now(clock));
         assertThat(response.resolutionNotes()).isEqualTo("Replaced display panel");
 
         ArgumentCaptor<AssetRepairedEvent> eventCaptor = ArgumentCaptor.forClass(AssetRepairedEvent.class);
@@ -113,13 +114,14 @@ class IncidentServiceTest {
         assertThat(publishedEvent.incidentId()).isEqualTo(incidentId);
         assertThat(publishedEvent.assetId()).isEqualTo(10L);
         assertThat(publishedEvent.resolvedById()).isEqualTo(adminId);
+        assertThat(publishedEvent.resolvedAt()).isEqualTo(LocalDateTime.now(clock));
     }
 
     @Test
     void resolveIncident_shouldThrowInvalidStateTransitionException_whenRejected() {
         Long incidentId = 2L;
-        IncidentReport rejectedReport =
-                new IncidentReport(10L, 5L, reporterId, "Not an issue", IncidentSeverity.LOW, null, clock.instant());
+        IncidentReport rejectedReport = new IncidentReport(
+                10L, 5L, reporterId, "Not an issue", IncidentSeverity.LOW, null, LocalDateTime.now(clock));
         ReflectionTestUtils.setField(rejectedReport, "id", incidentId);
         ReflectionTestUtils.setField(rejectedReport, "status", IncidentStatus.REJECTED);
 
@@ -129,7 +131,9 @@ class IncidentServiceTest {
 
         assertThatThrownBy(() -> incidentService.resolveIncident(incidentId, request, adminId))
                 .isInstanceOf(InvalidStateTransitionException.class)
-                .hasMessageContaining("Incident cannot be resolved from status: REJECTED");
+                .hasMessageContaining("Incident cannot be resolved from status: REJECTED")
+                .extracting("code")
+                .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
     }
 
     @Test
@@ -141,13 +145,15 @@ class IncidentServiceTest {
 
         assertThatThrownBy(() -> incidentService.resolveIncident(missingId, request, adminId))
                 .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining("Incident report not found with id: " + missingId);
+                .hasMessageContaining("Incident report not found with id: " + missingId)
+                .extracting("code")
+                .isEqualTo("INCIDENT_NOT_FOUND");
     }
 
     @Test
     void getAllIncidents_shouldFilterByStatusAndReturnPageResponse() {
         IncidentReport report = new IncidentReport(
-                20L, null, reporterId, "Keyboard issue", IncidentSeverity.LOW, null, clock.instant());
+                20L, null, reporterId, "Keyboard issue", IncidentSeverity.LOW, null, LocalDateTime.now(clock));
         ReflectionTestUtils.setField(report, "id", 5L);
 
         Pageable pageable = PageRequest.of(0, 20);

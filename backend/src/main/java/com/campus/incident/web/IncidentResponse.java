@@ -2,7 +2,7 @@ package com.campus.incident.web;
 
 import com.campus.incident.domain.IncidentReport.IncidentSeverity;
 import com.campus.incident.domain.IncidentReport.IncidentStatus;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 public record IncidentResponse(
         Long id,
@@ -13,7 +13,7 @@ public record IncidentResponse(
         IncidentSeverity severity,
         IncidentStatus status,
         String photoKey,
-        Instant createdAt,
-        Instant resolvedAt,
+        LocalDateTime createdAt,
+        LocalDateTime resolvedAt,
         Long resolvedById,
         String resolutionNotes) {}

@@ -10,7 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -49,10 +49,10 @@ public class IncidentReport {
     private String photoKey;
 
     @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 
     @Column(name = "resolved_at")
-    private Instant resolvedAt;
+    private LocalDateTime resolvedAt;
 
     @Column(name = "resolved_by_id")
     private Long resolvedById;
@@ -70,7 +70,7 @@ public class IncidentReport {
             String description,
             IncidentSeverity severity,
             String photoKey,
-            Instant createdAt) {
+            LocalDateTime createdAt) {
         this.assetId = assetId;
         this.reservationId = reservationId;
         this.reportedById = reportedById;
@@ -81,9 +81,10 @@ public class IncidentReport {
         this.createdAt = createdAt;
     }
 
-    public void resolve(Long adminId, String resolutionNotes, Instant resolvedAt) {
+    public void resolve(Long adminId, String resolutionNotes, LocalDateTime resolvedAt) {
         if (this.status != IncidentStatus.OPEN) {
-            throw new InvalidStateTransitionException("Incident cannot be resolved from status: " + this.status);
+            throw new InvalidStateTransitionException(
+                    "INVALID_INCIDENT_STATUS_TRANSITION", "Incident cannot be resolved from status: " + this.status);
         }
         this.status = IncidentStatus.RESOLVED;
         this.resolvedById = adminId;
