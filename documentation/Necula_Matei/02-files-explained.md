@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) and register/login (`13-auth-register-login.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) and the dev accounts (`14-user-seeder.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -26,7 +26,7 @@ campus-hub/
         │                          user/web/AuthController.java, <module>/package-info.java,
         │                          user/api/Role.java, user/domain/User.java,
         │                          user/repository/UserRepository.java, user/service/UserService.java,
-        │                          user/service/AuthService.java,
+        │                          user/service/AuthService.java, user/service/UserSeeder.java,
         │                          user/api/UserApi.java, user/api/UserSummary.java,
         │                          user/web/{Register,Login}Request.java, {User,Login}Response.java
         ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
@@ -34,7 +34,8 @@ campus-hub/
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
-        │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT
+        │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
+        │                          UserSeederTest
         └── test/resources/application-test.yml
 ```
 
@@ -106,6 +107,8 @@ campus-hub/
 | `AuthService.java` | Sign-up (always a student, refuses an email that's taken) and login (checks the password, hands out an entry ticket valid 8 hours). |
 | `AuthServiceTest` | Checks sign-up stores a scrambled password, refuses a taken email, and that login gives a correct ticket or the same "wrong email or password" error for every mistake. |
 | `AuthFlowIT` | Signs up, logs in and uses the ticket on the real app, like the website will. |
+| `UserSeeder.java` | On a laptop, creates 3 test accounts at startup (2 students, 1 admin, password `password`) if there are no users yet. |
+| `UserSeederTest` | Checks the 3 accounts are created in an empty table, and nothing happens when users exist. |
 
 ### Backend: login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`)
 | File | What it does |
@@ -187,6 +190,7 @@ campus-hub/
 | `OpenApiConfig` | Annotations only: `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` + `@OpenAPIDefinition(security = @SecurityRequirement(name = "bearerAuth"))`, so the scheme applies to every endpoint and teammates don't annotate controllers. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. `POST /register` (`@ResponseStatus(CREATED)`) and `POST /login` take `@Valid @RequestBody` records and only call `AuthService`. Public through the `/api/v1/auth/**` rule. |
 | `AuthService` | `register`: `existsByEmailIgnoreCase` → `409 EMAIL_TAKEN`, BCrypt hash, role always `STUDENT`, `saveAndFlush` inside a try so a simultaneous duplicate (UNIQUE column) also becomes 409. `login`: `findByEmailIgnoreCase` → `filter(isEnabled)` → `filter(passwordEncoder.matches)` → else `401 INVALID_CREDENTIALS` (same error for every case). Token: `JwtClaimsSet` with `sub` (id), `email`, `roles`, `iat`/`exp` from the shared `Clock` + `app.jwt.expiration` (8 h, bound as `Duration`), signed with the HS256 `JwtEncoder`. Details in `13-auth-register-login.md`. |
+| `UserSeeder` | `@Component @Profile("dev") @Order(1)` `CommandLineRunner`: if `count() == 0`, `saveAll` student1 (id 1), student2 (id 2), admin (id 3), password `password` (one BCrypt hash), `created_at` from the `Clock`. Order 1 so Liviu's (2) and Calin's (3) seeders find users. Details in `14-user-seeder.md`. |
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
 | `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
 | `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
@@ -219,6 +223,7 @@ campus-hub/
 | `UserServiceTest` | Plain Mockito (`@ExtendWith(MockitoExtension.class)`, no Spring): known id → `UserSummary` without the hash; unknown id → `NotFoundException` with code `USER_NOT_FOUND`; `exists` follows the repository. The id is set with `ReflectionTestUtils` because only the database sets it. |
 | `AuthServiceTest` | Mockito, only `UserRepository` mocked; the real BCrypt encoder and a real `NimbusJwtEncoder` with a test key. The token is decoded with a `JwtTimestampValidator` on the fixed clock, so claims and expiry are checked exactly. 7 tests: register OK / taken / race, login OK / wrong password / unknown email / disabled. |
 | `AuthFlowIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back): register → login → token gets 404 on an unknown `/api/v1` path (past security) and 403 on `/api/v1/admin/**`; a second register with other capitals → 409 `EMAIL_TAKEN`. |
+| `UserSeederTest` | Mockito: `count() = 0` → `saveAll` captured (`ArgumentCaptor`), emails + roles in order, all hashes match `password`; `count() = 3` → `saveAll` never called. |
 | `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |
 
 Result: `./gradlew build` → BUILD SUCCESSFUL, 32 tests (6 after #13, +2 for users, +9 from Liviu's #22, +12 for login foundations, +3 for `UserService`), locally on PostgreSQL 18.
