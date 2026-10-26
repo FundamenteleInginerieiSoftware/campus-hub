@@ -216,13 +216,24 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-10-21 (W3):**
-- The first skeleton was removed from `main` on 2026-10-08 (#10). `main` now holds only the repo files: this file, `README.md`, `CONTRIBUTING.md`, `CODEOWNERS`, PR/issue templates and the `ci` workflow (it skips the backend steps until `backend/` exists).
-- **Decided:** Gradle + Java 25, project in `backend/`, base package `com.campus`, local PostgreSQL 18 + pgAdmin (setup in `README.md`).
-- **Next for Matei:** the Gradle skeleton in `backend/` (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway, PostgreSQL), then `SecurityConfig` + login/JWT.
-- **Liviu's PR #11** (catalog, Gradle project at the repo root, package `com.campus.incident_hub`): **don't merge**. Once the skeleton is on `main`, move the code into `backend/src/main/java/com/campus/catalog/{api,domain,repository,service,web}` on a fresh branch.
+**As of 2026-10-26 (end of W3):**
+- **On `main`:**
+  - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
+  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), Swagger **Authorize**.
+  - Dev accounts `student1`/`student2`/`admin@campus.test` with password `password`, created by `UserSeeder` (#55; ids 1, 2, 3).
+  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52).
+  - `Clock` bean (Calin #27).
+  - `UserApi` (real).
+  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24).
+- **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`. Still in PRs: `reservations` (#34), `incident_reports` (#40), `reassignment_log` (#37).
+- **In review**, merge order **#34 → #35 → #36 → #40 → #37 → #39**:
+  - Calin's #34–#37 need a rebase onto `main` (their CI only failed because `assets` was missing).
+  - #39 needs its base switched to `main`.
+  - Stefania's #40 needs a rebase, the `CurrentUser` agreement with Calin, and API contract entries.
+- **`CurrentUser`:** proposed as a `@Component` with `id()` + `isAdmin()` (comment on #40). The contract change in §5/§9 is draft PR #53, merged once Stefania and Calin agree. Until then, §9 still shows the old static form.
+- **Next for Matei:** `GET /api/v1/users/me` (needs `CurrentUser`), then Terraform (W4).
+- **Prototype demo goal:** a Swagger run on a fresh database: login → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409. It needs #34–#37 and #40 on `main`.
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
-- **Teammates now:** install JDK 25, PostgreSQL 18 + pgAdmin, create the `campus` databases (README section 1), do the **practice PR** (README section 3) and the spring.io tutorials ("Building a RESTful Web Service", "Accessing Data with JPA", "Validating Form Input"). Everyone who builds pages: React + Vite + TypeScript basics.
 
 ---
 
