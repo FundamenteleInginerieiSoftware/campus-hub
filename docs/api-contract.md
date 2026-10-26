@@ -163,7 +163,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Reservations (Calin)
 
-`RESERVATION_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 400 · `INVALID_DURATION` 400 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 400 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409
+`RESERVATION_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409
 
 ### Incidents (Stefania)
 
@@ -183,3 +183,52 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Catalog | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-log` |
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
+
+---
+
+#### Reservation endpoints (Calin)
+
+| Method & path | Access | Request body | Response | Status & errors |
+|---|---|---|---|---|
+| `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` | `201` + `ReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
+| `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED` |
+| `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
+| `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+
+```json
+// CreateReservationRequest
+{
+  "assetId": 1,
+  "startTime": "2026-11-03T10:00:00",
+  "endTime": "2026-11-03T12:00:00"
+}
+
+// ReservationResponse (returned by booking, check-out, return, cancel)
+{
+  "id": 10,
+  "userId": 2,
+  "assetId": 1,
+  "originalAssetId": null,
+  "startTime": "2026-11-03T10:00:00",
+  "endTime": "2026-11-03T12:00:00",
+  "status": "CONFIRMED",
+  "createdAt": "2026-10-25T14:30:00",
+  "checkedOutAt": null,
+  "returnedAt": null,
+  "cancelledAt": null,
+  "cancelReason": null
+}
+
+// LifecycleSweepSummary (returned by POST /api/v1/admin/reservations/jobs/run-lifecycle)
+{
+  "executedAt": "2026-11-03T10:35:00",
+  "noShowReleasedCount": 1,
+  "markedOverdueCount": 1,
+  "preventivelyReassignedCount": 1,
+  "preventivelyReassignedReservationIds": [33]
+}
+```
+
