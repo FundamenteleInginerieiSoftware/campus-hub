@@ -181,7 +181,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 - Status codes: 200, 201 (+ body), 204, 400 validation, 401, 403, 404, 409 conflict/invalid transition/limit.
 - Errors: RFC 9457 `ProblemDetail` with a `code` property, produced by **Liviu's** `GlobalExceptionHandler` (401/403 from the security filters use the same shape, written by Matei's `SecurityConfig`). **Throw** the shared exceptions from `common.error` (`NotFoundException`, `ConflictException`, `BusinessRuleException(code, msg)`, `ForbiddenException`, `InvalidStateTransitionException`); never build error responses in controllers. Error codes are listed in `docs/api-contract.md`.
 - Lists: `?page=0&size=20&sort=name,asc`, returned as `PageResponse<T>` (`content, page, size, totalElements, totalPages`), never Spring's `Page`.
-- **Ownership in the service layer:** the user ID always comes from the JWT (`CurrentUser.id()`), never from the body. Others' resources return **404**, not 403.
+- **Ownership in the service layer:** the user ID always comes from the JWT (inject `CurrentUser`, call `currentUser.id()`), never from the body. Others' resources return **404**, not 403.
 
 **JPA rules:** `@ManyToOne(fetch = LAZY)` always · avoid `@OneToMany` (query the repository) · **cross-module references are plain IDs** (`Long assetId`) with a real FK in SQL · `open-in-view=false`, so map entities to DTOs **inside** `@Transactional` service methods · `@Transactional` on public service methods only (not controllers/repositories; self-invocation and `private` don't work); reads `readOnly = true` · state transitions inside the entity (`reservation.checkOut(now)`), no scattered `setStatus()` · `@Version` on concurrently edited rows.
 
@@ -307,8 +307,8 @@ freeze() { git grep -ohE 'CREATE TABLE (users|categories|lab_rooms|assets|reserv
 // user.api (Matei)
 interface UserApi { UserSummary getById(Long id); boolean exists(Long id); }
 record UserSummary(Long id, String email, String fullName, Role role) {}
-// common.security (Stefania): reads the JWT of the current request
-CurrentUser.id(); CurrentUser.isAdmin();
+// common.security (Stefania): a bean that reads the JWT of the current request. Inject it; mock it in service unit tests
+@Component class CurrentUser { Long id(); boolean isAdmin(); }   // id() = "sub" claim, isAdmin() = has ROLE_ADMIN
 // common.time (Calin): one Clock bean, zone Europe/Bucharest
 @Bean Clock clock();
 // common.paging (Liviu)
