@@ -9,9 +9,9 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Backend | Java 25, Spring Boot 4.1, Gradle (wrapper), Spring Security (JWT), JPA + Flyway |
 | Database | PostgreSQL 18: installed on your laptop (+ pgAdmin), a service container in CI, RDS on AWS |
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
-| Cloud | AWS (ECS Fargate, RDS, S3, CloudFront), managed by Matei. **You don't need an AWS account.** |
+| Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (21 Oct 2026):** the backend project (Gradle, in `backend/`) lands on `main` soon. Until then: install the tools (section 1), set up the database (section 1.1) and do your practice PR (section 3).
+> **Status (26 Oct 2026, week 3):** the backend skeleton, the shared error handling, paging and `Clock`, and the first security pieces (users table, password hashing, JWT signing, 401/403 JSON) are on `main`. The catalog, reservation and incident modules are open PRs (section 7). Login/register endpoints and the frontend are not there yet. New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
 
 ---
 
@@ -82,6 +82,7 @@ The first build downloads Gradle and the dependencies and takes a few minutes. L
 |---|---|
 | <http://localhost:8080/actuator/health> | `{"status":"UP"}` |
 | <http://localhost:8080/swagger-ui.html> | Swagger UI with the API endpoints |
+| <http://localhost:8080/api/v1/auth/ping> | a short JSON message: security lets you through without a token |
 
 **Reset the local database:** stop the app, then in pgAdmin's Query Tool (connected as `postgres`):
 `DROP DATABASE campus WITH (FORCE); CREATE DATABASE campus OWNER campus;`
@@ -150,10 +151,10 @@ campus-hub/
 │           ├── application-dev.yml      local dev (local PostgreSQL, default profile)
 │           ├── application-prod.yml     AWS (everything from env vars)
 │           └── db/migration/            Flyway SQL migrations
-├── frontend/                 React app (Stefania sets it up)
-├── docs/                     requirements, API contract, diagrams, decisions, meeting notes
+├── frontend/                 React app (not yet; Stefania sets it up)
+├── docs/                     decisions log, API contract, AWS ADRs + diagram, clickable prototype (docs/prototype/)
 ├── documentation/            one folder per member (personal docs)
-├── infra/                    Terraform for AWS (Matei)
+├── infra/                    Terraform for AWS (not yet; Matei)
 ├── .github/                  CODEOWNERS, CI workflow, PR template, issue templates
 └── CONTRIBUTING.md           Git, code, database and test rules (read before your first PR)
 ```
@@ -172,3 +173,72 @@ Inside every module the code is split the same way: `api/` (the only package oth
 | 4 | Stefania | Incidents, Users & Frontend Lead | `incident/`, user admin (`user/admin/`), `common/security` (`CurrentUser`), `frontend/` (lead), CI (`ci.yml`) | [@m1runa-stefan1a](https://github.com/m1runa-stefan1a) | Calin |
 
 Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHub requests the right reviewer automatically through `.github/CODEOWNERS`.
+
+---
+
+## 7. Progress: what each of us has done
+
+What is on `main` and what is still in review, per member. **As of 26 Oct 2026**; update it when PRs merge.
+
+### Matei Necula: cloud, security & auth
+
+| Done (merged) | PRs |
+|---|---|
+| Repo restart: README, CONTRIBUTING, AGENTS, CODEOWNERS, PR/issue templates, `ci` workflow, `main` protection | #12, #16, #18, #26, #49 |
+| Gradle backend skeleton (Java 25, Spring Boot 4.1, PostgreSQL 18, Flyway, Spotless, JaCoCo, Swagger) | #13 |
+| Decisions log + API contract draft | #15 |
+| `users` table, `User` entity and repository | #17 |
+| Password hashing (BCrypt), JWT signing, `/api/v1/admin/**` admin-only, Swagger "Authorize" | #25 |
+| 401/403 answers as ProblemDetail JSON | #44 |
+| `@Async` + `@Scheduled` switched on (for Calin's jobs and listeners) | #45 |
+| `UserApi` contract + `UserSummary`, implemented by `UserService` | #46, #48 |
+| Register/login request and response records | #47 |
+| AWS architecture diagram + ADRs 001-005; AWS account with budget alerts | #20 |
+| Clickable prototype of the app (fake data) | #41, #42 |
+| Personal docs 01-11 | #14 + each PR above |
+
+**Next:** login/register endpoints (`AuthService`, `AuthController`), dev seed users, then Terraform for AWS (W4).
+
+### Liviu Nedelcu: catalog & shared services
+
+| Done (merged) | PRs |
+|---|---|
+| Shared exceptions + `GlobalExceptionHandler` (ProblemDetail errors) | #22 |
+| `PageResponse<T>` for paginated lists | #22 |
+| `AuditService`, `StorageService`, `NotificationService` interfaces + dev versions (logging, local disk) | #22 |
+| Personal documentation folder | #21 |
+
+| In review | PR | State |
+|---|---|---|
+| Catalog entities, migration and `CatalogApi` | #24 | changes requested |
+
+### Calin Murariu: reservations & reassignment
+
+| Done (merged) | PRs |
+|---|---|
+| Shared `Clock` bean (Europe/Bucharest) for every "now" in the app | #27 |
+
+| In review | PR | State |
+|---|---|---|
+| Reservations table, entity and `ReservationApi` | #34 | CI red: needs the `assets` table from #24 first |
+| Booking with overlap check and row locking | #35 | changes requested, CI red (same cause) |
+| My reservations, cancel, facade, seeder | #36 | CI red (same cause) |
+| Auto-reassignment engine on `AssetDamagedEvent` | #37 | CI red (same cause) |
+| Reservation + reassignment docs | #39 | changes requested |
+
+### Stefania: incidents, users & frontend lead
+
+| Done (merged) | PRs |
+|---|---|
+| Personal documentation folder | #19 |
+
+| In review | PR | State |
+|---|---|---|
+| Incident reporting flow, persistence and `AssetDamagedEvent` | #40 | changes requested |
+
+**Open for her:** issue #23 (review notes for the incident database), confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md`. Still to start: `CurrentUser`, frontend scaffold.
+
+### Everyone
+
+- Issue #43: check the prototype (`docs/prototype/campus-hub-prototype.html`) against your module.
+- Still to decide (🟡/⏳ in `docs/decisions.md`): weekly meeting time, entity freeze session, real week dates and milestones.
