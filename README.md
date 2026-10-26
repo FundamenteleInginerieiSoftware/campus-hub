@@ -11,7 +11,7 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (26 Oct 2026, end of week 3):** on `main`: the backend skeleton, the shared error handling, paging and `Clock`, security with **register/login (JWT) and dev test accounts**, and the **catalog** (`assets`, `CatalogApi`). The reservation and incident modules are open PRs (section 7). The frontend is not there yet. New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
+> **Status (26 Oct 2026, start of week 4):** on `main`: the backend skeleton, the shared error handling, paging and `Clock`, security with **register/login (JWT) and dev test accounts**, and the **catalog** (`assets`, `CatalogApi`). The reservation and incident modules are open PRs (section 7). The frontend is not there yet. **The next three weeks, per member: [`docs/plan-w4-w6.md`](docs/plan-w4-w6.md).** New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
 
 ---
 
