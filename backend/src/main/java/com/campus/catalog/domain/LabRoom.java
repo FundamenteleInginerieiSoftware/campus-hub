@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -32,8 +33,8 @@ public class LabRoom {
     private String building;
 
     public LabRoom(String code, String name, String building) {
-        this.code = code;
-        this.name = name;
+        this.code = code.trim().toUpperCase(Locale.ROOT);
+        this.name = name.trim();
         this.building = building;
     }
 }

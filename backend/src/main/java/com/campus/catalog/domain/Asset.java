@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -72,9 +73,10 @@ public class Asset {
             Category category,
             LabRoom labRoom,
             LocalDateTime now) {
-        this.name = name;
-        this.model = model;
-        this.serialNumber = serialNumber;
+        this.name = name.trim();
+        this.model = model.trim();
+        // Normalise once here so case-insensitive lookups and the DB constraint agree on one format.
+        this.serialNumber = serialNumber.trim().toUpperCase(Locale.ROOT);
         this.description = description;
         this.category = category;
         this.labRoom = labRoom;
@@ -110,8 +112,8 @@ public class Asset {
         if (this.status == AssetStatus.RETIRED) {
             throw new InvalidStateTransitionException("ASSET_RETIRED", "Cannot update a retired asset");
         }
-        this.name = name;
-        this.model = model;
+        this.name = name.trim();
+        this.model = model.trim();
         this.description = description;
         this.category = category;
         this.labRoom = labRoom;

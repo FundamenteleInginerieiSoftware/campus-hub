@@ -2,10 +2,9 @@ package com.campus.catalog.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campus.catalog.api.AssetStatus;
@@ -20,13 +19,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
 
 @ExtendWith(MockitoExtension.class)
 class CatalogServiceTest {
@@ -45,18 +44,14 @@ class CatalogServiceTest {
     @BeforeEach
     void setUp() {
         Clock fixedClock = Clock.fixed(FIXED_INSTANT, CAMPUS_ZONE);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<Clock> clockProvider = mock(ObjectProvider.class);
-        when(clockProvider.getIfAvailable(org.mockito.ArgumentMatchers.any())).thenReturn(fixedClock);
-
-        catalogService = new CatalogService(assetRepository, clockProvider);
+        catalogService = new CatalogService(assetRepository, fixedClock);
         category = new Category("Osciloscoape", "Echipamente de masura");
         labRoom = new LabRoom("B204", "Laborator Robotica", "Corp B");
     }
 
     @Test
     void getAssetReturnsSummaryWhenFound() {
-        Asset asset = new Asset("Osciloscop", "DS1054Z", "OSC-101", "Descriere", category, labRoom, FIXED_NOW);
+        Asset asset = new Asset("Osciloscop", "DS1054Z", "osc-101", "Descriere", category, labRoom, FIXED_NOW);
         when(assetRepository.findById(1L)).thenReturn(Optional.of(asset));
 
         AssetSummary summary = catalogService.getAsset(1L);
@@ -64,6 +59,7 @@ class CatalogServiceTest {
         assertEquals("Osciloscop", summary.name());
         assertEquals("DS1054Z", summary.model());
         assertEquals(AssetStatus.AVAILABLE, summary.status());
+        assertEquals("OSC-101", asset.getSerialNumber());
     }
 
     @Test
@@ -76,16 +72,59 @@ class CatalogServiceTest {
     }
 
     @Test
-    void markUnderMaintenanceUpdatesStatusAndRejectsRetiredAsset() {
+    void findAvailableByModelAndCategoryReturnMatchingSummaries() {
+        Asset asset = new Asset("Osciloscop #2", "DS1054Z", "OSC-102", "Descriere", category, labRoom, FIXED_NOW);
+        when(assetRepository.findByModelAndStatusAndIdNot("DS1054Z", AssetStatus.AVAILABLE, 1L))
+                .thenReturn(List.of(asset));
+        when(assetRepository.findByCategoryIdAndStatusAndIdNot(10L, AssetStatus.AVAILABLE, 1L))
+                .thenReturn(List.of(asset));
+
+        List<AssetSummary> byModel = catalogService.findAvailableByModel("DS1054Z", 1L);
+        List<AssetSummary> byCategory = catalogService.findAvailableByCategory(10L, 1L);
+
+        assertEquals(1, byModel.size());
+        assertEquals("Osciloscop #2", byModel.getFirst().name());
+        assertEquals(1, byCategory.size());
+    }
+
+    @Test
+    void markUnderMaintenanceAndMarkAvailableUpdateStatus() {
         Asset asset = new Asset("Osciloscop", "DS1054Z", "OSC-101", "Descriere", category, labRoom, FIXED_NOW);
         when(assetRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(asset));
 
         catalogService.markUnderMaintenance(1L);
         assertEquals(AssetStatus.UNDER_MAINTENANCE, asset.getStatus());
-        assertNotEquals(AssetStatus.AVAILABLE, asset.getStatus());
 
+        catalogService.markAvailable(1L);
+        assertEquals(AssetStatus.AVAILABLE, asset.getStatus());
+    }
+
+    @Test
+    void rejectsStatusTransitionOnRetiredAsset() {
+        Asset asset = new Asset("Osciloscop", "DS1054Z", "OSC-101", "Descriere", category, labRoom, FIXED_NOW);
         asset.retire(FIXED_NOW);
+        when(assetRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(asset));
+
         assertThrows(InvalidStateTransitionException.class, () -> catalogService.markAvailable(1L));
+        assertThrows(InvalidStateTransitionException.class, () -> catalogService.markUnderMaintenance(1L));
+    }
+
+    @Test
+    void markUnderMaintenanceAndLockForBookingThrowNotFoundWhenMissing() {
+        when(assetRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundException.class, () -> catalogService.markUnderMaintenance(99L));
+        assertThrows(NotFoundException.class, () -> catalogService.lockForBooking(99L));
+    }
+
+    @Test
+    void lockForBookingAcquiresRowLockWhenAssetExists() {
+        Asset asset = new Asset("Osciloscop", "DS1054Z", "OSC-101", "Descriere", category, labRoom, FIXED_NOW);
+        when(assetRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(asset));
+
+        catalogService.lockForBooking(1L);
+
+        verify(assetRepository).findByIdForUpdate(1L);
     }
 
     @Test
