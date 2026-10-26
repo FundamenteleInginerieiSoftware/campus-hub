@@ -70,7 +70,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 | Rule | Value |
 |---|---|
 | Email | trimmed, stored lowercase, unique → `409 EMAIL_TAKEN` |
-| Password | 8–72 characters (BCrypt's limit is 72 bytes) 🟡 confirm |
+| Password | 8–72 characters **and** at most 72 bytes (BCrypt's limit; "ș" counts as 2) → else `400 VALIDATION_FAILED` 🟡 confirm |
 | Full name | 1–100 characters |
 | Wrong email **or** wrong password | the **same** `401 INVALID_CREDENTIALS`, so nobody can test which emails exist |
 | Disabled user | `401 INVALID_CREDENTIALS` as well |
