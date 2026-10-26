@@ -1,15 +1,15 @@
+# Every test runs with this profile (build.gradle sets spring.profiles.active=test).
+# It uses the local campus_test database, so tests never touch your dev data.
+# CI overrides the connection with SPRING_DATASOURCE_* env vars (its own PostgreSQL 18 container).
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: password
-  flyway:
-    enabled: true
-    validate-on-migrate: false
+    url: jdbc:postgresql://localhost:5432/campus_test
+    username: campus
+    password: campus
+  test:
+    database:
+      replace: none         # @DataJpaTest uses this real database instead of looking for an embedded one
 
 app:
   jwt:
-    secret: "very-secure-and-long-secret-key-that-exceeds-thirty-two-bytes-length"
-    expiration: 8h
-  time-zone: Europe/Bucharest
+    secret: test-only-secret-change-me-test-only-secret-change-me-012345678   # fake, >= 32 bytes for HS256
