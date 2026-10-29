@@ -38,6 +38,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     Optional<Reservation> findFirstByAssetIdAndStatusIn(Long assetId, Collection<ReservationStatus> statuses);
 
+    List<Reservation> findByStatus(ReservationStatus status);
+
     @Query("""
         select r from Reservation r
         where r.assetId = :assetId

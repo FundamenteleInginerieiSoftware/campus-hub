@@ -7,6 +7,7 @@ import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
+import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
@@ -15,7 +16,9 @@ import com.campus.reservation.web.ReservationResponse;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -103,7 +106,9 @@ public class ReservationLifecycleService {
      * had already been sent. Fix: each reservation state change now runs in its own transaction via
      * {@link ReservationService}, and notification emails are only sent after that reservation's commit succeeds.
      */
-    @Scheduled(fixedDelayString = "${app.reservation.lifecycle-sweep-ms:300000}")
+    @Scheduled(
+            fixedDelayString = "${app.reservation.lifecycle-sweep-ms:300000}",
+            initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")
     public LifecycleSweepSummary runLifecycleSweep() {
         LocalDateTime now = LocalDateTime.now(clock);
         int noShowCount = processNoShows(now);
@@ -141,7 +146,6 @@ public class ReservationLifecycleService {
 
     private int processOverdueAndCascade(LocalDateTime now, List<Long> cascadedReservationIds) {
         List<Reservation> expiredCheckouts = reservationRepository.findCheckedOutPastEnd(now);
-        LocalDateTime cascadeHorizon = now.plusMinutes(PREVENTIVE_CASCADE_HORIZON_MINUTES);
         int overdueCount = 0;
 
         for (Reservation overdue : expiredCheckouts) {
@@ -165,17 +169,29 @@ public class ReservationLifecycleService {
                     "Equipment Overdue",
                     "Your reservation #" + overdue.getId()
                             + " is past its end time. Please return the equipment to the lab desk immediately.");
+        }
 
-            // Preventive cascade reassignment: if another student has a booking starting within 60 minutes
-            // on this unreturned asset, proactively move them to a free same-model substitute.
+        // Bug fixed: previously, the preventive cascade check was only executed once inside the
+        // transition block above. If an asset was still missing 1 hour later, upcoming bookings starting
+        // then were never moved because findCheckedOutPastEnd only returns CHECKED_OUT rows.
+        // Fix: run the preventive check for EVERY asset currently unreturned (status OVERDUE) on every sweep.
+        // Since moveToAsset returns false when nothing changes, re-evaluating active OVERDUE assets is safe.
+        List<Reservation> currentOverdue = reservationRepository.findByStatus(ReservationStatus.OVERDUE);
+        LocalDateTime cascadeHorizon = now.plusMinutes(PREVENTIVE_CASCADE_HORIZON_MINUTES);
+        Set<Long> overdueAssetIds = new HashSet<>();
+        for (Reservation r : currentOverdue) {
+            overdueAssetIds.add(r.getAssetId());
+        }
+
+        for (Long overdueAssetId : overdueAssetIds) {
             List<Reservation> upcomingOnSameAsset =
-                    reservationRepository.findUpcomingConfirmedByAsset(overdue.getAssetId(), now);
+                    reservationRepository.findUpcomingConfirmedByAsset(overdueAssetId, now);
 
             for (Reservation threatened : upcomingOnSameAsset) {
                 if (threatened.getStartTime().isAfter(cascadeHorizon)) {
                     break;
                 }
-                if (tryPreventiveMove(threatened, overdue.getAssetId())) {
+                if (tryPreventiveMove(threatened, overdueAssetId)) {
                     cascadedReservationIds.add(threatened.getId());
                 }
             }
