@@ -1,6 +1,7 @@
 package com.campus.common.audit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -44,6 +45,21 @@ class DatabaseAuditServiceTest {
         assertEquals("ASSET", saved.getEntityType());
         assertEquals(12L, saved.getEntityId());
         assertEquals("Retired damaged oscilloscope", saved.getDetails());
+        assertEquals(EXPECTED_NOW, saved.getCreatedAt());
+    }
+
+    @Test
+    void recordsSystemAuditEntryWithNullActor() {
+        auditService.record(null, "RESERVATION_NO_SHOW", "RESERVATION", 42L, "Marked as no-show by scheduled job");
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+
+        AuditLog saved = captor.getValue();
+        assertNull(saved.getActorId());
+        assertEquals("RESERVATION_NO_SHOW", saved.getAction());
+        assertEquals("RESERVATION", saved.getEntityType());
+        assertEquals(42L, saved.getEntityId());
         assertEquals(EXPECTED_NOW, saved.getCreatedAt());
     }
 }
