@@ -208,6 +208,7 @@ class ReservationLifecycleServiceTest {
         when(reservationService.markNoShow(11L)).thenReturn(true);
         when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of(overdueRes));
         when(reservationService.markOverdue(22L)).thenReturn(true);
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
         when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now)).thenReturn(List.of(threatenedRes));
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
@@ -257,6 +258,7 @@ class ReservationLifecycleServiceTest {
                 .thenReturn(List.of());
         when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of(overdueRes));
         when(reservationService.markOverdue(22L)).thenReturn(true);
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
         when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now)).thenReturn(List.of(threatenedRes));
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
@@ -300,6 +302,7 @@ class ReservationLifecycleServiceTest {
                 .thenReturn(List.of());
         when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of(overdueRes));
         when(reservationService.markOverdue(22L)).thenReturn(true);
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
         when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now)).thenReturn(List.of(threatenedRes));
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
@@ -341,6 +344,7 @@ class ReservationLifecycleServiceTest {
                 .thenReturn(List.of());
         when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of(overdueRes));
         when(reservationService.markOverdue(22L)).thenReturn(true);
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
         when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now)).thenReturn(List.of(farFutureRes));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
@@ -385,5 +389,93 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.noShowReleasedCount()).isEqualTo(1);
         verify(notificationService, never()).notifyUser(eq(201L), any(), any());
         verify(notificationService).notifyUser(eq(202L), eq("Reservation Marked as No-Show"), any());
+    }
+
+    @Test
+    @DisplayName(
+            "Preventive cascade runs across multiple sweeps: second sweep moves later booking for already-OVERDUE asset")
+    void cascadeRunsAcrossMultipleSweepsForAlreadyOverdueAsset() {
+        LocalDateTime now1 = LocalDateTime.now(clock); // 10:00
+
+        Reservation overdueRes = new Reservation(
+                102L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 1, 12, 0));
+        ReflectionTestUtils.setField(overdueRes, "id", 22L);
+
+        // Threatened 1: starts at 10:30 (within 60m horizon of 10:00 sweep)
+        Reservation threatened1 = new Reservation(
+                103L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 1, 15, 0));
+        ReflectionTestUtils.setField(threatened1, "id", 33L);
+
+        // Threatened 2: starts at 11:30 (outside 60m horizon at 10:00, but inside at 11:00)
+        Reservation threatened2 = new Reservation(
+                104L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 11, 30),
+                LocalDateTime.of(2026, 11, 2, 13, 0),
+                LocalDateTime.of(2026, 11, 1, 15, 0));
+        ReflectionTestUtils.setField(threatened2, "id", 44L);
+
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope 1", "Tek-100", 1L, 1L, AssetStatus.AVAILABLE);
+        AssetSummary sub = new AssetSummary(SUB_ASSET_ID, "Scope 2", "Tek-100", 1L, 1L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
+
+        // --- Sweep 1: at 10:00 ---
+        when(reservationRepository.findConfirmedBeforeCutoff(now1.minusMinutes(30)))
+                .thenReturn(List.of());
+        when(reservationRepository.findCheckedOutPastEnd(now1)).thenReturn(List.of(overdueRes));
+        when(reservationService.markOverdue(22L)).thenReturn(true);
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
+        when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now1))
+                .thenReturn(List.of(threatened1, threatened2));
+        when(reservationService.isAssetFree(SUB_ASSET_ID, threatened1.getStartTime(), threatened1.getEndTime(), 33L))
+                .thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(SUB_ASSET_ID), any())).thenReturn(true);
+
+        LifecycleSweepSummary sweep1 = lifecycleService.runLifecycleSweep();
+
+        assertThat(sweep1.markedOverdueCount()).isEqualTo(1);
+        assertThat(sweep1.preventivelyReassignedCount()).isEqualTo(1);
+        assertThat(sweep1.preventivelyReassignedReservationIds()).containsExactly(33L);
+
+        // --- Sweep 2: at 11:00 (60 minutes later, equipment still OVERDUE) ---
+        Clock clock2 = Clock.fixed(Instant.parse("2026-11-02T09:00:00Z"), ZoneId.of("Europe/Bucharest"));
+        ReservationLifecycleService service2 = new ReservationLifecycleService(
+                reservationRepository,
+                reservationService,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock2);
+
+        LocalDateTime now2 = LocalDateTime.now(clock2); // 11:00
+        when(reservationRepository.findConfirmedBeforeCutoff(now2.minusMinutes(30)))
+                .thenReturn(List.of());
+        // No new expired checkouts, reservation 22L is already OVERDUE
+        when(reservationRepository.findCheckedOutPastEnd(now2)).thenReturn(List.of());
+        when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now2)).thenReturn(List.of(threatened2));
+        when(reservationService.isAssetFree(SUB_ASSET_ID, threatened2.getStartTime(), threatened2.getEndTime(), 44L))
+                .thenReturn(true);
+        when(reservationService.moveToAsset(eq(44L), eq(SUB_ASSET_ID), any())).thenReturn(true);
+
+        LifecycleSweepSummary sweep2 = service2.runLifecycleSweep();
+
+        assertThat(sweep2.markedOverdueCount()).isZero(); // Not marked again
+        assertThat(sweep2.preventivelyReassignedCount()).isEqualTo(1); // Second booking moved!
+        assertThat(sweep2.preventivelyReassignedReservationIds()).containsExactly(44L);
+
+        verify(notificationService).notifyUser(eq(102L), eq("Equipment Overdue"), any());
+        verify(notificationService).notifyUser(eq(103L), eq("Proactive Reservation Reassignment"), any());
+        verify(notificationService).notifyUser(eq(104L), eq("Proactive Reservation Reassignment"), any());
     }
 }
