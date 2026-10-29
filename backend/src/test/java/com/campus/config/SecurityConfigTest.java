@@ -28,6 +28,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class SecurityConfigTest {
 
+    // Bug fixed (#67): the probes used /api/v1/assets and /api/v1/admin/assets. Once Liviu mapped
+    // real endpoints there, a request that passed security got 405 or 200 instead of the expected 404.
+    // Fix: probe paths that no controller will ever map, so 404 always means "security let it through".
+    private static final String PROBE = "/api/v1/_security-probe";
+    private static final String ADMIN_PROBE = "/api/v1/admin/_security-probe";
+
     @Autowired
     MockMvc mockMvc;
 
@@ -57,29 +63,28 @@ class SecurityConfigTest {
 
     @Test
     void otherEndpointsNeedAToken() throws Exception {
-        mockMvc.perform(get("/api/v1/assets"))
+        mockMvc.perform(get(PROBE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
-                .andExpect(jsonPath("$.instance").value("/api/v1/assets"));
+                .andExpect(jsonPath("$.instance").value(PROBE));
     }
 
     @Test
     void invalidTokenIsRejected() throws Exception {
-        mockMvc.perform(get("/api/v1/assets").header("Authorization", "Bearer not-a-real-token"))
+        mockMvc.perform(get(PROBE).header("Authorization", "Bearer not-a-real-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
     void studentPassesSecurityOnNormalPaths() throws Exception {
-        mockMvc.perform(get("/api/v1/assets").header("Authorization", bearer("STUDENT")))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get(PROBE).header("Authorization", bearer("STUDENT"))).andExpect(status().isNotFound());
     }
 
     @Test
     void studentIsForbiddenOnAdminPaths() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/assets").header("Authorization", bearer("STUDENT")))
+        mockMvc.perform(get(ADMIN_PROBE).header("Authorization", bearer("STUDENT")))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(403))
@@ -88,7 +93,7 @@ class SecurityConfigTest {
 
     @Test
     void adminPassesSecurityOnAdminPaths() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/assets").header("Authorization", bearer("ADMIN")))
+        mockMvc.perform(get(ADMIN_PROBE).header("Authorization", bearer("ADMIN")))
                 .andExpect(status().isNotFound());
     }
 
