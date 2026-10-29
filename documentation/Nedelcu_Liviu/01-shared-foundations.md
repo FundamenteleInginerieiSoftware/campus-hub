@@ -25,7 +25,7 @@ Before each module could build its own screens and business rules, the whole bac
 | `common/error/` | `AppException`, `NotFoundException` (404), `ConflictException` (409), `BusinessRuleException` (409), `InvalidStateTransitionException` (409), `ForbiddenException` (403), `UnauthorizedException` (401), `GlobalExceptionHandler` | Maps domain, validation, optimistic-locking (`STALE_VERSION`) and unexpected errors into RFC 9457 `ProblemDetail` JSON |
 | `common/paging/` | `PageResponse<T>` | Stable DTO wrapper converted via `PageResponse.from(Page<T>)` so Spring's internal `PageImpl` JSON structure is never exposed |
 | `common/audit/` | `AuditService`, `LoggingAuditService` (replaced in W4 by `DatabaseAuditService`) | Contract for recording sensitive admin and system actions |
-| `storage/` | `StorageService`, `LocalStorageService` (`@Profile("!prod")`) | Stores uploaded files on local disk with path-traversal protection (`normalize().startsWith(rootDir)`) |
+| `storage/` | `StorageService`, `LocalStorageService` (`@Profile("!prod")`) | W3 non-prod stub logging generated `<uuid>.<ext>` keys (real disk persistence + validation planned for W5, #71) |
 | `notification/` | `NotificationService`, `LoggingNotificationService` (`@Profile("!prod")`) | Logs outbound user notifications in dev/test; paired with SES in `prod` |
 
 ### Key design choices
@@ -34,5 +34,4 @@ Before each module could build its own screens and business rules, the whole bac
 |---|---|
 | RFC 9457 `ProblemDetail` + `code` property | Built into Spring Framework 6/7; gives the React client a stable `code` key (`SERIAL_NUMBER_TAKEN`, `RESERVATION_CONFLICT`) independent of human text |
 | `@Profile("!prod")` instead of `@Profile("dev")` on local adapters | Ensures `@SpringBootTest` (which runs under the `test` profile) also gets a working `StorageService` and `NotificationService` bean without extra mocks |
-| Path-traversal check in `LocalStorageService` | Rejects keys like `../../etc/passwd` before touching the filesystem |
 | Catch-all `Exception` handler logs server-side only | Returns generic `500 INTERNAL_ERROR` to the client while delegating Spring's own `ErrorResponse` exceptions (`404`/`405`) cleanly |
