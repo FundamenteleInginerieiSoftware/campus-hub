@@ -167,7 +167,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Incidents (Stefania)
 
-`INCIDENT_NOT_FOUND` 404 · `INVALID_PHOTO_TYPE` 400 · `INVALID_INCIDENT_STATUS_TRANSITION` 409 (+ `ASSET_RETIRED` and `PHOTO_TOO_LARGE` above)
+`INCIDENT_NOT_FOUND` 404 · `INVALID_PHOTO_TYPE` 400 · `INVALID_INCIDENT_STATUS_TRANSITION` 409 (+ `ASSET_NOT_FOUND`, `ASSET_RETIRED` and `PHOTO_TOO_LARGE` above)
 
 Owners: check the status codes above when you implement them, and fix this list if yours differ.
 
@@ -183,3 +183,25 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Catalog | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-log` |
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
+
+
+### Incident endpoints (Stefania)
+
+| Method & path | Access | Request | Response | Errors |
+|---|---|---|---|---|
+| `POST /api/v1/incidents` | logged in | `{"assetId","description","severity"}` | `201` + `IncidentResponse`. The asset becomes `UNDER_MAINTENANCE` | 400 `VALIDATION_FAILED`, 401, 404 `ASSET_NOT_FOUND`, 409 `ASSET_RETIRED` |
+| `GET /api/v1/admin/incidents?status=OPEN&page=0&size=20` | admin | – | `200` + `PageResponse<IncidentResponse>`, newest first; `status` is optional | 400 `INVALID_PARAMETER`, 401, 403 |
+| `POST /api/v1/admin/incidents/{id}/resolve` | admin | optional `{"resolutionNotes"}` (max 2000 chars); no body is fine | `200` + `IncidentResponse`. Resolving twice returns it unchanged. The asset is `AVAILABLE` again once no other `OPEN`/`IN_REPAIR` incident is left on it | 400 `VALIDATION_FAILED`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `REJECTED`) |
+
+`description`: required, not blank, max 2000 chars. `severity`: `LOW` · `MEDIUM` · `HIGH` · `CRITICAL`. `status`: `OPEN` · `IN_REPAIR` · `RESOLVED` · `REJECTED`. The reporter comes from the token, never from the body. The photo comes later as a separate multipart upload.
+
+```json
+// IncidentResponse
+{
+  "id": 100, "assetId": 12, "reservationId": null, "reportedById": 1,
+  "description": "Display cracked", "severity": "HIGH", "status": "OPEN", "photoKey": null,
+  "createdAt": "2026-11-03T14:00:00", "resolvedAt": null, "resolvedById": null, "resolutionNotes": null
+}
+```
+
+After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, occurredAt)` starts Calin's reassignment engine.
