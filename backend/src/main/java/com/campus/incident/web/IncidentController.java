@@ -18,16 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class IncidentController {
 
     private final IncidentService incidentService;
+    private final CurrentUser currentUser;
 
-    public IncidentController(IncidentService incidentService) {
+    public IncidentController(IncidentService incidentService, CurrentUser currentUser) {
         this.incidentService = incidentService;
+        this.currentUser = currentUser;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Report an incident on an asset")
+    @Operation(summary = "Report an incident on an asset; the asset goes UNDER_MAINTENANCE")
     public IncidentResponse reportIncident(@Valid @RequestBody CreateIncidentRequest request) {
-        CurrentUser user = CurrentUser.fromSecurityContext();
-        return incidentService.reportIncident(request, user.id());
+        return incidentService.reportIncident(request, currentUser.id());
     }
 }
