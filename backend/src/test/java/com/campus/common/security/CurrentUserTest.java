@@ -47,6 +47,11 @@ class CurrentUserTest {
     }
 
     @Test
+    void noLoginIsNotAdmin() {
+        assertThat(currentUser.isAdmin()).isFalse();
+    }
+
+    @Test
     void noTokenGives401() {
         assertThatThrownBy(currentUser::id)
                 .isInstanceOf(UnauthorizedException.class)

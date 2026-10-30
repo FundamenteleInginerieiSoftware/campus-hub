@@ -20,8 +20,9 @@ public class CurrentUser {
 
     /** SecurityConfig turns roles: ["ADMIN"] into the ROLE_ADMIN authority. */
     public boolean isAdmin() {
-        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        // No login (e.g. a public path): not an admin, instead of a NullPointerException.
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
     // Only fails on a path that SecurityConfig left public (like /api/v1/auth/**): 401, not a 500.
