@@ -24,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminIncidentController {
 
     private final IncidentService incidentService;
+    private final CurrentUser currentUser;
 
-    public AdminIncidentController(IncidentService incidentService) {
+    public AdminIncidentController(IncidentService incidentService, CurrentUser currentUser) {
         this.incidentService = incidentService;
+        this.currentUser = currentUser;
     }
 
     @GetMapping
@@ -37,11 +39,14 @@ public class AdminIncidentController {
         return incidentService.getAllIncidents(status, pageable);
     }
 
+    // The body is optional: resolutionNotes may be left out, so an empty request is valid too.
     @PostMapping("/{id}/resolve")
-    @Operation(summary = "Resolve an incident report")
+    @Operation(
+            summary = "Resolve an incident report (OPEN or IN_REPAIR); the asset is available again once no "
+                    + "other incident on it is still open")
     public IncidentResponse resolveIncident(
-            @PathVariable("id") Long id, @Valid @RequestBody ResolveIncidentRequest request) {
-        CurrentUser admin = CurrentUser.fromSecurityContext();
-        return incidentService.resolveIncident(id, request, admin.id());
+            @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
+        String notes = request != null ? request.resolutionNotes() : null;
+        return incidentService.resolveIncident(id, notes, currentUser.id());
     }
 }

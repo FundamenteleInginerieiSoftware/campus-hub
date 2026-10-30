@@ -82,7 +82,7 @@ public class IncidentReport {
     }
 
     public void resolve(Long adminId, String resolutionNotes, LocalDateTime resolvedAt) {
-        if (this.status != IncidentStatus.OPEN) {
+        if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
             throw new InvalidStateTransitionException(
                     "INVALID_INCIDENT_STATUS_TRANSITION", "Incident cannot be resolved from status: " + this.status);
         }
@@ -101,7 +101,7 @@ public class IncidentReport {
 
     public enum IncidentStatus {
         OPEN,
-        IN_PROGRESS,
+        IN_REPAIR,
         RESOLVED,
         REJECTED
     }
