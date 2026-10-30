@@ -38,17 +38,19 @@ public interface ReservationApi {
      * @param reservationId the ID of the reservation to move
      * @param newAssetId the target substitute asset ID
      * @param reason the reason for reassignment (e.g., incident report ID or note)
+     * @return {@code true} if the reservation was moved, or {@code false} if it was no longer CONFIRMED
      */
-    void moveToAsset(Long reservationId, Long newAssetId, String reason);
+    boolean moveToAsset(Long reservationId, Long newAssetId, String reason);
 
     /**
      * Force-cancels a reservation (e.g., during reassignment when no substitute asset is free).
-     * Idempotent if already force-cancelled.
+     * Idempotent if already cancelled or no longer CONFIRMED.
      *
      * @param reservationId the ID of the reservation to force-cancel
      * @param reason the cancellation explanation
+     * @return {@code true} if the reservation was force-cancelled, or {@code false} if it was no longer CONFIRMED
      */
-    void forceCancel(Long reservationId, String reason);
+    boolean forceCancel(Long reservationId, String reason);
 
     /**
      * Finds the active check-out summary for an asset if currently checked out or overdue.
