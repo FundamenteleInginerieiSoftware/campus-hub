@@ -230,7 +230,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
   - Calin's #34–#37 need a rebase onto `main` (their CI only failed because `assets` was missing).
   - #39 needs its base switched to `main`.
   - Stefania's #40 needs a rebase, the `CurrentUser` agreement with Calin, and API contract entries.
-- **`CurrentUser`:** proposed as a `@Component` with `id()` + `isAdmin()` (comment on #40). The contract change in §5/§9 is draft PR #53, merged once Stefania and Calin agree. Until then, §9 still shows the old static form.
+- **`CurrentUser`:** on `main` as a `@Component` with `id()` + `isAdmin()` (Stefania #74). Inject it; `id()` throws 401 `UNAUTHORIZED` when nobody is logged in, `isAdmin()` returns `false`.
 - **Next for Matei:** `GET /api/v1/users/me` (needs `CurrentUser`), then Terraform (W4).
 - **Prototype demo goal:** a Swagger run on a fresh database: login → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409. It needs #34–#37 and #40 on `main`.
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
