@@ -2,6 +2,7 @@ package com.campus.reservation.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -20,15 +21,14 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AdminReservationController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
-@AutoConfigureMockMvc(addFilters = false)
 class AdminReservationControllerTest {
 
     @Autowired
@@ -66,7 +66,41 @@ class AdminReservationControllerTest {
             null);
 
     @Test
-    @DisplayName("GET /api/v1/admin/reservations returns 200 with PageResponse")
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("Non-admin user gets 403 FORBIDDEN on search endpoint")
+    void studentGets403OnSearch() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reservations"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("Non-admin user gets 403 FORBIDDEN on check-out endpoint")
+    void studentGets403OnCheckOut() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reservations/1/check-out"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("Non-admin user gets 403 FORBIDDEN on return endpoint")
+    void studentGets403OnReturn() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reservations/1/return"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reservations returns 200 with PageResponse for ADMIN")
     void searchReturns200() throws Exception {
         PageResponse<ReservationResponse> page = new PageResponse<>(List.of(checkedOutResponse), 0, 20, 1L, 1);
         when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt()))
@@ -83,6 +117,7 @@ class AdminReservationControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     @DisplayName("POST /api/v1/admin/reservations/{id}/check-out returns 200 when successful")
     void checkOutReturns200() throws Exception {
         when(reservationService.checkOutReservation(1L)).thenReturn(checkedOutResponse);
@@ -95,6 +130,7 @@ class AdminReservationControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     @DisplayName("POST /api/v1/admin/reservations/{id}/check-out returns 409 when window is closed")
     void checkOutReturns409WhenWindowClosed() throws Exception {
         when(reservationService.checkOutReservation(1L))
@@ -109,6 +145,7 @@ class AdminReservationControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     @DisplayName("POST /api/v1/admin/reservations/{id}/check-out returns 404 when reservation not found")
     void checkOutReturns404WhenNotFound() throws Exception {
         when(reservationService.checkOutReservation(999L))
@@ -120,6 +157,7 @@ class AdminReservationControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     @DisplayName("POST /api/v1/admin/reservations/{id}/return returns 200 when successful")
     void returnItemReturns200() throws Exception {
         when(reservationService.returnReservation(1L)).thenReturn(returnedResponse);

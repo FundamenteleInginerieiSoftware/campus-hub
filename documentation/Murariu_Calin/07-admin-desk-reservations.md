@@ -93,7 +93,8 @@ Specification<Reservation> spec = (root, query, cb) -> {
     if (userId != null) predicates.add(cb.equal(root.get("userId"), userId));
     if (assetId != null) predicates.add(cb.equal(root.get("assetId"), assetId));
     if (date != null) {
-        predicates.add(cb.lessThan(root.get("startTime"), date.atTime(23, 59, 59, 999999999)));
+        LocalDateTime nextDayStart = date.plusDays(1).atStartOfDay();
+        predicates.add(cb.lessThan(root.get("startTime"), nextDayStart));
         predicates.add(cb.greaterThan(root.get("endTime"), date.atStartOfDay()));
     }
     return cb.and(predicates.toArray(new Predicate[0]));
