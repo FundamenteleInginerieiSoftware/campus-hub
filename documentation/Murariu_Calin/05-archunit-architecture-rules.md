@@ -19,7 +19,7 @@ When four developers build a modular monolith simultaneously, it is easy for bou
 
 ### The Solution: Automated Architecture Testing with ArchUnit
 We introduced **ArchUnit** tests running as standard JUnit 5 test cases during `./gradlew test` and in the GitHub Actions CI pipeline:
-1. **Public API Enclosure:** Each feature module (`catalog`, `incident`, `reassignment`, `reservation`, `user`) exposes *only* its `api` package. Internal packages (`domain`, `service`, `repository`, `web`) are strictly forbidden from being imported by other modules.
+1. **Public API Enclosure:** Each feature and shared service module (`catalog`, `incident`, `notification`, `reassignment`, `reservation`, `storage`, `user`) exposes *only* its `api` package. Internal packages (`domain`, `service`, `repository`, `web`) are strictly forbidden from being imported by other modules.
 2. **Forbidden Cross-Module Dependencies:** 
    - `catalog` is the core equipment inventory and must never depend on reservations, incidents, or reassignment.
    - `reservation` handles booking lifecycles and must not depend on incidents or reassignment.
@@ -27,8 +27,8 @@ We introduced **ArchUnit** tests running as standard JUnit 5 test cases during `
 3. **No Circular Dependencies:** A clean directed acyclic graph (DAG) is enforced between all top-level modules.
 4. **Coding Conventions:**
    - Constructor injection only (field injection via `@Autowired` is banned).
-   - Controllers in `web` must only return and accept request/response records (DTOs), never JPA `@Entity` domain objects.
-   - Entities must not use Lombok `@Data` or `@AllArgsConstructor`.
+   - Controllers in `web` must only return and accept request/response records (DTOs), never JPA `@Entity` domain objects (including generic wrappers like `ResponseEntity<Asset>` or `List<Asset>`).
+   - Entities must not define `equals`, `hashCode`, or `toString` (forbidden Lombok `@Data`, `@EqualsAndHashCode`, `@ToString` or hand-written).
 
 If any teammate accidentally violates these rules, the build breaks immediately locally and in CI with an explicit, educational failure message.
 
@@ -55,9 +55,8 @@ If any teammate accidentally violates these rules, the build breaks immediately 
 | **Incident Independence** | `noClasses().that().resideInAPackage("com.campus.incident..").should().dependOnClassesThat().resideInAPackage("..reassignment..")` | Incident reporting publishes `AssetDamagedEvent`; reassignment is decoupled as a listener. |
 | **No Cycles** | `slices().matching("com.campus.(*)..").should().beFreeOfCycles()` | Prevents circular dependencies across all top-level modules. |
 | **No Field Injection** | `GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION` | Enforces constructor injection with `@RequiredArgsConstructor` (AGENTS.md §5). |
-| **DTOs in Controllers (Returns)** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class).and().arePublic().should().haveRawReturnType(annotatedWith(Entity.class))` | Controllers must return response records to prevent leaking domain entities or lazy initialization outside `@Transactional` (AGENTS.md §3). |
-| **DTOs in Controllers (Parameters)** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class).and().arePublic().should(notAcceptEntities)` | Controllers must accept request records in `web/`, never JPA domain entities directly. |
-| **Forbidden Lombok on Entities** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class).should().haveName("equals").orShould().haveName("hashCode").orShould().haveName("toString")` | `@Data`, `@EqualsAndHashCode`, and `@ToString` break JPA proxy identity and dirty checking; because Lombok has `SOURCE` retention, ArchUnit checks that these generated methods do not exist (AGENTS.md §5). |
+| **DTOs in Controllers (Returns & Params)** | `methods().that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class).and().arePublic().should(notExposeEntities)` | Controllers must return and accept response/request records, preventing JPA domain entity leakage even through generic wrappers like `ResponseEntity<Asset>` or `List<Asset>` (AGENTS.md §3). |
+| **Forbidden Equals/HashCode on Entities** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class).should().haveName("equals").orShould().haveName("hashCode").orShould().haveName("toString")` | `@Data`, `@EqualsAndHashCode`, and `@ToString` break JPA proxy identity and dirty checking; because Lombok has `SOURCE` retention, ArchUnit checks that these generated or hand-written methods do not exist (AGENTS.md §5). |
 
 ---
 
@@ -83,4 +82,4 @@ Output:
 BUILD SUCCESSFUL in 11s
 6 actionable tasks: 3 executed, 3 up-to-date
 ```
-All 8 architecture rules pass against the entire `com.campus` codebase with 0 violations.
+All architecture rules pass against the entire `com.campus` codebase with 0 violations.

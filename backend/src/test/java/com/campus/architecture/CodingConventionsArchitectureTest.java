@@ -1,12 +1,12 @@
 package com.campus.architecture;
 
-import static com.tngtech.archunit.core.domain.properties.CanBeAnnotated.Predicates.annotatedWith;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -21,8 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Architecture tests enforcing team coding conventions defined in AGENTS.md §3 and §5:
  * <ul>
  *   <li>Constructor injection only (no {@code @Autowired} on fields).</li>
- *   <li>Controllers must return/accept request/response records (DTOs), never JPA {@code @Entity} classes.</li>
- *   <li>Entities must not use forbidden Lombok annotations ({@code @Data}, {@code @EqualsAndHashCode}, {@code @ToString}).</li>
+ *   <li>Controllers must return/accept request/response records (DTOs), never JPA {@code @Entity} classes
+ *       (including generic wrappers such as {@code ResponseEntity<Asset>} or {@code List<Asset>}).</li>
+ *   <li>Entities must not define {@code equals}, {@code hashCode}, or {@code toString}
+ *       (forbidden Lombok {@code @Data}, {@code @EqualsAndHashCode}, {@code @ToString} or hand-written).</li>
  * </ul>
  */
 @AnalyzeClasses(packages = "com.campus", importOptions = ImportOption.DoNotIncludeTests.class)
@@ -33,45 +35,44 @@ class CodingConventionsArchitectureTest {
     static final ArchRule no_field_injection = NO_CLASSES_SHOULD_USE_FIELD_INJECTION.because(
             "Constructor injection ensures immutability, simpler unit testing, and explicit dependencies");
 
-    // Rule 2a: Controllers must never return JPA @Entity classes directly.
+    // Rule 2: Controllers must never expose JPA @Entity classes in return types or parameters
+    // (including generic wrappers like ResponseEntity<Asset>, List<Asset>, Optional<Asset>, etc.).
     @ArchTest
-    static final ArchRule controllers_must_not_return_entities = noMethods()
+    static final ArchRule controllers_must_not_expose_entities = methods()
             .that()
             .areDeclaredInClassesThat()
             .areAnnotatedWith(RestController.class)
             .and()
             .arePublic()
-            .should()
-            .haveRawReturnType(annotatedWith(Entity.class))
-            .because(
-                    "Controllers must return request/response records (DTOs) in web/ to avoid leaking JPA domain entities");
-
-    // Rule 2b: Controllers must never accept JPA @Entity classes as parameters directly.
-    @ArchTest
-    static final ArchRule controllers_must_not_accept_entities = methods()
-            .that()
-            .areDeclaredInClassesThat()
-            .areAnnotatedWith(RestController.class)
-            .and()
-            .arePublic()
-            .should(new ArchCondition<JavaMethod>("not accept an @Entity as a parameter") {
+            .should(new ArchCondition<JavaMethod>("not expose JPA @Entity classes in return types or parameters") {
                 @Override
                 public void check(JavaMethod method, ConditionEvents events) {
-                    for (JavaClass param : method.getRawParameterTypes()) {
-                        if (param.isAnnotatedWith(Entity.class)) {
+                    for (JavaClass involved : method.getReturnType().getAllInvolvedRawTypes()) {
+                        if (involved.isAnnotatedWith(Entity.class)) {
                             String message = String.format(
-                                    "Method %s has parameter %s which is an @Entity",
-                                    method.getFullName(), param.getName());
+                                    "Method %s exposes @Entity %s in its return type signature",
+                                    method.getFullName(), involved.getName());
                             events.add(SimpleConditionEvent.violated(method, message));
+                        }
+                    }
+                    for (JavaType paramType : method.getParameterTypes()) {
+                        for (JavaClass involved : paramType.getAllInvolvedRawTypes()) {
+                            if (involved.isAnnotatedWith(Entity.class)) {
+                                String message = String.format(
+                                        "Method %s exposes @Entity %s in its parameter signature",
+                                        method.getFullName(), involved.getName());
+                                events.add(SimpleConditionEvent.violated(method, message));
+                            }
                         }
                     }
                 }
             })
-            .because("Controllers must accept request records (DTOs) in web/, never JPA domain entities");
+            .because(
+                    "Controllers must return and accept request/response records (DTOs) in web/, never JPA domain entities");
 
-    // Rule 3: Entities must not use Lombok @Data, @EqualsAndHashCode, or @ToString (AGENTS.md §5).
-    // Lombok annotations have SOURCE retention and disappear from .class files,
-    // so we verify that the methods generated by @Data / @EqualsAndHashCode / @ToString do not exist.
+    // Rule 3: Entities must not define equals, hashCode, or toString (AGENTS.md §5).
+    // Lombok annotations (@Data, @EqualsAndHashCode, @ToString) have SOURCE retention and disappear from .class files,
+    // so we verify that the methods (generated by Lombok or written by hand) do not exist on entities.
     @ArchTest
     static final ArchRule entities_must_not_override_equals_hashcode_tostring = noMethods()
             .that()
@@ -84,5 +85,6 @@ class CodingConventionsArchitectureTest {
             .orShould()
             .haveName("toString")
             .because(
-                    "Entities must not use @Data, @EqualsAndHashCode, or @ToString; generated equals/hashCode/toString break JPA proxy identity");
+                    "Entities must not define equals, hashCode, or toString (via Lombok @Data / @EqualsAndHashCode / @ToString or hand-written); "
+                            + "JPA proxy identity and dirty checking are managed by the database primary key and EntityManager");
 }

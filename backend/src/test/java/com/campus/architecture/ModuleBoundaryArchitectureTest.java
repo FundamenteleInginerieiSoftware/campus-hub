@@ -26,7 +26,9 @@ import com.tngtech.archunit.lang.ArchRule;
 @AnalyzeClasses(packages = "com.campus", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleBoundaryArchitectureTest {
 
-    private static final String[] FEATURE_MODULES = {"catalog", "incident", "reassignment", "reservation", "user"};
+    private static final String[] FEATURE_MODULES = {
+        "catalog", "incident", "notification", "reassignment", "reservation", "storage", "user"
+    };
 
     // Rule 1: Cross-module communication must go through public api facades or events.
     // No module may access internal domain, service, repository, or web packages of another module.
