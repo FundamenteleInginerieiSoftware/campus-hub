@@ -8,5 +8,7 @@ public interface LabRoomRepository extends JpaRepository<LabRoom, Long> {
 
     boolean existsByCodeIgnoreCase(String code);
 
+    boolean existsByCodeIgnoreCaseAndIdNot(String code, Long id);
+
     Optional<LabRoom> findByCodeIgnoreCase(String code);
 }
