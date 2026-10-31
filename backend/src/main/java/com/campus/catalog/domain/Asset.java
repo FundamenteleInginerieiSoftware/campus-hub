@@ -103,6 +103,9 @@ public class Asset {
     }
 
     public void retire(LocalDateTime now) {
+        if (this.status == AssetStatus.RETIRED) {
+            throw new InvalidStateTransitionException("ASSET_RETIRED", "Asset is already retired");
+        }
         this.status = AssetStatus.RETIRED;
         this.updatedAt = now;
     }

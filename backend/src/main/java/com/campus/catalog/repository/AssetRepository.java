@@ -5,12 +5,16 @@ import com.campus.catalog.domain.Asset;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AssetRepository extends JpaRepository<Asset, Long> {
+
+    @EntityGraph(attributePaths = {"category", "labRoom"})
+    Optional<Asset> findWithDetailsById(Long id);
 
     // Acquires a PostgreSQL "SELECT ... FOR UPDATE" row lock so concurrent booking attempts
     // wait here until the active transaction finishes.
