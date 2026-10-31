@@ -40,6 +40,21 @@ class AuthFlowIT {
     }
 
     @Test
+    void meReturnsTheAccountOfTheToken() throws Exception {
+        register("me@campus.test");
+        String token = login("me@campus.test");
+
+        mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("me@campus.test"))
+                .andExpect(jsonPath("$.role").value("STUDENT"))
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+        mockMvc.perform(get("/api/v1/users/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void sameEmailTwiceIs409() throws Exception {
         register("twice@campus.test");
 
