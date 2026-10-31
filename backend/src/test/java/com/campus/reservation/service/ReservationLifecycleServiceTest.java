@@ -1,7 +1,6 @@
 package com.campus.reservation.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -12,22 +11,16 @@ import static org.mockito.Mockito.when;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
-import com.campus.common.audit.AuditService;
-import com.campus.common.error.BusinessRuleException;
-import com.campus.common.error.InvalidStateTransitionException;
-import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.LifecycleSweepSummary;
-import com.campus.reservation.web.ReservationResponse;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,12 +46,6 @@ class ReservationLifecycleServiceTest {
     private CatalogApi catalogApi;
 
     @Mock
-    private CurrentUser currentUser;
-
-    @Mock
-    private AuditService auditService;
-
-    @Mock
     private NotificationService notificationService;
 
     private Clock clock;
@@ -69,101 +56,7 @@ class ReservationLifecycleServiceTest {
         // 2026-11-02T10:00:00 Europe/Bucharest
         clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
         lifecycleService = new ReservationLifecycleService(
-                reservationRepository,
-                reservationService,
-                catalogApi,
-                currentUser,
-                auditService,
-                notificationService,
-                clock);
-    }
-
-    @Test
-    @DisplayName("checkOut rejects when called more than 15 minutes before startTime (CHECKOUT_WINDOW_CLOSED)")
-    void checkOutRejectsWhenTooEarly() {
-        Reservation r = new Reservation(
-                1L,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 9, 0));
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
-
-        assertThatThrownBy(() -> lifecycleService.checkOut(1L))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasFieldOrPropertyWithValue("code", "CHECKOUT_WINDOW_CLOSED");
-    }
-
-    @Test
-    @DisplayName("checkOut succeeds within [-15m, +30m] including exact +30m boundary and rejects after +30m")
-    void checkOutSucceedsWithinWindowAndAtExactBoundary() {
-        // Clock is 10:00 -> startTime 09:30 means now == startTime + 30m (inclusive boundary)
-        Reservation atBoundary = new Reservation(
-                1L,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 9, 30),
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                LocalDateTime.of(2026, 11, 2, 8, 0));
-        ReflectionTestUtils.setField(atBoundary, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(atBoundary));
-        when(currentUser.id()).thenReturn(3L);
-
-        ReservationResponse response = lifecycleService.checkOut(1L);
-
-        assertThat(response.status()).isEqualTo(ReservationStatus.CHECKED_OUT);
-        verify(auditService).record(eq(3L), eq("CHECK_OUT_RESERVATION"), eq("Reservation"), eq(1L), any());
-
-        // Start 09:00 -> now (10:00) is past startTime + 30m
-        Reservation tooLate = new Reservation(
-                1L,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 9, 0),
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                LocalDateTime.of(2026, 11, 2, 8, 0));
-        when(reservationRepository.findById(2L)).thenReturn(Optional.of(tooLate));
-
-        assertThatThrownBy(() -> lifecycleService.checkOut(2L))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasFieldOrPropertyWithValue("code", "CHECKOUT_WINDOW_CLOSED");
-    }
-
-    @Test
-    @DisplayName("returnAsset succeeds for CHECKED_OUT reservation and records audit")
-    void returnAssetSucceeds() {
-        Reservation r = new Reservation(
-                1L,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 9, 0),
-                LocalDateTime.of(2026, 11, 2, 11, 0),
-                LocalDateTime.of(2026, 11, 2, 8, 0));
-        ReflectionTestUtils.setField(r, "id", 5L);
-        r.checkOut(LocalDateTime.of(2026, 11, 2, 9, 5));
-        when(reservationRepository.findById(5L)).thenReturn(Optional.of(r));
-        when(currentUser.id()).thenReturn(3L);
-
-        ReservationResponse response = lifecycleService.returnAsset(5L);
-
-        assertThat(response.status()).isEqualTo(ReservationStatus.RETURNED);
-        assertThat(response.returnedAt()).isEqualTo(LocalDateTime.now(clock));
-        verify(auditService).record(eq(3L), eq("RETURN_RESERVATION"), eq("Reservation"), eq(5L), any());
-    }
-
-    @Test
-    @DisplayName(
-            "returnAsset rejects with 409 INVALID_RESERVATION_STATUS_TRANSITION when reservation is still CONFIRMED")
-    void returnAssetRejectsWrongStatus() {
-        Reservation r = new Reservation(
-                1L,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 10, 0),
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                LocalDateTime.of(2026, 11, 2, 8, 0));
-        ReflectionTestUtils.setField(r, "id", 6L);
-        when(reservationRepository.findById(6L)).thenReturn(Optional.of(r));
-
-        assertThatThrownBy(() -> lifecycleService.returnAsset(6L))
-                .isInstanceOf(InvalidStateTransitionException.class)
-                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+                reservationRepository, reservationService, catalogApi, notificationService, clock);
     }
 
     @Test
@@ -450,13 +343,7 @@ class ReservationLifecycleServiceTest {
         // --- Sweep 2: at 11:00 (60 minutes later, equipment still OVERDUE) ---
         Clock clock2 = Clock.fixed(Instant.parse("2026-11-02T09:00:00Z"), ZoneId.of("Europe/Bucharest"));
         ReservationLifecycleService service2 = new ReservationLifecycleService(
-                reservationRepository,
-                reservationService,
-                catalogApi,
-                currentUser,
-                auditService,
-                notificationService,
-                clock2);
+                reservationRepository, reservationService, catalogApi, notificationService, clock2);
 
         LocalDateTime now2 = LocalDateTime.now(clock2); // 11:00
         when(reservationRepository.findConfirmedBeforeCutoff(now2.minusMinutes(30)))

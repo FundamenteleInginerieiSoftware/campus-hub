@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.config.SecurityConfig;
-import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.ReservationLifecycleService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,32 +30,10 @@ class AdminReservationLifecycleControllerTest {
     @MockitoBean
     private ReservationLifecycleService lifecycleService;
 
-    private final ReservationResponse sampleResponse = new ReservationResponse(
-            1L,
-            2L,
-            10L,
-            null,
-            LocalDateTime.of(2026, 11, 2, 10, 0),
-            LocalDateTime.of(2026, 11, 2, 12, 0),
-            ReservationStatus.CHECKED_OUT,
-            LocalDateTime.of(2026, 11, 2, 9, 0),
-            LocalDateTime.of(2026, 11, 2, 10, 0),
-            null,
-            null,
-            null);
-
     @Test
     @WithMockUser(roles = "STUDENT")
-    @DisplayName("Non-admin user gets 403 FORBIDDEN on check-out, return and run-lifecycle endpoints")
+    @DisplayName("Non-admin user gets 403 FORBIDDEN on run-lifecycle job endpoint")
     void studentGets403OnAdminLifecycleEndpoints() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/reservations/1/check-out"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
-
-        mockMvc.perform(post("/api/v1/admin/reservations/1/return"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
-
         mockMvc.perform(post("/api/v1/admin/reservations/jobs/run-lifecycle"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
@@ -66,21 +43,10 @@ class AdminReservationLifecycleControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    @DisplayName("Admin user gets 200 OK on check-out, return and run-lifecycle endpoints")
+    @DisplayName("Admin user gets 200 OK on run-lifecycle job endpoint")
     void adminGets200OnAdminLifecycleEndpoints() throws Exception {
-        when(lifecycleService.checkOut(1L)).thenReturn(sampleResponse);
-        when(lifecycleService.returnAsset(1L)).thenReturn(sampleResponse);
         when(lifecycleService.runLifecycleSweep())
                 .thenReturn(new LifecycleSweepSummary(LocalDateTime.of(2026, 11, 2, 10, 35), 1, 1, 1, List.of(33L)));
-
-        mockMvc.perform(post("/api/v1/admin/reservations/1/check-out"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.status").value("CHECKED_OUT"));
-
-        mockMvc.perform(post("/api/v1/admin/reservations/1/return"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
 
         mockMvc.perform(post("/api/v1/admin/reservations/jobs/run-lifecycle"))
                 .andExpect(status().isOk())

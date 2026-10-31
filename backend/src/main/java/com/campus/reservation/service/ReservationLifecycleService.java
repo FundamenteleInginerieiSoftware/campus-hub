@@ -2,17 +2,12 @@ package com.campus.reservation.service;
 
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
-import com.campus.common.audit.AuditService;
-import com.campus.common.error.BusinessRuleException;
-import com.campus.common.error.NotFoundException;
-import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.LifecycleSweepSummary;
-import com.campus.reservation.web.ReservationResponse;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -23,10 +18,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Manages equipment check-out/return windows and runs autonomous background jobs (`@Scheduled`) for:
+ * Runs autonomous background jobs (`@Scheduled`) and on-demand admin sweeps for:
  * <ul>
  *   <li><b>Auto-No-Show Release:</b> releases unclaimed bookings 30 minutes after start time;</li>
  *   <li><b>Overdue Detection & Preventive Cascade Reassignment:</b> marks unreturned bookings as
@@ -39,63 +33,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ReservationLifecycleService {
 
-    private static final int CHECKOUT_EARLY_MINUTES = 15;
     private static final int NO_SHOW_GRACE_MINUTES = 30;
     private static final int PREVENTIVE_CASCADE_HORIZON_MINUTES = 60;
 
     private final ReservationRepository reservationRepository;
     private final ReservationService reservationService;
     private final CatalogApi catalogApi;
-    private final CurrentUser currentUser;
-    private final AuditService auditService;
     private final NotificationService notificationService;
     private final Clock clock;
-
-    /**
-     * Checks out a confirmed reservation within the allowed check-out window
-     * ({@code startTime - 15 min} to {@code startTime + 30 min}).
-     */
-    @Transactional
-    public ReservationResponse checkOut(Long reservationId) {
-        Reservation reservation = reservationRepository
-                .findById(reservationId)
-                .orElseThrow(() ->
-                        new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + reservationId));
-
-        LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime earliest = reservation.getStartTime().minusMinutes(CHECKOUT_EARLY_MINUTES);
-        LocalDateTime latest = reservation.getStartTime().plusMinutes(NO_SHOW_GRACE_MINUTES);
-
-        if (now.isBefore(earliest) || now.isAfter(latest)) {
-            throw new BusinessRuleException(
-                    "CHECKOUT_WINDOW_CLOSED",
-                    "Check-out is only allowed between 15 minutes before and 30 minutes after start time");
-        }
-
-        reservation.checkOut(now);
-        auditService.record(
-                currentUser.id(), "CHECK_OUT_RESERVATION", "Reservation", reservation.getId(), "Checked out at desk");
-
-        return ReservationResponse.from(reservation);
-    }
-
-    /**
-     * Records the return of checked-out or overdue equipment at the lab desk.
-     */
-    @Transactional
-    public ReservationResponse returnAsset(Long reservationId) {
-        Reservation reservation = reservationRepository
-                .findById(reservationId)
-                .orElseThrow(() ->
-                        new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + reservationId));
-
-        LocalDateTime now = LocalDateTime.now(clock);
-        reservation.returnItem(now);
-        auditService.record(
-                currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at desk");
-
-        return ReservationResponse.from(reservation);
-    }
 
     /**
      * Autonomous lifecycle job running every 5 minutes (also callable on demand by admins) to release
