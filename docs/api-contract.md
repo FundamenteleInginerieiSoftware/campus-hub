@@ -159,7 +159,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Catalog (Liviu)
 
-`ASSET_NOT_FOUND` 404 · `CATEGORY_NOT_FOUND` 404 · `LAB_ROOM_NOT_FOUND` 404 · `SERIAL_NUMBER_TAKEN` 409 · `CATEGORY_NAME_TAKEN` 409 · `CATEGORY_IN_USE` 409 · `LAB_ROOM_IN_USE` 409 · `ASSET_RETIRED` 409 · `INVALID_ASSET_STATUS_TRANSITION` 409
+`ASSET_NOT_FOUND` 404 · `CATEGORY_NOT_FOUND` 404 · `LAB_ROOM_NOT_FOUND` 404 · `SERIAL_NUMBER_TAKEN` 409 · `CATEGORY_NAME_TAKEN` 409 · `LAB_ROOM_CODE_TAKEN` 409 · `CATEGORY_IN_USE` 409 · `LAB_ROOM_IN_USE` 409 · `ASSET_RETIRED` 409 · `INVALID_ASSET_STATUS_TRANSITION` 409
 
 ### Reservations (Calin)
 
@@ -240,5 +240,72 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "returnedAt": null,
   "cancelledAt": null,
   "cancelReason": null
+}
+```
+
+---
+
+### Catalog endpoints — Categories & Lab Rooms (Liviu)
+
+All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/categories` | `STUDENT`, `ADMIN` | `200` `CategoryResponse[]` (sorted by `name`) | — |
+| `POST /api/v1/admin/categories` | `ADMIN` | `201` `CategoryResponse` | `400 VALIDATION_FAILED`, `409 CATEGORY_NAME_TAKEN` |
+| `PUT /api/v1/admin/categories/{id}` | `ADMIN` | `200` `CategoryResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND`, `409 CATEGORY_NAME_TAKEN` |
+| `DELETE /api/v1/admin/categories/{id}` | `ADMIN` | `204` | `404 CATEGORY_NOT_FOUND`, `409 CATEGORY_IN_USE` |
+| `GET /api/v1/lab-rooms` | `STUDENT`, `ADMIN` | `200` `LabRoomResponse[]` (sorted by `code`) | — |
+| `POST /api/v1/admin/lab-rooms` | `ADMIN` | `201` `LabRoomResponse` | `400 VALIDATION_FAILED`, `409 LAB_ROOM_CODE_TAKEN` |
+| `PUT /api/v1/admin/lab-rooms/{id}` | `ADMIN` | `200` `LabRoomResponse` | `400 VALIDATION_FAILED`, `404 LAB_ROOM_NOT_FOUND`, `409 LAB_ROOM_CODE_TAKEN` |
+| `DELETE /api/v1/admin/lab-rooms/{id}` | `ADMIN` | `204` | `404 LAB_ROOM_NOT_FOUND`, `409 LAB_ROOM_IN_USE` |
+
+```json
+// CategoryRequest / CategoryResponse
+{ "id": 1, "name": "Oscilloscopes", "description": "Signal measurement equipment" }
+
+// LabRoomRequest / LabRoomResponse (code is normalized to uppercase)
+{ "id": 1, "code": "EC105", "name": "Electronics Lab", "building": "EC" }
+```
+
+---
+
+### Catalog endpoints — Assets Details & Admin Inventory (Liviu)
+
+All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
+| `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
+| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
+| `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
+
+```json
+// CreateAssetRequest
+{
+  "name": "Rigol DS1054Z no. 1",
+  "model": "Rigol DS1054Z",
+  "serialNumber": "DS1ZA2419003",
+  "description": "4-channel digital oscilloscope",
+  "categoryId": 2,
+  "labRoomId": 1
+}
+
+// AssetResponse
+{
+  "id": 7,
+  "name": "Rigol DS1054Z no. 1",
+  "model": "Rigol DS1054Z",
+  "serialNumber": "DS1ZA2419003",
+  "description": "4-channel digital oscilloscope",
+  "status": "AVAILABLE",
+  "categoryId": 2,
+  "categoryName": "Oscilloscopes",
+  "labRoomId": 1,
+  "labRoomCode": "EC105",
+  "labRoomName": "Electronics Lab",
+  "createdAt": "2026-10-29T12:00:00",
+  "updatedAt": "2026-10-29T12:00:00"
 }
 ```
