@@ -22,6 +22,7 @@ Each document is structured in two parts:
 | 01 | [`01-common-time-clock.md`](./01-common-time-clock.md) | Shared Clock & Time Zone | `ClockConfig`, `Europe/Bucharest`, deterministic testing, avoiding `now()` |
 | 02 | [`02-reservation-module.md`](./02-reservation-module.md) | Reservation Module | Pessimistic locking, 10-case overlap matrix, lifecycle state machine, IDOR protection, REST API |
 | 03 | [`03-reassignment-engine.md`](./03-reassignment-engine.md) | Auto-Reassignment Engine | Strategy pattern (`SameModelStrategy`, `SameCategoryStrategy`), Observer pattern (`@TransactionalEventListener`), `reassignment_log`, `REQUIRES_NEW` |
+| 05 | [`05-archunit-architecture-rules.md`](./05-archunit-architecture-rules.md) | ArchUnit Architecture Rules | Package boundaries, module encapsulation, cycle detection, entity encapsulation, coding conventions |
 
 ---
 
