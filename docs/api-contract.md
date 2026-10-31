@@ -267,3 +267,45 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 // LabRoomRequest / LabRoomResponse (code is normalized to uppercase)
 { "id": 1, "code": "EC105", "name": "Electronics Lab", "building": "EC" }
 ```
+
+---
+
+### Catalog endpoints — Assets Details & Admin Inventory (Liviu)
+
+All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
+| `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
+| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
+| `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
+
+```json
+// CreateAssetRequest
+{
+  "name": "Rigol DS1054Z no. 1",
+  "model": "Rigol DS1054Z",
+  "serialNumber": "DS1ZA2419003",
+  "description": "4-channel digital oscilloscope",
+  "categoryId": 2,
+  "labRoomId": 1
+}
+
+// AssetResponse
+{
+  "id": 7,
+  "name": "Rigol DS1054Z no. 1",
+  "model": "Rigol DS1054Z",
+  "serialNumber": "DS1ZA2419003",
+  "description": "4-channel digital oscilloscope",
+  "status": "AVAILABLE",
+  "categoryId": 2,
+  "categoryName": "Oscilloscopes",
+  "labRoomId": 1,
+  "labRoomCode": "EC105",
+  "labRoomName": "Electronics Lab",
+  "createdAt": "2026-10-29T12:00:00",
+  "updatedAt": "2026-10-29T12:00:00"
+}
+```
