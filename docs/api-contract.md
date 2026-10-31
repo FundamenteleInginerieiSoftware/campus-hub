@@ -218,6 +218,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
 ```json
 // CreateReservationRequest
@@ -241,6 +242,15 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "returnedAt": null,
   "cancelledAt": null,
   "cancelReason": null
+}
+
+// LifecycleSweepSummary (returned by POST /api/v1/admin/reservations/jobs/run-lifecycle)
+{
+  "executedAt": "2026-11-03T10:35:00",
+  "noShowReleasedCount": 1,
+  "markedOverdueCount": 1,
+  "preventivelyReassignedCount": 1,
+  "preventivelyReassignedReservationIds": [33]
 }
 ```
 

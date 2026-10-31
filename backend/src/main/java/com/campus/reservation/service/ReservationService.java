@@ -359,5 +359,35 @@ public class ReservationService implements ReservationApi {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"));
         Page<Reservation> reservationPage = reservationRepository.findAll(spec, pageable);
         return PageResponse.from(reservationPage, ReservationResponse::from);
+     * Marks a single confirmed reservation as {@code NO_SHOW} in its own transaction.
+     * Called through the {@link ReservationService} proxy by {@link ReservationLifecycleService}
+     * so an optimistic-lock conflict on one booking never rolls back the rest of the sweep, and
+     * the no-show email is only sent after this transaction commits.
+     */
+    @Transactional
+    public boolean markNoShow(Long reservationId) {
+        Reservation r = reservationRepository.findById(reservationId).orElse(null);
+        if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
+            return false;
+        }
+        r.markNoShow();
+        auditService.record(null, "AUTO_NO_SHOW", "Reservation", r.getId(), "Unclaimed 30m after startTime");
+        return true;
+    }
+
+    /**
+     * Marks a single checked-out reservation as {@code OVERDUE} in its own transaction.
+     * Called through the {@link ReservationService} proxy by {@link ReservationLifecycleService}
+     * so the overdue email is only sent after this transaction commits.
+     */
+    @Transactional
+    public boolean markOverdue(Long reservationId) {
+        Reservation r = reservationRepository.findById(reservationId).orElse(null);
+        if (r == null || r.getStatus() != ReservationStatus.CHECKED_OUT) {
+            return false;
+        }
+        r.markOverdue();
+        auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
+        return true;
     }
 }

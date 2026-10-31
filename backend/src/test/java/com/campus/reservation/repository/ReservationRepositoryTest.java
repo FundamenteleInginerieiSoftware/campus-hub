@@ -208,4 +208,15 @@ class ReservationRepositoryTest {
         long count = reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         assertThat(count).isEqualTo(1L);
     }
+
+    @Test
+    @DisplayName("findConfirmedBeforeCutoff uses strict < cutoff so exact +30m boundary is not marked no-show")
+    void findConfirmedBeforeCutoffExcludesExactCutoff() {
+        // existingReservation has startTime 14:00 (when now = 14:30, cutoff = 14:00)
+        assertThat(reservationRepository.findConfirmedBeforeCutoff(LocalDateTime.of(2026, 11, 2, 14, 0)))
+                .isEmpty();
+        assertThat(reservationRepository.findConfirmedBeforeCutoff(LocalDateTime.of(2026, 11, 2, 14, 1)))
+                .extracting(Reservation::getId)
+                .containsExactly(existingReservation.getId());
+    }
 }

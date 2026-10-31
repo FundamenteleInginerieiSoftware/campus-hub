@@ -623,7 +623,7 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("ReservationApi: moveToAsset returns silently if reservation not CONFIRMED")
+    @DisplayName("ReservationApi: moveToAsset returns false if reservation not CONFIRMED")
     void moveToAssetSilentlyReturnsWhenNotConfirmed() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -634,9 +634,59 @@ class ReservationServiceTest {
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
 
-        reservationService.moveToAsset(1L, 20L, "Damaged");
+        boolean moved = reservationService.moveToAsset(1L, 20L, "Damaged");
 
+        assertThat(moved).isFalse();
         verify(catalogApi, never()).lockForBooking(anyLong());
+    }
+
+    @Test
+    @DisplayName("ReservationApi: forceCancel returns false if reservation not CONFIRMED")
+    void forceCancelReturnsFalseWhenNotConfirmed() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        boolean cancelled = reservationService.forceCancel(1L, "Damaged");
+
+        assertThat(cancelled).isFalse();
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("markNoShow and markOverdue transition single reservations and return false when status changed")
+    void markNoShowAndMarkOverdueTransitionInOwnTransaction() {
+        Reservation confirmed = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(confirmed, "id", 10L);
+        when(reservationRepository.findById(10L)).thenReturn(Optional.of(confirmed));
+
+        assertThat(reservationService.markNoShow(10L)).isTrue();
+        assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
+        assertThat(reservationService.markNoShow(10L)).isFalse();
+
+        Reservation checkedOut = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 1, 12, 0));
+        ReflectionTestUtils.setField(checkedOut, "id", 11L);
+        checkedOut.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
+        when(reservationRepository.findById(11L)).thenReturn(Optional.of(checkedOut));
+
+        assertThat(reservationService.markOverdue(11L)).isTrue();
+        assertThat(checkedOut.getStatus()).isEqualTo(ReservationStatus.OVERDUE);
+        assertThat(reservationService.markOverdue(11L)).isFalse();
     }
 
     @Test
