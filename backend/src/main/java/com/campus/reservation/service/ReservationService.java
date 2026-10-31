@@ -359,6 +359,9 @@ public class ReservationService implements ReservationApi {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"));
         Page<Reservation> reservationPage = reservationRepository.findAll(spec, pageable);
         return PageResponse.from(reservationPage, ReservationResponse::from);
+    }
+
+    /**
      * Marks a single confirmed reservation as {@code NO_SHOW} in its own transaction.
      * Called through the {@link ReservationService} proxy by {@link ReservationLifecycleService}
      * so an optimistic-lock conflict on one booking never rolls back the rest of the sweep, and

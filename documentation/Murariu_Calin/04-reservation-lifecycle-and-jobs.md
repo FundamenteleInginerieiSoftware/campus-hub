@@ -19,12 +19,12 @@ Once a student reserves laboratory equipment, the reservation goes through a phy
 
 ## Part 2: Technical details
 
-### 1. REST Endpoints (`AdminReservationLifecycleController` & `AdminReservationController`)
+### 1. REST Endpoints (`AdminReservationLifecycleController`)
+
+Desk check-out and return operations live in `AdminReservationController` (documented in [Doc 07](./07-admin-desk-reservations.md), PR #80). This PR provides the autonomous background execution and manual trigger endpoint:
 
 | Method & Path | Access | Controller | Description | Error Codes |
 |---|---|---|---|---|
-| `POST /api/v1/admin/reservations/{id}/check-out` | Admin (`ROLE_ADMIN`) | `AdminReservationController` | Transitions `CONFIRMED -> CHECKED_OUT` inside `[startTime - 15m, startTime + 30m]` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
-| `POST /api/v1/admin/reservations/{id}/return` | Admin (`ROLE_ADMIN`) | `AdminReservationController` | Transitions `CHECKED_OUT / OVERDUE -> RETURNED` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin (`ROLE_ADMIN`) | `AdminReservationLifecycleController` | Manually triggers the `NO_SHOW` + `OVERDUE` cascade sweep and returns `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
 ---
