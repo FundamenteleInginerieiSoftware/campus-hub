@@ -936,6 +936,8 @@ class ReservationServiceTest {
         assertThat(page.content()).hasSize(1);
         assertThat(page.content().get(0).id()).isEqualTo(301L);
         assertThat(page.totalElements()).isEqualTo(1);
+    }
+
     @Test
     @DisplayName("checkAvailability: throws MISSING_PARAMETER if neither assetId nor categoryId is provided")
     void checkAvailabilityThrowsWhenNeitherAssetNorCategoryProvided() {
