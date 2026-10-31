@@ -74,12 +74,12 @@ public class ReservationController {
                     "Checks whether a specific asset or any asset in a category is available for booking in a time window")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Availability evaluation returned"),
-        @ApiResponse(
-                responseCode = "400",
-                description = "Invalid time range, alignment, duration or missing parameter"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "404", description = "Asset not found"),
-        @ApiResponse(responseCode = "409", description = "Outside opening hours, in past, or exceeds horizon")
+        @ApiResponse(
+                responseCode = "409",
+                description =
+                        "Invalid time range, alignment, duration, outside opening hours, in past, or missing parameter")
     })
     @GetMapping("/availability")
     public ResponseEntity<AvailabilityResponse> checkAvailability(
