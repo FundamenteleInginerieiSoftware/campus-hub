@@ -1,6 +1,7 @@
 package com.campus.architecture;
 
 import static com.tngtech.archunit.core.domain.properties.CanBeAnnotated.Predicates.annotatedWith;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 
@@ -47,13 +48,13 @@ class CodingConventionsArchitectureTest {
 
     // Rule 2b: Controllers must never accept JPA @Entity classes as parameters directly.
     @ArchTest
-    static final ArchRule controllers_must_not_accept_entities = noMethods()
+    static final ArchRule controllers_must_not_accept_entities = methods()
             .that()
             .areDeclaredInClassesThat()
             .areAnnotatedWith(RestController.class)
             .and()
             .arePublic()
-            .should(new ArchCondition<JavaMethod>("accept an @Entity as a parameter") {
+            .should(new ArchCondition<JavaMethod>("not accept an @Entity as a parameter") {
                 @Override
                 public void check(JavaMethod method, ConditionEvents events) {
                     for (JavaClass param : method.getRawParameterTypes()) {
