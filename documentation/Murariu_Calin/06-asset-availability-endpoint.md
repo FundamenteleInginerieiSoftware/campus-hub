@@ -71,7 +71,7 @@ GET /api/v1/reservations/availability?assetId=1&startTime=...&endTime=...
   - Asset under maintenance returns `available: false, conflictReason: "ASSET_NOT_BOOKABLE"`
   - Unknown asset throws `404 NotFoundException`
   - Category sweep correctly filters out busy asset IDs
-  - Missing both parameters throws `BusinessRuleException("MISSING_PARAMETER")`
+  - Missing both parameters throws `BusinessRuleException("MISSING_PARAMETER")`, providing both throws `BusinessRuleException("CONFLICTING_PARAMETERS")`
 - **Controller Slice Tests (`ReservationControllerTest`):**
   - `GET /api/v1/reservations/availability` returns `200 OK` with JSON
   - Missing required time parameters returns `400 Bad Request`

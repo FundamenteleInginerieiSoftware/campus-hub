@@ -160,7 +160,7 @@ public class ReservationService implements ReservationApi {
                     "MISSING_PARAMETER", "Either assetId or categoryId must be provided to check availability");
         }
         if (assetId != null && categoryId != null) {
-            throw new BusinessRuleException("INVALID_PARAMETER", "Provide either assetId or categoryId, not both");
+            throw new BusinessRuleException("CONFLICTING_PARAMETERS", "Provide either assetId or categoryId, not both");
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
