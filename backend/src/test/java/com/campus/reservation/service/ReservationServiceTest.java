@@ -948,6 +948,17 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("checkAvailability: throws INVALID_PARAMETER if both assetId and categoryId are provided")
+    void checkAvailabilityThrowsWhenBothAssetAndCategoryProvided() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        assertThatThrownBy(() -> reservationService.checkAvailability(ASSET_ID, 5L, start, end))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Provide either assetId or categoryId, not both");
+    }
+
+    @Test
     @DisplayName("checkAvailability: returns available true when specific asset is operational and free")
     void checkAvailabilityReturnsTrueWhenAssetIsFree() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);

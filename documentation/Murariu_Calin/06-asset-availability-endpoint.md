@@ -49,7 +49,7 @@ GET /api/v1/reservations/availability?assetId=1&startTime=...&endTime=...
                       │
                       ▼
               ReservationService
-  ├── 1. Parameter presence check (assetId or categoryId required)
+  ├── 1. Parameter validation (must provide either assetId or categoryId, but not both)
   ├── 2. validateSlotRules (Mon-Fri 08:00-20:00, :00/:30 alignment, 30m-4h duration, max 14 days)
   ├── 3. If assetId != null:
   │      ├── catalogApi.getAsset(id) (404 ASSET_NOT_FOUND if unknown)
