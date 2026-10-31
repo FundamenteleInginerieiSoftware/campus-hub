@@ -52,7 +52,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 | `GET /api/v1/auth/ping` | public | – | `200 {"message":"pong"}` |
 | `POST /api/v1/auth/register` | public | `{"email","password","fullName"}` | `201` + `UserResponse`. Always creates a **`STUDENT`**; admins can never self-register |
 | `POST /api/v1/auth/login` | public | `{"email","password"}` | `200` + `LoginResponse` |
-| `GET /api/v1/users/me` | logged in | – | `200` + `UserResponse` |
+| `GET /api/v1/users/me` | logged in | – | `200` + `UserResponse` of the token's user (`401 UNAUTHORIZED` without a token, `404 USER_NOT_FOUND` if the account no longer exists) |
 
 ```json
 // LoginResponse

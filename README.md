@@ -11,7 +11,7 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (26 Oct 2026, start of week 4):** on `main`: the backend skeleton, the shared error handling, paging and `Clock`, security with **register/login (JWT) and dev test accounts**, and the **catalog** (`assets`, `CatalogApi`). The reservation and incident modules are open PRs (section 7). The frontend is not there yet. **The next three weeks, per member: [`docs/plan-w4-w6.md`](docs/plan-w4-w6.md).** New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
+> **Status (31 Oct 2026, week 4):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), dev test accounts and `CurrentUser`**, the **catalog** (`assets`, `CatalogApi`), **reservations** (booking with overlap check, my reservations, cancel), **incident reporting** and the **auto-reassignment engine**. The prototype demo needs one more PR: #66 (admins create assets; there is no catalog seed data yet). The frontend is not there yet. **The next three weeks, per member: [`docs/plan-w4-w6.md`](docs/plan-w4-w6.md).** New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
 
 ---
 
@@ -180,7 +180,7 @@ Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHu
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 26 Oct 2026**; update it when PRs merge.
+What is on `main` and what is still in review, per member. **As of 31 Oct 2026**; update it when PRs merge.
 
 ### Matei Necula: cloud, security & auth
 
@@ -200,13 +200,12 @@ What is on `main` and what is still in review, per member. **As of 26 Oct 2026**
 | Error responses keep their `code` for validation errors, bad JSON and unknown paths | #52 |
 | Register + login endpoints (JWT with `sub`, `email`, `roles`; 8 h) | #54 |
 | Dev test accounts created on startup (2 students, 1 admin) | #55 |
-| Personal docs 01-14 | #14 + each PR above |
+| `archunit-junit5` added for Calin's architecture tests | #62 |
+| Security tests probe paths no controller maps | #70 |
+| `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
+| Personal docs 01-16 | #14 + each PR above |
 
-| In review | PR | State |
-|---|---|---|
-| `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 | draft: merge once Stefania and Calin agree on #40 |
-
-**Next:** `GET /api/v1/users/me` (needs `CurrentUser`), then Terraform for AWS (W4).
+**Next:** `GET /api/v1/users/me`, then Terraform part 1 for AWS (W4).
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -217,22 +216,32 @@ What is on `main` and what is still in review, per member. **As of 26 Oct 2026**
 | `AuditService`, `StorageService`, `NotificationService` interfaces + dev versions (logging, local disk) | #22 |
 | Personal documentation folder | #21 |
 | Catalog: `categories`, `lab_rooms`, `assets` tables + entities, real `CatalogApi` (incl. `lockForBooking`), `docs/modules/catalog.md` | #24 |
+| Real `AuditService` writing the `audit_logs` table | #64 |
+| Personal docs W2-W4 | #68 |
 
-**Next (week plan):** admin CRUD + the real `AuditService` (W4), then search/filter/paging (W5).
+| In review | PR | State |
+|---|---|---|
+| Category, lab room and asset CRUD + retire (admin), asset details | #66 | approved; needs a rebase onto `main` |
+
+**Next (week plan):** search/filter/paging (W5); agree with Calin how retiring an asset moves its future bookings (W7).
 
 ### Calin Murariu: reservations & reassignment
 
 | Done (merged) | PRs |
 |---|---|
 | Shared `Clock` bean (Europe/Bucharest) for every "now" in the app | #27 |
+| Reservations table, entity and `ReservationApi` | #34 |
+| Booking with overlap check and row locking | #35 |
+| My reservations, cancel, facade, seeder | #36 |
+| Auto-reassignment engine on `AssetDamagedEvent` (same model, then same category, else cancel) | #37 |
+| Reservation + reassignment docs | #39 |
 
 | In review | PR | State |
 |---|---|---|
-| Reservations table, entity and `ReservationApi` | #34 | approved; needs a rebase onto `main` (#24 is merged, so CI can pass now) |
-| Booking with overlap check and row locking | #35 | changes requested (`CurrentUser` and `catalog/api` copies to drop); rebase |
-| My reservations, cancel, facade, seeder | #36 | approved; rebase |
-| Auto-reassignment engine on `AssetDamagedEvent` | #37 | approved; rebase (after #40, which owns `AssetDamagedEvent`) |
-| Reservation + reassignment docs | #39 | approved; switch the base to `main`, merge after #34–#37 |
+| No-show and overdue jobs (`/admin/reservations/jobs`) | #60 | approved by Matei; needs Stefania's review |
+| ArchUnit module boundary and coding convention rules | #76 | one rule can never fail yet; fix before merge |
+| Equipment availability endpoint | #78 | approved by Matei; rebase after #60 / #80 |
+| Admin desk: reservation search, check-out, return | #80 | approved by Matei; rebase after #60 |
 
 ### Stefania: incidents, users & frontend lead
 
@@ -240,10 +249,8 @@ What is on `main` and what is still in review, per member. **As of 26 Oct 2026**
 |---|---|
 | Personal documentation folder | #19 |
 | Redesigned clickable prototype (`docs/prototype/campus-hub-redesign.html`) | #51 |
-
-| In review | PR | State |
-|---|---|---|
-| Incident reporting flow, persistence, `AssetDamagedEvent` and `CurrentUser` | #40 | changes requested: rebase, agree on `CurrentUser` with Calin, API contract entries |
+| `CurrentUser` as an injectable bean | #74 |
+| Incident reporting flow, persistence, `AssetDamagedEvent` | #40 |
 
 **Open for her:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md`. Still to start: frontend scaffold.
 
