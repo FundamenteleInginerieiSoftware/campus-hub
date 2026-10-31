@@ -15,11 +15,14 @@ import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ReservationResponse;
+import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +30,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -277,5 +282,81 @@ public class ReservationService implements ReservationApi {
                         assetId, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE))
                 .map(r -> new ReservationSummary(
                         r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
+    }
+
+    /**
+     * Admin action to check out equipment for a confirmed reservation at the lab desk.
+     *
+     * <p>Check-out window: only permitted between 15 minutes before slot start and 30 minutes after slot start.
+     * Outside this window, throws {@code CHECKOUT_WINDOW_CLOSED}.
+     */
+    @Transactional
+    public ReservationResponse checkOutReservation(Long id) {
+        Reservation reservation = reservationRepository
+                .findById(id)
+                .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
+        LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
+
+        if (now.isBefore(windowStart) || now.isAfter(windowEnd)) {
+            throw new BusinessRuleException(
+                    "CHECKOUT_WINDOW_CLOSED",
+                    "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
+        }
+
+        reservation.checkOut(now);
+        auditService.record(
+                currentUser.id(), "CHECK_OUT_RESERVATION", "Reservation", reservation.getId(), "Checked out at " + now);
+        return ReservationResponse.from(reservation);
+    }
+
+    /**
+     * Admin action to return equipment for a checked-out or overdue reservation.
+     */
+    @Transactional
+    public ReservationResponse returnReservation(Long id) {
+        Reservation reservation = reservationRepository
+                .findById(id)
+                .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        reservation.returnItem(now);
+        auditService.record(
+                currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at " + now);
+        return ReservationResponse.from(reservation);
+    }
+
+    /**
+     * Retrieves a paginated and dynamically filtered list of reservations for administrators.
+     *
+     * <p>Avoids JPQL null-check tricks by using Spring Data JPA {@link Specification}.
+     */
+    public PageResponse<ReservationResponse> getAdminReservations(
+            ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size) {
+        Specification<Reservation> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (userId != null) {
+                predicates.add(cb.equal(root.get("userId"), userId));
+            }
+            if (assetId != null) {
+                predicates.add(cb.equal(root.get("assetId"), assetId));
+            }
+            if (date != null) {
+                LocalDateTime dayStart = date.atStartOfDay();
+                LocalDateTime dayEnd = date.atTime(23, 59, 59, 999999999);
+                predicates.add(cb.lessThan(root.get("startTime"), dayEnd));
+                predicates.add(cb.greaterThan(root.get("endTime"), dayStart));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"));
+        Page<Reservation> reservationPage = reservationRepository.findAll(spec, pageable);
+        return PageResponse.from(reservationPage, ReservationResponse::from);
     }
 }

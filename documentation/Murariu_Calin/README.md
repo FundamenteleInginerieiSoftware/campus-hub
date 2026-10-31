@@ -23,6 +23,7 @@ Each document is structured in two parts:
 | 02 | [`02-reservation-module.md`](./02-reservation-module.md) | Reservation Module | Pessimistic locking, 10-case overlap matrix, lifecycle state machine, IDOR protection, REST API |
 | 03 | [`03-reassignment-engine.md`](./03-reassignment-engine.md) | Auto-Reassignment Engine | Strategy pattern (`SameModelStrategy`, `SameCategoryStrategy`), Observer pattern (`@TransactionalEventListener`), `reassignment_log`, `REQUIRES_NEW` |
 | 05 | [`05-archunit-architecture-rules.md`](./05-archunit-architecture-rules.md) | ArchUnit Architecture Rules | Package boundaries, module encapsulation, cycle detection, entity encapsulation, coding conventions |
+| 07 | [`07-admin-desk-reservations.md`](./07-admin-desk-reservations.md) | Admin Desk Operations | Check-out window (`-15m` to `+30m`), item return (`CHECKED_OUT`/`OVERDUE`), JPA `Specification` search |
 
 ---
 

@@ -16,6 +16,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
@@ -696,5 +697,191 @@ class ReservationServiceTest {
 
         assertThat(current).isPresent();
         assertThat(current.get().status()).isEqualTo(ReservationStatus.OVERDUE);
+    }
+
+    // --- Admin Desk Operations Tests ---
+
+    @Test
+    @DisplayName("checkOutReservation: succeeds within valid check-out window (start - 15m to start + 30m)")
+    void checkOutReservationSuccessWithinWindow() {
+        // Fixed clock is 2026-11-02T10:00:00 (Bucharest time).
+        // Slot from 10:00 to 12:00 -> window is 09:45 to 10:30.
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(currentUser.id()).thenReturn(1L);
+
+        ReservationResponse response = reservationService.checkOutReservation(101L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.CHECKED_OUT);
+        assertThat(response.checkedOutAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
+        verify(auditService).record(eq(1L), eq("CHECK_OUT_RESERVATION"), eq("Reservation"), eq(101L), any());
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: rejects if current time is before window (earlier than start - 15m)")
+    void checkOutReservationRejectsBeforeWindow() {
+        // Clock is 10:00:00. Slot starts at 10:30:00 -> window starts at 10:15:00.
+        // Current time (10:00) is too early.
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 2, 12, 30),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 102L);
+
+        when(reservationRepository.findById(102L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(102L))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining(
+                        "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start")
+                .extracting("code")
+                .isEqualTo("CHECKOUT_WINDOW_CLOSED");
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: rejects if current time is after window (later than start + 30m)")
+    void checkOutReservationRejectsAfterWindow() {
+        // Clock is 10:00:00. Slot started at 09:00:00 -> window ended at 09:30:00.
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 103L);
+
+        when(reservationRepository.findById(103L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(103L))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting("code")
+                .isEqualTo("CHECKOUT_WINDOW_CLOSED");
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: throws NotFoundException when reservation does not exist")
+    void checkOutReservationNotFound() {
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(999L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("code")
+                .isEqualTo("RESERVATION_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: throws InvalidStateTransitionException if reservation is not CONFIRMED")
+    void checkOutReservationInvalidState() {
+        // Clock is 10:00:00. Slot 10:00 - 12:00.
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 104L);
+        r.cancel(LocalDateTime.of(2026, 11, 1, 12, 0), "Cancelled");
+
+        when(reservationRepository.findById(104L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(104L))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName("returnReservation: succeeds for CHECKED_OUT reservation")
+    void returnReservationSuccessFromCheckedOut() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 201L);
+        r.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
+
+        when(reservationRepository.findById(201L)).thenReturn(Optional.of(r));
+        when(currentUser.id()).thenReturn(1L);
+
+        ReservationResponse response = reservationService.returnReservation(201L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.RETURNED);
+        assertThat(response.returnedAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
+        verify(auditService).record(eq(1L), eq("RETURN_RESERVATION"), eq("Reservation"), eq(201L), any());
+    }
+
+    @Test
+    @DisplayName("returnReservation: succeeds for OVERDUE reservation")
+    void returnReservationSuccessFromOverdue() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 202L);
+        r.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
+        r.markOverdue();
+
+        when(reservationRepository.findById(202L)).thenReturn(Optional.of(r));
+        when(currentUser.id()).thenReturn(1L);
+
+        ReservationResponse response = reservationService.returnReservation(202L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.RETURNED);
+    }
+
+    @Test
+    @DisplayName("returnReservation: throws InvalidStateTransitionException if reservation is CONFIRMED")
+    void returnReservationRejectsConfirmed() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 203L);
+
+        when(reservationRepository.findById(203L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.returnReservation(203L))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName("getAdminReservations: queries repository using specifications and returns PageResponse")
+    void getAdminReservationsSuccess() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 301L);
+
+        when(reservationRepository.findAll(
+                        any(org.springframework.data.jpa.domain.Specification.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
+
+        PageResponse<ReservationResponse> page = reservationService.getAdminReservations(
+                ReservationStatus.CONFIRMED, USER_ID, ASSET_ID, java.time.LocalDate.of(2026, 11, 2), 0, 20);
+
+        assertThat(page.content()).hasSize(1);
+        assertThat(page.content().get(0).id()).isEqualTo(301L);
+        assertThat(page.totalElements()).isEqualTo(1);
     }
 }
