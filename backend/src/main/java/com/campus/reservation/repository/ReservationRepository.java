@@ -67,6 +67,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
         order by r.endTime asc
         """)
     List<Reservation> findCheckedOutPastEnd(@Param("now") LocalDateTime now);
+
     @Query("""
         select distinct r.assetId from Reservation r
         where r.status in :statuses
