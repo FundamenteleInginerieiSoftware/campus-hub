@@ -10,7 +10,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -64,6 +66,28 @@ public class ReservationController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ResponseEntity.ok(reservationService.getMyReservations(status, page, size));
+    }
+
+    @Operation(
+            summary = "Check equipment availability",
+            description =
+                    "Checks whether a specific asset or any asset in a category is available for booking in a time window")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Availability evaluation returned"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "Invalid time range, alignment, duration or missing parameter"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Asset not found"),
+        @ApiResponse(responseCode = "409", description = "Outside opening hours, in past, or exceeds horizon")
+    })
+    @GetMapping("/availability")
+    public ResponseEntity<AvailabilityResponse> checkAvailability(
+            @RequestParam(required = false) Long assetId,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+        return ResponseEntity.ok(reservationService.checkAvailability(assetId, categoryId, startTime, endTime));
     }
 
     @Operation(

@@ -213,6 +213,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 |---|---|---|---|---|
 | `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` | `201` + `ReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
 | `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED` |
+| `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 MISSING_PARAMETER`, `400 INVALID_TIME_RANGE`, `400 SLOT_NOT_ALIGNED`, `400 INVALID_DURATION`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
@@ -251,6 +252,17 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "markedOverdueCount": 1,
   "preventivelyReassignedCount": 1,
   "preventivelyReassignedReservationIds": [33]
+}
+
+// AvailabilityResponse (returned by GET /api/v1/reservations/availability)
+{
+  "assetId": 1,
+  "categoryId": null,
+  "startTime": "2026-11-03T14:00:00",
+  "endTime": "2026-11-03T16:00:00",
+  "available": true,
+  "availableAssetIds": [1],
+  "conflictReason": null
 }
 ```
 

@@ -2,6 +2,8 @@ package com.campus.reservation.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -137,5 +139,50 @@ class ReservationControllerTest {
         mockMvc.perform(post("/api/v1/reservations/999/cancel"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESERVATION_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/availability returns 200 with availability evaluation")
+    void checkAvailabilityReturns200() throws Exception {
+        AvailabilityResponse resp = AvailabilityResponse.forAsset(
+                10L, LocalDateTime.of(2026, 11, 2, 14, 0), LocalDateTime.of(2026, 11, 2, 16, 0), true, null);
+        when(reservationService.checkAvailability(eq(10L), isNull(), any(), any()))
+                .thenReturn(resp);
+
+        mockMvc.perform(get("/api/v1/reservations/availability")
+                        .param("assetId", "10")
+                        .param("startTime", "2026-11-02T14:00:00")
+                        .param("endTime", "2026-11-02T16:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assetId").value(10))
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.availableAssetIds[0]").value(10));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/availability returns 400 when startTime is missing")
+    void checkAvailabilityMissingParamReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/availability")
+                        .param("assetId", "10")
+                        .param("endTime", "2026-11-02T16:00:00"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/availability with categoryId returns 200 with free assets")
+    void checkAvailabilityCategoryReturns200() throws Exception {
+        AvailabilityResponse resp = AvailabilityResponse.forCategory(
+                5L, LocalDateTime.of(2026, 11, 2, 14, 0), LocalDateTime.of(2026, 11, 2, 16, 0), List.of(10L, 20L));
+        when(reservationService.checkAvailability(isNull(), eq(5L), any(), any()))
+                .thenReturn(resp);
+
+        mockMvc.perform(get("/api/v1/reservations/availability")
+                        .param("categoryId", "5")
+                        .param("startTime", "2026-11-02T14:00:00")
+                        .param("endTime", "2026-11-02T16:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.categoryId").value(5))
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.availableAssetIds.length()").value(2));
     }
 }

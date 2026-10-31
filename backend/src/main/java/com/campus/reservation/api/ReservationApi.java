@@ -33,6 +33,15 @@ public interface ReservationApi {
     boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId);
 
     /**
+     * Finds the IDs of all assets with active overlapping reservations in the requested interval.
+     *
+     * @param start start of the required time slot
+     * @param end end of the required time slot
+     * @return list of asset IDs that are occupied
+     */
+    List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end);
+
+    /**
      * Reassigns an existing confirmed reservation to a new substitute asset.
      *
      * @param reservationId the ID of the reservation to move

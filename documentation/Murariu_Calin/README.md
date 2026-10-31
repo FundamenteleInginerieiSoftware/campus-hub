@@ -24,6 +24,7 @@ Each document is structured in two parts:
 | 03 | [`03-reassignment-engine.md`](./03-reassignment-engine.md) | Auto-Reassignment Engine | Strategy pattern (`SameModelStrategy`, `SameCategoryStrategy`), Observer pattern (`@TransactionalEventListener`), `reassignment_log`, `REQUIRES_NEW` |
 | 04 | [`04-reservation-lifecycle-and-jobs.md`](./04-reservation-lifecycle-and-jobs.md) | Autonomous Lifecycle Jobs | Scheduled no-show expiration, overdue detection, preventive cascade move to free substitutes |
 | 05 | [`05-archunit-architecture-rules.md`](./05-archunit-architecture-rules.md) | ArchUnit Architecture Rules | Package boundaries, module encapsulation, cycle detection, entity encapsulation, coding conventions |
+| 06 | [`06-asset-availability-endpoint.md`](./06-asset-availability-endpoint.md) | Equipment Availability Query | Temporal availability check, category bulk availability, `findBusyAssetIds`, separation of catalog vs reservation |
 | 07 | [`07-admin-desk-reservations.md`](./07-admin-desk-reservations.md) | Admin Desk Operations | Check-out window (`-15m` to `+30m`), item return (`CHECKED_OUT`/`OVERDUE`), JPA `Specification` search |
 
 ---
