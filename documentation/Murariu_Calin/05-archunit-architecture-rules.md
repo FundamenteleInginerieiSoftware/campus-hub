@@ -55,8 +55,9 @@ If any teammate accidentally violates these rules, the build breaks immediately 
 | **Incident Independence** | `noClasses().that().resideInAPackage("com.campus.incident..").should().dependOnClassesThat().resideInAPackage("..reassignment..")` | Incident reporting publishes `AssetDamagedEvent`; reassignment is decoupled as a listener. |
 | **No Cycles** | `slices().matching("com.campus.(*)..").should().beFreeOfCycles()` | Prevents circular dependencies across all top-level modules. |
 | **No Field Injection** | `GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION` | Enforces constructor injection with `@RequiredArgsConstructor` (AGENTS.md §5). |
-| **DTOs in Controllers** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class).and().arePublic().should().haveRawReturnType(Entity.class)` | Controllers must return response records to prevent leaking domain entities or lazy initialization outside `@Transactional` (AGENTS.md §3). |
-| **Forbidden Lombok on Entities** | `noClasses().that().areAnnotatedWith(Entity.class).should().beAnnotatedWith("lombok.Data").orShould().beAnnotatedWith("lombok.AllArgsConstructor")` | `@Data` breaks JPA proxy equality and dirty checking; entities must use explicit `@Getter`, `@Setter`, protected `@NoArgsConstructor` (AGENTS.md §5). |
+| **DTOs in Controllers (Returns)** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class).and().arePublic().should().haveRawReturnType(annotatedWith(Entity.class))` | Controllers must return response records to prevent leaking domain entities or lazy initialization outside `@Transactional` (AGENTS.md §3). |
+| **DTOs in Controllers (Parameters)** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class).and().arePublic().should(notAcceptEntities)` | Controllers must accept request records in `web/`, never JPA domain entities directly. |
+| **Forbidden Lombok on Entities** | `noMethods().that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class).should().haveName("equals").orShould().haveName("hashCode").orShould().haveName("toString")` | `@Data`, `@EqualsAndHashCode`, and `@ToString` break JPA proxy identity and dirty checking; because Lombok has `SOURCE` retention, ArchUnit checks that these generated methods do not exist (AGENTS.md §5). |
 
 ---
 
