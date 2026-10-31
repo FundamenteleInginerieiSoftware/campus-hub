@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import com.campus.user.api.Role;
 import com.campus.user.api.UserSummary;
 import com.campus.user.domain.User;
 import com.campus.user.repository.UserRepository;
+import com.campus.user.web.UserResponse;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,10 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    // Mocked like any other bean: the test decides who is "logged in", no JWT needed.
+    @Mock
+    private CurrentUser currentUser;
 
     @InjectMocks
     private UserService userService;
@@ -62,5 +68,33 @@ class UserServiceTest {
 
         assertThat(userService.exists(5L)).isTrue();
         assertThat(userService.exists(99L)).isFalse();
+    }
+
+    @Test
+    void meReturnsTheTokensUser() {
+        User user = new User(
+                "student1@campus.test",
+                "{bcrypt}hash",
+                "Student One",
+                Role.STUDENT,
+                LocalDateTime.of(2026, 11, 2, 9, 0));
+        ReflectionTestUtils.setField(user, "id", 1L);
+        when(currentUser.id()).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        UserResponse me = userService.me();
+
+        assertThat(me).isEqualTo(new UserResponse(1L, "student1@campus.test", "Student One", Role.STUDENT));
+    }
+
+    @Test
+    void meThrowsUserNotFoundWhenTheAccountIsGone() {
+        when(currentUser.id()).thenReturn(42L);
+        when(userRepository.findById(42L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.me())
+                .isInstanceOf(NotFoundException.class)
+                .extracting("code")
+                .isEqualTo("USER_NOT_FOUND");
     }
 }
