@@ -181,7 +181,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 - Status codes: 200, 201 (+ body), 204, 400 validation, 401, 403, 404, 409 conflict/invalid transition/limit.
 - Errors: RFC 9457 `ProblemDetail` with a `code` property, produced by **Liviu's** `GlobalExceptionHandler` (401/403 from the security filters use the same shape, written by Matei's `SecurityConfig`). **Throw** the shared exceptions from `common.error` (`NotFoundException`, `ConflictException`, `BusinessRuleException(code, msg)`, `ForbiddenException`, `InvalidStateTransitionException`); never build error responses in controllers. Error codes are listed in `docs/api-contract.md`.
 - Lists: `?page=0&size=20&sort=name,asc`, returned as `PageResponse<T>` (`content, page, size, totalElements, totalPages`), never Spring's `Page`.
-- **Ownership in the service layer:** the user ID always comes from the JWT (`CurrentUser.id()`), never from the body. Others' resources return **404**, not 403.
+- **Ownership in the service layer:** the user ID always comes from the JWT (inject `CurrentUser`, call `currentUser.id()`), never from the body. Others' resources return **404**, not 403.
 
 **JPA rules:** `@ManyToOne(fetch = LAZY)` always · avoid `@OneToMany` (query the repository) · **cross-module references are plain IDs** (`Long assetId`) with a real FK in SQL · `open-in-view=false`, so map entities to DTOs **inside** `@Transactional` service methods · `@Transactional` on public service methods only (not controllers/repositories; self-invocation and `private` don't work); reads `readOnly = true` · state transitions inside the entity (`reservation.checkOut(now)`), no scattered `setStatus()` · `@Version` on concurrently edited rows.
 
@@ -230,7 +230,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
   - Calin's #34–#37 need a rebase onto `main` (their CI only failed because `assets` was missing).
   - #39 needs its base switched to `main`.
   - Stefania's #40 needs a rebase, the `CurrentUser` agreement with Calin, and API contract entries.
-- **`CurrentUser`:** proposed as a `@Component` with `id()` + `isAdmin()` (comment on #40). The contract change in §5/§9 is draft PR #53, merged once Stefania and Calin agree. Until then, §9 still shows the old static form.
+- **`CurrentUser`:** on `main` as a `@Component` with `id()` + `isAdmin()` (Stefania #74). Inject it; `id()` throws 401 `UNAUTHORIZED` when nobody is logged in, `isAdmin()` returns `false`.
 - **Next for Matei:** `GET /api/v1/users/me` (needs `CurrentUser`), then Terraform (W4).
 - **Prototype demo goal:** a Swagger run on a fresh database: login → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409. It needs #34–#37 and #40 on `main`.
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
@@ -307,8 +307,8 @@ freeze() { git grep -ohE 'CREATE TABLE (users|categories|lab_rooms|assets|reserv
 // user.api (Matei)
 interface UserApi { UserSummary getById(Long id); boolean exists(Long id); }
 record UserSummary(Long id, String email, String fullName, Role role) {}
-// common.security (Stefania): reads the JWT of the current request
-CurrentUser.id(); CurrentUser.isAdmin();
+// common.security (Stefania): a bean that reads the JWT of the current request. Inject it; mock it in service unit tests
+@Component class CurrentUser { Long id(); boolean isAdmin(); }   // id() = "sub" claim, isAdmin() = has ROLE_ADMIN
 // common.time (Calin): one Clock bean, zone Europe/Bucharest
 @Bean Clock clock();
 // common.paging (Liviu)
