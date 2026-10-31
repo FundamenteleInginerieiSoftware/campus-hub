@@ -33,8 +33,7 @@ We introduced an endpoint that supports two primary use cases:
 |---|---|---|
 | `backend/src/main/java/com/campus/reservation/web/AvailabilityResponse.java` | New DTO | Response record with `available`, `availableAssetIds`, and `conflictReason` |
 | `backend/src/main/java/com/campus/reservation/repository/ReservationRepository.java` | Method added | `findBusyAssetIds(start, end, statuses)` using JPQL `select distinct r.assetId` |
-| `backend/src/main/java/com/campus/reservation/api/ReservationApi.java` | Facade method | `findBusyAssetIds(start, end)` exposed for cross-module queries |
-| `backend/src/main/java/com/campus/reservation/service/ReservationService.java` | Logic added | `checkAvailability(assetId, categoryId, start, end)` with full slot validation |
+| `backend/src/main/java/com/campus/reservation/service/ReservationService.java` | Logic added | `checkAvailability(assetId, categoryId, start, end)` with full slot validation and O(1) Set lookup |
 | `backend/src/main/java/com/campus/reservation/web/ReservationController.java` | Endpoint added | `GET /api/v1/reservations/availability` with Swagger annotations |
 | `docs/api-contract.md` | Contract entry | Documents request parameters, response JSON, and status codes |
 

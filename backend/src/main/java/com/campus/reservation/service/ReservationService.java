@@ -26,8 +26,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -174,8 +176,10 @@ public class ReservationService implements ReservationApi {
         }
 
         // Category-wide availability evaluation
+        // Liviu's CatalogApi.findAvailableByCategory(categoryId, excludeAssetId): passing -1L means "exclude nothing"
         List<AssetSummary> candidateAssets = catalogApi.findAvailableByCategory(categoryId, -1L);
-        List<Long> busyAssetIds = reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES);
+        Set<Long> busyAssetIds =
+                new HashSet<>(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES));
 
         List<Long> availableAssetIds = candidateAssets.stream()
                 .map(AssetSummary::id)
@@ -280,7 +284,6 @@ public class ReservationService implements ReservationApi {
         return !reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
     }
 
-    @Override
     public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {
         return reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES);
     }
