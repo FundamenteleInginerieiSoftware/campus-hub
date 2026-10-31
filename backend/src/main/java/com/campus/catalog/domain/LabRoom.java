@@ -10,12 +10,10 @@ import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "lab_rooms")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class LabRoom {
 
@@ -33,6 +31,12 @@ public class LabRoom {
     private String building;
 
     public LabRoom(String code, String name, String building) {
+        this.code = code.trim().toUpperCase(Locale.ROOT);
+        this.name = name.trim();
+        this.building = building;
+    }
+
+    public void update(String code, String name, String building) {
         this.code = code.trim().toUpperCase(Locale.ROOT);
         this.name = name.trim();
         this.building = building;

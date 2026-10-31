@@ -9,12 +9,10 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "categories")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Category {
 
@@ -29,6 +27,11 @@ public class Category {
     private String description;
 
     public Category(String name, String description) {
+        this.name = name.trim();
+        this.description = description;
+    }
+
+    public void update(String name, String description) {
         this.name = name.trim();
         this.description = description;
     }
