@@ -1,5 +1,6 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
@@ -13,6 +14,7 @@ import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ReservationResponse;
 import jakarta.persistence.criteria.Predicate;
@@ -24,8 +26,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -141,6 +145,53 @@ public class ReservationService implements ReservationApi {
         return ReservationResponse.from(r);
     }
 
+    /**
+     * Evaluates equipment availability for a requested time slot.
+     *
+     * <p>If {@code assetId} is provided, evaluates whether that specific equipment is bookable and free.
+     * If {@code categoryId} is provided, queries all operational assets in that category and excludes any
+     * that have conflicting active bookings during the requested window.
+     */
+    @Transactional(readOnly = true)
+    public AvailabilityResponse checkAvailability(
+            Long assetId, Long categoryId, LocalDateTime start, LocalDateTime end) {
+        if (assetId == null && categoryId == null) {
+            throw new BusinessRuleException(
+                    "MISSING_PARAMETER", "Either assetId or categoryId must be provided to check availability");
+        }
+        if (assetId != null && categoryId != null) {
+            throw new BusinessRuleException("CONFLICTING_PARAMETERS", "Provide either assetId or categoryId, not both");
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        validateSlotRules(start, end, now);
+
+        if (assetId != null) {
+            // Verify asset exists in catalog (throws 404 ASSET_NOT_FOUND if unknown)
+            catalogApi.getAsset(assetId);
+
+            if (!catalogApi.isBookable(assetId)) {
+                return AvailabilityResponse.forAsset(assetId, start, end, false, "ASSET_NOT_BOOKABLE");
+            }
+
+            boolean isFree = isAssetFree(assetId, start, end, null);
+            return AvailabilityResponse.forAsset(assetId, start, end, isFree, isFree ? null : "RESERVATION_CONFLICT");
+        }
+
+        // Category-wide availability evaluation
+        // Liviu's CatalogApi.findAvailableByCategory(categoryId, excludeAssetId): passing -1L means "exclude nothing"
+        List<AssetSummary> candidateAssets = catalogApi.findAvailableByCategory(categoryId, -1L);
+        Set<Long> busyAssetIds =
+                new HashSet<>(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES));
+
+        List<Long> availableAssetIds = candidateAssets.stream()
+                .map(AssetSummary::id)
+                .filter(id -> !busyAssetIds.contains(id))
+                .toList();
+
+        return AvailabilityResponse.forCategory(categoryId, start, end, availableAssetIds);
+    }
+
     private Reservation loadOwnedOrAdmin(Long id) {
         Reservation reservation = reservationRepository
                 .findById(id)
@@ -234,6 +285,10 @@ public class ReservationService implements ReservationApi {
     public boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
         long ignore = ignoreReservationId == null ? -1L : ignoreReservationId;
         return !reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
+    }
+
+    public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {
+        return reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES);
     }
 
     // Bug fixed: without noRollbackFor, throwing SubstituteNoLongerFreeException through the Spring proxy

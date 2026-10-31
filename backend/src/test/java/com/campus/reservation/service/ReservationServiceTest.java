@@ -12,6 +12,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campus.catalog.api.AssetStatus;
+import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
@@ -25,6 +27,7 @@ import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ReservationResponse;
 import java.time.Clock;
@@ -933,5 +936,122 @@ class ReservationServiceTest {
         assertThat(page.content()).hasSize(1);
         assertThat(page.content().get(0).id()).isEqualTo(301L);
         assertThat(page.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("checkAvailability: throws MISSING_PARAMETER if neither assetId nor categoryId is provided")
+    void checkAvailabilityThrowsWhenNeitherAssetNorCategoryProvided() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        assertThatThrownBy(() -> reservationService.checkAvailability(null, null, start, end))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Either assetId or categoryId must be provided");
+    }
+
+    @Test
+    @DisplayName("checkAvailability: throws CONFLICTING_PARAMETERS if both assetId and categoryId are provided")
+    void checkAvailabilityThrowsWhenBothAssetAndCategoryProvided() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        assertThatThrownBy(() -> reservationService.checkAvailability(ASSET_ID, 5L, start, end))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "CONFLICTING_PARAMETERS")
+                .hasMessageContaining("Provide either assetId or categoryId, not both");
+    }
+
+    @Test
+    @DisplayName("checkAvailability: returns available true when specific asset is operational and free")
+    void checkAvailabilityReturnsTrueWhenAssetIsFree() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
+
+        assertThat(response.available()).isTrue();
+        assertThat(response.assetId()).isEqualTo(ASSET_ID);
+        assertThat(response.availableAssetIds()).containsExactly(ASSET_ID);
+        assertThat(response.conflictReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("checkAvailability: returns available false with RESERVATION_CONFLICT when asset is booked")
+    void checkAvailabilityReturnsFalseWhenAssetOverlaps() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(true);
+
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
+
+        assertThat(response.available()).isFalse();
+        assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
+        assertThat(response.availableAssetIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("checkAvailability: returns available false with ASSET_NOT_BOOKABLE when asset is under maintenance")
+    void checkAvailabilityReturnsFalseWhenAssetUnderMaintenance() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
+
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
+
+        assertThat(response.available()).isFalse();
+        assertThat(response.conflictReason()).isEqualTo("ASSET_NOT_BOOKABLE");
+        assertThat(response.availableAssetIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("checkAvailability: throws ASSET_NOT_FOUND when assetId is unknown")
+    void checkAvailabilityThrowsWhenAssetNotFound() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(catalogApi.getAsset(999L)).thenThrow(new NotFoundException("ASSET_NOT_FOUND", "Asset not found"));
+
+        assertThatThrownBy(() -> reservationService.checkAvailability(999L, null, start, end))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Asset not found");
+    }
+
+    @Test
+    @DisplayName("checkAvailability: queries category assets and filters out busy ones")
+    void checkAvailabilityReturnsFreeAssetsInCategory() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Long categoryId = 5L;
+
+        AssetSummary a1 = new AssetSummary(10L, "Scope 1", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
+        AssetSummary a2 = new AssetSummary(20L, "Scope 2", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
+        AssetSummary a3 = new AssetSummary(30L, "Scope 3", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.findAvailableByCategory(categoryId, -1L)).thenReturn(List.of(a1, a2, a3));
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(20L));
+
+        AvailabilityResponse response = reservationService.checkAvailability(null, categoryId, start, end);
+
+        assertThat(response.available()).isTrue();
+        assertThat(response.categoryId()).isEqualTo(categoryId);
+        assertThat(response.availableAssetIds()).containsExactly(10L, 30L);
+        assertThat(response.conflictReason()).isNull();
     }
 }
