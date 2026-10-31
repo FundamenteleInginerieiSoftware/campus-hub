@@ -333,6 +333,7 @@ public class ReservationService implements ReservationApi {
      *
      * <p>Avoids JPQL null-check tricks by using Spring Data JPA {@link Specification}.
      */
+    @Transactional(readOnly = true)
     public PageResponse<ReservationResponse> getAdminReservations(
             ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size) {
         Specification<Reservation> spec = (root, query, cb) -> {
@@ -348,8 +349,8 @@ public class ReservationService implements ReservationApi {
             }
             if (date != null) {
                 LocalDateTime dayStart = date.atStartOfDay();
-                LocalDateTime dayEnd = date.atTime(23, 59, 59, 999999999);
-                predicates.add(cb.lessThan(root.get("startTime"), dayEnd));
+                LocalDateTime nextDayStart = date.plusDays(1).atStartOfDay();
+                predicates.add(cb.lessThan(root.get("startTime"), nextDayStart));
                 predicates.add(cb.greaterThan(root.get("endTime"), dayStart));
             }
             return cb.and(predicates.toArray(new Predicate[0]));
