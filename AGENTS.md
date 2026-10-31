@@ -216,23 +216,25 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-10-26 (start of W4).** Week-by-week plan until M1 for every member: `docs/plan-w4-w6.md`.
+**As of 2026-10-31 (W4).** Week-by-week plan until M1 for every member: `docs/plan-w4-w6.md`.
 - **On `main`:**
   - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
   - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), Swagger **Authorize**.
   - Dev accounts `student1`/`student2`/`admin@campus.test` with password `password`, created by `UserSeeder` (#55; ids 1, 2, 3).
-  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52).
-  - `Clock` bean (Calin #27).
+  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64).
+  - `Clock` bean (Calin #27). `archunit-junit5` dependency (#62).
   - `UserApi` (real).
   - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24).
-- **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`. Still in PRs: `reservations` (#34), `incident_reports` (#40), `reassignment_log` (#37).
-- **In review**, merge order **#34 → #35 → #36 → #40 → #37 → #39**:
-  - Calin's #34–#37 need a rebase onto `main` (their CI only failed because `assets` was missing).
-  - #39 needs its base switched to `main`.
-  - Stefania's #40 needs a rebase, the `CurrentUser` agreement with Calin, and API contract entries.
-- **`CurrentUser`:** on `main` as a `@Component` with `id()` + `isAdmin()` (Stefania #74). Inject it; `id()` throws 401 `UNAUTHORIZED` when nobody is logged in, `isAdmin()` returns `false`.
-- **Next for Matei:** `GET /api/v1/users/me` (needs `CurrentUser`), then Terraform (W4).
-- **Prototype demo goal:** a Swagger run on a fresh database: login → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409. It needs #34–#37 and #40 on `main`.
+  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36).
+  - **Incidents:** report → asset `UNDER_MAINTENANCE` + `AssetDamagedEvent` (Stefania #40).
+  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37).
+- **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`.
+- **Open PRs:**
+  - Liviu's #66 (category, lab room and asset CRUD + retire): approved by Matei, needs a rebase onto `main`.
+  - Calin's #60 (lifecycle jobs), #80 (admin desk: search, check-out, return), #78 (availability): approved by Matei; they conflict with each other (methods added in the same spot), so rebase after each merge.
+  - Calin's #76 (ArchUnit rules): one rule (`controllers_must_not_accept_entities`) can never fail yet; fix before merge.
+- **Next for Matei:** `GET /api/v1/users/me`, then Terraform part 1 (W4).
+- **Prototype demo goal:** a Swagger run on a fresh database: login → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. All the code is on `main` except a way to create assets: it needs #66 (admin asset CRUD), since there is no catalog seed data yet. Checked locally on main + #66 (31 Oct): the whole flow works; `POST /incidents` also needs `severity` (e.g. `HIGH`).
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
 
 ---
@@ -332,8 +334,8 @@ record AssetSummary(Long id, String name, String model, Long categoryId, Long la
 interface ReservationApi {
   List<ReservationSummary> findUpcomingActiveByAsset(Long assetId, LocalDateTime from);
   boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId);
-  void moveToAsset(Long reservationId, Long newAssetId, String reason);  // re-checks conflict + lock
-  void forceCancel(Long reservationId, String reason);                   // idempotent
+  boolean moveToAsset(Long reservationId, Long newAssetId, String reason);  // re-checks conflict + lock; false if no longer CONFIRMED
+  boolean forceCancel(Long reservationId, String reason);                   // idempotent; false if no longer CONFIRMED
   Optional<ReservationSummary> findCurrentCheckout(Long assetId);
 }
 record ReservationSummary(Long id, Long userId, Long assetId, LocalDateTime start, LocalDateTime end, ReservationStatus status) {}
