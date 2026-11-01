@@ -5,6 +5,19 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Campus Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Google+Sans+Code:wght@400;500&display=swap"
+  />
+  <script>
+    // Applies the saved light/dark choice before React starts, so a dark page doesn't flash white.
+    try {
+      var scheme = localStorage.getItem('mantine-color-scheme-value')
+      document.documentElement.setAttribute('data-mantine-color-scheme', scheme === 'dark' ? 'dark' : 'light')
+    } catch (e) {}
+  </script>
 </head>
 <body>
 <div id="root"></div>
