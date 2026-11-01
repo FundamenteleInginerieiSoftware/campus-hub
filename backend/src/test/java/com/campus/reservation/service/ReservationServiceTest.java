@@ -30,6 +30,7 @@ import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ReservationResponse;
+import com.campus.reservation.web.ReservationSummaryResponse;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -364,7 +365,8 @@ class ReservationServiceTest {
         when(reservationRepository.findByUserIdOrderByStartTimeAsc(eq(USER_ID), any()))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
 
-        PageResponse<ReservationResponse> result = reservationService.getMyReservations(null, 0, 10);
+        PageResponse<ReservationResponse> result =
+                reservationService.getMyReservations((ReservationStatus) null, 0, 10);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).userId()).isEqualTo(USER_ID);
@@ -391,6 +393,49 @@ class ReservationServiceTest {
         assertThat(result.content()).hasSize(1);
         verify(reservationRepository)
                 .findByUserIdAndStatusOrderByStartTimeAsc(eq(USER_ID), eq(ReservationStatus.CONFIRMED), any());
+    }
+
+    @Test
+    @DisplayName("getMyReservations returns paginated user reservations with multiple statuses filter")
+    void getMyReservationsWithMultipleStatuses() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        List<ReservationStatus> statuses = List.of(ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_OUT);
+        when(reservationRepository.findByUserIdAndStatusInOrderByStartTimeAsc(eq(USER_ID), eq(statuses), any()))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
+
+        PageResponse<ReservationResponse> result = reservationService.getMyReservations(statuses, 0, 10);
+
+        assertThat(result.content()).hasSize(1);
+        verify(reservationRepository).findByUserIdAndStatusInOrderByStartTimeAsc(eq(USER_ID), eq(statuses), any());
+    }
+
+    @Test
+    @DisplayName("getMySummary returns aggregate stats for active, completed, and reassigned bookings")
+    void getMySummaryReturnsAccurateAggregateCounts() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.countByUserIdAndStatusIn(
+                        eq(USER_ID),
+                        eq(List.of(
+                                ReservationStatus.CONFIRMED,
+                                ReservationStatus.CHECKED_OUT,
+                                ReservationStatus.OVERDUE))))
+                .thenReturn(2L);
+        when(reservationRepository.countByUserIdAndStatusIn(eq(USER_ID), eq(List.of(ReservationStatus.RETURNED))))
+                .thenReturn(7L);
+        when(reservationRepository.countByUserIdAndOriginalAssetIdIsNotNull(eq(USER_ID)))
+                .thenReturn(3L);
+
+        ReservationSummaryResponse summary = reservationService.getMySummary();
+
+        assertThat(summary.activeCount()).isEqualTo(2L);
+        assertThat(summary.completedCount()).isEqualTo(7L);
+        assertThat(summary.reassignedCount()).isEqualTo(3L);
     }
 
     @Test

@@ -3,6 +3,7 @@ import RequireAdmin from './auth/RequireAdmin.tsx'
 import RequireAuth from './auth/RequireAuth.tsx'
 import AppLayout from './layout/AppLayout.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
 
@@ -27,10 +28,7 @@ export default function App() {
           path="catalog"
           element={<PlaceholderPage title="Equipment" description="Browse lab equipment and book a slot." owner="Liviu" />}
         />
-        <Route
-          path="reservations"
-          element={<PlaceholderPage title="My reservations" description="Your upcoming and past bookings." owner="Calin" />}
-        />
+        <Route path="reservations" element={<MyReservationsPage />} />
         <Route
           path="incidents"
           element={

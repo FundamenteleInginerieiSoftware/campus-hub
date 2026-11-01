@@ -17,6 +17,7 @@ import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ReservationResponse;
+import com.campus.reservation.web.ReservationSummaryResponse;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -102,14 +103,40 @@ public class ReservationService implements ReservationApi {
      * Retrieves a paginated list of reservations for the current authenticated user.
      */
     public PageResponse<ReservationResponse> getMyReservations(ReservationStatus status, int page, int size) {
+        return getMyReservations(status != null ? List.of(status) : null, page, size);
+    }
+
+    /**
+     * Retrieves a paginated list of reservations for the current authenticated user filtered by statuses.
+     */
+    public PageResponse<ReservationResponse> getMyReservations(List<ReservationStatus> statuses, int page, int size) {
         Long userId = currentUser.id();
         Pageable pageable = PageRequest.of(page, size);
 
-        Page<Reservation> reservationPage = status == null
-                ? reservationRepository.findByUserIdOrderByStartTimeAsc(userId, pageable)
-                : reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(userId, status, pageable);
+        Page<Reservation> reservationPage;
+        if (statuses == null || statuses.isEmpty()) {
+            reservationPage = reservationRepository.findByUserIdOrderByStartTimeAsc(userId, pageable);
+        } else if (statuses.size() == 1) {
+            reservationPage = reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(
+                    userId, statuses.getFirst(), pageable);
+        } else {
+            reservationPage =
+                    reservationRepository.findByUserIdAndStatusInOrderByStartTimeAsc(userId, statuses, pageable);
+        }
 
         return PageResponse.from(reservationPage, ReservationResponse::from);
+    }
+
+    /**
+     * Retrieves aggregate counts for the current student's reservations (active, completed, reassigned).
+     */
+    public ReservationSummaryResponse getMySummary() {
+        Long userId = currentUser.id();
+        long active = reservationRepository.countByUserIdAndStatusIn(
+                userId, List.of(ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE));
+        long completed = reservationRepository.countByUserIdAndStatusIn(userId, List.of(ReservationStatus.RETURNED));
+        long reassigned = reservationRepository.countByUserIdAndOriginalAssetIdIsNotNull(userId);
+        return new ReservationSummaryResponse(active, completed, reassigned);
     }
 
     /**

@@ -212,7 +212,8 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | Method & path | Access | Request body | Response | Status & errors |
 |---|---|---|---|---|
 | `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` | `201` + `ReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
-| `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED` |
+| `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED` (accepts optional `status` filter, supporting single or multiple statuses e.g. `status=CONFIRMED&status=CHECKED_OUT`) |
+| `GET /api/v1/reservations/me/summary` | Logged in | – | `200` + `ReservationSummaryResponse` | `401 UNAUTHORIZED` |
 | `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
@@ -263,6 +264,13 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "available": true,
   "availableAssetIds": [1],
   "conflictReason": null
+}
+
+// ReservationSummaryResponse (returned by GET /api/v1/reservations/me/summary)
+{
+  "activeCount": 2,
+  "completedCount": 5,
+  "reassignedCount": 1
 }
 
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE` or `RETIRED`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).

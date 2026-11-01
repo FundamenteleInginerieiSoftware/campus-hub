@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -62,10 +63,22 @@ public class ReservationController {
     })
     @GetMapping("/me")
     public ResponseEntity<PageResponse<ReservationResponse>> getMyReservations(
-            @RequestParam(required = false) ReservationStatus status,
+            @RequestParam(required = false) List<ReservationStatus> status,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ResponseEntity.ok(reservationService.getMyReservations(status, page, size));
+    }
+
+    @Operation(
+            summary = "Get my reservations summary stats",
+            description = "Retrieves aggregate counts for active, completed, and reassigned bookings")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Summary statistics returned"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    @GetMapping("/me/summary")
+    public ResponseEntity<ReservationSummaryResponse> getMySummary() {
+        return ResponseEntity.ok(reservationService.getMySummary());
     }
 
     @Operation(

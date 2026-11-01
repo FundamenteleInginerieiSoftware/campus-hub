@@ -77,12 +77,26 @@ class ReservationControllerTest {
     @DisplayName("GET /api/v1/reservations/me returns 200 OK with PageResponse")
     void getMyReservationsReturns200() throws Exception {
         PageResponse<ReservationResponse> page = new PageResponse<>(List.of(sampleResponse), 0, 20, 1L, 1);
-        when(reservationService.getMyReservations(any(), anyInt(), anyInt())).thenReturn(page);
+        when(reservationService.getMyReservations(
+                        org.mockito.ArgumentMatchers.<List<ReservationStatus>>any(), anyInt(), anyInt()))
+                .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/reservations/me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(1))
                 .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/me/summary returns 200 OK with summary counts")
+    void getMySummaryReturns200() throws Exception {
+        when(reservationService.getMySummary()).thenReturn(new ReservationSummaryResponse(2L, 5L, 1L));
+
+        mockMvc.perform(get("/api/v1/reservations/me/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeCount").value(2))
+                .andExpect(jsonPath("$.completedCount").value(5))
+                .andExpect(jsonPath("$.reassignedCount").value(1));
     }
 
     @Test

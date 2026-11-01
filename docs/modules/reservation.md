@@ -84,3 +84,12 @@ cd backend
 # Integration tests on real PostgreSQL:
 ./gradlew test --tests "com.campus.reservation.repository.ReservationRepositoryTest"
 ```
+
+---
+
+## 7. Frontend Components & UI Integration
+
+- **`frontend/src/pages/MyReservationsPage.tsx`**: Complete dashboard for `/reservations` providing students and admins with quota tracking cards (backed by real database counts via `GET /api/v1/reservations/me/summary`), server-side active/past tabs (`GET /api/v1/reservations/me?status=...`), quota limit warning badge (`Limit reached (2/2)`), `PagedTable` with pagination strictly matching server totals, cancellation modal, and instant confirmation alerts.
+- **`frontend/src/components/CalendarBookingView.tsx`**: Interactive Google Calendar timetable with 30-minute intervals (Mon–Fri, 08:00–20:00). Features real-time availability checks via `GET /api/v1/reservations/availability`, RFC 9457 error display (`<ErrorAlert error={availability.error} />`), synchronized week navigation (`handleNextWeek`/`handlePrevWeek`), past-time auto-disabling, asset operational state verification, and strict enforcement of the 20:00 lab closing constraint (durations exceeding 20:00 are dynamically disabled and capped).
+- **`frontend/src/api/reservations.ts`**: Frontend API client bindings mapping to the reservation REST endpoints (`createReservation`, `cancelReservation`, `fetchMyReservations`, `fetchMyReservationSummary`, `checkAvailability`, `fetchAssetSummary`).
+
