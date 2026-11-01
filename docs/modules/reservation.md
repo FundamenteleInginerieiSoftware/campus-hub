@@ -91,6 +91,5 @@ cd backend
 
 - **`frontend/src/pages/MyReservationsPage.tsx`**: Complete dashboard for `/reservations` providing students and admins with quota tracking cards, active/past tabs, `PagedTable`, cancellation modal, and indicator when a reservation was moved by the auto-reassignment engine.
 - **`frontend/src/components/CalendarBookingView.tsx`**: Interactive Google Calendar timetable with 30-minute intervals (Mon–Fri, 08:00–20:00). Features real-time availability checks via `GET /api/v1/reservations/availability` and enforces the strict 20:00 lab closing constraint (durations exceeding 20:00 are dynamically greyed out/disabled and capped).
-- **`frontend/src/components/BookingModal.tsx`**: Alternative modal dialog variant for quick booking directly from asset lists with the same duration limiting logic.
 - **`frontend/src/api/reservations.ts`**: Frontend API client bindings mapping to the reservation REST endpoints (`createReservation`, `cancelReservation`, `fetchMyReservations`, `checkAvailability`, `fetchAssetSummary`).
 

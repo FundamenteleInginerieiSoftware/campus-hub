@@ -68,7 +68,7 @@ Shared files are changed in their own small PR, so everyone notices.
 
 > [!NOTE]
 > **Liviu (@NliviuN): Equipment Catalog & Booking View Integration**  
-> Calin has built the reusable Google Calendar-style booking component at `src/components/CalendarBookingView.tsx` (and quick modal `src/components/BookingModal.tsx`). When you build `/catalog` (`CatalogPage.tsx`), render your asset grid/filters; when an asset is selected, embed `<CalendarBookingView asset={selectedAsset} onBack={() => setSelectedAsset(null)} onSuccess={() => navigate('/reservations')} />`. Full details and props are documented in `documentation/Murariu_Calin/08-frontend-reservations-and-booking.md`.
+> Calin has built the reusable Google Calendar-style booking component at `src/components/CalendarBookingView.tsx`. When you build `/catalog` (`CatalogPage.tsx`), render your asset grid/filters; when an asset is selected, embed `<CalendarBookingView asset={selectedAsset} onBack={() => setSelectedAsset(null)} onSuccess={() => navigate('/reservations')} />`. Full details and props are documented in `documentation/Murariu_Calin/08-frontend-reservations-and-booking.md`.
 
 The frontend hides admin pages from students, but the real protection is the backend: `/api/v1/admin/**` answers 403.
 

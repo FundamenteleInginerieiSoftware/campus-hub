@@ -57,7 +57,6 @@ Instead of typing abstract date-time strings into text inputs, students interact
 | `frontend/src/api/errorMessages.ts` | Modified | Added user-friendly Romanian/English descriptions for reservation error codes (`RESERVATION_CONFLICT`, `RESERVATION_LIMIT_REACHED`, `OUTSIDE_OPENING_HOURS`, `BOOKING_IN_PAST`, `INVALID_DURATION`, `ASSET_NOT_BOOKABLE`) |
 | `frontend/src/pages/MyReservationsPage.tsx` | Created | Full dashboard page for `/reservations` featuring statistics cards, segmented tab filter, `PagedTable`, cancellation modal, and redirect to catalog |
 | `frontend/src/components/CalendarBookingView.tsx` | Created | Interactive Google Calendar timetable with week switcher, 30m slot grid, real-time availability indicator, and 20:00 closing duration limiter |
-| `frontend/src/components/BookingModal.tsx` | Created | Alternative lightweight dialog for quick reservation with the same duration capping logic |
 | `frontend/src/App.tsx` | Modified | Connected route `/reservations` to `<MyReservationsPage />`; kept `/catalog` as Liviu's `<PlaceholderPage>` |
 | `documentation/Murariu_Calin/08-frontend-reservations-and-booking.md` | Created | Personal documentation and teammate integration guide |
 
@@ -70,11 +69,7 @@ Instead of typing abstract date-time strings into text inputs, students interact
 
 ### How to embed `CalendarBookingView` in `CatalogPage.tsx`
 
-When a student clicks on an equipment card in `/catalog`, you can display the Google Calendar booking view either:
-1. As an inline view replacing the catalog list (with a "Back to equipment" button), OR
-2. In an asset details drawer / modal.
-
-#### Option A: Inline View (Recommended, matches prototype)
+When a student clicks on an equipment card in `/catalog`, you can display the Google Calendar booking view inline replacing the catalog list (with a "Back to equipment" button):
 
 ```tsx
 import { useState } from 'react'
@@ -121,39 +116,6 @@ export default function CatalogPage() {
 }
 ```
 
-#### Option B: Modal Dialog (`BookingModal`)
-
-If you prefer opening a quick modal directly from an asset card without leaving the catalog view:
-
-```tsx
-import { useState } from 'react'
-import BookingModal from '../components/BookingModal.tsx'
-import type { AssetSummary } from '../api/reservations.ts'
-
-export default function CatalogPage() {
-  const [bookingAsset, setBookingAsset] = useState<AssetSummary | null>(null)
-
-  return (
-    <>
-      {/* Your asset grid */}
-      <button onClick={() => setBookingAsset(asset)}>Quick Book</button>
-
-      {bookingAsset && (
-        <BookingModal
-          asset={bookingAsset}
-          opened={true}
-          onClose={() => setBookingAsset(null)}
-          onSuccess={() => {
-            setBookingAsset(null)
-            window.location.href = '/reservations'
-          }}
-        />
-      )}
-    </>
-  )
-}
-```
-
 ### Component Props Reference
 
 #### `CalendarBookingView` Props:
@@ -165,7 +127,7 @@ export default function CatalogPage() {
 
 ## 20:00 Closing Time Rule Implementation
 
-In both `CalendarBookingView.tsx` and `BookingModal.tsx`, the duration options are dynamically evaluated based on the selected slot start time:
+In `CalendarBookingView.tsx`, the duration options are dynamically evaluated based on the selected slot start time:
 
 ```typescript
 // Lab closes strictly at 20:00
