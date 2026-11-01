@@ -88,8 +88,16 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   const [today] = useState(() => new Date())
   const maxBookingDate = useMemo(() => new Date(today.getTime() + 14 * 86400000), [today])
 
-  // Current view's Monday
-  const [currentMonday, setCurrentMonday] = useState(() => getMonday(today))
+  // Current view's Monday (on weekends, show the upcoming week so slots are active)
+  const [currentMonday, setCurrentMonday] = useState(() => {
+    const dayOfWeek = today.getDay()
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      const nextMon = getMonday(today)
+      nextMon.setDate(nextMon.getDate() + 7)
+      return nextMon
+    }
+    return getMonday(today)
+  })
 
   // Selected slot state
   const [selectedDay, setSelectedDay] = useState<string>(() => {
@@ -418,6 +426,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                       return (
                         <Box
                           key={`${dayKey}-${stepTime}`}
+                          data-time={stepTime}
+                          data-day={dayKey}
                           onClick={() => {
                             if (!isPastDay && !isOutOfHorizon) {
                               setSelectedDay(dayKey)
