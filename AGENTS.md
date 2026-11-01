@@ -216,25 +216,24 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-10-31 (W4).** Week-by-week plan until M1 for every member: `docs/plan-w4-w6.md`.
+**As of 2026-11-02 (W5).** Week-by-week plan until M1 for every member: `docs/plan-w4-w6.md`.
 - **On `main`:**
   - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
-  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), Swagger **Authorize**.
+  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**.
   - Dev accounts `student1`/`student2`/`admin@campus.test` with password `password`, created by `UserSeeder` (#55; ids 1, 2, 3).
   - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64).
-  - `Clock` bean (Calin #27). `archunit-junit5` dependency (#62).
+  - `Clock` bean (Calin #27). `CurrentUser` bean (Stefania #74).
   - `UserApi` (real).
-  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24).
-  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36).
+  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24); admin CRUD for categories, lab rooms and assets, asset details, retire (Liviu #66).
+  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87).
   - **Incidents:** report → asset `UNDER_MAINTENANCE` + `AssetDamagedEvent` (Stefania #40).
   - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37).
+  - **ArchUnit rules** for module boundaries and coding conventions (Calin #76).
+  - **Frontend** (`frontend/`, Stefania #84–#86): Vite + React + TypeScript + Mantine scaffold, API client (token in `localStorage`, 401 → back to login), login page, layout, role-based routes, shared components; lint + build run in `ci`. Calin's My reservations page + calendar booking view (#87).
 - **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`.
-- **Open PRs:**
-  - Liviu's #66 (category, lab room and asset CRUD + retire): approved by Matei, needs a rebase onto `main`.
-  - Calin's #60 (lifecycle jobs), #80 (admin desk: search, check-out, return), #78 (availability): approved by Matei; they conflict with each other (methods added in the same spot), so rebase after each merge.
-  - Calin's #76 (ArchUnit rules): one rule (`controllers_must_not_accept_entities`) can never fail yet; fix before merge.
-- **Next for Matei:** `GET /api/v1/users/me`, then Terraform part 1 (W4).
-- **Prototype demo goal:** a Swagger run on a fresh database: login → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. All the code is on `main` except a way to create assets: it needs #66 (admin asset CRUD), since there is no catalog seed data yet. Checked locally on main + #66 (31 Oct): the whole flow works; `POST /incidents` also needs `severity` (e.g. `HIGH`).
+- **Open PRs:** only Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
+- **Next for Matei:** Terraform part 1 (W4, carried into W5), then IAM/SSM/budgets (W5).
+- **Prototype demo:** a Swagger run on a fresh database: login → admin creates assets → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. **All of it is on `main`** (checked locally on 31 Oct with all these PRs combined). `POST /incidents` also needs `severity` (e.g. `HIGH`).
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
 
 ---
