@@ -18,15 +18,17 @@ import {
   IconCalendarCheck,
   IconPlus,
 } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import {
   cancelReservation,
   fetchAssetSummary,
   fetchMyReservations,
+  fetchMyReservationSummary,
   type AssetSummary,
   type Reservation,
   type ReservationStatus,
+  type ReservationSummary,
 } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
@@ -110,10 +112,17 @@ export default function MyReservationsPage() {
   const [error, setError] = useState<unknown>(null)
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'past'>('all')
 
+  // Aggregate stats across all reservations, fetched from GET /api/v1/reservations/me/summary
+  const [summary, setSummary] = useState<ReservationSummary>({
+    activeCount: 0,
+    completedCount: 0,
+    reassignedCount: 0,
+  })
+
   // Cache for resolved asset names to enrich the table rows.
   const [assetCache, setAssetCache] = useState<Record<number, AssetSummary>>({})
 
-  // Increment this counter to re-fetch the current reservations page.
+  // Increment this counter to re-fetch the current reservations page and summary.
   const [reloadToken, setReloadToken] = useState(0)
 
   // Modal state for cancelling a reservation.
@@ -122,9 +131,32 @@ export default function MyReservationsPage() {
   const [cancelSubmitting, setCancelSubmitting] = useState(false)
   const [cancelError, setCancelError] = useState<unknown>(null)
 
+  // Fetch summary counts for the user across the entire database.
   useEffect(() => {
     let ignore = false
-    fetchMyReservations(pageNumber, 10)
+    fetchMyReservationSummary()
+      .then((data) => {
+        if (!ignore) setSummary(data)
+      })
+      .catch(() => {
+        // Non-blocking fallback if summary is unavailable
+      })
+    return () => {
+      ignore = true
+    }
+  }, [reloadToken])
+
+  // Fetch paginated reservations with server-side status filtering.
+  useEffect(() => {
+    let ignore = false
+    const statusFilter: ReservationStatus[] | undefined =
+      filterTab === 'active'
+        ? ['CONFIRMED', 'CHECKED_OUT', 'OVERDUE']
+        : filterTab === 'past'
+          ? ['RETURNED', 'CANCELLED', 'FORCE_CANCELLED', 'NO_SHOW']
+          : undefined
+
+    fetchMyReservations(pageNumber, 10, statusFilter)
       .then(async (response) => {
         if (ignore) return
         setPageData(response)
@@ -162,32 +194,13 @@ export default function MyReservationsPage() {
     return () => {
       ignore = true
     }
-  }, [pageNumber, reloadToken])
+  }, [pageNumber, filterTab, reloadToken])
 
-  // Filter content client-side based on the selected tab.
-  const filteredContent = useMemo(() => {
-    if (filterTab === 'active') {
-      return pageData.content.filter((r) => ['CONFIRMED', 'CHECKED_OUT', 'OVERDUE'].includes(r.status))
-    }
-    if (filterTab === 'past') {
-      return pageData.content.filter((r) => !['CONFIRMED', 'CHECKED_OUT', 'OVERDUE'].includes(r.status))
-    }
-    return pageData.content
-  }, [pageData.content, filterTab])
-
-  // Summary statistics for the user.
-  const activeCount = useMemo(
-    () => pageData.content.filter((r) => ['CONFIRMED', 'CHECKED_OUT', 'OVERDUE'].includes(r.status)).length,
-    [pageData.content],
-  )
-  const completedCount = useMemo(
-    () => pageData.content.filter((r) => r.status === 'RETURNED').length,
-    [pageData.content],
-  )
-  const movedCount = useMemo(
-    () => pageData.content.filter((r) => r.originalAssetId !== null).length,
-    [pageData.content],
-  )
+  function handleTabChange(val: string) {
+    setFilterTab(val as 'all' | 'active' | 'past')
+    setPageNumber(0)
+    setLoading(true)
+  }
 
   function handleStartCancel(reservation: Reservation) {
     setCancellingReservation(reservation)
@@ -291,11 +304,6 @@ export default function MyReservationsPage() {
     },
   ]
 
-  const displayedPageData: PageResponse<Reservation> = {
-    ...pageData,
-    content: filteredContent,
-  }
-
   return (
     <>
       <PageHeader
@@ -320,14 +328,19 @@ export default function MyReservationsPage() {
               </Text>
               <Group gap="xs" align="baseline" mt={2}>
                 <Text fw={700} size="xl">
-                  {activeCount}
+                  {summary.activeCount}
                 </Text>
                 <Text size="xs" c="dimmed">
                   of 2 max allowed
                 </Text>
               </Group>
             </div>
-            <ThemeIcon size={36} radius="md" variant="light" color={activeCount >= 2 ? 'orange' : 'campus'}>
+            <ThemeIcon
+              size={36}
+              radius="md"
+              variant="light"
+              color={summary.activeCount >= 2 ? 'orange' : 'campus'}
+            >
               <IconCalendar size={20} />
             </ThemeIcon>
           </Group>
@@ -340,7 +353,7 @@ export default function MyReservationsPage() {
                 Completed
               </Text>
               <Text fw={700} size="xl" mt={2}>
-                {completedCount}
+                {summary.completedCount}
               </Text>
             </div>
             <ThemeIcon size={36} radius="md" variant="light" color="green">
@@ -357,7 +370,7 @@ export default function MyReservationsPage() {
               </Text>
               <Group gap="xs" align="baseline" mt={2}>
                 <Text fw={700} size="xl">
-                  {movedCount}
+                  {summary.reassignedCount}
                 </Text>
                 <Text size="xs" c="dimmed">
                   moved by engine
@@ -375,17 +388,17 @@ export default function MyReservationsPage() {
       <Group justify="space-between" mb="sm">
         <SegmentedControl
           value={filterTab}
-          onChange={(val) => setFilterTab(val as 'all' | 'active' | 'past')}
+          onChange={handleTabChange}
           data={[
             { label: 'All bookings', value: 'all' },
-            { label: `Active (${activeCount})`, value: 'active' },
+            { label: `Active (${summary.activeCount})`, value: 'active' },
             { label: 'Past', value: 'past' },
           ]}
         />
       </Group>
 
       <PagedTable
-        page={displayedPageData}
+        page={pageData}
         columns={columns}
         rowKey={(r) => r.id}
         onPageChange={(newPage) => {
@@ -396,7 +409,9 @@ export default function MyReservationsPage() {
         emptyText={
           filterTab === 'active'
             ? 'No active bookings. Browse the catalog to book equipment.'
-            : 'No reservations found.'
+            : filterTab === 'past'
+              ? 'No past bookings found.'
+              : 'No reservations found.'
         }
       />
 

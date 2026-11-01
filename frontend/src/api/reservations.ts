@@ -56,13 +56,33 @@ export type AssetSummary = {
   status: 'AVAILABLE' | 'UNDER_MAINTENANCE' | 'RETIRED'
 }
 
+export type ReservationSummary = {
+  activeCount: number
+  completedCount: number
+  reassignedCount: number
+}
+
+/**
+ * Fetches the aggregate counts for the student's bookings (GET /api/v1/reservations/me/summary).
+ */
+export function fetchMyReservationSummary() {
+  return apiFetch<ReservationSummary>('/api/v1/reservations/me/summary')
+}
+
 /**
  * Fetches the paginated reservations belonging to the authenticated student (GET /api/v1/reservations/me).
+ * Supports single status or array of statuses for server-side filtering.
  */
-export function fetchMyReservations(page = 0, size = 10, status?: ReservationStatus) {
+export function fetchMyReservations(page = 0, size = 10, status?: ReservationStatus | ReservationStatus[]) {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   if (status) {
-    params.set('status', status)
+    if (Array.isArray(status)) {
+      for (const s of status) {
+        params.append('status', s)
+      }
+    } else {
+      params.set('status', status)
+    }
   }
   return apiFetch<PageResponse<Reservation>>(`/api/v1/reservations/me?${params.toString()}`)
 }

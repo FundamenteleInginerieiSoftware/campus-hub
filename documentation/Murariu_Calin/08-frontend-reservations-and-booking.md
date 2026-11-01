@@ -28,12 +28,12 @@ When students log into Campus Hub and navigate to "My reservations", they are gr
 ### 2. Google Calendar-Style Week Booking View (`CalendarBookingView`)
 Instead of typing abstract date-time strings into text inputs, students interact with a visual timetable modeled after Google Calendar:
 - **Time Window:** Displays Monday through Friday, 08:00 to 20:00 in 30-minute intervals matching laboratory opening hours.
-- **Visual State:** Confirmed bookings show as blocked cards, while free time slots remain clickable.
+- **Visual State & Real-Time Conflict Detection:** Students pick any 30-minute interval on the timetable; the component automatically validates opening hours and past time slots, and checks real-time slot availability via the backend availability endpoint (`/api/v1/reservations/availability`), reporting whether the slot is free or conflicted along with the exact RFC 9457 error code.
 - **Smart Duration Constraint at Closing Time (20:00 Rule):**
   - Lab rules state that bookings cannot extend past the 20:00 laboratory closing time.
   - When a student picks a late start time (e.g. 19:30), the selector **automatically greys out / disables** durations longer than 30 minutes (1h, 1.5h, 2h, etc.).
   - The duration is automatically capped to 30 minutes, preventing invalid requests before they reach the server.
-- **Instant Booking Confirmation:** Clicking "Confirm reservation" calls the backend API and redirects the user directly to their updated "My reservations" view.
+- **Instant Booking Confirmation:** Clicking "Confirm booking" calls the backend API and redirects the user directly to their updated "My reservations" view via React Router's `useNavigate` (preserving SPA client state without full page reloads).
 
 #### Screenshots — Interactive Booking Calendar & 20:00 Restriction:
 | Google Calendar Timetable | 20:00 Closing Rule Restriction (19:30 slot) |
@@ -73,11 +73,13 @@ When a student clicks on an equipment card in `/catalog`, you can display the Go
 
 ```tsx
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import CalendarBookingView from '../components/CalendarBookingView.tsx'
 import type { AssetSummary } from '../api/reservations.ts'
 
 export default function CatalogPage() {
   const [selectedAsset, setSelectedAsset] = useState<AssetSummary | null>(null)
+  const navigate = useNavigate()
 
   // If the student clicked "Book" or clicked on an asset card:
   if (selectedAsset) {
@@ -87,7 +89,7 @@ export default function CatalogPage() {
         onBack={() => setSelectedAsset(null)}
         onSuccess={(createdReservation) => {
           // Booking confirmed! Redirect student to their reservations page
-          window.location.href = '/reservations'
+          navigate('/reservations')
         }}
       />
     )
@@ -121,7 +123,7 @@ export default function CatalogPage() {
 #### `CalendarBookingView` Props:
 - `asset: AssetSummary` (required) — Object containing `id`, `name`, `model`, `categoryName`, `roomName`, and `status`.
 - `onBack: () => void` (required) — Callback invoked when the user clicks "← Back to catalog".
-- `onSuccess?: (reservation: Reservation) => void` (optional) — Callback invoked after successful booking. Default behavior redirects to `/reservations`.
+- `onSuccess?: (reservation: Reservation) => void` (optional) — Callback invoked after successful booking. If omitted, it automatically navigates to `/reservations` using React Router's `useNavigate()`.
 
 ---
 

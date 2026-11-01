@@ -5,9 +5,9 @@ import {
   Box,
   Button,
   Card,
+  Grid,
   Group,
   Paper,
-  SimpleGrid,
   Stack,
   Text,
   Tooltip,
@@ -22,6 +22,7 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
 import {
   checkAvailability,
   createReservation,
@@ -80,43 +81,87 @@ function addMinutesToTimeString(timeStr: string, minutes: number): string {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`
 }
 
+function findFirstValidSlotForDay(targetDay: Date, today: Date): string {
+  const isToday = formatDateKey(targetDay) === formatDateKey(today)
+  if (!isToday) {
+    return '09:00'
+  }
+  const currentTotalMins = today.getHours() * 60 + today.getMinutes()
+  for (const step of TIME_STEPS) {
+    const [h, m] = step.split(':').map(Number)
+    const slotMins = h * 60 + m
+    if (slotMins > currentTotalMins && slotMins <= 19 * 60 + 30) {
+      return step
+    }
+  }
+  return '09:00'
+}
+
+function getInitialSchedule(today: Date): { day: string; time: string; monday: Date } {
+  const dayOfWeek = today.getDay()
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  const currentTotalMins = today.getHours() * 60 + today.getMinutes()
+  const isTooLateToday = currentTotalMins >= 19 * 60 + 30
+
+  if (isWeekend) {
+    const nextMon = getMonday(today)
+    nextMon.setDate(nextMon.getDate() + 7)
+    return {
+      day: formatDateKey(nextMon),
+      time: '09:00',
+      monday: nextMon,
+    }
+  }
+
+  if (isTooLateToday) {
+    if (dayOfWeek === 5) {
+      const nextMon = getMonday(today)
+      nextMon.setDate(nextMon.getDate() + 7)
+      return {
+        day: formatDateKey(nextMon),
+        time: '09:00',
+        monday: nextMon,
+      }
+    }
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return {
+      day: formatDateKey(tomorrow),
+      time: '09:00',
+      monday: getMonday(today),
+    }
+  }
+
+  return {
+    day: formatDateKey(today),
+    time: findFirstValidSlotForDay(today, today),
+    monday: getMonday(today),
+  }
+}
+
 /**
  * Google Calendar-style weekly equipment scheduling and booking component.
  * Calin's booking view ready to be embedded into Liviu's catalog equipment pages.
  */
 export default function CalendarBookingView({ asset, onBack, onSuccess }: Props) {
+  const navigate = useNavigate()
   const [today] = useState(() => new Date())
+  const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
   const maxBookingDate = useMemo(() => new Date(today.getTime() + 14 * 86400000), [today])
 
-  // Current view's Monday (on weekends, show the upcoming week so slots are active)
-  const [currentMonday, setCurrentMonday] = useState(() => {
-    const dayOfWeek = today.getDay()
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      const nextMon = getMonday(today)
-      nextMon.setDate(nextMon.getDate() + 7)
-      return nextMon
-    }
-    return getMonday(today)
-  })
+  // Current view's Monday
+  const [currentMonday, setCurrentMonday] = useState(() => initialSchedule.monday)
 
   // Selected slot state
-  const [selectedDay, setSelectedDay] = useState<string>(() => {
-    const dayOfWeek = today.getDay()
-    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      return formatDateKey(today)
-    }
-    const nextMon = getMonday(today)
-    nextMon.setDate(nextMon.getDate() + 7)
-    return formatDateKey(nextMon)
-  })
-  const [selectedStartTime, setSelectedStartTime] = useState<string>('09:00')
+  const [selectedDay, setSelectedDay] = useState<string>(() => initialSchedule.day)
+  const [selectedStartTime, setSelectedStartTime] = useState<string>(() => initialSchedule.time)
   const [durationMinutes, setDurationMinutes] = useState<number>(60)
 
   const [availability, setAvailability] = useState<{
     checking: boolean
     data: AvailabilityResponse | null
     error: unknown
-  }>({ checking: false, data: null, error: null })
+  }>({ checking: true, data: null, error: null })
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
@@ -178,6 +223,17 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     }
   }, [asset.id, startIso, endIso])
 
+  function selectSlot(day: string, time: string) {
+    setSelectedDay(day)
+    setSelectedStartTime(time)
+    setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+  }
+
+  function handleDurationChange(val: number) {
+    setDurationMinutes(val)
+    setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+  }
+
   function handlePrevWeek() {
     setCurrentMonday((prev) => {
       const next = new Date(prev)
@@ -196,7 +252,9 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
 
   function handleToday() {
     setCurrentMonday(getMonday(today))
-    setSelectedDay(formatDateKey(today))
+    const todayKey = formatDateKey(today)
+    const validSlot = findFirstValidSlotForDay(today, today)
+    selectSlot(todayKey, validSlot)
   }
 
   async function handleConfirmBooking() {
@@ -210,6 +268,9 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
       })
       if (onSuccess) {
         onSuccess(res)
+      } else {
+        // Default redirect preserves SPA navigation state without full page reload
+        navigate('/reservations')
       }
     } catch (err) {
       setBookingError(err)
@@ -259,9 +320,9 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
       </Paper>
 
       {/* Booking Layout: Google Calendar-style Schedule + Confirmation Panel */}
-      <SimpleGrid cols={{ base: 1, md: 3 }} spacing="lg">
-        {/* Left Column (2 spans): Google Calendar Interactive Week View */}
-        <Box style={{ gridColumn: 'span 2' }}>
+      <Grid gap="lg">
+        {/* Left Column: Google Calendar Interactive Week View */}
+        <Grid.Col span={{ base: 12, md: 8 }}>
           <Paper withBorder p="md" radius="md" bg="var(--app-surface)">
             {/* Calendar Controls */}
             <Group justify="space-between" mb="md" wrap="wrap">
@@ -309,7 +370,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                           variant={isSelected ? 'filled' : 'default'}
                           color={isSelected ? 'campus' : undefined}
                           disabled={isDisabled}
-                          onClick={() => setDurationMinutes(dur.value)}
+                          onClick={() => handleDurationChange(dur.value)}
                           style={{
                             opacity: isDisabled ? 0.4 : 1,
                             cursor: isDisabled ? 'not-allowed' : 'pointer',
@@ -368,7 +429,15 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                     }}
                     onClick={() => {
                       if (!isPast && !isOutOfHorizon) {
-                        setSelectedDay(dayKey)
+                        let newTime = selectedStartTime
+                        if (dayKey === formatDateKey(today)) {
+                          const currentTotalMins = today.getHours() * 60 + today.getMinutes()
+                          const [selH, selM] = selectedStartTime.split(':').map(Number)
+                          if (selH * 60 + selM <= currentTotalMins) {
+                            newTime = findFirstValidSlotForDay(d, today)
+                          }
+                        }
+                        selectSlot(dayKey, newTime)
                       }
                     }}
                   >
@@ -410,18 +479,23 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                     {weekDays.map((d) => {
                       const dayKey = formatDateKey(d)
                       const isPastDay = d < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+                      const isToday = formatDateKey(d) === formatDateKey(today)
+                      const [stepH, stepM] = stepTime.split(':').map(Number)
+                      const currentTotalMins = today.getHours() * 60 + today.getMinutes()
+                      const stepTotalMins = stepH * 60 + stepM
+                      const isPastTimeToday = isToday && stepTotalMins <= currentTotalMins
+                      const isPastSlot = isPastDay || isPastTimeToday
                       const isOutOfHorizon = d > maxBookingDate
+                      const isCellDisabled = isPastSlot || isOutOfHorizon
                       const isSelectedSlot = dayKey === selectedDay && stepTime === selectedStartTime
 
                       // Check if this cell is inside the selected time block:
-                      const [h, m] = stepTime.split(':').map(Number)
-                      const currentMins = h * 60 + m
                       const [selH, selM] = selectedStartTime.split(':').map(Number)
                       const selStartMins = selH * 60 + selM
                       const isInsideSelectedBlock =
                         dayKey === selectedDay &&
-                        currentMins >= selStartMins &&
-                        currentMins < selStartMins + effectiveDuration
+                        stepTotalMins >= selStartMins &&
+                        stepTotalMins < selStartMins + effectiveDuration
 
                       return (
                         <Box
@@ -429,9 +503,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                           data-time={stepTime}
                           data-day={dayKey}
                           onClick={() => {
-                            if (!isPastDay && !isOutOfHorizon) {
-                              setSelectedDay(dayKey)
-                              setSelectedStartTime(stepTime)
+                            if (!isCellDisabled) {
+                              selectSlot(dayKey, stepTime)
                             }
                           }}
                           style={{
@@ -449,8 +522,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            cursor: isPastDay || isOutOfHorizon ? 'not-allowed' : 'pointer',
-                            opacity: isPastDay || isOutOfHorizon ? 0.35 : 1,
+                            cursor: isCellDisabled ? 'not-allowed' : 'pointer',
+                            opacity: isCellDisabled ? 0.35 : 1,
                             fontSize: '11px',
                             fontWeight: 600,
                             transition: 'background 0.15s ease',
@@ -490,16 +563,17 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
               </Group>
             </Group>
           </Paper>
-        </Box>
+        </Grid.Col>
 
-        {/* Right Column (1 span): Booking Confirmation & Rule Checks */}
-        <Box>
+        {/* Right Column: Booking Confirmation & Rule Checks */}
+        <Grid.Col span={{ base: 12, md: 4 }}>
           <Card withBorder p="lg" radius="md" bg="var(--app-surface)" style={{ position: 'sticky', top: 80 }}>
             <Text fw={700} size="lg" mb="sm">
               Confirm Reservation
             </Text>
 
             <ErrorAlert error={bookingError} />
+            <ErrorAlert error={availability.error} />
 
             <Stack gap="sm">
               <div>
@@ -598,8 +672,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
               </Button>
             </Stack>
           </Card>
-        </Box>
-      </SimpleGrid>
+        </Grid.Col>
+      </Grid>
     </Stack>
   )
 }
