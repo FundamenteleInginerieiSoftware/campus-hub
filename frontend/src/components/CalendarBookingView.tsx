@@ -81,6 +81,15 @@ function addMinutesToTimeString(timeStr: string, minutes: number): string {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`
 }
 
+function formatFriendlyDate(dateKey: string): string {
+  if (!dateKey) return ''
+  const [y, m, d] = dateKey.split('-').map(Number)
+  const dateObj = new Date(y, m - 1, d)
+  const dayName = DAY_NAMES[dateObj.getDay() === 0 ? 4 : dateObj.getDay() - 1] ?? 'Day'
+  const monthName = MONTH_NAMES[m - 1] ?? ''
+  return `${dayName}, ${d} ${monthName} ${y}`
+}
+
 function findFirstValidSlotForDay(targetDay: Date, today: Date): string {
   const isToday = formatDateKey(targetDay) === formatDateKey(today)
   if (!isToday) {
@@ -234,20 +243,41 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
+  const isPrevWeekDisabled = currentMonday.getTime() <= getMonday(today).getTime()
+  const isNextWeekDisabled = currentMonday.getTime() + 7 * 86400000 > maxBookingDate.getTime()
+
   function handlePrevWeek() {
-    setCurrentMonday((prev) => {
-      const next = new Date(prev)
-      next.setDate(next.getDate() - 7)
-      return next
-    })
+    if (isPrevWeekDisabled) return
+    const prevMon = new Date(currentMonday)
+    prevMon.setDate(prevMon.getDate() - 7)
+    setCurrentMonday(prevMon)
+
+    // Shift selectedDay back by 7 days so it stays in the displayed week
+    const currSel = new Date(selectedDay)
+    const prevSel = new Date(currSel)
+    prevSel.setDate(currSel.getDate() - 7)
+
+    const isPast = prevSel < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const targetDay = !isPast ? prevSel : today
+    const targetKey = formatDateKey(targetDay)
+    const targetTime =
+      targetKey === formatDateKey(today) ? findFirstValidSlotForDay(today, today) : selectedStartTime
+    selectSlot(targetKey, targetTime)
   }
 
   function handleNextWeek() {
-    setCurrentMonday((prev) => {
-      const next = new Date(prev)
-      next.setDate(next.getDate() + 7)
-      return next
-    })
+    if (isNextWeekDisabled) return
+    const nextMon = new Date(currentMonday)
+    nextMon.setDate(nextMon.getDate() + 7)
+    setCurrentMonday(nextMon)
+
+    // Shift selectedDay forward by 7 days so it stays in the displayed week
+    const currSel = new Date(selectedDay)
+    const nextSel = new Date(currSel)
+    nextSel.setDate(currSel.getDate() + 7)
+
+    const targetDay = nextSel <= maxBookingDate ? nextSel : nextMon
+    selectSlot(formatDateKey(targetDay), selectedStartTime)
   }
 
   function handleToday() {
@@ -269,8 +299,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
       if (onSuccess) {
         onSuccess(res)
       } else {
-        // Default redirect preserves SPA navigation state without full page reload
-        navigate('/reservations')
+        // Default redirect preserves SPA navigation state and passes bookedId for confirmation banner
+        navigate('/reservations', { state: { bookedId: res.id } })
       }
     } catch (err) {
       setBookingError(err)
@@ -319,6 +349,12 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
         </Group>
       </Paper>
 
+      {asset.status !== 'AVAILABLE' && (
+        <Alert color="orange" title="Equipment Unavailable">
+          This equipment is currently {asset.status === 'UNDER_MAINTENANCE' ? 'under maintenance' : 'retired'} and cannot accept new reservations.
+        </Alert>
+      )}
+
       {/* Booking Layout: Google Calendar-style Schedule + Confirmation Panel */}
       <Grid gap="lg">
         {/* Left Column: Google Calendar Interactive Week View */}
@@ -327,13 +363,25 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
             {/* Calendar Controls */}
             <Group justify="space-between" mb="md" wrap="wrap">
               <Group gap="xs">
-                <ActionIcon variant="default" size="lg" onClick={handlePrevWeek} aria-label="Previous week">
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  onClick={handlePrevWeek}
+                  disabled={isPrevWeekDisabled}
+                  aria-label="Previous week"
+                >
                   <IconChevronLeft size={18} />
                 </ActionIcon>
                 <Button variant="default" size="xs" onClick={handleToday}>
                   Today
                 </Button>
-                <ActionIcon variant="default" size="lg" onClick={handleNextWeek} aria-label="Next week">
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  onClick={handleNextWeek}
+                  disabled={isNextWeekDisabled}
+                  aria-label="Next week"
+                >
                   <IconChevronRight size={18} />
                 </ActionIcon>
 
@@ -594,7 +642,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 </Text>
                 <Group gap="xs" mt={2}>
                   <IconCalendar size={16} />
-                  <Text fw={600}>{selectedDay}</Text>
+                  <Text fw={600}>{formatFriendlyDate(selectedDay)}</Text>
                 </Group>
               </div>
 
@@ -665,7 +713,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 fullWidth
                 onClick={handleConfirmBooking}
                 loading={bookingLoading}
-                disabled={!isSlotAvailable || availability.checking}
+                disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE'}
                 mt="xs"
               >
                 Confirm booking

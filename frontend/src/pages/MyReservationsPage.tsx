@@ -1,4 +1,5 @@
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -16,10 +17,11 @@ import {
   IconArrowsExchange,
   IconCalendar,
   IconCalendarCheck,
+  IconCheck,
   IconPlus,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import {
   cancelReservation,
   fetchAssetSummary,
@@ -111,6 +113,16 @@ export default function MyReservationsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'past'>('all')
+
+  const location = useLocation()
+  const [actionNotice, setActionNotice] = useState<string | null>(() => {
+    const state = location.state as { bookedId?: number } | null
+    if (state?.bookedId) {
+      window.history.replaceState({}, document.title)
+      return `Booking confirmed! Reservation #${state.bookedId} has been added to your upcoming bookings.`
+    }
+    return null
+  })
 
   // Aggregate stats across all reservations, fetched from GET /api/v1/reservations/me/summary
   const [summary, setSummary] = useState<ReservationSummary>({
@@ -210,13 +222,15 @@ export default function MyReservationsPage() {
 
   async function handleConfirmCancel() {
     if (!cancellingReservation) return
+    const cancelledId = cancellingReservation.id
     setCancelSubmitting(true)
     setCancelError(null)
     try {
-      await cancelReservation(cancellingReservation.id)
+      await cancelReservation(cancelledId)
       closeCancelModal()
       setCancellingReservation(null)
-      // Refresh the current page.
+      setActionNotice(`Reservation #${cancelledId} was successfully cancelled.`)
+      // Refresh the current page and summary counters.
       setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
@@ -310,11 +324,33 @@ export default function MyReservationsPage() {
         title="My reservations"
         description="View your lab bookings and manage upcoming slots. You can cancel any confirmed booking until its start time."
         actions={
-          <Button component={Link} to="/catalog" leftSection={<IconPlus size={16} />}>
-            Book equipment
-          </Button>
+          <Tooltip
+            label="You already have 2 active bookings (the maximum allowed). Return or cancel a booking before making a new reservation."
+            disabled={summary.activeCount < 2}
+          >
+            <Button
+              component={Link}
+              to="/catalog"
+              leftSection={<IconPlus size={16} />}
+              color={summary.activeCount >= 2 ? 'gray' : 'campus'}
+            >
+              Book equipment
+            </Button>
+          </Tooltip>
         }
       />
+
+      {actionNotice && (
+        <Alert
+          color="green"
+          icon={<IconCheck size={18} />}
+          withCloseButton
+          onClose={() => setActionNotice(null)}
+          mb="md"
+        >
+          {actionNotice}
+        </Alert>
+      )}
 
       <ErrorAlert error={error} />
 
@@ -334,6 +370,11 @@ export default function MyReservationsPage() {
                   of 2 max allowed
                 </Text>
               </Group>
+              {summary.activeCount >= 2 && (
+                <Badge color="orange" size="xs" variant="light" mt={4}>
+                  Limit reached (2/2)
+                </Badge>
+              )}
             </div>
             <ThemeIcon
               size={36}

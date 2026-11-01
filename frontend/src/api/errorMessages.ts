@@ -10,6 +10,8 @@ const MESSAGES: Record<string, string> = {
   EMAIL_TAKEN: 'An account with this email already exists.',
 
   // Reservation error codes (api-contract §5, Calin)
+  ASSET_NOT_FOUND: 'The requested equipment was not found.',
+  NO_ASSETS_AVAILABLE: 'No free equipment of this type remains in the selected time window.',
   RESERVATION_NOT_FOUND: 'Reservation was not found.',
   RESERVATION_CONFLICT: 'This equipment is already booked for the selected time slot.',
   ASSET_NOT_BOOKABLE: 'This equipment is currently not available for booking (under maintenance or retired).',
