@@ -53,10 +53,16 @@ Instead of typing abstract date-time strings into text inputs, students interact
 
 | File | Change | Description |
 |---|---|---|
-| `frontend/src/api/reservations.ts` | Created | API client methods (`fetchMyReservations`, `fetchReservationById`, `cancelReservation`, `createReservation`, `checkAvailability`, `fetchAssetSummary`) and TypeScript types (`Reservation`, `ReservationStatus`, `AvailabilityResponse`, `AssetSummary`) |
-| `frontend/src/api/errorMessages.ts` | Modified | Added user-friendly Romanian/English descriptions for reservation error codes (`RESERVATION_CONFLICT`, `RESERVATION_LIMIT_REACHED`, `OUTSIDE_OPENING_HOURS`, `BOOKING_IN_PAST`, `INVALID_DURATION`, `ASSET_NOT_BOOKABLE`) |
-| `frontend/src/pages/MyReservationsPage.tsx` | Created | Full dashboard page for `/reservations` featuring statistics cards, segmented tab filter, `PagedTable`, cancellation modal, and redirect to catalog |
-| `frontend/src/components/CalendarBookingView.tsx` | Created | Interactive Google Calendar timetable with week switcher, 30m slot grid, real-time availability indicator, and 20:00 closing duration limiter |
+| `backend/.../ReservationController.java` | Modified | Added `GET /api/v1/reservations/me/summary` aggregate counts and multi-status query support on `/me` |
+| `backend/.../ReservationService.java` | Modified | Implemented `getMySummary()` and multi-status `getMyReservations` |
+| `backend/.../ReservationRepository.java` | Modified | Added `countByUserIdAndOriginalAssetIdIsNotNull` and `findByUserIdAndStatusInOrderByStartTimeAsc` |
+| `backend/.../ReservationSummaryResponse.java` | Created | DTO record for active, completed, and reassigned aggregate counts |
+| `docs/api-contract.md` | Modified | Updated contracts with `/me/summary` and `/me` multi-status filter parameters |
+| `docs/modules/reservation.md` | Modified | Updated reservation frontend and REST integration documentation |
+| `frontend/src/api/reservations.ts` | Created | API client methods (`fetchMyReservations`, `fetchMyReservationSummary`, `fetchReservationById`, `cancelReservation`, `createReservation`, `checkAvailability`, `fetchAssetSummary`) and TypeScript types (`Reservation`, `ReservationStatus`, `ReservationSummary`, `AvailabilityResponse`, `AssetSummary`) |
+| `frontend/src/api/errorMessages.ts` | Modified | Added user-friendly descriptions for reservation error codes (`RESERVATION_CONFLICT`, `RESERVATION_LIMIT_REACHED`, `OUTSIDE_OPENING_HOURS`, `BOOKING_IN_PAST`, `INVALID_DURATION`, `ASSET_NOT_BOOKABLE`, `ASSET_NOT_FOUND`, `NO_ASSETS_AVAILABLE`) |
+| `frontend/src/pages/MyReservationsPage.tsx` | Created | Full dashboard page for `/reservations` featuring server-backed statistics cards, server-side segmented filter tabs, `PagedTable`, cancellation modal, and instant confirmation alerts |
+| `frontend/src/components/CalendarBookingView.tsx` | Created | Interactive Google Calendar timetable with synchronized week navigation, responsive Mantine Grid layout, live availability checks, RFC 9457 error display, and 20:00 closing duration limiter |
 | `frontend/src/App.tsx` | Modified | Connected route `/reservations` to `<MyReservationsPage />`; kept `/catalog` as Liviu's `<PlaceholderPage>` |
 | `documentation/Murariu_Calin/08-frontend-reservations-and-booking.md` | Created | Personal documentation and teammate integration guide |
 
