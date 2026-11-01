@@ -5,11 +5,11 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import App from './App.tsx'
 import AuthProvider from './auth/AuthProvider.tsx'
-import { theme } from './theme.ts'
+import { cssVariablesResolver, theme } from './theme.ts'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="light">
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} defaultColorScheme="light">
       <BrowserRouter>
         <AuthProvider>
           <App />
