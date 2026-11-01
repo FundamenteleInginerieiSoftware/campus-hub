@@ -20,10 +20,14 @@ When students log into Campus Hub and navigate to "My reservations", they are gr
 - **Auto-Reassignment Indicator:** If equipment was damaged and the engine substituted the asset, a badge clearly displays `"Reassigned by engine (originally: Asset #X)"`.
 - **Cancellation Flow:** For upcoming confirmed reservations, students can cancel with a single click after confirming in a safe modal dialog.
 
-#### Screenshots — My Reservations Dashboard:
+#### Screenshots — My Reservations Dashboard & Cancellation Modal:
 | Light Mode | Dark Mode |
 |---|---|
 | ![My Reservations Light](../../docs/screenshots/01-my-reservations-light.png) | ![My Reservations Dark](../../docs/screenshots/02-my-reservations-dark.png) |
+
+| Safe Cancellation Confirmation Modal |
+|---|
+| ![Cancel Modal](../../docs/screenshots/03-cancel-reservation-modal.png) |
 
 ### 2. Google Calendar-Style Week Booking View (`CalendarBookingView`)
 Instead of typing abstract date-time strings into text inputs, students interact with a visual timetable modeled after Google Calendar:
@@ -35,14 +39,14 @@ Instead of typing abstract date-time strings into text inputs, students interact
   - The duration is automatically capped to 30 minutes, preventing invalid requests before they reach the server.
 - **Instant Booking Confirmation:** Clicking "Confirm booking" calls the backend API and redirects the user directly to their updated "My reservations" view via React Router's `useNavigate` (preserving SPA client state without full page reloads).
 
-#### Screenshots — Interactive Booking Calendar & 20:00 Restriction:
+#### Screenshots — Interactive Booking Calendar & Confirmation Banner:
 | Google Calendar Timetable | 20:00 Closing Rule Restriction (19:30 slot) |
 |---|---|
 | ![Booking Calendar Week](../../docs/screenshots/04-calendar-booking-week.png) | ![Closing Rule 19:30](../../docs/screenshots/05-closing-rule-1930.png) |
 
-| Calendar in Dark Mode |
-|---|
-| ![Calendar Dark](../../docs/screenshots/06-calendar-booking-dark.png) |
+| Calendar in Dark Mode | Instant Booking Confirmation Banner |
+|---|---|
+| ![Calendar Dark](../../docs/screenshots/06-calendar-booking-dark.png) | ![Booking Confirmed Banner](../../docs/screenshots/07-booking-confirmed-banner.png) |
 
 
 ---
