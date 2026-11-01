@@ -20,6 +20,11 @@ When students log into Campus Hub and navigate to "My reservations", they are gr
 - **Auto-Reassignment Indicator:** If equipment was damaged and the engine substituted the asset, a badge clearly displays `"Reassigned by engine (originally: Asset #X)"`.
 - **Cancellation Flow:** For upcoming confirmed reservations, students can cancel with a single click after confirming in a safe modal dialog.
 
+#### Screenshots — My Reservations Dashboard:
+| Light Mode | Dark Mode |
+|---|---|
+| ![My Reservations Light](../../docs/screenshots/01-my-reservations-light.png) | ![My Reservations Dark](../../docs/screenshots/02-my-reservations-dark.png) |
+
 ### 2. Google Calendar-Style Week Booking View (`CalendarBookingView`)
 Instead of typing abstract date-time strings into text inputs, students interact with a visual timetable modeled after Google Calendar:
 - **Time Window:** Displays Monday through Friday, 08:00 to 20:00 in 30-minute intervals matching laboratory opening hours.
@@ -29,6 +34,16 @@ Instead of typing abstract date-time strings into text inputs, students interact
   - When a student picks a late start time (e.g. 19:30), the selector **automatically greys out / disables** durations longer than 30 minutes (1h, 1.5h, 2h, etc.).
   - The duration is automatically capped to 30 minutes, preventing invalid requests before they reach the server.
 - **Instant Booking Confirmation:** Clicking "Confirm reservation" calls the backend API and redirects the user directly to their updated "My reservations" view.
+
+#### Screenshots — Interactive Booking Calendar & 20:00 Restriction:
+| Google Calendar Timetable | 20:00 Closing Rule Restriction (19:30 slot) |
+|---|---|
+| ![Booking Calendar Week](../../docs/screenshots/04-calendar-booking-week.png) | ![Closing Rule 19:30](../../docs/screenshots/05-closing-rule-1930.png) |
+
+| Calendar in Dark Mode |
+|---|
+| ![Calendar Dark](../../docs/screenshots/06-calendar-booking-dark.png) |
+
 
 ---
 
