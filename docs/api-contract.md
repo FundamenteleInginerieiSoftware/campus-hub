@@ -122,7 +122,7 @@ Validation errors (400) add a list of field errors:
 
 | Exception (`common.error`) | Status |
 |---|---|
-| `BadRequestException(code, msg)` | 400 |
+| `BadRequestException(code, msg)`, `InvalidParameterException(msg)` | 400 |
 | `UnauthorizedException(code, msg)` | 401 |
 | `ForbiddenException(code, msg)` | 403 |
 | `NotFoundException(code, msg)` | 404 |
@@ -306,16 +306,24 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 
 ---
 
-### Catalog endpoints — Assets Details & Admin Inventory (Liviu)
+### Catalog endpoints — Assets Search, Details & Admin Inventory (Liviu)
 
 All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
 
 | Method & Path | Access | Response | Errors |
 |---|---|---|---|
+| `GET /api/v1/assets` | `STUDENT`, `ADMIN` | `200` `PageResponse<AssetResponse>` | `400 INVALID_PARAMETER` |
 | `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
 | `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
 | `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
 | `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
+
+`GET /api/v1/assets` optional query parameters:
+- `search`: case-insensitive substring match across `name`, `model`, and `serialNumber`
+- `categoryId`: numeric category ID
+- `labRoomId`: numeric lab room ID
+- `status`: `AVAILABLE | UNDER_MAINTENANCE | RETIRED` (retired items are hidden from `STUDENT` searches; `ADMIN` sees all statuses)
+- `page` (default `0`, `>= 0`), `size` (default `20`, `1..100`), `sort` (default `name,asc`; whitelisted fields: `name`, `model`, `serialNumber`, `status`, `createdAt`, `updatedAt`, direction `asc` or `desc`)
 
 ```json
 // CreateAssetRequest
