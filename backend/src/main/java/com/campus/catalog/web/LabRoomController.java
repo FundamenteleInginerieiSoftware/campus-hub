@@ -33,19 +33,19 @@ public class LabRoomController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a lab room (409 LAB_ROOM_CODE_TAKEN if duplicate)")
     public LabRoomResponse create(@Valid @RequestBody LabRoomRequest request) {
-        return labRoomService.create(request, AdminActor.currentUserId());
+        return labRoomService.create(request);
     }
 
     @PutMapping("/api/v1/admin/lab-rooms/{id}")
     @Operation(summary = "Update a lab room (404 LAB_ROOM_NOT_FOUND, 409 LAB_ROOM_CODE_TAKEN)")
     public LabRoomResponse update(@PathVariable Long id, @Valid @RequestBody LabRoomRequest request) {
-        return labRoomService.update(id, request, AdminActor.currentUserId());
+        return labRoomService.update(id, request);
     }
 
     @DeleteMapping("/api/v1/admin/lab-rooms/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete an unused lab room (409 LAB_ROOM_IN_USE if assets reference it)")
     public void delete(@PathVariable Long id) {
-        labRoomService.delete(id, AdminActor.currentUserId());
+        labRoomService.delete(id);
     }
 }

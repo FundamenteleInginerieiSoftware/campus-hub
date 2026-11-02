@@ -23,8 +23,8 @@ These two PRs expose the REST endpoints for managing laboratory inventory and re
 
 | Area | Files | Purpose |
 |---|---|---|
-| `catalog/web/` | `CategoryRequest`, `CategoryResponse`, `LabRoomRequest`, `LabRoomResponse`, `CreateAssetRequest`, `UpdateAssetRequest`, `AssetResponse`, `AdminActor`, `CategoryController`, `LabRoomController`, `AssetController` | Validation (`@Valid`), flat DTO `record`s (never exposing `@Entity`), Swagger annotations, and JWT `sub` extraction until `CurrentUser` (#40 / #69) lands |
-| `catalog/service/` | `CategoryService`, `LabRoomService`, `AssetService` | `@Transactional` business logic, race-safe uniqueness handling (`DataIntegrityViolationException` -> `409`), and `AuditService.record(...)` calls |
+| `catalog/web/` | `CategoryRequest`, `CategoryResponse`, `LabRoomRequest`, `LabRoomResponse`, `CreateAssetRequest`, `UpdateAssetRequest`, `AssetResponse`, `CategoryController`, `LabRoomController`, `AssetController` | Validation (`@Valid`), flat DTO `record`s (never exposing `@Entity`), and Swagger annotations |
+| `catalog/service/` | `CategoryService`, `LabRoomService`, `AssetService` | `@Transactional` business logic, race-safe uniqueness handling (`DataIntegrityViolationException` -> `409`), actor resolution via injected `CurrentUser`, whole-second timestamps, and `AuditService.record(...)` calls |
 | `catalog/repository/` | `CategoryRepository`, `LabRoomRepository`, `AssetRepository` | `existsBy...IgnoreCaseAndIdNot` for rename checks and `@EntityGraph(attributePaths = {"category", "labRoom"})` on `findWithDetailsById` |
 
 ### Key design choices

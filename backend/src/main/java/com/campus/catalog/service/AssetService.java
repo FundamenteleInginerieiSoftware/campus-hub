@@ -12,8 +12,10 @@ import com.campus.catalog.web.UpdateAssetRequest;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,6 +30,7 @@ public class AssetService {
     private final CategoryRepository categoryRepository;
     private final LabRoomRepository labRoomRepository;
     private final AuditService auditService;
+    private final CurrentUser currentUser;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -39,7 +42,7 @@ public class AssetService {
     }
 
     @Transactional
-    public AssetResponse create(CreateAssetRequest request, Long actorId) {
+    public AssetResponse create(CreateAssetRequest request) {
         String normalizedSerial = request.serialNumber().trim().toUpperCase(Locale.ROOT);
         if (assetRepository.existsBySerialNumberIgnoreCase(normalizedSerial)) {
             throw serialTaken(normalizedSerial);
@@ -49,18 +52,12 @@ public class AssetService {
         LabRoom labRoom = findLabRoomOrThrow(request.labRoomId());
 
         Asset asset = new Asset(
-                request.name(),
-                request.model(),
-                normalizedSerial,
-                request.description(),
-                category,
-                labRoom,
-                LocalDateTime.now(clock));
+                request.name(), request.model(), normalizedSerial, request.description(), category, labRoom, now());
 
         try {
             Asset saved = assetRepository.saveAndFlush(asset);
             auditService.record(
-                    actorId,
+                    currentUser.id(),
                     "ASSET_CREATED",
                     "ASSET",
                     saved.getId(),
@@ -74,7 +71,7 @@ public class AssetService {
     }
 
     @Transactional
-    public AssetResponse update(Long id, UpdateAssetRequest request, Long actorId) {
+    public AssetResponse update(Long id, UpdateAssetRequest request) {
         Asset asset = assetRepository
                 .findWithDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
@@ -82,30 +79,36 @@ public class AssetService {
         Category category = findCategoryOrThrow(request.categoryId());
         LabRoom labRoom = findLabRoomOrThrow(request.labRoomId());
 
-        asset.updateDetails(
-                request.name(), request.model(), request.description(), category, labRoom, LocalDateTime.now(clock));
+        asset.updateDetails(request.name(), request.model(), request.description(), category, labRoom, now());
         Asset saved = assetRepository.saveAndFlush(asset);
-        auditService.record(actorId, "ASSET_UPDATED", "ASSET", saved.getId(), "Updated asset " + saved.getName());
+        auditService.record(
+                currentUser.id(), "ASSET_UPDATED", "ASSET", saved.getId(), "Updated asset " + saved.getName());
         return AssetResponse.from(saved);
     }
 
     // Uses findByIdForUpdate so a student booking in flight (CatalogApi.lockForBooking) cannot pass
     // the availability check while an admin is retiring the same asset.
     @Transactional
-    public AssetResponse retire(Long id, Long actorId) {
+    public AssetResponse retire(Long id) {
         Asset asset = assetRepository
                 .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
 
-        asset.retire(LocalDateTime.now(clock));
+        asset.retire(now());
         Asset saved = assetRepository.saveAndFlush(asset);
         auditService.record(
-                actorId,
+                currentUser.id(),
                 "ASSET_RETIRED",
                 "ASSET",
                 saved.getId(),
                 "Retired asset " + saved.getName() + " (S/N " + saved.getSerialNumber() + ")");
         return AssetResponse.from(saved);
+    }
+
+    // Truncated to whole seconds so the response returned right after create/update matches
+    // subsequent reads from PostgreSQL and the ISO-8601 format in api-contract.md.
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 
     private Category findCategoryOrThrow(Long categoryId) {

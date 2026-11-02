@@ -16,6 +16,7 @@ import com.campus.catalog.web.CategoryResponse;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,9 @@ class CategoryServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private CurrentUser currentUser;
+
     @InjectMocks
     private CategoryService categoryService;
 
@@ -56,9 +60,10 @@ class CategoryServiceTest {
         Category saved = new Category("Oscilloscopes", "Signal measurement");
         when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
         when(categoryRepository.saveAndFlush(any(Category.class))).thenReturn(saved);
+        when(currentUser.id()).thenReturn(3L);
 
         CategoryResponse response =
-                categoryService.create(new CategoryRequest("  Oscilloscopes  ", "Signal measurement"), 3L);
+                categoryService.create(new CategoryRequest("  Oscilloscopes  ", "Signal measurement"));
 
         assertEquals("Oscilloscopes", response.name());
         verify(auditService)
@@ -70,8 +75,7 @@ class CategoryServiceTest {
         when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(true);
 
         ConflictException ex = assertThrows(
-                ConflictException.class,
-                () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc"), 3L));
+                ConflictException.class, () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
 
         assertEquals("CATEGORY_NAME_TAKEN", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
@@ -82,7 +86,7 @@ class CategoryServiceTest {
         when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
 
         NotFoundException ex = assertThrows(
-                NotFoundException.class, () -> categoryService.update(99L, new CategoryRequest("Cameras", "Desc"), 3L));
+                NotFoundException.class, () -> categoryService.update(99L, new CategoryRequest("Cameras", "Desc")));
 
         assertEquals("CATEGORY_NOT_FOUND", ex.getCode());
     }
@@ -93,7 +97,7 @@ class CategoryServiceTest {
         when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
         when(assetRepository.existsByCategoryId(5L)).thenReturn(true);
 
-        ConflictException ex = assertThrows(ConflictException.class, () -> categoryService.delete(5L, 3L));
+        ConflictException ex = assertThrows(ConflictException.class, () -> categoryService.delete(5L));
 
         assertEquals("CATEGORY_IN_USE", ex.getCode());
         verify(categoryRepository, never()).delete(any());
@@ -104,8 +108,9 @@ class CategoryServiceTest {
         Category existing = new Category("Oscilloscopes", "Desc");
         when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
         when(assetRepository.existsByCategoryId(5L)).thenReturn(false);
+        when(currentUser.id()).thenReturn(3L);
 
-        categoryService.delete(5L, 3L);
+        categoryService.delete(5L);
 
         verify(categoryRepository).delete(existing);
         verify(categoryRepository).flush();

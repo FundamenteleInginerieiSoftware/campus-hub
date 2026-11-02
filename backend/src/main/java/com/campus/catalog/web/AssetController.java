@@ -31,19 +31,19 @@ public class AssetController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Register a new equipment item (409 SERIAL_NUMBER_TAKEN, 404 category/room missing)")
     public AssetResponse create(@Valid @RequestBody CreateAssetRequest request) {
-        return assetService.create(request, AdminActor.currentUserId());
+        return assetService.create(request);
     }
 
     @PutMapping("/api/v1/admin/assets/{id}")
     @Operation(summary = "Update equipment details (409 ASSET_RETIRED if already retired)")
     public AssetResponse update(@PathVariable Long id, @Valid @RequestBody UpdateAssetRequest request) {
-        return assetService.update(id, request, AdminActor.currentUserId());
+        return assetService.update(id, request);
     }
 
     // Assets are never hard-deleted because reservations and incidents reference them.
     @PostMapping("/api/v1/admin/assets/{id}/retire")
     @Operation(summary = "Retire an equipment item instead of deleting it (409 ASSET_RETIRED if already retired)")
     public AssetResponse retire(@PathVariable Long id) {
-        return assetService.retire(id, AdminActor.currentUserId());
+        return assetService.retire(id);
     }
 }
