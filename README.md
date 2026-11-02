@@ -11,7 +11,7 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (31 Oct 2026, week 4):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), dev test accounts and `CurrentUser`**, the **catalog** (`assets`, `CatalogApi`), **reservations** (booking with overlap check, my reservations, cancel), **incident reporting** and the **auto-reassignment engine**. The prototype demo needs one more PR: #66 (admins create assets; there is no catalog seed data yet). The frontend is not there yet. **The next three weeks, per member: [`docs/plan-w4-w6.md`](docs/plan-w4-w6.md).** New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
+> **Status (2 Nov 2026, week 5):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), `/users/me`, dev test accounts and `CurrentUser`**, the **catalog** with admin CRUD and retire, **reservations** (booking with overlap check, my reservations, cancel, availability, admin check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine** and **ArchUnit** architecture rules. **The whole prototype demo now runs on `main`** (admins create the assets in Swagger; there is no catalog seed data yet). The **frontend** has started: scaffold, login, layout and routes, My reservations and the booking calendar (`cd frontend && npm ci && npm run dev`). **The next three weeks, per member: [`docs/plan-w4-w6.md`](docs/plan-w4-w6.md).** New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
 
 ---
 
@@ -180,7 +180,7 @@ Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHu
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 31 Oct 2026**; update it when PRs merge.
+What is on `main` and what is still in review, per member. **As of 2 Nov 2026**; update it when PRs merge.
 
 ### Matei Necula: cloud, security & auth
 
@@ -203,9 +203,11 @@ What is on `main` and what is still in review, per member. **As of 31 Oct 2026**
 | `archunit-junit5` added for Calin's architecture tests | #62 |
 | Security tests probe paths no controller maps | #70 |
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
-| Personal docs 01-16 | #14 + each PR above |
+| `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
+| Status updates in README + AGENTS | #50, #56, #81 |
+| Personal docs 01-17 | #14 + each PR above |
 
-**Next:** `GET /api/v1/users/me`, then Terraform part 1 for AWS (W4).
+**Next:** Terraform part 1 for AWS (W4, carried into W5), then IAM, SSM and budgets (W5).
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -218,10 +220,7 @@ What is on `main` and what is still in review, per member. **As of 31 Oct 2026**
 | Catalog: `categories`, `lab_rooms`, `assets` tables + entities, real `CatalogApi` (incl. `lockForBooking`), `docs/modules/catalog.md` | #24 |
 | Real `AuditService` writing the `audit_logs` table | #64 |
 | Personal docs W2-W4 | #68 |
-
-| In review | PR | State |
-|---|---|---|
-| Category, lab room and asset CRUD + retire (admin), asset details | #66 | approved; needs a rebase onto `main` |
+| Category, lab room and asset CRUD + retire (admin), asset details | #66 (+ #73) |
 
 **Next (week plan):** search/filter/paging (W5); agree with Calin how retiring an asset moves its future bookings (W7).
 
@@ -235,13 +234,15 @@ What is on `main` and what is still in review, per member. **As of 31 Oct 2026**
 | My reservations, cancel, facade, seeder | #36 |
 | Auto-reassignment engine on `AssetDamagedEvent` (same model, then same category, else cancel) | #37 |
 | Reservation + reassignment docs | #39 |
+| ArchUnit module boundary and coding convention rules | #76 |
+| Admin desk: reservation search, check-out, return | #80 |
+| Check-out/return windows, scheduled no-show and overdue jobs | #60 |
+| Equipment availability endpoint | #78 |
+| Frontend: My reservations page + calendar booking view, `/reservations/me/summary` | #87 |
 
-| In review | PR | State |
-|---|---|---|
-| No-show and overdue jobs (`/admin/reservations/jobs`) | #60 | approved by Matei; needs Stefania's review |
-| ArchUnit module boundary and coding convention rules | #76 | one rule can never fail yet; fix before merge |
-| Equipment availability endpoint | #78 | approved by Matei; rebase after #60 / #80 |
-| Admin desk: reservation search, check-out, return | #80 | approved by Matei; rebase after #60 |
+| Parked (draft, after M1) | PRs |
+|---|---|
+| Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
 
 ### Stefania: incidents, users & frontend lead
 
@@ -251,8 +252,11 @@ What is on `main` and what is still in review, per member. **As of 31 Oct 2026**
 | Redesigned clickable prototype (`docs/prototype/campus-hub-redesign.html`) | #51 |
 | `CurrentUser` as an injectable bean | #74 |
 | Incident reporting flow, persistence, `AssetDamagedEvent` | #40 |
+| Frontend scaffold (Vite + React + TypeScript + Mantine, routing) | #84 |
+| API client, auth context, login page | #85 |
+| App layout, role-based routes, shared components, conventions (`docs/modules/frontend.md`) | #86 |
 
-**Open for her:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md`. Still to start: frontend scaffold.
+**Open for her:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md` (Matei's Dockerfile depends on it).
 
 ### Everyone
 
