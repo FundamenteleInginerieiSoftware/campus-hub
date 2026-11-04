@@ -71,6 +71,15 @@ class SecurityConfigTest {
                 .andExpect(jsonPath("$.instance").value(PROBE));
     }
 
+    // #118: the firewall blocks ";" in a URL before any other filter; it must still answer with our JSON.
+    @Test
+    void firewallRejectionIsProblemJson() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/ping;x=1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("REQUEST_REJECTED"));
+    }
+
     @Test
     void invalidTokenIsRejected() throws Exception {
         mockMvc.perform(get(PROBE).header("Authorization", "Bearer not-a-real-token"))
