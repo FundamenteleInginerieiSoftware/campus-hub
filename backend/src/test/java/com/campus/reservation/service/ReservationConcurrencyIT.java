@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -111,6 +112,7 @@ class ReservationConcurrencyIT {
 
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger conflictCount = new AtomicInteger(0);
+        List<Throwable> unexpectedExceptions = new CopyOnWriteArrayList<>();
 
         Runnable bookTask1 = () -> {
             setupSecurityContext(USER_1_ID);
@@ -122,8 +124,11 @@ class ReservationConcurrencyIT {
             } catch (ConflictException ex) {
                 if ("RESERVATION_CONFLICT".equals(ex.getCode())) {
                     conflictCount.incrementAndGet();
+                } else {
+                    unexpectedExceptions.add(ex);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable t) {
+                unexpectedExceptions.add(t);
             } finally {
                 SecurityContextHolder.clearContext();
             }
@@ -139,8 +144,11 @@ class ReservationConcurrencyIT {
             } catch (ConflictException ex) {
                 if ("RESERVATION_CONFLICT".equals(ex.getCode())) {
                     conflictCount.incrementAndGet();
+                } else {
+                    unexpectedExceptions.add(ex);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable t) {
+                unexpectedExceptions.add(t);
             } finally {
                 SecurityContextHolder.clearContext();
             }
@@ -158,6 +166,9 @@ class ReservationConcurrencyIT {
         f1.get(10, TimeUnit.SECONDS);
         f2.get(10, TimeUnit.SECONDS);
         executor.shutdown();
+
+        // Ensure no unexpected exceptions were silently swallowed
+        assertThat(unexpectedExceptions).isEmpty();
 
         // Exactly one student succeeded and exactly one was rejected with RESERVATION_CONFLICT
         assertThat(successCount.get()).isEqualTo(1);
