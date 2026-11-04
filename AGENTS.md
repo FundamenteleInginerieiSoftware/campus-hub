@@ -216,7 +216,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-11-02 (W5).** Week-by-week plan until M1 for every member: `docs/plan-w4-w6.md`.
+**As of 2026-11-04 (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
 - **On `main`:**
   - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
   - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**.
@@ -231,8 +231,9 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
   - **ArchUnit rules** for module boundaries and coding conventions (Calin #76).
   - **Frontend** (`frontend/`, Stefania #84–#86): Vite + React + TypeScript + Mantine scaffold, API client (token in `localStorage`, 401 → back to login), login page, layout, role-based routes, shared components; lint + build run in `ci`. Calin's My reservations page + calendar booking view (#87).
 - **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`.
-- **Open PRs:** only Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
-- **Next for Matei:** Terraform part 1 (W4, carried into W5), then IAM/SSM/budgets (W5).
+- **Open PRs:** Matei #88 (first admin on AWS, approved); Liviu #89 (catalog → `CurrentUser`), #90 (local disk storage), #92 (asset search + paging), all waiting for Matei's review; Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
+- **Missing for M1 (15 Nov):** asset search (#92), `CatalogSeeder`, catalog / asset details / admin inventory pages (Liviu), booking on asset details (Calin), register page (Stefania). Details per member: `docs/whats-left.md`.
+- **Next for Matei:** merge #88, review #89/#90/#92, Terraform parts 1 + 2 (W5), Dockerfile (W6, waits on Stefania's 🟡 ADR-002).
 - **Prototype demo:** a Swagger run on a fresh database: login → admin creates assets → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. **All of it is on `main`** (checked locally on 31 Oct with all these PRs combined). `POST /incidents` also needs `severity` (e.g. `HIGH`).
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
 
@@ -250,7 +251,7 @@ Dates are approximate (W1 = week of 5 Oct 2026); real dates go in `docs/decision
 | W4 | Core CRUD | Terraform VPC/RDS/S3/ECR | Admin CRUD + real `AuditService` | Create/cancel + **overlap check**; ArchUnit (freeze mode) | Report incident + event; layout + routing; Postgres + JaCoCo in CI |
 | W5 | Core CRUD | Terraform IAM/SSM/budgets; reviews | Search/filter/paging, real `CatalogApi`; local storage + logging notifications | Rules, my reservations, availability, real `ReservationApi` | Photo upload/view, triage, user admin endpoints, report form |
 | W6 | **M1 walking skeleton** `v0.1.0` | Dockerfile, ECR | Seed data; catalog, asset details, inventory pages | Checkout/return; booking + My reservations pages | Wire all M1 pages; workload retro |
-| W7 | Business logic | ECS + ALB + CloudFront first deploy | Retire flow; audit log endpoint + page | **Reassignment engine v1** + tests | My incidents, incident details, admin incident queue |
+| W7 | Business logic | EC2 + CloudFront first deploy (ADR-002) | Retire flow; audit log endpoint + page | **Reassignment engine v1** + tests | My incidents, incident details, admin incident queue |
 | W8 | Business logic | `deploy.yml`, `S3StorageService` | Tests; help Calin with substitute queries | Reassignment log endpoint + notifications; overdue/no-show jobs; concurrency test | Reassignment log view; UI polish |
 | W9 | **M2 feature complete** `v0.2.0` | SES, secrets, **admin reservations desk page**; SQS only if ahead | Polish + docs | Full incident → reassignment flow local + AWS | Integration of all screens; prod build |
 | W10 | **Feature freeze**: tests & bugs only | Alarms, budget, load + security smoke tests | Coverage >= 70% | Integration tests; test plan | Manual E2E checklist, UI polish |
