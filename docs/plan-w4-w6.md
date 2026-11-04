@@ -4,43 +4,21 @@ The next three weeks for the whole team, ending with **M1 = `v0.1.0`** on 15 Nov
 
 ---
 
-## 1. Where we are (26 Oct 2026, start of W4)
+## 1. Where we are (updated 4 Nov 2026, W5)
 
-### On `main`
+> **What is left for each member, until the defense, is now in [`whats-left.md`](whats-left.md).** This plan stays as the detailed W4–W6 guide; the 26 Oct snapshot that was here is in the git history.
 
-| Member | Done |
+| Week | Result |
 |---|---|
-| **Matei** | Gradle skeleton, CI + `main` protection, `users` table, JWT security (admin-only `/api/v1/admin/**`, 401/403 as JSON), **register + login** (#54), **dev accounts** (#55), `UserApi`, `@Async` + `@Scheduled`, error codes on MVC errors (#52), AWS account + architecture ADRs, first prototype |
-| **Liviu** | `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (#22), **catalog**: `categories`, `lab_rooms`, `assets` + real `CatalogApi` with `lockForBooking` (#24) |
-| **Calin** | Shared `Clock` bean (#27) |
-| **Stefania** | Redesigned prototype (#51) |
+| **W4** | ✅ Done except Terraform part 1 (Matei, carried into W5). Merged: #34–#37, #39, #40 (reservations, booking, incidents, reassignment engine, docs), #53, #62, #64, #66, #74, #76, #78, #80, #81, #82, #60, and Stefania's frontend #84–#86 + Calin's #87. **Prototype demo runs on `main`** (tag not set yet) |
+| **W5 (now)** | In review: #88 (Matei), #89, #90, #92 (Liviu). Not started: Terraform (Matei), photo upload, triage, user admin, report form (Stefania) |
+| **W6** | M1 still needs: asset search (#92), `CatalogSeeder`, catalog / asset details / inventory pages (Liviu), booking on asset details (Calin), register page (Stefania), Dockerfile (Matei, waits on ADR-002) |
 
-**Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`. **Dev accounts:** `student1@campus.test` (id 1), `student2@campus.test` (id 2), `admin@campus.test` (id 3), all with password `password`.
-
-### Open PRs (merge order: #34 → #35 → #36 → #40 → #37 → #39)
-
-| PR | Owner | What | State | Next step |
-|---|---|---|---|---|
-| #34 | Calin | `reservations` table, entity, `ReservationApi` | `main` merged in, CI green; the push dismissed the approval | Re-review, then merge |
-| #35 | Calin | Booking + overlap check + row lock | Changes requested; base is still #34's branch | Drop the `CurrentUser` and `catalog/api` copies, rebase onto `main` after #34 |
-| #36 | Calin | My reservations, cancel, facade, seeder | Base is still #35's branch | Rebase onto `main` after #35 |
-| #40 | Stefania | Incident report + resolve, `incident_reports`, `AssetDamagedEvent`, `CurrentUser` | Changes requested, CI green | Rebase; agree on `CurrentUser` with Calin; `@NotBlank`; `IN_REPAIR`; API contract entries; PR description |
-| #37 | Calin | Reassignment engine, `reassignment_log` | Base is still #36's branch | Rebase onto `main` after #40 (it listens to `AssetDamagedEvent`) |
-| #39 | Calin | Reservation + reassignment docs | Approved; base is `reassignment-engine` | `gh pr edit 39 --base main`, merge last |
-| #53 | Matei | `AGENTS.md`: `CurrentUser` as an injectable bean | Draft, approved by Liviu | Merge once Stefania and Calin agree on #40 |
-
-### Not started yet
-
-| What | Owner | Why it matters |
-|---|---|---|
-| **Frontend scaffold** (`frontend/`: Vite + React + TS, API client, login, routing) | Stefania | **Everyone's M1 pages in W6 are built on it** |
-| `archunit-junit5` in `build.gradle` | Matei | Calin's ArchUnit rules (W4) need it |
-| First admin in prod (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) | Matei | Without it, the AWS deploy has no admin |
-| Terraform (`infra/`), `Dockerfile` | Matei | W4–W6 AWS work |
+**Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`. **Dev accounts:** `student1@campus.test` (id 1), `student2@campus.test` (id 2), `admin@campus.test` (id 3), all with password `password`.
 
 ### Still to decide (🟡 / ⏳ in `docs/decisions.md`)
 
-Weekly meeting time · real week dates and the defense date · milestones (M1 end of W6, M2 end of W9) · in prod, Spring serves the React build (**Stefania**: please confirm) · `Instant` only in event payloads · a reassigned reservation stays `CONFIRMED`. **Calin** leads the next meeting on these.
+Weekly meeting time · real week dates and the defense date · milestones (M1 end of W6, M2 end of W9) · in prod, Spring serves the React build (**Stefania**: please confirm, it blocks the Dockerfile) · `Instant` only in event payloads · a reassigned reservation stays `CONFIRMED` · entity freeze row. **Calin** leads the next meeting on these.
 
 ---
 
@@ -48,14 +26,14 @@ Weekly meeting time · real week dates and the defense date · milestones (M1 en
 
 | When | Milestone | What must work |
 |---|---|---|
-| **This week (W4)** | **Prototype demo**, tag `v0.1.0-prototype` | In Swagger, on a fresh database: login → book → same slot again gives `409 RESERVATION_CONFLICT` → report an incident on the asset → the asset is `UNDER_MAINTENANCE` → booking it gives `409 ASSET_NOT_BOOKABLE` |
+| ✅ W4 | **Prototype demo** (runs on `main`; tag `v0.1.0-prototype` still to set) | In Swagger, on a fresh database: login → book → same slot again gives `409 RESERVATION_CONFLICT` → report an incident on the asset → the asset is `UNDER_MAINTENANCE` → booking it gives `409 ASSET_NOT_BOOKABLE` |
 | **15 Nov (end of W6)** | **M1**, tag `v0.1.0` | Locally: a student registers, logs in, browses, books (conflicts rejected) and sees "My reservations"; an admin adds assets; CI green; every endpoint in Swagger |
 
 ---
 
 ## 3. Week by week
 
-### W4 (26 Oct – 1 Nov): merge the open PRs, frontend scaffold, admin CRUD
+### W4 (26 Oct – 1 Nov): merge the open PRs, frontend scaffold, admin CRUD: ✅ done, except Terraform part 1
 
 | Who | Tasks |
 |---|---|
