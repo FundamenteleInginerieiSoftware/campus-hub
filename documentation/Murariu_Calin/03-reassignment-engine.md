@@ -94,11 +94,13 @@ public interface SubstituteStrategy {
 #### Ordered Implementations:
 1. **`SameModelStrategy.java` (`@Order(1)`):**
    - Retrieves candidates via `catalogApi.findAvailableByModel(damaged.model(), damaged.id())`.
-   - Sorts candidates to prioritize equipment located in the same lab room (`damaged.labRoomId()`).
+   - **Hardening:** Filters strictly for `candidate.status() == AssetStatus.AVAILABLE`, excluding `RETIRED` or `UNDER_MAINTENANCE` units.
+   - **Deterministic Ranking:** Prioritizes equipment in the same lab room (`damaged.labRoomId()`), with a secondary deterministic sort by lowest `id` (`thenComparing(AssetSummary::id)`).
    - Filters by `reservationApi.isAssetFree(candidate.id(), reservation.start(), reservation.end(), reservation.id())`.
 2. **`SameCategoryStrategy.java` (`@Order(2)`):**
    - Retrieves candidates via `catalogApi.findAvailableByCategory(damaged.categoryId(), damaged.id())`.
-   - Prioritizes same lab room, filters by `reservationApi.isAssetFree(...)`.
+   - **Hardening:** Filters strictly for `candidate.status() == AssetStatus.AVAILABLE`, excluding `RETIRED` or `UNDER_MAINTENANCE` units.
+   - **Deterministic Ranking:** Prioritizes same lab room, then by lowest `id`, and filters by `reservationApi.isAssetFree(...)`.
 
 ---
 
