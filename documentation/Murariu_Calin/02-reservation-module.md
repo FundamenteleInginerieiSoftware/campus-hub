@@ -182,3 +182,25 @@ DTO Records:
 
 ### 6. Dev Seeder: `ReservationSeeder.java`
 Annotated with `@Component`, `@Profile("dev")`, `@Order(3)`. Populates initial bookings after users (`@Order(1)`) and catalog (`@Order(2)`).
+
+---
+
+### 7. Booking Rules Test Matrix (Handbook §10.2)
+
+Every business rule stipulated in Handbook §10.2 is verified with dedicated happy-path and edge/failure unit tests in `ReservationServiceTest.java`:
+
+| Rule | Description | Error Code / Status | Test Methods |
+|---|---|---|---|
+| **R1: Time Direction** | `endTime` must be strictly after `startTime` | `409 INVALID_TIME_RANGE` | `rejectsWhenEndTimeNotAfterStartTime` |
+| **R2: Temporal Validity** | Cannot book slots in the past relative to `Clock` | `409 BOOKING_IN_PAST` | `rejectsWhenBookingInPast` |
+| **R3: Minute Alignment** | `startTime` and `endTime` minutes must be `:00` or `:30` | `409 SLOT_NOT_ALIGNED` | `rejectsWhenMinutesNotAligned` |
+| **R4: Second Alignment** | `startTime` and `endTime` seconds and nanos must be `0` | `409 SLOT_NOT_ALIGNED` | `rejectsWhenSecondsNotAligned` |
+| **R5: Duration Range** | Min 30m, Max 4h (240m) | `409 INVALID_DURATION` | `rejectsWhenDurationExceeds4Hours`, `allowsBookingExactly30Minutes`, `allowsBookingExactly4Hours` |
+| **R6: Horizon Limit** | Maximum 14 days in advance from today | `409 BOOKING_TOO_FAR_AHEAD` | `rejectsWhenBookingTooFarAhead`, `allowsBookingAt14DayHorizon` |
+| **R7: Day Boundary** | Booking cannot cross midnight (same calendar day) | `409 OUTSIDE_OPENING_HOURS` | `rejectsWhenCrossingDays` |
+| **R8: Weekdays Only** | Opening hours apply Mon–Fri; weekends closed | `409 OUTSIDE_OPENING_HOURS` | `rejectsWhenOnWeekend` |
+| **R9: Opening Hours** | Lab opens at 08:00 and closes at 20:00 | `409 OUTSIDE_OPENING_HOURS` | `rejectsWhenBeforeOpeningHours`, `rejectsWhenAfterClosingHours`, `rejectsWhenSlotStartsBefore0800`, `rejectsWhenSlotEndsAfter2000`, `allowsBookingAtOpeningBoundary`, `allowsBookingAtClosingBoundary` |
+| **R10: Asset Bookability**| Asset status must be `AVAILABLE` (`UNDER_MAINTENANCE`/`RETIRED` rejected) | `409 ASSET_NOT_BOOKABLE` | `rejectsWhenAssetNotBookable` |
+| **R11: No Overlap** | Slot must not intersect existing confirmed/checked-out bookings | `409 RESERVATION_CONFLICT` | `rejectsWhenSlotOverlaps` |
+| **R12: Quota Limit** | Max 2 active bookings per student; admin accounts bypass | `409 RESERVATION_LIMIT_REACHED` | `rejectsWhenActiveLimitReached`, `adminBypassesActiveReservationLimit` |
+
