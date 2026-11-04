@@ -11,7 +11,7 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (2 Nov 2026, week 5):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), `/users/me`, dev test accounts and `CurrentUser`**, the **catalog** with admin CRUD and retire, **reservations** (booking with overlap check, my reservations, cancel, availability, admin check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine** and **ArchUnit** architecture rules. **The whole prototype demo now runs on `main`** (admins create the assets in Swagger; there is no catalog seed data yet). The **frontend** has started: scaffold, login, layout and routes, My reservations and the booking calendar (`cd frontend && npm ci && npm run dev`). **The next three weeks, per member: [`docs/plan-w4-w6.md`](docs/plan-w4-w6.md).** New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
+> **Status (4 Nov 2026, week 5):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), `/users/me`, dev test accounts and `CurrentUser`**, the **catalog** with admin CRUD and retire, **reservations** (booking with overlap check, my reservations, cancel, availability, admin check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine** and **ArchUnit** architecture rules. **The whole prototype demo runs on `main`** (admins create the assets in Swagger; there is no catalog seed data yet). The **frontend** has started: scaffold, login, layout and routes, My reservations and the booking calendar (`cd frontend && npm ci && npm run dev`). **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
 
 ---
 
@@ -180,7 +180,7 @@ Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHu
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 2 Nov 2026**; update it when PRs merge.
+What is on `main` and what is still in review, per member. **As of 4 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
 
 ### Matei Necula: cloud, security & auth
 
@@ -204,10 +204,14 @@ What is on `main` and what is still in review, per member. **As of 2 Nov 2026**;
 | Security tests probe paths no controller maps | #70 |
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
-| Status updates in README + AGENTS | #50, #56, #81 |
+| Status updates in README + AGENTS, team plan W4-W6 | #50, #56, #57, #81, #83 |
 | Personal docs 01-17 | #14 + each PR above |
 
-**Next:** Terraform part 1 for AWS (W4, carried into W5), then IAM, SSM and budgets (W5).
+| In review | PRs |
+|---|---|
+| First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (approved) | #88 |
+
+**Next:** review Liviu's #89, #90, #92; Terraform parts 1 + 2 (W5); Dockerfile + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -222,7 +226,13 @@ What is on `main` and what is still in review, per member. **As of 2 Nov 2026**;
 | Personal docs W2-W4 | #68 |
 | Category, lab room and asset CRUD + retire (admin), asset details | #66 (+ #73) |
 
-**Next (week plan):** search/filter/paging (W5); agree with Calin how retiring an asset moves its future bookings (W7).
+| In review | PRs |
+|---|---|
+| Catalog admin actor via `CurrentUser` | #89 |
+| Local disk storage with security checks | #90 |
+| Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
+
+**Next:** `CatalogSeeder`, catalog / asset details / admin inventory pages (W6, for M1); retire flow with Calin (W7). Full list: `docs/whats-left.md` §5.
 
 ### Calin Murariu: reservations & reassignment
 
@@ -244,6 +254,8 @@ What is on `main` and what is still in review, per member. **As of 2 Nov 2026**;
 |---|---|
 | Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
 
+**Next:** booking on the asset details page (W6, for M1); `/admin/reassignments` + concurrency test (W8); test lead from W10. Full list: `docs/whats-left.md` §6.
+
 ### Stefania: incidents, users & frontend lead
 
 | Done (merged) | PRs |
@@ -256,7 +268,7 @@ What is on `main` and what is still in review, per member. **As of 2 Nov 2026**;
 | API client, auth context, login page | #85 |
 | App layout, role-based routes, shared components, conventions (`docs/modules/frontend.md`) | #86 |
 
-**Open for her:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md` (Matei's Dockerfile depends on it).
+**Next:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md` (Matei's Dockerfile depends on it); photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
 
 ### Everyone
 
