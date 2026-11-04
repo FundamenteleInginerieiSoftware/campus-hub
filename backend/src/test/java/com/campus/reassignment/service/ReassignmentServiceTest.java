@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +39,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class ReassignmentServiceTest {
@@ -80,13 +82,10 @@ class ReassignmentServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReassignmentBookingProcessor bookingProcessor = new ReassignmentBookingProcessor(
+                reservationApi, reassignmentLogRepository, List.of(primaryStrategy, secondaryStrategy), clock);
         reassignmentService = new ReassignmentService(
-                catalogApi,
-                reservationApi,
-                notificationService,
-                reassignmentLogRepository,
-                List.of(primaryStrategy, secondaryStrategy),
-                clock);
+                catalogApi, reservationApi, notificationService, bookingProcessor, reassignmentLogRepository, clock);
     }
 
     @Test
@@ -252,6 +251,47 @@ class ReassignmentServiceTest {
 
         verify(reassignmentLogRepository, never()).save(any());
         verify(notificationService, never()).notifyUser(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Exception during single booking reassignment skips that booking and continues processing others")
+    void exceptionOnOneBookingContinuesProcessingRemainingBookings() {
+        LocalDateTime start1 = LocalDateTime.of(2026, 11, 2, 12, 0);
+        LocalDateTime start2 = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime start3 = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary b1 = new ReservationSummary(
+                1L, 10L, DAMAGED_ASSET_ID, start1, start1.plusHours(2), ReservationStatus.CONFIRMED);
+        ReservationSummary b2 = new ReservationSummary(
+                2L, 20L, DAMAGED_ASSET_ID, start2, start2.plusHours(2), ReservationStatus.CONFIRMED);
+        ReservationSummary b3 = new ReservationSummary(
+                3L, 30L, DAMAGED_ASSET_ID, start3, start3.plusHours(2), ReservationStatus.CONFIRMED);
+
+        ReassignmentBookingProcessor mockProcessor = mock(ReassignmentBookingProcessor.class);
+        ReassignmentService service = new ReassignmentService(
+                catalogApi, reservationApi, notificationService, mockProcessor, reassignmentLogRepository, clock);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+                .thenReturn(List.of(b1, b2, b3));
+
+        when(mockProcessor.processSingleBooking(eq(event), eq(b1), eq(damagedAsset)))
+                .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
+                        ReassignmentOutcome.REASSIGNED, "Sub 1")));
+        when(mockProcessor.processSingleBooking(eq(event), eq(b2), eq(damagedAsset)))
+                .thenThrow(new ObjectOptimisticLockingFailureException("Stale version on b2", new Throwable()));
+        when(mockProcessor.processSingleBooking(eq(event), eq(b3), eq(damagedAsset)))
+                .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
+                        ReassignmentOutcome.REASSIGNED, "Sub 3")));
+
+        service.handle(event);
+
+        verify(mockProcessor).processSingleBooking(eq(event), eq(b1), eq(damagedAsset));
+        verify(mockProcessor).processSingleBooking(eq(event), eq(b2), eq(damagedAsset));
+        verify(mockProcessor).processSingleBooking(eq(event), eq(b3), eq(damagedAsset));
+
+        verify(notificationService).notifyUser(eq(10L), eq("Reservation Reassigned"), contains("Sub 1"));
+        verify(notificationService).notifyUser(eq(30L), eq("Reservation Reassigned"), contains("Sub 3"));
+        verify(notificationService, never()).notifyUser(eq(20L), any(), any());
     }
 
     @Test
