@@ -6,6 +6,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -53,6 +54,15 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers("/api/v1/**")
                         .authenticated()
+                        // Other API paths and actuator endpoints stay closed. This must stay above
+                        // the GET rule below, or that rule would open them.
+                        .requestMatchers("/api/**", "/actuator/**")
+                        .denyAll()
+                        // The React app in prod (ADR-002, SpaConfig): index.html, /assets/*.js and
+                        // pages like /reservations. They hold no data (all data comes from /api, which
+                        // needs a token), so anyone may load them, like any website's login page.
+                        .requestMatchers(HttpMethod.GET, "/**")
+                        .permitAll()
                         // A path nobody listed above is closed by default, so a forgotten rule
                         // fails safe instead of leaving something open.
                         .anyRequest()
