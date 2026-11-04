@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`) and the firewall error format (`21-firewall-error-json.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`) the firewall error format (`21-firewall-error-json.md`) and the admin Reservations desk page (`26-reservations-desk-page.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -17,6 +17,7 @@ campus-hub/
 │   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/
+├── frontend/src/  pages/ReservationsDeskPage.tsx  api/reservationDesk.ts   (26-reservations-desk-page.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
     ├── gradlew  gradlew.bat  gradle/wrapper/
@@ -146,6 +147,12 @@ campus-hub/
 | `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
 | `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
 
+### Frontend: Reservations desk (`26-reservations-desk-page.md`)
+| File | What it does |
+|---|---|
+| `frontend/src/pages/ReservationsDeskPage.tsx` | The admin's page at the lab counter (`/admin/reservations`): three lists (to pick up today, out now, overdue), a "Check out" button when a student takes the equipment and a "Return" button when they bring it back. On a phone each booking is a card. |
+| `frontend/src/api/reservationDesk.ts` | The three calls the page makes to Calin's admin reservation endpoints: search, check out, return. |
+
 ### Not uploaded to GitHub (local only)
 | What | Why |
 |---|---|
@@ -230,6 +237,12 @@ campus-hub/
 |---|---|
 | `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
 | ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
+
+### Frontend: Reservations desk
+| File | Key points |
+|---|---|
+| `ReservationsDeskPage.tsx` | Tabs = one status each (`CONFIRMED` / `CHECKED_OUT` / `OVERDUE`); only "To pick up" sends `date` (default: today in Europe/Bucharest via `Intl.DateTimeFormat('en-CA', …)`). One effect loads the open tab (`ignore` flag against stale answers, `loading` ends in `finally` only for the latest request), a second one loads the tab counts with `size=1`. Asset names via Calin's `fetchAssetSummary` (Liviu's `GET /api/v1/assets/{id}`); students as `Student #id` (no admin user lookup endpoint yet). Buttons call check-out / return, then reload; 409s show the text from `errorMessages.ts` with "Could not … reservation #id" as title. `<PagedTable>` on desktop, a local `PhoneList` (same columns, one card per booking) below 48em. Details in `26-reservations-desk-page.md`. |
+| `reservationDesk.ts` | `searchReservations({ status, date, page, size })` → `GET /api/v1/admin/reservations`, `checkOutReservation(id)` → `POST …/{id}/check-out`, `returnReservation(id)` → `POST …/{id}/return`. Types (`Reservation`, `ReservationStatus`) imported from Calin's `src/api/reservations.ts`, not copied. |
 
 ### Tests
 | Test | What it proves |
