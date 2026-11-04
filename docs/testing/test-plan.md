@@ -53,7 +53,7 @@ We employ a 4-tier testing hierarchy that balances execution speed, isolation, a
      - `ReservationConcurrencyIT`: Uses multithreaded workers (`ExecutorService` + `CountDownLatch`) to fire simultaneous reservation requests for the same slot, proving pessimistic locking (`PESSIMISTIC_WRITE`) permits exactly 1 booking and rejects the other with 409 `RESERVATION_CONFLICT`.
 
 ### Tier 3: Architectural Tests (ArchUnit)
-- **Framework:** ArchUnit 1.3.0 (`backend/src/test/java/com/campus/architecture/ArchitectureRulesTest.java`).
+- **Framework:** ArchUnit 1.5.1 (`com.campus.architecture.ModuleBoundaryArchitectureTest` and `CodingConventionsArchitectureTest`).
 - **Enforced Constraints:**
   - **Modular Monolith Encapsulation:** Non-`api` packages (`domain`, `repository`, `service`, `web`) cannot be accessed from outside their owning module.
   - **Dependency Hierarchy:** `catalog` and `reservation` must never depend on `incident` or `reassignment`.
@@ -74,7 +74,7 @@ Special emphasis is placed on concurrency and distributed failure modes:
 |---|---|---|---|
 | `ReservationConcurrencyIT` | Verify pessimistic row locking on equipment during booking | 2 concurrent threads synchronized with `CountDownLatch` executing `bookReservation()` | Exactly 1 transaction commits (HTTP 201); 1 transaction fails with 409 `RESERVATION_CONFLICT` |
 | `ReassignmentRollbackIT` | Verify transaction autonomy of the auto-reassignment engine | Throw simulated exception during reassignment processing | Incident report remains committed in `incident_reports`; asset stays `UNDER_MAINTENANCE` |
-| `AssetOptimisticLockIT` | Prevent stale asset edits | Concurrent updates on the same `Asset` entity with `@Version` | Spring Data JPA throws `OptimisticLockingFailureException` (HTTP 409 `STALE_VERSION`) |
+| `AssetOptimisticLockIT` *(planned, Liviu W7–W8)* | Prevent stale asset edits | Concurrent updates on the same `Asset` entity with `@Version` | Spring Data JPA throws `OptimisticLockingFailureException` (HTTP 409 `STALE_VERSION`) |
 
 ---
 
@@ -126,13 +126,13 @@ Every Pull Request must satisfy the following automated gates before merge:
    ./gradlew jacocoTestCoverageVerification
    ```
    - **Line Coverage Target:** ≥ 70% on all `*.service.*` packages.
-   - **Current System Status:** Global backend coverage **~85%**, `reservation.service` **81%**, `reassignment.service` **89%**.
+   - Verified via JaCoCo reports uploaded in CI artifacts and generated in `build/reports/jacoco/test/html/index.html`.
 
 4. **Frontend Quality Check:**
    ```bash
    npm run lint && npm run build
    ```
-   Zero TypeScript errors, zero ESLint warnings, Vite build completes successfully.
+   Zero TypeScript errors, zero `oxlint` warnings, Vite build completes successfully.
 
 ---
 

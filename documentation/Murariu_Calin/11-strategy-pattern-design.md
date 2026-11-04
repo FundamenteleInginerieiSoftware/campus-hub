@@ -39,22 +39,22 @@ The design strictly follows the classic Gang of Four (GoF) Strategy Pattern:
 classDiagram
     class SubstituteStrategy {
         <<interface>>
-        +findSubstitute(AssetSummary original, LocalDateTime start, LocalDateTime end) Optional~AssetSummary~
-        +strategyName() String
+        +findSubstitute(ReservationSummary reservation, AssetSummary damaged) Optional~AssetSummary~
+        +name() String
     }
 
     class SameModelStrategy {
         -CatalogApi catalogApi
         -ReservationApi reservationApi
         +findSubstitute(...) Optional~AssetSummary~
-        +strategyName() String
+        +name() String
     }
 
     class SameCategoryStrategy {
         -CatalogApi catalogApi
         -ReservationApi reservationApi
         +findSubstitute(...) Optional~AssetSummary~
-        +strategyName() String
+        +name() String
     }
 
     class ReassignmentService {
@@ -62,7 +62,7 @@ classDiagram
         -ReservationApi reservationApi
         -ReassignmentLogRepository logRepo
         -NotificationService notificationService
-        +handleAssetDamaged(AssetDamagedEvent event) void
+        +handle(AssetDamagedEvent event) void
     }
 
     SubstituteStrategy <|.. SameModelStrategy : implements (@Order 1)
@@ -100,14 +100,16 @@ public class ReassignmentService {
 - `SameModelStrategy` is annotated with `@Order(1)` (highest priority).
 - `SameCategoryStrategy` is annotated with `@Order(2)` (fallback priority).
 
-When `handleAssetDamaged` executes:
+When `handle(event)` executes:
 ```java
-Optional<SubstituteResult> substitute = Optional.empty();
-
 for (SubstituteStrategy strategy : strategies) {
-    Optional<AssetSummary> candidate = strategy.findSubstitute(originalAsset, res.startTime(), res.endTime());
+    Optional<AssetSummary> candidate = strategy.findSubstitute(booking, damaged);
     if (candidate.isPresent()) {
-        substitute = Optional.of(new SubstituteResult(candidate.get(), strategy.strategyName()));
+        boolean moved = reservationApi.moveToAsset(booking.id(), candidate.get().id(), "Incident #" + event.incidentId());
+        if (moved) {
+            reassignmentLogRepository.save(new ReassignmentLog(event.incidentId(), booking.id(), event.assetId(), candidate.get().id(), ReassignmentOutcome.REASSIGNED, strategy.name(), now));
+            notificationService.notifyUser(booking.userId(), "Reservation moved to substitute asset");
+        }
         break; // First matching strategy wins
     }
 }
@@ -147,7 +149,7 @@ The primary architectural advantage of this design is adherence to the **Open-Cl
 The auto-reassignment engine runs in an isolated transaction to ensure that failures or lack of substitutes never impact the originating incident report:
 
 1. **Observer Decoupling:** `LocalAssetDamagedListener` receives `AssetDamagedEvent` using `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
-2. **Isolated Transaction:** `ReassignmentService.handleAssetDamaged` is marked `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
+2. **Isolated Transaction:** `ReassignmentService.handle` is marked `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
 3. **Absence of Substitute is Normal Business Flow:** When no substitute is found, the engine does **not** throw an exception that triggers rollback. Instead, it calls `ReservationService.forceCancel(res.id())` and records `ReassignmentLog(outcome = FORCE_CANCELLED, reason = "NO_SUBSTITUTE_FOUND")`. The transaction commits cleanly.
 
 ---
