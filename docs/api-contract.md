@@ -57,9 +57,9 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 ```json
 // LoginResponse
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-  "expiresIn": 28800,
-  "user": { "id": 1, "email": "student1@campus.test", "fullName": "Student One", "role": "STUDENT" }
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "expiresIn": 28800,
+    "user": { "id": 1, "email": "student1@campus.test", "fullName": "Student One", "role": "STUDENT" }
 }
 // UserResponse
 { "id": 1, "email": "student1@campus.test", "fullName": "Student One", "role": "STUDENT" }
@@ -100,12 +100,12 @@ Every error is an **RFC 9457 `ProblemDetail`** JSON object with an extra **`code
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Conflict",
-  "status": 409,
-  "detail": "Asset 12 is already booked between 14:00 and 16:00",
-  "instance": "/api/v1/reservations",
-  "code": "RESERVATION_CONFLICT"
+    "type": "about:blank",
+    "title": "Conflict",
+    "status": 409,
+    "detail": "Asset 12 is already booked between 14:00 and 16:00",
+    "instance": "/api/v1/reservations",
+    "code": "RESERVATION_CONFLICT"
 }
 ```
 
@@ -113,10 +113,10 @@ Validation errors (400) add a list of field errors:
 
 ```json
 {
-  "type": "about:blank", "title": "Bad Request", "status": 400,
-  "detail": "Validation failed", "instance": "/api/v1/auth/register",
-  "code": "VALIDATION_FAILED",
-  "errors": [ { "field": "email", "message": "must be a well-formed email address" } ]
+    "type": "about:blank", "title": "Bad Request", "status": 400,
+    "detail": "Validation failed", "instance": "/api/v1/auth/register",
+    "code": "VALIDATION_FAILED",
+    "errors": [ { "field": "email", "message": "must be a well-formed email address" } ]
 }
 ```
 
@@ -192,10 +192,14 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Method & path | Access | Request | Response | Errors |
 |---|---|---|---|---|
 | `POST /api/v1/incidents` | logged in | `{"assetId","description","severity"}` | `201` + `IncidentResponse`. The asset becomes `UNDER_MAINTENANCE` | 400 `VALIDATION_FAILED`, 401, 404 `ASSET_NOT_FOUND`, 409 `ASSET_RETIRED` |
+| `GET /api/v1/incidents/me?page=0&size=20` | logged in | – | `200` + `PageResponse<IncidentResponse>`: only the incidents I reported, newest first | 400 `INVALID_PARAMETER`, 401 |
+| `GET /api/v1/incidents/{id}` | reporter or admin | – | `200` + `IncidentResponse` | 400 `INVALID_PARAMETER`, 401, 404 `INCIDENT_NOT_FOUND` (also when it is someone else's incident, so ids are not revealed) |
 | `GET /api/v1/admin/incidents?status=OPEN&page=0&size=20` | admin | – | `200` + `PageResponse<IncidentResponse>`, newest first; `status` is optional | 400 `INVALID_PARAMETER`, 401, 403 |
 | `POST /api/v1/admin/incidents/{id}/resolve` | admin | optional `{"resolutionNotes"}` (max 2000 chars); no body is fine | `200` + `IncidentResponse`. Resolving twice returns it unchanged. The asset is `AVAILABLE` again once no other `OPEN`/`IN_REPAIR` incident is left on it | 400 `VALIDATION_FAILED`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `REJECTED`) |
+| `POST /api/v1/admin/incidents/{id}/start-repair` | admin | – | `200` + `IncidentResponse` with `IN_REPAIR`. Starting twice returns it unchanged. The asset stays `UNDER_MAINTENANCE` | 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `RESOLVED` or `REJECTED`) |
+| `POST /api/v1/admin/incidents/{id}/reject` | admin | optional `{"resolutionNotes"}` (why it was rejected, max 2000 chars); no body is fine | `200` + `IncidentResponse` with `REJECTED`. Rejecting twice returns it unchanged. Same asset rule as resolve; bookings the engine already moved stay moved | 400 `VALIDATION_FAILED`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `RESOLVED`) |
 
-`description`: required, not blank, max 2000 chars. `severity`: `LOW` · `MEDIUM` · `HIGH` · `CRITICAL`. `status`: `OPEN` · `IN_REPAIR` · `RESOLVED` · `REJECTED`. The reporter comes from the token, never from the body. The photo comes later as a separate multipart upload.
+`description`: required, not blank, max 2000 chars. `severity`: `LOW` · `MEDIUM` · `HIGH` · `CRITICAL`. `status`: `OPEN` → `IN_REPAIR` (start-repair) → `RESOLVED`; `OPEN` or `IN_REPAIR` → `REJECTED`. `RESOLVED` and `REJECTED` are final; `resolvedAt`, `resolvedById` and `resolutionNotes` tell who closed the incident, when and why (for both). The reporter comes from the token, never from the body. The photo comes later as a separate multipart upload.
 
 ```json
 // IncidentResponse

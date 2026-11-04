@@ -64,14 +64,26 @@ public class IncidentService {
     }
 
     /**
+     * OPEN to IN_REPAIR. Starting twice returns the incident unchanged. The asset stays UNDER_MAINTENANCE,
+     * so nothing changes in the catalog. From RESOLVED or REJECTED: 409 INVALID_INCIDENT_STATUS_TRANSITION.
+     */
+    public IncidentResponse startRepair(Long incidentId) {
+        IncidentReport report = findOrThrow(incidentId);
+
+        if (report.getStatus() == IncidentStatus.IN_REPAIR) {
+            return toResponse(report);
+        }
+
+        report.startRepair();
+        return toResponse(incidentReportRepository.save(report));
+    }
+
+    /**
      * Resolves an OPEN or IN_REPAIR incident. Resolving twice returns the incident unchanged. The asset
      * becomes AVAILABLE again only when no other OPEN or IN_REPAIR incident is left on it.
      */
     public IncidentResponse resolveIncident(Long incidentId, String resolutionNotes, Long adminId) {
-        IncidentReport report = incidentReportRepository
-                .findById(incidentId)
-                .orElseThrow(() -> new NotFoundException(
-                        "INCIDENT_NOT_FOUND", "Incident report not found with id: " + incidentId));
+        IncidentReport report = findOrThrow(incidentId);
 
         if (report.getStatus() == IncidentStatus.RESOLVED) {
             return toResponse(report);
@@ -79,12 +91,25 @@ public class IncidentService {
 
         report.resolve(adminId, resolutionNotes, now());
         IncidentReport updated = incidentReportRepository.save(report);
+        releaseAssetIfNoActiveIncident(updated.getAssetId());
 
-        if (incidentReportRepository
-                .findByAssetIdAndStatusIn(updated.getAssetId(), ACTIVE_STATUSES)
-                .isEmpty()) {
-            catalogApi.markAvailable(updated.getAssetId());
+        return toResponse(updated);
+    }
+
+    /**
+     * Rejects an OPEN or IN_REPAIR incident (the report was wrong). Rejecting twice returns it unchanged.
+     * Same asset rule as resolve. Bookings the engine already moved stay where they are.
+     */
+    public IncidentResponse rejectIncident(Long incidentId, String resolutionNotes, Long adminId) {
+        IncidentReport report = findOrThrow(incidentId);
+
+        if (report.getStatus() == IncidentStatus.REJECTED) {
+            return toResponse(report);
         }
+
+        report.reject(adminId, resolutionNotes, now());
+        IncidentReport updated = incidentReportRepository.save(report);
+        releaseAssetIfNoActiveIncident(updated.getAssetId());
 
         return toResponse(updated);
     }
@@ -96,6 +121,43 @@ public class IncidentService {
                 : incidentReportRepository.findAll(pageable);
 
         return PageResponse.from(page, this::toResponse);
+    }
+
+    /** The incidents this user reported (My incidents page). */
+    @Transactional(readOnly = true)
+    public PageResponse<IncidentResponse> getMyIncidents(Long reporterId, Pageable pageable) {
+        return PageResponse.from(incidentReportRepository.findByReportedById(reporterId, pageable), this::toResponse);
+    }
+
+    /**
+     * One incident, for its reporter or an admin. Anyone else gets the same 404 as for a missing id, so
+     * nobody can find out which incident ids exist.
+     */
+    @Transactional(readOnly = true)
+    public IncidentResponse getIncident(Long incidentId, Long requesterId, boolean requesterIsAdmin) {
+        IncidentReport report = findOrThrow(incidentId);
+
+        if (!requesterIsAdmin && !report.getReportedById().equals(requesterId)) {
+            throw notFound(incidentId);
+        }
+        return toResponse(report);
+    }
+
+    private IncidentReport findOrThrow(Long incidentId) {
+        return incidentReportRepository.findById(incidentId).orElseThrow(() -> notFound(incidentId));
+    }
+
+    private static NotFoundException notFound(Long incidentId) {
+        return new NotFoundException("INCIDENT_NOT_FOUND", "Incident report not found with id: " + incidentId);
+    }
+
+    // After resolve or reject: the asset is usable again only if no other incident still keeps it out of use.
+    private void releaseAssetIfNoActiveIncident(Long assetId) {
+        if (incidentReportRepository
+                .findByAssetIdAndStatusIn(assetId, ACTIVE_STATUSES)
+                .isEmpty()) {
+            catalogApi.markAvailable(assetId);
+        }
     }
 
     // Whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET return the same value.

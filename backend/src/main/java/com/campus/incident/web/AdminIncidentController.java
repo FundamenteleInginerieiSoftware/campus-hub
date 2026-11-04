@@ -39,6 +39,13 @@ public class AdminIncidentController {
         return incidentService.getAllIncidents(status, pageable);
     }
 
+    // No body: starting a repair only changes the status.
+    @PostMapping("/{id}/start-repair")
+    @Operation(summary = "Start the repair of an OPEN incident (OPEN to IN_REPAIR); the asset stays UNDER_MAINTENANCE")
+    public IncidentResponse startRepair(@PathVariable("id") Long id) {
+        return incidentService.startRepair(id);
+    }
+
     // The body is optional: resolutionNotes may be left out, so an empty request is valid too.
     @PostMapping("/{id}/resolve")
     @Operation(
@@ -48,5 +55,16 @@ public class AdminIncidentController {
             @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
         String notes = request != null ? request.resolutionNotes() : null;
         return incidentService.resolveIncident(id, notes, currentUser.id());
+    }
+
+    // Same optional body as resolve: resolutionNotes says why the report was rejected.
+    @PostMapping("/{id}/reject")
+    @Operation(
+            summary = "Reject an incident report (OPEN or IN_REPAIR), e.g. the item works; the asset is available "
+                    + "again once no other incident on it is still open")
+    public IncidentResponse rejectIncident(
+            @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
+        String notes = request != null ? request.resolutionNotes() : null;
+        return incidentService.rejectIncident(id, notes, currentUser.id());
     }
 }

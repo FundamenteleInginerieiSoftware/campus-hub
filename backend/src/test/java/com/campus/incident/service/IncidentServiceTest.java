@@ -223,4 +223,151 @@ class IncidentServiceTest {
         assertThat(results.content().get(0).status()).isEqualTo(IncidentStatus.OPEN);
         assertThat(results.totalElements()).isEqualTo(1);
     }
+
+    @Test
+    void startRepair_shouldMoveOpenToInRepair_andLeaveAssetUnderMaintenance() {
+        IncidentReport report = incident(1L, IncidentStatus.OPEN);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+        when(incidentReportRepository.save(any(IncidentReport.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        IncidentResponse response = incidentService.startRepair(1L);
+
+        assertThat(response.status()).isEqualTo(IncidentStatus.IN_REPAIR);
+        assertThat(response.resolvedAt()).isNull();
+        verifyNoInteractions(catalogApi);
+    }
+
+    @Test
+    void startRepair_shouldReturnUnchanged_whenAlreadyInRepair() {
+        IncidentReport report = incident(1L, IncidentStatus.IN_REPAIR);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+
+        IncidentResponse response = incidentService.startRepair(1L);
+
+        assertThat(response.status()).isEqualTo(IncidentStatus.IN_REPAIR);
+        verify(incidentReportRepository, never()).save(any());
+    }
+
+    @Test
+    void startRepair_shouldThrowInvalidStateTransitionException_whenResolved() {
+        IncidentReport report = incident(1L, IncidentStatus.RESOLVED);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(() -> incidentService.startRepair(1L))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessageContaining("Repair cannot start from status: RESOLVED")
+                .extracting("code")
+                .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
+        verify(incidentReportRepository, never()).save(any());
+    }
+
+    @Test
+    void startRepair_shouldThrowNotFoundException_whenMissing() {
+        when(incidentReportRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> incidentService.startRepair(404L))
+                .isInstanceOf(NotFoundException.class)
+                .extracting("code")
+                .isEqualTo("INCIDENT_NOT_FOUND");
+    }
+
+    @Test
+    void rejectIncident_shouldRejectAndMarkAssetAvailable_whenNoOtherActiveIncident() {
+        IncidentReport report = incident(1L, IncidentStatus.OPEN);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+        when(incidentReportRepository.save(any(IncidentReport.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(incidentReportRepository.findByAssetIdAndStatusIn(10L, ACTIVE)).thenReturn(List.of());
+
+        IncidentResponse response = incidentService.rejectIncident(1L, "Works fine, wrong cable", adminId);
+
+        assertThat(response.status()).isEqualTo(IncidentStatus.REJECTED);
+        assertThat(response.resolvedById()).isEqualTo(adminId);
+        assertThat(response.resolvedAt()).isEqualTo(nowInSeconds());
+        assertThat(response.resolutionNotes()).isEqualTo("Works fine, wrong cable");
+        verify(catalogApi).markAvailable(10L);
+    }
+
+    @Test
+    void rejectIncident_shouldKeepAssetUnderMaintenance_whenAnotherIncidentIsStillActive() {
+        IncidentReport report = incident(1L, IncidentStatus.IN_REPAIR);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+        when(incidentReportRepository.save(any(IncidentReport.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(incidentReportRepository.findByAssetIdAndStatusIn(10L, ACTIVE))
+                .thenReturn(List.of(incident(2L, IncidentStatus.IN_REPAIR)));
+
+        IncidentResponse response = incidentService.rejectIncident(1L, null, adminId);
+
+        assertThat(response.status()).isEqualTo(IncidentStatus.REJECTED);
+        verify(catalogApi, never()).markAvailable(any());
+    }
+
+    @Test
+    void rejectIncident_shouldReturnUnchanged_whenAlreadyRejected() {
+        IncidentReport report = incident(1L, IncidentStatus.REJECTED);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+
+        IncidentResponse response = incidentService.rejectIncident(1L, "Again", adminId);
+
+        assertThat(response.status()).isEqualTo(IncidentStatus.REJECTED);
+        verify(incidentReportRepository, never()).save(any());
+        verifyNoInteractions(catalogApi);
+    }
+
+    @Test
+    void rejectIncident_shouldThrowInvalidStateTransitionException_whenResolved() {
+        IncidentReport report = incident(1L, IncidentStatus.RESOLVED);
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(report));
+
+        assertThatThrownBy(() -> incidentService.rejectIncident(1L, null, adminId))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessageContaining("Incident cannot be rejected from status: RESOLVED")
+                .extracting("code")
+                .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
+        verifyNoInteractions(catalogApi);
+    }
+
+    @Test
+    void getMyIncidents_shouldReturnOnlyTheReportersIncidents() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<IncidentReport> page = new PageImpl<>(List.of(incident(7L, IncidentStatus.OPEN)), pageable, 1);
+        when(incidentReportRepository.findByReportedById(reporterId, pageable)).thenReturn(page);
+
+        PageResponse<IncidentResponse> results = incidentService.getMyIncidents(reporterId, pageable);
+
+        assertThat(results.content()).hasSize(1);
+        assertThat(results.content().get(0).id()).isEqualTo(7L);
+        assertThat(results.content().get(0).reportedById()).isEqualTo(reporterId);
+    }
+
+    @Test
+    void getIncident_shouldReturnIt_forTheReporter() {
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(incident(1L, IncidentStatus.OPEN)));
+
+        IncidentResponse response = incidentService.getIncident(1L, reporterId, false);
+
+        assertThat(response.id()).isEqualTo(1L);
+    }
+
+    @Test
+    void getIncident_shouldReturnIt_forAnAdmin() {
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(incident(1L, IncidentStatus.OPEN)));
+
+        IncidentResponse response = incidentService.getIncident(1L, adminId, true);
+
+        assertThat(response.id()).isEqualTo(1L);
+    }
+
+    @Test
+    void getIncident_shouldThrowNotFound_forAnotherStudent() {
+        when(incidentReportRepository.findById(1L)).thenReturn(Optional.of(incident(1L, IncidentStatus.OPEN)));
+
+        assertThatThrownBy(() -> incidentService.getIncident(1L, 7L, false))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Incident report not found with id: 1")
+                .extracting("code")
+                .isEqualTo("INCIDENT_NOT_FOUND");
+    }
 }

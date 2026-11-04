@@ -1,11 +1,17 @@
 package com.campus.incident.web;
 
+import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.incident.service.IncidentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,5 +36,19 @@ public class IncidentController {
     @Operation(summary = "Report an incident on an asset; the asset goes UNDER_MAINTENANCE")
     public IncidentResponse reportIncident(@Valid @RequestBody CreateIncidentRequest request) {
         return incidentService.reportIncident(request, currentUser.id());
+    }
+
+    // "/me" is a fixed path, so Spring picks it before "/{id}".
+    @GetMapping("/me")
+    @Operation(summary = "The incidents I reported, newest first")
+    public PageResponse<IncidentResponse> getMyIncidents(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return incidentService.getMyIncidents(currentUser.id(), pageable);
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "One incident; only its reporter or an admin can see it (anyone else gets 404)")
+    public IncidentResponse getIncident(@PathVariable("id") Long id) {
+        return incidentService.getIncident(id, currentUser.id(), currentUser.isAdmin());
     }
 }

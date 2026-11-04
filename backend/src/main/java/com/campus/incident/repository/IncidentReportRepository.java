@@ -11,5 +11,8 @@ public interface IncidentReportRepository extends JpaRepository<IncidentReport, 
 
     Page<IncidentReport> findByStatus(IncidentStatus status, Pageable pageable);
 
+    // My incidents: only the ones this user reported.
+    Page<IncidentReport> findByReportedById(Long reportedById, Pageable pageable);
+
     List<IncidentReport> findByAssetIdAndStatusIn(Long assetId, List<IncidentStatus> statuses);
 }
