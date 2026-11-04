@@ -899,7 +899,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
-        when(reservationRepository.findFirstByAssetIdAndStatusIn(
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
                         ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
                 .thenReturn(Optional.of(r));
 
@@ -920,7 +920,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
         r.markOverdue();
-        when(reservationRepository.findFirstByAssetIdAndStatusIn(
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
                         ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
                 .thenReturn(Optional.of(r));
 
@@ -946,6 +946,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 101L);
 
         when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(currentUser.id()).thenReturn(1L);
 
         ReservationResponse response = reservationService.checkOutReservation(101L);
@@ -953,6 +954,64 @@ class ReservationServiceTest {
         assertThat(response.status()).isEqualTo(ReservationStatus.CHECKED_OUT);
         assertThat(response.checkedOutAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
         verify(auditService).record(eq(1L), eq("CHECK_OUT_RESERVATION"), eq("Reservation"), eq(101L), any());
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: rejects if asset is not bookable (under maintenance or retired)")
+    void checkOutReservationRejectsWhenAssetNotBookable() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(101L))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("ASSET_NOT_BOOKABLE");
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
+    }
+
+    @Test
+    @DisplayName(
+            "checkOutReservation: rejects if asset is currently held by another reservation (checked out or overdue)")
+    void checkOutReservationRejectsWhenAssetCurrentlyHeldByAnotherBooking() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        // Previous reservation on same asset is currently OVERDUE or CHECKED_OUT
+        Reservation priorHolder = new Reservation(
+                999L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 10, 30, 8, 0));
+        ReflectionTestUtils.setField(priorHolder, "id", 99L);
+        priorHolder.checkOut(LocalDateTime.of(2026, 11, 2, 8, 0));
+        priorHolder.markOverdue();
+
+        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
+                .thenReturn(Optional.of(priorHolder));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(101L))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("RESERVATION_CONFLICT");
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
     }
 
     @Test
