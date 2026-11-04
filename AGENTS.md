@@ -216,24 +216,25 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-11-04 (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
+**As of 2026-11-04 evening (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
 - **On `main`:**
   - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
   - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**.
   - Dev accounts `student1`/`student2`/`admin@campus.test` with password `password`, created by `UserSeeder` (#55; ids 1, 2, 3).
   - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64).
   - `Clock` bean (Calin #27). `CurrentUser` bean (Stefania #74).
-  - `UserApi` (real).
-  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24); admin CRUD for categories, lab rooms and assets, asset details, retire (Liviu #66).
-  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87).
+  - `UserApi` (real). First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, `prod` profile only (`AdminBootstrap`, #88).
+  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24); admin CRUD for categories, lab rooms and assets, asset details, retire (Liviu #66); admin actor from `CurrentUser` (#89); asset search, filters and paging `GET /api/v1/assets` (#92).
+  - **Local disk storage** with type, size and path-traversal checks; `BadRequestException` (400) and `PayloadTooLargeException` (413) in `common.error` (Liviu #90).
+  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87); booking-rule boundary tests (#98); two-thread row-lock test, exactly one booking wins (#97).
   - **Incidents:** report → asset `UNDER_MAINTENANCE` + `AssetDamagedEvent` (Stefania #40).
-  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37).
-  - **ArchUnit rules** for module boundaries and coding conventions (Calin #76).
+  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37). Retired assets excluded, ties broken the same way every time (#99). `GET /api/v1/admin/reassignments` (paged log, #96). "Moved" / "force-cancelled" badges in My reservations (#100).
+  - **ArchUnit rules** for module boundaries and coding conventions (Calin #76), plus shared `Clock`, `@Transactional` placement and no ORDINAL enums (#102). Team test plan `docs/testing/test-plan.md`, reservation diagrams, Strategy doc (#101).
   - **Frontend** (`frontend/`, Stefania #84–#86): Vite + React + TypeScript + Mantine scaffold, API client (token in `localStorage`, 401 → back to login), login page, layout, role-based routes, shared components; lint + build run in `ci`. Calin's My reservations page + calendar booking view (#87).
 - **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`.
-- **Open PRs:** Matei #88 (first admin on AWS, approved); Liviu #89 (catalog → `CurrentUser`), #90 (local disk storage), #92 (asset search + paging), all waiting for Matei's review; Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
-- **Missing for M1 (15 Nov):** asset search (#92), `CatalogSeeder`, catalog / asset details / admin inventory pages (Liviu), booking on asset details (Calin), register page (Stefania). Details per member: `docs/whats-left.md`.
-- **Next for Matei:** merge #88, review #89/#90/#92, Terraform parts 1 + 2 (W5), Dockerfile (W6, waits on Stefania's 🟡 ADR-002).
+- **Open PRs:** Stefania #107 (register page) and #108 (incident start-repair, reject, my incidents, details), both approved; Liviu #110 (query-parameter validation → 400, approved); Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
+- **Missing for M1 (15 Nov):** `CatalogSeeder`, catalog / asset details / admin inventory pages (Liviu), booking on asset details (Calin), register page (Stefania, #107). Details per member: `docs/whats-left.md`.
+- **Next for Matei:** Terraform parts 1 + 2 (W5), Dockerfile (W6, waits on Stefania's 🟡 ADR-002, issue #105).
 - **Prototype demo:** a Swagger run on a fresh database: login → admin creates assets → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. **All of it is on `main`** (checked locally on 31 Oct with all these PRs combined). `POST /incidents` also needs `severity` (e.g. `HIGH`).
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval from any teammate, stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
 

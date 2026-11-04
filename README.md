@@ -204,14 +204,12 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Security tests probe paths no controller maps | #70 |
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
-| Status updates in README + AGENTS, team plan W4-W6 | #50, #56, #57, #81, #83 |
-| Personal docs 01-17 | #14 + each PR above |
+| First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93 |
+| No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
+| Personal docs 01-18 | #14 + each PR above |
 
-| In review | PRs |
-|---|---|
-| First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (approved) | #88 |
-
-**Next:** review Liviu's #89, #90, #92; Terraform parts 1 + 2 (W5); Dockerfile + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
+**Next:** Terraform parts 1 + 2 (W5); Dockerfile + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -225,12 +223,13 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Real `AuditService` writing the `audit_logs` table | #64 |
 | Personal docs W2-W4 | #68 |
 | Category, lab room and asset CRUD + retire (admin), asset details | #66 (+ #73) |
+| Catalog admin actor via `CurrentUser` | #89 |
+| Local disk storage with security checks (type, size, path traversal) | #90 |
+| Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
 
 | In review | PRs |
 |---|---|
-| Catalog admin actor via `CurrentUser` | #89 |
-| Local disk storage with security checks | #90 |
-| Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
+| Query-parameter validation errors → 400 `VALIDATION_FAILED` (closes #103) | #110 |
 
 **Next:** `CatalogSeeder`, catalog / asset details / admin inventory pages (W6, for M1); retire flow with Calin (W7). Full list: `docs/whats-left.md` §5.
 
@@ -249,12 +248,21 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Check-out/return windows, scheduled no-show and overdue jobs | #60 |
 | Equipment availability endpoint | #78 |
 | Frontend: My reservations page + calendar booking view, `/reservations/me/summary` | #87 |
+| Fix: rollback test used the real clock and broke once its date passed | #95 |
+| `GET /api/v1/admin/reassignments` (paged reassignment log) | #96 |
+| Concurrency test: two threads book the same slot, exactly one wins | #97 |
+| Boundary tests for every booking rule | #98 |
+| Engine hardening: retired assets excluded, deterministic tie-break | #99 |
+| "Moved" / "force-cancelled" badges in My reservations | #100 |
+| Reservation diagrams, team test plan, Strategy pattern doc | #101 |
+| More unit + web slice tests, 3 new ArchUnit rules (shared `Clock`, `@Transactional` placement, no ORDINAL enums) | #102 |
+| Review follow-ups: badge check, test cleanup, coverage worded as a target | #109 |
 
 | Parked (draft, after M1) | PRs |
 |---|---|
 | Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
 
-**Next:** booking on the asset details page (W6, for M1); `/admin/reassignments` + concurrency test (W8); test lead from W10. Full list: `docs/whats-left.md` §6.
+**Next:** booking on the asset details page (W6, for M1); `AssetRetiredEvent` listener if the team picks it (W7); test lead from W10. Full list: `docs/whats-left.md` §6.
 
 ### Stefania: incidents, users & frontend lead
 
@@ -268,9 +276,13 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | API client, auth context, login page | #85 |
 | App layout, role-based routes, shared components, conventions (`docs/modules/frontend.md`) | #86 |
 
-**Next:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md` (Matei's Dockerfile depends on it); photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
+| In review | PRs |
+|---|---|
+| Register page (approved) | #107 |
+| Incident start-repair, reject, my incidents, incident details (approved) | #108 |
+
+**Next:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md` (issue #105; Matei's Dockerfile depends on it); photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
 
 ### Everyone
 
-- Issue #43: check the prototype (`docs/prototype/campus-hub-prototype.html`) against your module.
 - Still to decide (🟡/⏳ in `docs/decisions.md`): weekly meeting time, entity freeze session, real week dates and milestones.
