@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Wed 4 Nov 2026 (W5).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Wed 4 Nov 2026, evening (W5).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -23,14 +23,16 @@
 | `CatalogSeeder` with several assets of the same model (demo + reassignment) | Liviu | – |
 | Catalog page, asset details page, admin inventory page | Liviu | – |
 | Booking on the asset details page (calendar component exists, #87) | Calin | Liviu's asset details page |
-| Register page | Stefania | – (backend `/auth/register` is on `main`) |
+| Register page | Stefania | #107 (approved) |
 | Run the full M1 flow on a fresh database, tag `v0.1.0` | Matei (with Stefania) | everything above |
 
 ## 3. Open PRs right now
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
-| #88 | Matei | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Approved, CI green: merge |
+| #107 | Stefania | Register page | Approved: merge |
+| #108 | Stefania | Incident start-repair, reject, my incidents, incident details | Approved: merge |
+| #110 | Liviu | `ConstraintViolationException` / `HandlerMethodValidationException` → 400 `VALIDATION_FAILED` (closes #103) | Approved by Matei: merge |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 ---
@@ -39,13 +41,12 @@
 
 | When | Task | Waits on |
 |---|---|---|
-| **W5 (now)** | Merge #88 · review #89, #90, #92 (24h rule) | – |
-| W5 | **Terraform part 1** (`infra/`): S3 state bucket, VPC, 1 public subnet + 2 private DB subnets, no NAT, security groups (EC2 only from CloudFront, RDS only from EC2); `terraform plan` | – |
+| **W5 (now)** | **Terraform part 1** (`infra/`): S3 state bucket, VPC, 1 public subnet + 2 private DB subnets, no NAT, security groups (EC2 only from CloudFront, RDS only from EC2); `terraform plan` | – |
 | W5 | **Terraform part 2**: RDS PostgreSQL 18 (`db.t4g.micro`, private, encrypted), S3 photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`; first `apply`, stop RDS when idle | Part 1 |
 | W6 | **`backend/Dockerfile`** (2 stages, JDK 25, non-root, builds the React app into the image) · run it locally with `prod` · push to ECR | **Stefania confirms 🟡 ADR-002** |
 | W6 | Check every endpoint has a Swagger summary · run the M1 flow mid-week · tag `v0.1.0` · status update | Section 2 |
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront | Dockerfile, Terraform |
-| W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · **`S3StorageService`** (`@Profile("prod")`, same key format as Liviu's local one) · first live deploy **by the end of W8** | #90 |
+| W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · **`S3StorageService`** (`@Profile("prod")`, same key format and checks as Liviu's local one, #90 on `main`) · first live deploy **by the end of W8** | – |
 | W9 | **`SesNotificationService`** (sandbox, verified team emails, send after commit, never roll back) · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
 | W9 | Frontend: **admin reservations desk page** (today's pickups/returns, check-out/return, 409 messages), Stefania reviews | Calin's `src/api/reservations.ts` (on `main`) |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
@@ -68,27 +69,26 @@
 
 | When | Task | Waits on |
 |---|---|---|
-| **W5 (now)** | Check that every booking rule (handbook §10.2) has a test · align `ReservationSeeder` with Liviu's `CatalogSeeder` (bookings on an asset that breaks in the demo, free substitutes of the same model) | Liviu's seeder |
+| **W5 (now)** | Align `ReservationSeeder` with Liviu's `CatalogSeeder` (bookings on an asset that breaks in the demo, free substitutes of the same model) | Liviu's seeder |
 | W6 | **Booking on the asset details page** (reuse the calendar view from #87; friendly 409 `RESERVATION_CONFLICT`) | Liviu's asset details page |
-| W7 | Engine hardening + tests (no substitute, several, retired excluded) · listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
-| W8 | **`GET /api/v1/admin/reassignments`** (newest first, `PageResponse`): tell Stefania when it is on `main` · "moved" / force-cancelled labels in My reservations (check what #87 already shows) · **concurrency test** (two threads book the same slot, exactly one wins) | – |
+| W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |
-| W10–W12 | **Test lead**: `docs/testing/test-plan.md`, JaCoCo results, **test report** · full-flow integration tests · coverage ≥ 70% (`reservation.service`, `reassignment`) · reservation state + sequence diagrams · **Strategy pattern doc** · report section · demo part | – |
+| W10–W12 | **Test lead**: keep `docs/testing/test-plan.md` current (#101), JaCoCo results, **test report** · full-flow integration tests · coverage ≥ 70% (`reservation.service`, `reassignment`) · reservation state + sequence diagrams · **Strategy pattern doc** · report section · demo part | – |
 
 ## 7. Stefania: incidents, user admin, frontend lead
 
 | When | Task | Waits on |
 |---|---|---|
-| **W5 (now)** | **Confirm 🟡 ADR-002** in `docs/decisions.md` (Spring serves the React build in prod) | – (blocks Matei's Dockerfile) |
-| W5 | **Photo upload** + `GET /api/v1/incidents/{id}/photo` (reporter or admin, else 404; frontend loads it as a blob) | Liviu's #90 |
+| **W5 (now)** | **Confirm 🟡 ADR-002** in `docs/decisions.md` (Spring serves the React build in prod): issue #105 | – (blocks Matei's Dockerfile) |
+| W5 | **Photo upload** + `GET /api/v1/incidents/{id}/photo` (reporter or admin, else 404; frontend loads it as a blob) | – (#90 on `main`) |
 | W5 | Triage: **start repair** and **reject** next to the existing resolve; `markAvailable` only if no other `OPEN`/`IN_REPAIR` incident on the asset | – |
 | W5 | `GET /api/v1/incidents/me` + `GET /api/v1/incidents/{id}` (for My incidents) | – |
 | W5 | **User admin endpoints** in `user/admin/` (search, details, enable/disable, change role; `CANNOT_MODIFY_SELF`, `LAST_ADMIN_REQUIRED`; audit every change) | – |
 | W5–W6 | Frontend: **report-incident form** (asset, description, severity, photo with preview) · **register page** | – |
 | W6 | Wire all M1 pages together · run the full M1 flow with the team · workload retro (re-split the frontend if it is behind) | Section 2 |
 | W7 | **My incidents** + **incident details** pages · **admin incident queue** (filters, photo, start-repair/resolve/reject) · Observer doc draft with Calin | – |
-| W8 | **Reassignment log page** · optional admin users page · polish (loading/empty states, error messages by `code`) | Calin's `/admin/reassignments` |
+| W8 | **Reassignment log page** · optional admin users page · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |
 | W10–W12 | Coverage ≥ 70% (`incident.service`, user admin) · **manual E2E checklist** · final use case + incident state diagrams · **Observer doc** · **user manual** with screenshots · **demo script** + 2 rehearsals + video backup (you lead the demo) | – |
 
@@ -99,7 +99,6 @@
 | What | Who |
 |---|---|
 | Settle the 🟡/⏳ rows in `docs/decisions.md` at the next meeting: meeting time, real week dates + defense date, milestones, ADR-002, reassigned booking stays `CONFIRMED`, `Instant` only in event payloads, entity freeze row | Calin leads |
-| Issue #43: check the prototype against your module | Liviu, Calin, Stefania |
 | Reviews within 24h; same day if it blocks someone | All |
 | One personal doc per PR / milestone in `documentation/<Surname_Name>/` (feeds your report section) | All |
 | Report (`docs/report/`): each member writes their own chapter (Matei: AWS, security, CI/CD; Liviu: catalog + shared services; Calin: reservations, engine, test report; Stefania: incidents, frontend, user manual) | All |
