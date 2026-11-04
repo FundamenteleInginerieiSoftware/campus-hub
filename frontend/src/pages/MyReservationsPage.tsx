@@ -287,9 +287,7 @@ export default function MyReservationsPage() {
     {
       header: 'Status',
       render: (r) => {
-        const isForceCancelled =
-          r.status === 'FORCE_CANCELLED' ||
-          (r.status === 'CANCELLED' && (r.cancelReason?.toLowerCase().includes('incident') || r.cancelReason?.toLowerCase().includes('equipment failure')))
+        const isForceCancelled = r.status === 'FORCE_CANCELLED'
 
         return (
           <div>

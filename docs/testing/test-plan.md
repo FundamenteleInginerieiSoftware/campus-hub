@@ -16,7 +16,7 @@ As a multi-tenant university lab management system where equipment is reserved a
 2. **Transaction Isolation & Fault Tolerance:** Automatic reassignment runs in an isolated transaction (`REQUIRES_NEW`) after the incident report is successfully committed, preventing rollback cascades.
 3. **Module Encapsulation:** Modules (`catalog`, `reservation`, `incident`, `reassignment`, `user`) communicate strictly via public `api` packages and Spring Application Events, enforced via ArchUnit.
 4. **Deterministic Time Handling:** All business logic depending on time operates via a shared `Clock` bean, guaranteeing reproducible test execution independent of execution time and timezone discrepancies.
-5. **Quality Gates:** Every pull request must pass spotless formatting, ArchUnit architecture rules, complete test execution (unit + integration), and meet the ≥ 70% JaCoCo line coverage threshold.
+5. **Quality Gates & Targets:** Every pull request must pass spotless formatting, ArchUnit architecture rules, and complete test execution (unit + integration), targeting ~ 70% line coverage on service packages (enforcement gate planned for W10).
 
 ---
 
@@ -123,10 +123,10 @@ Every Pull Request must satisfy the following automated gates before merge:
 
 3. **Code Coverage (JaCoCo):**
    ```bash
-   ./gradlew jacocoTestCoverageVerification
+   ./gradlew test jacocoTestReport
    ```
-   - **Line Coverage Target:** ≥ 70% on all `*.service.*` packages.
-   - Verified via JaCoCo reports uploaded in CI artifacts and generated in `build/reports/jacoco/test/html/index.html`.
+   - **Line Coverage Target:** ~ 70% on `*.service.*` packages (target before M1; formal `jacocoTestCoverageVerification` build gate planned for W10).
+   - Reports generated at `build/reports/jacoco/test/html/index.html`.
 
 4. **Frontend Quality Check:**
    ```bash
