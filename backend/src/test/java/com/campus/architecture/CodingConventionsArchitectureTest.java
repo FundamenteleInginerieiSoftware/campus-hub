@@ -29,11 +29,17 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Architecture tests enforcing team coding conventions defined in AGENTS.md §3 and §5:
  * <ul>
- *   <li>Constructor injection only (no {@code @Autowired} on fields).</li>
- *   <li>Controllers must return/accept request/response records (DTOs), never JPA {@code @Entity} classes
+ *   <li><b>Rule 1:</b> Constructor injection only (no {@code @Autowired} on fields).</li>
+ *   <li><b>Rule 2:</b> Controllers must return/accept request/response records (DTOs), never JPA {@code @Entity} classes
  *       (including generic wrappers such as {@code ResponseEntity<Asset>} or {@code List<Asset>}).</li>
- *   <li>Entities must not define {@code equals}, {@code hashCode}, or {@code toString}
+ *   <li><b>Rule 3:</b> Entities must not define {@code equals}, {@code hashCode}, or {@code toString}
  *       (forbidden Lombok {@code @Data}, {@code @EqualsAndHashCode}, {@code @ToString} or hand-written).</li>
+ *   <li><b>Rule 4:</b> Time operations must inject and query the shared {@code Clock} bean
+ *       (no zero-argument {@code LocalDateTime.now()} or {@code Instant.now()}).</li>
+ *   <li><b>Rule 5:</b> {@code @Transactional} annotations must only be declared on service methods,
+ *       never on controllers or repositories.</li>
+ *   <li><b>Rule 6:</b> Enums mapped in JPA entities must use {@code @Enumerated(EnumType.STRING)},
+ *       never {@code EnumType.ORDINAL}.</li>
  * </ul>
  */
 @AnalyzeClasses(packages = "com.campus", importOptions = ImportOption.DoNotIncludeTests.class)

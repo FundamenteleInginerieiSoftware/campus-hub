@@ -95,6 +95,11 @@ class ReservationConcurrencyIT {
     @AfterEach
     void tearDown() {
         reservationRepository.deleteAll();
+        jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?)", USER_1_ID, USER_2_ID);
+        jdbcTemplate.update("DELETE FROM assets WHERE id = ?", ASSET_ID);
+        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 600");
+        jdbcTemplate.update("DELETE FROM categories WHERE id = 600");
+        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", USER_1_ID, USER_2_ID);
     }
 
     @Test

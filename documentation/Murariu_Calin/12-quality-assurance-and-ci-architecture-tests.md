@@ -96,6 +96,7 @@ static final ArchRule entities_must_not_use_ordinal_enum_mapping = fields()
 - Added `markNoShowInvalidFromOtherStatuses`: parameterized test over 6 non-`CONFIRMED` statuses, verifying `InvalidStateTransitionException` (`INVALID_RESERVATION_STATUS_TRANSITION`).
 
 #### 4. `ReservationControllerTest.java` Web Slices
+- Added `checkAvailabilityCategoryReturns200`: verifies bulk category equipment availability queries return 200 OK with available asset IDs.
 - Added `createWithInvalidBodyReturns400`: missing payload fields trigger 400 with `VALIDATION_FAILED` (RFC 9457).
 - Added `createOutsideOpeningHoursReturns409`: `OUTSIDE_OPENING_HOURS` business rule conflict yields 409 (`BusinessRuleException`).
 - Added `createWithConflictReturns409`: `RESERVATION_CONFLICT` slot collision yields 409 with problem detail code.
