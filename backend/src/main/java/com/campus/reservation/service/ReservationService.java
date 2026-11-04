@@ -5,6 +5,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
@@ -389,9 +390,11 @@ public class ReservationService implements ReservationApi {
                     "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
         }
 
-        // Fast fail if not in CONFIRMED state before locking
+        // Fast fail if not in CONFIRMED state before acquiring row locks
         if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
-            reservation.checkOut(now);
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Cannot check out reservation in status " + reservation.getStatus() + "; expected CONFIRMED");
         }
 
         // Lock the asset row first to serialize simultaneous desk check-outs on the same physical equipment
