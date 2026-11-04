@@ -27,14 +27,32 @@
 | File | Change |
 |---|---|
 | `build.gradle` | `platform('software.amazon.awssdk:bom:2.57.0')`, `software.amazon.awssdk:s3`, `software.amazon.awssdk:sesv2` |
-| `config/AwsConfig.java` | `@Profile("prod")`: `S3Client` and `SesV2Client` beans, region from `app.aws-region` |
+| `config/AwsConfig.java` | `@Profile("prod")`: `S3Client` and `SesV2Client` beans, region from `app.aws-region`, 10 s / 20 s timeouts |
 | `storage/service/S3StorageService.java` | `@Profile("prod") StorageService`: put / get / delete in `app.storage.photo-bucket` |
 | `notification/service/SesNotificationService.java` | `@Profile("prod") NotificationService`: e-mail to `UserApi.getById(id).email()` from `app.mail.from` |
+| `documentation/Necula_Matei/19-dockerfile.md` | The "prod doesn't start yet" note now points here |
 | `test/.../storage/service/S3StorageServiceTest.java` | 6 Mockito tests |
 | `test/.../notification/service/SesNotificationServiceTest.java` | 2 Mockito tests |
 | `test/.../config/ProdProfileStartupTest.java` | `@ActiveProfiles("prod")`: the context starts and picks the AWS adapters |
 
 `application-prod.yml` already had `AWS_REGION`, `PHOTO_BUCKET` and `MAIL_FROM` since #13.
+
+### Environment variables for `prod`
+
+All of them are read by `application-prod.yml`. A missing required one stops the app at startup.
+
+| Variable | Required | What it is |
+|---|---|---|
+| `SPRING_PROFILES_ACTIVE` | yes | `prod` |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | yes | RDS PostgreSQL 18 (`jdbc:postgresql://<rds-endpoint>:5432/campus`) |
+| `JWT_SECRET` | yes | At least 32 bytes (HS256 key); a shorter one fails at startup |
+| `AWS_REGION` | yes | `eu-central-1` |
+| `PHOTO_BUCKET` | yes | Name of the private S3 photo bucket |
+| `MAIL_FROM` | yes | A sender address verified in SES |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | no | First admin account, created only if both are set (`18-prod-admin-bootstrap.md`) |
+| `SQS_QUEUE_URL` | no | Only for the SQS stretch goal |
+
+No AWS access keys: the EC2 instance role provides them. Don't set `SERVER_PORT`: the Dockerfile's `HEALTHCHECK` calls port 8080.
 
 ### Key choices
 
@@ -45,7 +63,8 @@
 | No credentials in code or config | `DefaultCredentialsProvider` (the SDK default) finds the EC2 instance role (ADR-002). It only looks on the first call, so the prod context also starts in tests and on a laptop |
 | Liviu's `StorageValidation` reused | Same type, size, magic-byte and key checks as `LocalStorageService`, so dev and prod accept and refuse the same files |
 | Explicit request objects (`PutObjectRequest.builder()...`) | Easier to read, and Mockito can capture and check them |
-| `load` reads the object into memory | Photos are at most 5 MB |
+| `load` reads the object into memory | Photos are at most 5 MB. Streaming (`InputStreamResource(s3.getObject(...))`, Calin's suggestion on the PR) would keep the heap flat, but it keeps an HTTP connection open until the caller closes the stream; if a caller forgets, the SDK's connection pool runs dry. With a few admins viewing photos, 5 MB copies are the simpler choice |
+| Timeouts on both clients (10 s per attempt, 20 s total) | The SDK waits forever by default; a hanging SES call would hold Calin's transaction open |
 | `delete` without an existence check | S3 already answers OK for a missing key, which is the contract's "no-op" |
 | SES errors caught and logged | Calin's engine calls `notifyUser` inside its transaction; an exception would roll back the reassignment it reports on |
 | `notification` → `user.api` | New dependency, allowed (only `api`, no cycle: `user` doesn't use `notification`). The e-mail address has to come from somewhere |
@@ -64,6 +83,6 @@
 
 | Check | Result |
 |---|---|
-| `./gradlew spotlessApply build --rerun` | BUILD SUCCESSFUL, 357 tests |
+| `./gradlew spotlessApply build --rerun` | BUILD SUCCESSFUL, 368 tests (after rebasing onto `896e7d8`) |
 | `java -jar` with `SPRING_PROFILES_ACTIVE=prod` and fake env values | `Started CampusHubApplication`, `/actuator/health` UP (before: "required a bean of type NotificationService") |
 | Jar size | ~82 MB |
