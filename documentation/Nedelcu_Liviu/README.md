@@ -14,3 +14,4 @@
 | 01 | [01-shared-foundations.md](01-shared-foundations.md) | Shared error handling (`ProblemDetail`), `PageResponse`, and Audit/Storage/Notification interfaces & dev adapters (#22) |
 | 02 | [02-catalog-domain-and-api.md](02-catalog-domain-and-api.md) | Catalog tables, JPA entities, pessimistic booking lock, and `CatalogApi` facade (#24) |
 | 03 | [03-database-audit-service.md](03-database-audit-service.md) | PostgreSQL `audit_logs` migration and `DatabaseAuditService` (#64) |
+| 04 | [04-catalog-admin-crud.md](04-catalog-admin-crud.md) | Category, lab room, and asset admin CRUD, asset details, and retire flow (#66, #73) |

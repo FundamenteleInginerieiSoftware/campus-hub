@@ -15,6 +15,7 @@ import com.campus.catalog.web.LabRoomResponse;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,9 @@ class LabRoomServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private CurrentUser currentUser;
+
     @InjectMocks
     private LabRoomService labRoomService;
 
@@ -42,9 +46,9 @@ class LabRoomServiceTest {
         LabRoom saved = new LabRoom("b204", "Embedded Lab", "Building B");
         when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false);
         when(labRoomRepository.saveAndFlush(any(LabRoom.class))).thenReturn(saved);
+        when(currentUser.id()).thenReturn(3L);
 
-        LabRoomResponse response =
-                labRoomService.create(new LabRoomRequest(" b204 ", "Embedded Lab", "Building B"), 3L);
+        LabRoomResponse response = labRoomService.create(new LabRoomRequest(" b204 ", "Embedded Lab", "Building B"));
 
         assertEquals("B204", response.code());
         verify(auditService).record(3L, "LAB_ROOM_CREATED", "LAB_ROOM", null, "Created lab room B204");
@@ -56,7 +60,7 @@ class LabRoomServiceTest {
 
         ConflictException ex = assertThrows(
                 ConflictException.class,
-                () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B"), 3L));
+                () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B")));
 
         assertEquals("LAB_ROOM_CODE_TAKEN", ex.getCode());
     }
@@ -66,8 +70,7 @@ class LabRoomServiceTest {
         when(labRoomRepository.findById(77L)).thenReturn(Optional.empty());
 
         NotFoundException ex = assertThrows(
-                NotFoundException.class,
-                () -> labRoomService.update(77L, new LabRoomRequest("B204", "Lab", "Corp B"), 3L));
+                NotFoundException.class, () -> labRoomService.update(77L, new LabRoomRequest("B204", "Lab", "Corp B")));
 
         assertEquals("LAB_ROOM_NOT_FOUND", ex.getCode());
     }
@@ -78,7 +81,7 @@ class LabRoomServiceTest {
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(existing));
         when(assetRepository.existsByLabRoomId(2L)).thenReturn(true);
 
-        ConflictException ex = assertThrows(ConflictException.class, () -> labRoomService.delete(2L, 3L));
+        ConflictException ex = assertThrows(ConflictException.class, () -> labRoomService.delete(2L));
 
         assertEquals("LAB_ROOM_IN_USE", ex.getCode());
         verify(labRoomRepository, never()).delete(any());

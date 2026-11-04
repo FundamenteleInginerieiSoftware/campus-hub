@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -24,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -104,11 +102,11 @@ class AssetControllerTest {
     }
 
     @Test
-    void adminCreateAssetReturns201AndPassesJwtActorId() throws Exception {
-        when(assetService.create(any(CreateAssetRequest.class), eq(3L))).thenReturn(sampleAsset(AssetStatus.AVAILABLE));
+    @WithMockUser(roles = "ADMIN")
+    void adminCreateAssetReturns201() throws Exception {
+        when(assetService.create(any(CreateAssetRequest.class))).thenReturn(sampleAsset(AssetStatus.AVAILABLE));
 
         mockMvc.perform(post("/api/v1/admin/assets")
-                        .with(jwt().jwt(j -> j.subject("3")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -123,7 +121,7 @@ class AssetControllerTest {
                 .andExpect(jsonPath("$.id").value(7))
                 .andExpect(jsonPath("$.status").value("AVAILABLE"));
 
-        verify(assetService).create(any(CreateAssetRequest.class), eq(3L));
+        verify(assetService).create(any(CreateAssetRequest.class));
     }
 
     @Test
@@ -141,7 +139,7 @@ class AssetControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void duplicateSerialReturns409SerialNumberTaken() throws Exception {
-        when(assetService.create(any(CreateAssetRequest.class), any()))
+        when(assetService.create(any(CreateAssetRequest.class)))
                 .thenThrow(new ConflictException("SERIAL_NUMBER_TAKEN", "Serial number already exists"));
 
         mockMvc.perform(post("/api/v1/admin/assets")
@@ -161,7 +159,7 @@ class AssetControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void updateRetiredAssetReturns409AssetRetired() throws Exception {
-        when(assetService.update(eq(7L), any(UpdateAssetRequest.class), any()))
+        when(assetService.update(eq(7L), any(UpdateAssetRequest.class)))
                 .thenThrow(new InvalidStateTransitionException("ASSET_RETIRED", "Cannot update a retired asset"));
 
         mockMvc.perform(put("/api/v1/admin/assets/7")
@@ -180,7 +178,7 @@ class AssetControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void retireAssetReturns200WithRetiredStatus() throws Exception {
-        when(assetService.retire(eq(7L), any())).thenReturn(sampleAsset(AssetStatus.RETIRED));
+        when(assetService.retire(7L)).thenReturn(sampleAsset(AssetStatus.RETIRED));
 
         mockMvc.perform(post("/api/v1/admin/assets/7/retire"))
                 .andExpect(status().isOk())

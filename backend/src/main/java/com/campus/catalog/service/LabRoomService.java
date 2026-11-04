@@ -8,6 +8,7 @@ import com.campus.catalog.web.LabRoomResponse;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class LabRoomService {
     private final LabRoomRepository labRoomRepository;
     private final AssetRepository assetRepository;
     private final AuditService auditService;
+    private final CurrentUser currentUser;
 
     @Transactional(readOnly = true)
     public List<LabRoomResponse> listAll() {
@@ -32,7 +34,7 @@ public class LabRoomService {
     }
 
     @Transactional
-    public LabRoomResponse create(LabRoomRequest request, Long actorId) {
+    public LabRoomResponse create(LabRoomRequest request) {
         String normalizedCode = request.code().trim().toUpperCase(Locale.ROOT);
         if (labRoomRepository.existsByCodeIgnoreCase(normalizedCode)) {
             throw codeTaken(normalizedCode);
@@ -42,7 +44,11 @@ public class LabRoomService {
         try {
             LabRoom saved = labRoomRepository.saveAndFlush(labRoom);
             auditService.record(
-                    actorId, "LAB_ROOM_CREATED", "LAB_ROOM", saved.getId(), "Created lab room " + saved.getCode());
+                    currentUser.id(),
+                    "LAB_ROOM_CREATED",
+                    "LAB_ROOM",
+                    saved.getId(),
+                    "Created lab room " + saved.getCode());
             return LabRoomResponse.from(saved);
         } catch (DataIntegrityViolationException ex) {
             // Concurrent creates can both pass existsByCodeIgnoreCase; the DB unique index stops the second with 409.
@@ -51,7 +57,7 @@ public class LabRoomService {
     }
 
     @Transactional
-    public LabRoomResponse update(Long id, LabRoomRequest request, Long actorId) {
+    public LabRoomResponse update(Long id, LabRoomRequest request) {
         LabRoom labRoom = findOrThrow(id);
         String normalizedCode = request.code().trim().toUpperCase(Locale.ROOT);
         if (labRoomRepository.existsByCodeIgnoreCaseAndIdNot(normalizedCode, id)) {
@@ -62,7 +68,11 @@ public class LabRoomService {
         try {
             LabRoom saved = labRoomRepository.saveAndFlush(labRoom);
             auditService.record(
-                    actorId, "LAB_ROOM_UPDATED", "LAB_ROOM", saved.getId(), "Updated lab room " + saved.getCode());
+                    currentUser.id(),
+                    "LAB_ROOM_UPDATED",
+                    "LAB_ROOM",
+                    saved.getId(),
+                    "Updated lab room " + saved.getCode());
             return LabRoomResponse.from(saved);
         } catch (DataIntegrityViolationException ex) {
             // A concurrent create or rename can pass the check above; the DB unique index stops it with 409.
@@ -71,7 +81,7 @@ public class LabRoomService {
     }
 
     @Transactional
-    public void delete(Long id, Long actorId) {
+    public void delete(Long id) {
         LabRoom labRoom = findOrThrow(id);
         if (assetRepository.existsByLabRoomId(id)) {
             throw roomInUse(labRoom.getCode());
@@ -80,7 +90,8 @@ public class LabRoomService {
         try {
             labRoomRepository.delete(labRoom);
             labRoomRepository.flush();
-            auditService.record(actorId, "LAB_ROOM_DELETED", "LAB_ROOM", id, "Deleted lab room " + labRoom.getCode());
+            auditService.record(
+                    currentUser.id(), "LAB_ROOM_DELETED", "LAB_ROOM", id, "Deleted lab room " + labRoom.getCode());
         } catch (DataIntegrityViolationException ex) {
             throw roomInUse(labRoom.getCode());
         }
