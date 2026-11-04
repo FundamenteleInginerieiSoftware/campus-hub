@@ -180,7 +180,7 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 4 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
+What is on `main` and what is still in review, per member. **As of 5 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
 
 ### Matei Necula: cloud, security & auth
 
@@ -205,12 +205,15 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
 | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136 |
 | Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
 | No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
-| Personal docs 01-19 | #14 + each PR above |
+| Old tokens ignored on the public `/api/v1/auth/**` endpoints | #126 |
+| Firewall-rejected URLs answer ProblemDetail JSON | #127 |
+| Disabled or deleted users lose access at once (`UserApi.findActiveRole`, checked on every request with a token) | #128 |
+| Personal docs 01-22 + README index of them | #14 + each PR above, #137 |
 
-**In review:** #126–#129 (old token on `/auth/**`, firewall JSON, disabled users lose access at once, S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds).
+**In review:** #129 (S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds), #138 (admin reservations desk page), #139 (security pass tests); all need re-approval after merging main.
 
 **Next:** Terraform parts 1 + 2 (W5); push the image to ECR + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
 
@@ -229,10 +232,7 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Catalog admin actor via `CurrentUser` | #89 |
 | Local disk storage with security checks (type, size, path traversal) | #90 |
 | Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
-
-| In review | PRs |
-|---|---|
-| Query-parameter validation errors → 400 `VALIDATION_FAILED` (closes #103) | #110 |
+| Query-parameter validation errors → 400 `VALIDATION_FAILED` | #110 |
 
 **Next:** `CatalogSeeder`, catalog / asset details / admin inventory pages (W6, for M1); retire flow with Calin (W7). Full list: `docs/whats-left.md` §5.
 
@@ -260,6 +260,14 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Reservation diagrams, team test plan, Strategy pattern doc | #101 |
 | More unit + web slice tests, 3 new ArchUnit rules (shared `Clock`, `@Transactional` placement, no ORDINAL enums) | #102 |
 | Review follow-ups: badge check, test cleanup, coverage worded as a target | #109 |
+| Timestamps in whole seconds (reservations, reassignment log) | #130 |
+| No check-out of an overdue or non-bookable asset | #131 |
+| Reassignment: one transaction per booking, one failed move no longer rolls back the rest | #132 |
+| My reservations: loader and error reset on every fetch | #133 |
+
+| In review | PRs |
+|---|---|
+| OVERDUE bookings block the asset until returned (closes #113; needs re-approval) | #141 |
 
 | Parked (draft, after M1) | PRs |
 |---|---|
@@ -282,7 +290,9 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | In review | PRs |
 |---|---|
 | Register page (approved) | #107 |
-| Incident start-repair, reject, my incidents, incident details (approved) | #108 |
+| Incident start-repair, reject, my incidents, incident details (changes requested) | #108 |
+| ADR-002 ✅ in `docs/decisions.md` (approved) | #111 |
+| Keep the token when the backend is down on startup (closes #124) | #142 |
 
 **Next:** merge #111 (ADR-002 ✅) and #107 (register page); fix #108; photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
 
