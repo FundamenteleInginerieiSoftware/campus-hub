@@ -59,7 +59,7 @@ campus-hub/
 ### `.github/` (GitHub settings stored as files)
 | File | What it does |
 |---|---|
-| `CODEOWNERS` | Says who must review changes in each folder. GitHub asks them automatically. |
+| `CODEOWNERS` | Says who GitHub asks to review. Since 4 Nov: the whole team, on every PR. |
 | `pull_request_template.md` | The form every pull request starts with: what, why, how to test, a checklist. |
 | `ISSUE_TEMPLATE/` | Forms for new issues: bug, task, user story. |
 | `workflows/ci.yml` | The robot that builds and tests every pull request. It must be green before merging. |
@@ -157,7 +157,7 @@ campus-hub/
 | File | Key points |
 |---|---|
 | `AGENTS.md` | Starts with an override table: the plan PDFs say Maven / Java 21 / H2, the repo uses **Gradle / Java 25 / PostgreSQL 18**. Then: session start checks, the v2 ownership table, the "never" list, workflow, architecture rules, week plan, WAIT-or-go checks (`onmain`/`inmain` shell helpers), cross-module contracts. |
-| `CODEOWNERS` | Every line is owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania), so either can approve. **The last matching rule wins**, so specific paths (`user/admin/`, `workflows/ci.yml`) come after general ones (`user/`, `.github/`). `ci.yml` also lists me because it is a required check. |
+| `CODEOWNERS` | One line, `*` = all four of us, so GitHub requests every teammate on every PR (never the author). Since 4 Nov 2026 the `protect-main` ruleset no longer requires a code owner's approval: 1 approval from anyone is enough. Before that, every path had owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania). |
 | `ci.yml` | One job named **`ci`**, which is the exact name the `protect-main` ruleset requires. A `postgres:18` service container with `campus_test`; `SPRING_DATASOURCE_*` env vars point the tests at it. Java 25 (Temurin) + `gradle/actions/setup-gradle@v6`, then `./gradlew build` and the JaCoCo report as an artifact. Every backend step has `if: hashFiles('backend/gradlew') != ''` and every frontend step `hashFiles('frontend/package.json')`, so docs-only PRs (like #12) still pass. |
 | Templates | PR checklist uses `./gradlew build`; the task template's Definition of Done says "works from a fresh database (reset in pgAdmin)". |
 | `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |

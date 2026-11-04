@@ -118,7 +118,7 @@ git checkout -b docs/<your-name>-intro
    git commit -m "docs(<your-name>): add personal documentation folder"
    git push -u origin docs/<your-name>-intro
    ```
-3. On GitHub, open a **Pull Request** into `main` and request a review from your **review buddy** (see the Team table).
+3. On GitHub, open a **Pull Request** into `main`. GitHub asks the whole team to review; any teammate can approve.
 4. After 1 approval and a green `ci` check, merge with **Squash and merge**. The branch is deleted automatically.
 
 ---
@@ -167,14 +167,14 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 6. Team
 
-| # | Member | Role | Owns (code) | GitHub | Review buddy |
-|---|---|---|---|---|---|
-| 1 | Matei Necula | Cloud, Security & Auth | build files, `application*.yml`, `config/`, `user/` (auth), `messaging/`, all AWS (`infra/`, Dockerfile, deploy), S3/SES adapters; admin reservations desk page | [@matei-necula](https://github.com/matei-necula) | Liviu |
-| 2 | Liviu Nedelcu | Catalog, Inventory & Shared Services | `catalog/`, `common/error`, `common/paging`, `common/audit`, `storage/`, `notification/`; catalog, inventory and audit log pages | [@NliviuN](https://github.com/NliviuN) | Matei |
-| 3 | Calin Murariu | Reservations, Scheduling & Reassignment | `reservation/`, `reassignment/`, `common/time` (`Clock`), ArchUnit rules; booking and My reservations pages | [@Swiorx](https://github.com/Swiorx) | Stefania |
-| 4 | Stefania | Incidents, Users & Frontend Lead | `incident/`, user admin (`user/admin/`), `common/security` (`CurrentUser`), `frontend/` (lead), CI (`ci.yml`) | [@m1runa-stefan1a](https://github.com/m1runa-stefan1a) | Calin |
+| # | Member | Role | Owns (code) | GitHub |
+|---|---|---|---|---|
+| 1 | Matei Necula | Cloud, Security & Auth | build files, `application*.yml`, `config/`, `user/` (auth), `messaging/`, all AWS (`infra/`, Dockerfile, deploy), S3/SES adapters; admin reservations desk page | [@matei-necula](https://github.com/matei-necula) |
+| 2 | Liviu Nedelcu | Catalog, Inventory & Shared Services | `catalog/`, `common/error`, `common/paging`, `common/audit`, `storage/`, `notification/`; catalog, inventory and audit log pages | [@NliviuN](https://github.com/NliviuN) |
+| 3 | Calin Murariu | Reservations, Scheduling & Reassignment | `reservation/`, `reassignment/`, `common/time` (`Clock`), ArchUnit rules; booking and My reservations pages | [@Swiorx](https://github.com/Swiorx) |
+| 4 | Stefania | Incidents, Users & Frontend Lead | `incident/`, user admin (`user/admin/`), `common/security` (`CurrentUser`), `frontend/` (lead), CI (`ci.yml`) | [@m1runa-stefan1a](https://github.com/m1runa-stefan1a) |
 
-Your **review buddy** reviews your PRs (and you review theirs) within 24h. GitHub requests the right reviewer automatically through `.github/CODEOWNERS`.
+**Anyone can review anyone's PR**, within 24h: `.github/CODEOWNERS` requests all teammates on every PR, and 1 approval from any of them is enough. The first one free picks it up.
 
 ---
 

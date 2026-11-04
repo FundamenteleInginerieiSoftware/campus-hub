@@ -13,7 +13,8 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 |---|---|---|---|
 | 2026-10-21 | **Role split v2** (final) | ✅ | Matei: auth/security, build files, all AWS, admin reservations desk page. Liviu: catalog + shared services (errors, paging, audit, storage/notification interfaces + local versions). Calin: reservations + reassignment engine, `Clock`, ArchUnit. Stefania: incidents, user admin + `CurrentUser`, frontend lead, CI. Full table in `AGENTS.md` §1 |
 | 2026-10-21 | Each member builds the frontend pages of their own module | ✅ | Following Stefania's conventions; she reviews every frontend PR |
-| 2026-10-08 | Review buddies: **Matei ↔ Liviu**, **Calin ↔ Stefania** | ✅ | `.github/CODEOWNERS` requests owner + buddy automatically |
+| 2026-11-04 | **No more review buddies: anyone can review anyone's PR** | ✅ | Matei. 1 approval from any teammate is enough (ruleset: code owner review off); `.github/CODEOWNERS` requests all four of us on every PR. The 24h rule stays: the first one free picks it up. Code ownership (who writes what) is unchanged |
+| 2026-10-08 | ~~Review buddies: Matei ↔ Liviu, Calin ↔ Stefania~~ | ✅ | Replaced on 2026-11-04 (row above) |
 | 2026-10-08 | GitHub Flow: branch per issue, PR + 1 approval + green `ci`, **squash merge**, Conventional Commits | ✅ | Ruleset `protect-main` |
 | 2026-10-08 | All files removed from `main` (#10) and the project restarted | ✅ | Restart PRs: #12 (repo guides), #13 (Gradle skeleton), #14 (Matei's docs) |
 | – | Weekly meeting day/time, chat channel | ⏳ | Fill in at the next meeting |
