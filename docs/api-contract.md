@@ -221,6 +221,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
 ```json
 // CreateReservationRequest
@@ -271,6 +272,18 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "activeCount": 2,
   "completedCount": 5,
   "reassignedCount": 1
+}
+
+// ReassignmentLogResponse (returned by GET /api/v1/admin/reassignments)
+{
+  "id": 1,
+  "incidentId": 100,
+  "reservationId": 10,
+  "fromAssetId": 501,
+  "toAssetId": 502,
+  "outcome": "REASSIGNED",
+  "strategy": "SameModelStrategy",
+  "createdAt": "2026-11-03T14:00:00"
 }
 
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE` or `RETIRED`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).
