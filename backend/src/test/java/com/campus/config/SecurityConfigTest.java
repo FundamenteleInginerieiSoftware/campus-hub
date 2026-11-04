@@ -78,6 +78,13 @@ class SecurityConfigTest {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
+    // #116: an old or broken token must not block the public auth endpoints.
+    @Test
+    void authEndpointsIgnoreAnInvalidToken() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/ping").header("Authorization", "Bearer expired-or-broken"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void studentPassesSecurityOnNormalPaths() throws Exception {
         mockMvc.perform(get(PROBE).header("Authorization", bearer("STUDENT"))).andExpect(status().isNotFound());

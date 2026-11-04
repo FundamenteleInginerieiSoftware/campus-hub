@@ -54,6 +54,19 @@ class AuthFlowIT {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
+    // #116: the browser still sends the old token from localStorage when the user logs in again.
+    @Test
+    void loginWorksWhileAnExpiredTokenIsStillSent() throws Exception {
+        register("stale@campus.test");
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .header("Authorization", "Bearer an-old-expired-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\": \"stale@campus.test\", \"password\": \"secret123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
     @Test
     void sameEmailTwiceIs409() throws Exception {
         register("twice@campus.test");
