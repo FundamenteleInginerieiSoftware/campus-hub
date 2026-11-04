@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -49,6 +50,7 @@ public class ReassignmentLog {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    // Bug fixed (#123): createdAt truncated to whole seconds to match API contract format and DB persistence.
     public ReassignmentLog(
             Long incidentId,
             Long reservationId,
@@ -63,6 +65,7 @@ public class ReassignmentLog {
         this.toAssetId = toAssetId;
         this.outcome = Objects.requireNonNull(outcome, "outcome must not be null");
         this.strategy = strategy;
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        this.createdAt =
+                Objects.requireNonNull(createdAt, "createdAt must not be null").truncatedTo(ChronoUnit.SECONDS);
     }
 }

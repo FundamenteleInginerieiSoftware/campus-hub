@@ -64,7 +64,7 @@ public class ReservationService implements ReservationApi {
     @Transactional
     public ReservationResponse createReservation(CreateReservationRequest req) {
         Long userId = currentUser.id();
-        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime now = now();
 
         validateReservationRequest(req, now);
 
@@ -157,7 +157,7 @@ public class ReservationService implements ReservationApi {
     @Transactional
     public ReservationResponse cancelReservation(Long id) {
         Reservation r = loadOwnedOrAdmin(id);
-        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime now = now();
 
         if (!currentUser.isAdmin() && !now.isBefore(r.getStartTime())) {
             throw new ConflictException(
@@ -191,7 +191,7 @@ public class ReservationService implements ReservationApi {
             throw new BusinessRuleException("CONFLICTING_PARAMETERS", "Provide either assetId or categoryId, not both");
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         validateSlotRules(start, end, now);
 
         if (assetId != null) {
@@ -353,7 +353,7 @@ public class ReservationService implements ReservationApi {
             return false;
         }
 
-        r.forceCancel(LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS), reason);
+        r.forceCancel(now(), reason);
         auditService.record(null, "FORCE_CANCEL_RESERVATION", "Reservation", r.getId(), reason);
         return true;
     }
@@ -379,7 +379,7 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime now = now();
         LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
         LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
 
@@ -404,7 +404,7 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime now = now();
         reservation.returnItem(now);
         auditService.record(
                 currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at " + now);
@@ -475,5 +475,11 @@ public class ReservationService implements ReservationApi {
         r.markOverdue();
         auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
         return true;
+    }
+
+    // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET
+    // return consistent values without subsecond drift between API responses and PostgreSQL storage.
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 }

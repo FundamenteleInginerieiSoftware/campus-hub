@@ -71,6 +71,9 @@ public class Reservation {
     @Column(name = "version", nullable = false)
     private Long version;
 
+    // Bug fixed (#123): timestamps truncated to whole seconds to strictly match the API contract
+    // (ISO-8601 without nanos) and Postgres storage (Postgres keeps at most microseconds; without
+    // truncation, in-memory nanos returned by POST differed from values loaded by subsequent GETs).
     public Reservation(
             Long userId, Long assetId, LocalDateTime startTime, LocalDateTime endTime, LocalDateTime createdAt) {
         this.userId = Objects.requireNonNull(userId, "userId must not be null");
@@ -85,7 +88,7 @@ public class Reservation {
     public void checkOut(LocalDateTime now) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CHECKED_OUT;
-        this.checkedOutAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
+        this.checkedOutAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
     }
 
     public void returnItem(LocalDateTime now) {
@@ -95,13 +98,13 @@ public class Reservation {
                     "Cannot return reservation in status " + this.status + "; expected CHECKED_OUT or OVERDUE");
         }
         this.status = ReservationStatus.RETURNED;
-        this.returnedAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
+        this.returnedAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
     }
 
     public void cancel(LocalDateTime now, String reason) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CANCELLED;
-        this.cancelledAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
+        this.cancelledAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
         this.cancelReason = reason;
     }
 
@@ -111,7 +114,7 @@ public class Reservation {
         }
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.FORCE_CANCELLED;
-        this.cancelledAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
+        this.cancelledAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
         this.cancelReason = reason;
     }
 

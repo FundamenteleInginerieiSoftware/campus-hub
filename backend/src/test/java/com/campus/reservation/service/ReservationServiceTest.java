@@ -54,8 +54,10 @@ class ReservationServiceTest {
     private static final Long USER_ID = 42L;
     private static final Long ASSET_ID = 10L;
 
-    // Fixed clock: 2026-11-02T08:00:00Z -> In Europe/Bucharest (UTC+2 in winter) this is 2026-11-02T10:00:00 (Monday)
-    private final Clock clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    // Fixed clock with nanos: 2026-11-02T08:00:00.123456789Z -> In Europe/Bucharest (UTC+2 in winter) this is
+    // 2026-11-02T10:00:00.123456789 (Monday)
+    private final Clock clock =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00.123456789Z"), ZoneId.of("Europe/Bucharest"));
 
     @Mock
     private ReservationRepository reservationRepository;
