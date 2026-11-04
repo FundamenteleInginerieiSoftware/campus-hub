@@ -1,5 +1,6 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
@@ -198,10 +199,11 @@ public class ReservationService implements ReservationApi {
         validateSlotRules(start, end, now);
 
         if (assetId != null) {
-            // Verify asset exists in catalog (throws 404 ASSET_NOT_FOUND if unknown)
-            catalogApi.getAsset(assetId);
+            // Bug fixed (#155): getAsset(assetId) already returns the AssetSummary with its status;
+            // checking asset.status() directly avoids a second identical SELECT via catalogApi.isBookable(assetId).
+            AssetSummary asset = catalogApi.getAsset(assetId);
 
-            if (!catalogApi.isBookable(assetId)) {
+            if (asset.status() != AssetStatus.AVAILABLE) {
                 return AvailabilityResponse.forAsset(assetId, start, end, false, "ASSET_NOT_BOOKABLE");
             }
 
