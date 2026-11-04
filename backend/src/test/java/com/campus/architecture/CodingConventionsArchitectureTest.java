@@ -1,10 +1,13 @@
 package com.campus.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.fields;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -15,6 +18,12 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import org.springframework.data.repository.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -87,4 +96,66 @@ class CodingConventionsArchitectureTest {
             .because(
                     "Entities must not define equals, hashCode, or toString (via Lombok @Data / @EqualsAndHashCode / @ToString or hand-written); "
                             + "JPA proxy identity and dirty checking are managed by the database primary key and EntityManager");
+
+    // Rule 4: Shared Clock bean enforcement (AGENTS.md §3).
+    // Never call LocalDateTime.now() or Instant.now() without passing the shared Clock.
+    @ArchTest
+    static final ArchRule no_unparameterized_datetime_now = noClasses()
+            .should()
+            .callMethod(LocalDateTime.class, "now")
+            .orShould()
+            .callMethod(Instant.class, "now")
+            .because(
+                    "All date and time calculations must use the shared Clock bean (e.g. LocalDateTime.now(clock)) to ensure deterministic tests and proper time zone handling");
+
+    // Rule 5: @Transactional belongs on service methods only, never on controllers or repositories (AGENTS.md §5).
+    @ArchTest
+    static final ArchRule controllers_must_not_be_transactional = noClasses()
+            .that()
+            .areAnnotatedWith(RestController.class)
+            .should()
+            .beAnnotatedWith(Transactional.class)
+            .orShould(new ArchCondition<JavaClass>("have @Transactional methods") {
+                @Override
+                public void check(JavaClass javaClass, ConditionEvents events) {
+                    for (JavaMethod method : javaClass.getMethods()) {
+                        if (method.isAnnotatedWith(Transactional.class)) {
+                            String message = String.format(
+                                    "Controller method %s must not be annotated with @Transactional",
+                                    method.getFullName());
+                            events.add(SimpleConditionEvent.violated(method, message));
+                        }
+                    }
+                }
+            })
+            .because("@Transactional belongs on service methods only, never on controllers (AGENTS.md §5)");
+
+    @ArchTest
+    static final ArchRule repositories_must_not_be_transactional = noClasses()
+            .that()
+            .areAssignableTo(Repository.class)
+            .should()
+            .beAnnotatedWith(Transactional.class)
+            .because("@Transactional belongs on service methods only, never on repositories (AGENTS.md §5)");
+
+    // Rule 6: Enums in entities must use EnumType.STRING, never ORDINAL (AGENTS.md §5).
+    @ArchTest
+    static final ArchRule entities_must_not_use_ordinal_enum_mapping = fields().that()
+            .areDeclaredInClassesThat()
+            .areAnnotatedWith(Entity.class)
+            .and()
+            .areAnnotatedWith(Enumerated.class)
+            .should(new ArchCondition<JavaField>("use EnumType.STRING instead of ORDINAL") {
+                @Override
+                public void check(JavaField field, ConditionEvents events) {
+                    Enumerated enumerated = field.getAnnotationOfType(Enumerated.class);
+                    if (enumerated.value() == EnumType.ORDINAL) {
+                        String message = String.format(
+                                "Entity field %s uses EnumType.ORDINAL; must use EnumType.STRING", field.getFullName());
+                        events.add(SimpleConditionEvent.violated(field, message));
+                    }
+                }
+            })
+            .because(
+                    "Database enums must be VARCHAR(32) with EnumType.STRING to prevent silent data corruption if enum constants are reordered (AGENTS.md §5)");
 }
