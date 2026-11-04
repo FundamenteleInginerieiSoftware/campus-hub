@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`) and the firewall error format (`21-firewall-error-json.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`) the firewall error format (`21-firewall-error-json.md`) and the security pass tests (`25-security-pass-tests.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -38,7 +38,8 @@ campus-hub/
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
-        │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest
+        │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest,
+        │                          SecurityPassIT
         └── test/resources/application-test.yml  static/index.html
 ```
 
@@ -128,6 +129,7 @@ campus-hub/
 | `ErrorJsonTest` | Checks that wrong input (a missing field, broken data, a page that doesn't exist) still gets an error with its short code (`12-error-codes-fix.md`). |
 | `SpaConfig.java` | On AWS, sends the website for every address that isn't a file or the API, so reloading a page like "My reservations" works (`19-dockerfile.md`). |
 | `SpaFrontendTest` | Checks that the website and its pages load without a login, and that a missing file or an API path doesn't get the website by mistake. |
+| `SecurityPassIT` | The security check-up: a student can't see or cancel another student's booking (it looks "not found"), can't book or report in someone else's name, can't open any admin page, and error messages never show program internals (`25-security-pass-tests.md`). |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -236,6 +238,7 @@ campus-hub/
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
 | `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. With real tokens signed by our `JwtEncoder`: a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 on other `/api` paths and on a `POST` outside the API; a broken token on `/api/v1/auth/ping` is ignored (200); `/api/v1/auth/ping;x=1` (blocked by the firewall) → 400 `REQUEST_REJECTED` JSON. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
+| `SecurityPassIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back), real users and login tokens, asset + booking created through Liviu's and Calin's REST endpoints: student B gets 404 `RESERVATION_NOT_FOUND` on A's reservation (`GET`, `cancel`), same as for a missing id; B's `/me` lists are empty; `userId` / `reportedById` in the body are ignored. Every `/api/v1/admin/**` mapping read from `RequestMappingHandlerMapping` (16 on `main`) → student 403 `FORBIDDEN`, no token 401 `UNAUTHORIZED`. 9 error cases + a test-only endpoint throwing a `DataIntegrityViolationException` → ProblemDetail with `code`, no stack trace, class name or SQL. |
 | `ErrorJsonTest` | `@SpringBootTest` + MockMvc with a test-only `@RestController` (`@Import`, since `main` has no `@Valid` endpoint yet) and `jwt()` from spring-security-test as the token: blank field → 400 `VALIDATION_FAILED` + `errors[].field`; broken JSON → 400 `MALFORMED_REQUEST`; unknown path → 404 `NOT_FOUND`. All three failed before the fix. |
 | `SpaFrontendTest` | `@SpringBootTest` + MockMvc with `test/resources/static/index.html` as a stand-in build: `/` forwards to `index.html` (Boot's welcome page; MockMvc doesn't follow forwards), `/reservations` and `/admin/incidents` return it without a token, `/assets/index-old.js` → 404, an unknown `/api/v1` path → 401 JSON, not HTML. |
 | `AsyncConfigTest` | `@SpringBootTest` with a test-only `@Async` bean: it is a proxy (async on) and runs on the test thread (sync executor). Its value is read through a method, because fields of a Spring proxy stay empty. |
