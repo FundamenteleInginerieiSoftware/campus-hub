@@ -9,7 +9,6 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.security.CurrentUser;
-import com.campus.common.time.ClockConfig;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
@@ -19,8 +18,10 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.service.ReservationService;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -41,9 +44,21 @@ import org.springframework.transaction.annotation.Transactional;
     ReservationService.class,
     SameModelStrategy.class,
     SameCategoryStrategy.class,
-    ClockConfig.class
+    ReassignmentRollbackIT.TestClockConfig.class
 })
 class ReassignmentRollbackIT {
+
+    // Bug fixed: The test was importing the real ClockConfig.class (system clock) with a hard-coded
+    // slot on 2026-11-02. When real calendar time passed 2026-11-02 16:00, ReassignmentService skipped
+    // the slot as past (findUpcomingActiveByAsset), leaving the reservation un-reassigned.
+    // Fix: Inject a fixed Clock at 2026-11-02 08:00 Europe/Bucharest via @TestConfiguration (AGENTS.md §5).
+    @TestConfiguration
+    static class TestClockConfig {
+        @Bean
+        Clock clock() {
+            return Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+        }
+    }
 
     private static final Long DAMAGED_ASSET_ID = 501L;
     private static final Long SUB_MODEL_BUSY_ID = 502L;
