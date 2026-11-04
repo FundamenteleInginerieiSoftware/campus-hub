@@ -64,7 +64,10 @@ public class AdminReservationController {
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)"),
         @ApiResponse(responseCode = "404", description = "Reservation not found"),
-        @ApiResponse(responseCode = "409", description = "Check-out window closed or invalid reservation state")
+        @ApiResponse(
+                responseCode = "409",
+                description =
+                        "Check-out window closed, asset not bookable, active holder already exists, or invalid state")
     })
     @PostMapping("/{id}/check-out")
     public ResponseEntity<ReservationResponse> checkOut(@PathVariable Long id) {

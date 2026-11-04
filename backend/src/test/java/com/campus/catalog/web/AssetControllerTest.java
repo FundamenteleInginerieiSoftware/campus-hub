@@ -14,10 +14,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.service.AssetService;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -54,6 +57,50 @@ class AssetControllerTest {
                 "Electronics Lab",
                 NOW,
                 NOW);
+    }
+
+    @Test
+    void unauthenticatedSearchReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/assets"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        verifyNoInteractions(assetService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void studentCanSearchAssetsWithDefaultPagingAndFilters() throws Exception {
+        PageResponse<AssetResponse> page = new PageResponse<>(List.of(sampleAsset(AssetStatus.AVAILABLE)), 0, 20, 1, 1);
+        when(assetService.search("rigol", 2L, 1L, AssetStatus.AVAILABLE, 0, 20, "name,asc"))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/assets")
+                        .param("search", "rigol")
+                        .param("categoryId", "2")
+                        .param("labRoomId", "1")
+                        .param("status", "AVAILABLE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(7))
+                .andExpect(jsonPath("$.content[0].name").value("Rigol DS1054Z no. 1"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void searchWithInvalidEnumOrUnsupportedSortReturns400InvalidParameter() throws Exception {
+        mockMvc.perform(get("/api/v1/assets").param("status", "BROKEN"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+
+        when(assetService.search(null, null, null, null, 0, 20, "secret,asc"))
+                .thenThrow(new InvalidParameterException("Unsupported sort property 'secret'"));
+
+        mockMvc.perform(get("/api/v1/assets").param("sort", "secret,asc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
     }
 
     @Test

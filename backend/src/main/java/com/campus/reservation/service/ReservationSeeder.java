@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,7 +56,7 @@ class ReservationSeeder implements CommandLineRunner {
             nextWeekday = nextWeekday.plusDays(1);
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 
         // One reservation for student1 (id 1) and one for student2 (id 2) so student1 stays below
         // the 2-active-bookings limit for the Swagger prototype demo.

@@ -122,7 +122,7 @@ Validation errors (400) add a list of field errors:
 
 | Exception (`common.error`) | Status |
 |---|---|
-| `BadRequestException(code, msg)` | 400 |
+| `BadRequestException(code, msg)`, `InvalidParameterException(msg)` | 400 |
 | `UnauthorizedException(code, msg)` | 401 |
 | `ForbiddenException(code, msg)` | 403 |
 | `NotFoundException(code, msg)` | 404 |
@@ -144,6 +144,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 | `VALIDATION_FAILED` | 400 | `@Valid` failed; see `errors` |
 | `MALFORMED_REQUEST` | 400 | unreadable JSON, wrong date format |
 | `INVALID_PARAMETER` | 400 | bad query parameter, e.g. an unknown `sort` field |
+| `REQUEST_REJECTED` | 400 | the URL was blocked by Spring Security's firewall (`;`, `..`, encoded `/` in the path) |
 | `UNAUTHORIZED` | 401 | no token, invalid or expired token |
 | `FORBIDDEN` | 403 | logged in, but not allowed (e.g. a student on `/api/v1/admin/**`) |
 | `STALE_VERSION` | 409 | someone else changed the row first (optimistic locking): reload and retry |
@@ -221,7 +222,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
-| `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
@@ -319,16 +320,24 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 
 ---
 
-### Catalog endpoints — Assets Details & Admin Inventory (Liviu)
+### Catalog endpoints — Assets Search, Details & Admin Inventory (Liviu)
 
 All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
 
 | Method & Path | Access | Response | Errors |
 |---|---|---|---|
+| `GET /api/v1/assets` | `STUDENT`, `ADMIN` | `200` `PageResponse<AssetResponse>` | `400 INVALID_PARAMETER` |
 | `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
 | `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
 | `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
 | `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
+
+`GET /api/v1/assets` optional query parameters:
+- `search`: case-insensitive substring match across `name`, `model`, and `serialNumber`
+- `categoryId`: numeric category ID
+- `labRoomId`: numeric lab room ID
+- `status`: `AVAILABLE | UNDER_MAINTENANCE | RETIRED` (retired items are hidden from `STUDENT` searches; `ADMIN` sees all statuses)
+- `page` (default `0`, `>= 0`), `size` (default `20`, `1..100`), `sort` (default `name,asc`; whitelisted fields: `name`, `model`, `serialNumber`, `status`, `createdAt`, `updatedAt`, direction `asc` or `desc`)
 
 ```json
 // CreateAssetRequest

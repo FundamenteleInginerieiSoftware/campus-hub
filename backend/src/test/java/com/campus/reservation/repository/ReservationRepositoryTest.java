@@ -219,4 +219,28 @@ class ReservationRepositoryTest {
                 .extracting(Reservation::getId)
                 .containsExactly(existingReservation.getId());
     }
+
+    @Test
+    @DisplayName(
+            "findFirstByAssetIdAndStatusInOrderByStartTimeDesc returns overdue holder when subsequent reservation is confirmed")
+    void findFirstByAssetIdAndStatusInReturnsOverdueHolder() {
+        // r1: earlier reservation that was checked out and became OVERDUE
+        Reservation r1 = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        r1.checkOut(LocalDateTime.of(2026, 11, 2, 10, 0));
+        r1.markOverdue();
+        Reservation savedR1 = reservationRepository.saveAndFlush(r1);
+
+        // existingReservation from setUp is CONFIRMED at 14:00 - 16:00
+        var holder = reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
+                ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE));
+
+        assertThat(holder).isPresent();
+        assertThat(holder.get().getId()).isEqualTo(savedR1.getId());
+        assertThat(holder.get().getStatus()).isEqualTo(ReservationStatus.OVERDUE);
+    }
 }

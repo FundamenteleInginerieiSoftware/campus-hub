@@ -1,7 +1,13 @@
 package com.campus.reassignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campus.catalog.api.AssetStatus;
@@ -34,13 +40,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @DataJpaTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({
     ReassignmentService.class,
+    ReassignmentBookingProcessor.class,
     ReservationService.class,
     SameModelStrategy.class,
     SameCategoryStrategy.class,
@@ -77,6 +87,9 @@ class ReassignmentRollbackIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @MockitoBean
     private CatalogApi catalogApi;
@@ -181,5 +194,69 @@ class ReassignmentRollbackIT {
         assertThat(entry.getToAssetId()).isEqualTo(SUB_CAT_FREE_ID);
         assertThat(entry.getOutcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
         assertThat(entry.getStrategy()).isEqualTo("SameCategoryStrategy");
+    }
+
+    @Test
+    @DisplayName("Bug #112 fix: Concurrent cancellation on booking 2 does not roll back booking 1 reassignment")
+    void concurrentModificationOnOneBookingDoesNotRollbackOtherReassignments() {
+        LocalDateTime start1 = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end1 = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime start2 = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime end2 = LocalDateTime.of(2026, 11, 2, 18, 0);
+
+        Reservation b1 = reservationRepository.saveAndFlush(
+                new Reservation(USER_ID, DAMAGED_ASSET_ID, start1, end1, LocalDateTime.of(2026, 11, 2, 10, 0)));
+        Reservation b2 = reservationRepository.saveAndFlush(
+                new Reservation(USER_ID, DAMAGED_ASSET_ID, start2, end2, LocalDateTime.of(2026, 11, 2, 10, 0)));
+
+        AssetSummary damaged =
+                new AssetSummary(DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+        AssetSummary subFree =
+                new AssetSummary(SUB_CAT_FREE_ID, "Sub Free", "DIFFERENT_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damaged);
+        when(catalogApi.findAvailableByModel(any(), anyLong())).thenReturn(List.of());
+        when(catalogApi.findAvailableByCategory(500L, DAMAGED_ASSET_ID)).thenReturn(List.of(subFree));
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+
+        // Simulate student concurrently cancelling b2 in a separate committed transaction
+        // while b1's notification is being dispatched (exact #112 race condition)
+        TransactionTemplate tt = new TransactionTemplate(transactionManager);
+        tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        doAnswer(invocation -> {
+                    tt.execute(status -> {
+                        Reservation r2 =
+                                reservationRepository.findById(b2.getId()).orElseThrow();
+                        r2.cancel(LocalDateTime.of(2026, 11, 2, 12, 0), "Cancelled concurrently by student");
+                        reservationRepository.saveAndFlush(r2);
+                        return null;
+                    });
+                    return null;
+                })
+                .when(notificationService)
+                .notifyUser(eq(USER_ID), eq("Reservation Reassigned"), anyString());
+
+        AssetDamagedEvent event =
+                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+
+        reassignmentService.handle(event);
+
+        // Booking 1 was moved to SUB_CAT_FREE_ID and its log is committed
+        Reservation updatedB1 = reservationRepository.findById(b1.getId()).orElseThrow();
+        assertThat(updatedB1.getAssetId()).isEqualTo(SUB_CAT_FREE_ID);
+        assertThat(updatedB1.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+
+        // Booking 2 remained CANCELLED (skipped cleanly)
+        Reservation updatedB2 = reservationRepository.findById(b2.getId()).orElseThrow();
+        assertThat(updatedB2.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+
+        // Exactly 1 log entry (for b1), 0 for b2
+        List<ReassignmentLog> logs = reassignmentLogRepository.findAll();
+        assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).getReservationId()).isEqualTo(b1.getId());
+
+        // Exactly 1 notification was sent (for b1)
+        verify(notificationService, times(1)).notifyUser(eq(USER_ID), eq("Reservation Reassigned"), anyString());
     }
 }

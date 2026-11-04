@@ -1,6 +1,8 @@
 package com.campus.catalog.web;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.service.AssetService;
+import com.campus.common.paging.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -11,15 +13,29 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Assets", description = "Equipment details and admin inventory management")
+@Tag(name = "Assets", description = "Equipment catalog search, details, and admin inventory management")
 public class AssetController {
 
     private final AssetService assetService;
+
+    @GetMapping("/api/v1/assets")
+    @Operation(summary = "Search and filter equipment with pagination and sorting")
+    public PageResponse<AssetResponse> search(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Long labRoomId,
+            @RequestParam(required = false) AssetStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "name,asc") String sort) {
+        return assetService.search(search, categoryId, labRoomId, status, page, size, sort);
+    }
 
     @GetMapping("/api/v1/assets/{id}")
     @Operation(summary = "Get equipment details by ID (404 ASSET_NOT_FOUND)")

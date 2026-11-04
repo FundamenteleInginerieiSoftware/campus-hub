@@ -19,19 +19,28 @@ import com.campus.catalog.web.CreateAssetRequest;
 import com.campus.catalog.web.UpdateAssetRequest;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class AssetServiceTest {
@@ -179,5 +188,74 @@ class AssetServiceTest {
 
         assertEquals("ASSET_RETIRED", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void searchMapsPageResponseWithWhitelistedSortAndDeterministicIdTieBreaker() {
+        Asset asset =
+                new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", "4-ch scope", category, labRoom, EXPECTED_NOW);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(assetRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(asset), PageRequest.of(0, 10), 1));
+
+        PageResponse<AssetResponse> page =
+                assetService.search("rigol", 2L, 1L, AssetStatus.AVAILABLE, 0, 10, "createdAt,desc");
+
+        assertEquals(1, page.totalElements());
+        assertEquals(1, page.content().size());
+        assertEquals("Rigol #1", page.content().getFirst().name());
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(assetRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        Sort expectedSort = Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        assertEquals(expectedSort, pageableCaptor.getValue().getSort());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void searchDefaultsBlankDirectionToAscending() {
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(assetRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        PageResponse<AssetResponse> page = assetService.search(null, null, null, null, 0, 20, "model");
+
+        assertEquals(0, page.totalElements());
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(assetRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        assertEquals(
+                Sort.by(Sort.Direction.ASC, "model").and(Sort.by(Sort.Direction.ASC, "id")),
+                pageableCaptor.getValue().getSort());
+    }
+
+    @Test
+    void searchRejectsInvalidPaginationAndUnwhitelistedSort() {
+        InvalidParameterException negativePage = assertThrows(
+                InvalidParameterException.class, () -> assetService.search(null, null, null, null, -1, 20, "name,asc"));
+        assertEquals("INVALID_PARAMETER", negativePage.getCode());
+
+        InvalidParameterException zeroSize = assertThrows(
+                InvalidParameterException.class, () -> assetService.search(null, null, null, null, 0, 0, "name,asc"));
+        assertEquals("INVALID_PARAMETER", zeroSize.getCode());
+
+        InvalidParameterException oversizedPage = assertThrows(
+                InvalidParameterException.class, () -> assetService.search(null, null, null, null, 0, 101, "name,asc"));
+        assertEquals("INVALID_PARAMETER", oversizedPage.getCode());
+
+        InvalidParameterException unknownSort = assertThrows(
+                InvalidParameterException.class,
+                () -> assetService.search(null, null, null, null, 0, 20, "category,asc"));
+        assertEquals("INVALID_PARAMETER", unknownSort.getCode());
+
+        InvalidParameterException badDirection = assertThrows(
+                InvalidParameterException.class,
+                () -> assetService.search(null, null, null, null, 0, 20, "name,sideways"));
+        assertEquals("INVALID_PARAMETER", badDirection.getCode());
+
+        InvalidParameterException extraParts = assertThrows(
+                InvalidParameterException.class,
+                () -> assetService.search(null, null, null, null, 0, 20, "name,asc,id"));
+        assertEquals("INVALID_PARAMETER", extraParts.getCode());
     }
 }

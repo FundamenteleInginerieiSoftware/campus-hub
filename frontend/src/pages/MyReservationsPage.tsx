@@ -102,13 +102,10 @@ function statusLabel(status: ReservationStatus): string {
 }
 
 export default function MyReservationsPage() {
-  const [pageData, setPageData] = useState<PageResponse<Reservation>>({
-    content: [],
-    page: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 0,
-  })
+  // Bug fixed (#122): pageData initialized as null (not empty object) and reset to null
+  // on tab/page transitions so PagedTable displays the loading spinner while fetching,
+  // avoiding false "No reservations found" flashes and stale tab data.
+  const [pageData, setPageData] = useState<PageResponse<Reservation> | null>(null)
   const [pageNumber, setPageNumber] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -171,6 +168,7 @@ export default function MyReservationsPage() {
     fetchMyReservations(pageNumber, 10, statusFilter)
       .then(async (response) => {
         if (ignore) return
+        setError(null)
         setPageData(response)
 
         const neededAssetIds = [
@@ -211,6 +209,8 @@ export default function MyReservationsPage() {
   function handleTabChange(val: string) {
     setFilterTab(val as 'all' | 'active' | 'past')
     setPageNumber(0)
+    setPageData(null)
+    setError(null)
     setLoading(true)
   }
 
@@ -231,6 +231,7 @@ export default function MyReservationsPage() {
       setCancellingReservation(null)
       setActionNotice(`Reservation #${cancelledId} was successfully cancelled.`)
       // Refresh the current page and summary counters.
+      setError(null)
       setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
@@ -456,16 +457,22 @@ export default function MyReservationsPage() {
         columns={columns}
         rowKey={(r) => r.id}
         onPageChange={(newPage) => {
+          // Mantine's Pagination calls onChange even for the current page; without this guard the spinner never clears.
+          if (newPage === pageNumber) return
+          setPageData(null)
+          setError(null)
           setLoading(true)
           setPageNumber(newPage)
         }}
         loading={loading}
         emptyText={
-          filterTab === 'active'
-            ? 'No active bookings. Browse the catalog to book equipment.'
-            : filterTab === 'past'
-              ? 'No past bookings found.'
-              : 'No reservations found.'
+          error
+            ? 'Could not load reservations.'
+            : filterTab === 'active'
+              ? 'No active bookings. Browse the catalog to book equipment.'
+              : filterTab === 'past'
+                ? 'No past bookings found.'
+                : 'No reservations found.'
         }
       />
 

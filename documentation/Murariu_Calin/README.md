@@ -49,4 +49,4 @@ Each document is structured in two parts:
   - `ReassignmentLog` entity and repository
   - `SubstituteStrategy` interface, `SameModelStrategy` & `SameCategoryStrategy`
   - Event listener `LocalAssetDamagedListener` on `AssetDamagedEvent`
-  - Isolated transaction engine (`Propagation.REQUIRES_NEW`)
+  - Isolated transaction engine (per-booking `Propagation.REQUIRES_NEW`)
