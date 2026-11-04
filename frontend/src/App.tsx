@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
+import RegisterPage from './pages/RegisterPage.tsx'
 
 // All pages of the app. Each owner replaces their <PlaceholderPage> with the real page component.
 // Pages under <AppLayout> get the side menu and need a login; pages under "admin" also need ADMIN.
@@ -13,6 +14,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
 
       <Route
         element={
