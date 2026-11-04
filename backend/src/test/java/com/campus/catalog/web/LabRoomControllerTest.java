@@ -1,7 +1,7 @@
 package com.campus.catalog.web;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -58,7 +58,7 @@ class LabRoomControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void adminCreateReturns201() throws Exception {
-        when(labRoomService.create(any(LabRoomRequest.class), any()))
+        when(labRoomService.create(any(LabRoomRequest.class)))
                 .thenReturn(new LabRoomResponse(2L, "EC203", "Embedded Lab", "EC"));
 
         mockMvc.perform(post("/api/v1/admin/lab-rooms")
@@ -85,7 +85,7 @@ class LabRoomControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void duplicateCodeReturns409() throws Exception {
-        when(labRoomService.create(any(LabRoomRequest.class), any()))
+        when(labRoomService.create(any(LabRoomRequest.class)))
                 .thenThrow(new ConflictException("LAB_ROOM_CODE_TAKEN", "Lab room code already exists"));
 
         mockMvc.perform(post("/api/v1/admin/lab-rooms")
@@ -100,6 +100,6 @@ class LabRoomControllerTest {
     @WithMockUser(roles = "ADMIN")
     void adminDeleteReturns204() throws Exception {
         mockMvc.perform(delete("/api/v1/admin/lab-rooms/2")).andExpect(status().isNoContent());
-        org.mockito.Mockito.verify(labRoomService).delete(eq(2L), any());
+        verify(labRoomService).delete(2L);
     }
 }

@@ -122,11 +122,14 @@ Validation errors (400) add a list of field errors:
 
 | Exception (`common.error`) | Status |
 |---|---|
+| `BadRequestException(code, msg)` | 400 |
+| `UnauthorizedException(code, msg)` | 401 |
+| `ForbiddenException(code, msg)` | 403 |
 | `NotFoundException(code, msg)` | 404 |
 | `ConflictException(code, msg)` | 409 |
 | `BusinessRuleException(code, msg)` | 409 |
 | `InvalidStateTransitionException(code, msg)` | 409 |
-| `ForbiddenException(code, msg)` | 403 |
+| `PayloadTooLargeException(code, msg)` | 413 |
 
 The frontend shows a message per `code` (fall back to `detail`). Never put stack traces, SQL or class names in `detail`.
 
@@ -167,7 +170,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Incidents (Stefania)
 
-`INCIDENT_NOT_FOUND` 404 · `INVALID_PHOTO_TYPE` 400 · `INVALID_INCIDENT_STATUS_TRANSITION` 409 (+ `ASSET_NOT_FOUND`, `ASSET_RETIRED` and `PHOTO_TOO_LARGE` above)
+`INCIDENT_NOT_FOUND` 404 · `PHOTO_NOT_FOUND` 404 · `INVALID_PHOTO_TYPE` 400 · `INVALID_INCIDENT_STATUS_TRANSITION` 409 (+ `ASSET_NOT_FOUND`, `ASSET_RETIRED` and `PHOTO_TOO_LARGE` above)
 
 Owners: check the status codes above when you implement them, and fix this list if yours differ.
 

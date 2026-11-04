@@ -21,6 +21,7 @@ import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -36,8 +37,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AssetServiceTest {
 
     private static final ZoneId CAMPUS_ZONE = ZoneId.of("Europe/Bucharest");
-    private static final Instant FIXED_INSTANT = Instant.parse("2026-10-29T10:00:00Z");
-    private static final LocalDateTime FIXED_NOW = LocalDateTime.ofInstant(FIXED_INSTANT, CAMPUS_ZONE);
+    // Sub-second nanos verify that AssetService truncates timestamps to whole seconds.
+    private static final Instant FIXED_INSTANT = Instant.parse("2026-10-29T10:00:00.456789123Z");
+    private static final LocalDateTime EXPECTED_NOW = LocalDateTime.of(2026, 10, 29, 12, 0, 0);
 
     @Mock
     private AssetRepository assetRepository;
@@ -51,6 +53,9 @@ class AssetServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private CurrentUser currentUser;
+
     private AssetService assetService;
     private Category category;
     private LabRoom labRoom;
@@ -62,6 +67,7 @@ class AssetServiceTest {
                 categoryRepository,
                 labRoomRepository,
                 auditService,
+                currentUser,
                 Clock.fixed(FIXED_INSTANT, CAMPUS_ZONE));
         category = new Category("Oscilloscopes", "Signal lab");
         labRoom = new LabRoom("EC105", "Electronics Lab", "EC");
@@ -69,7 +75,8 @@ class AssetServiceTest {
 
     @Test
     void getByIdReturnsAssetDetails() {
-        Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "ds1za-001", "4-ch scope", category, labRoom, FIXED_NOW);
+        Asset asset =
+                new Asset("Rigol #1", "Rigol DS1054Z", "ds1za-001", "4-ch scope", category, labRoom, EXPECTED_NOW);
         when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
 
         AssetResponse response = assetService.getById(7L);
@@ -90,17 +97,19 @@ class AssetServiceTest {
     }
 
     @Test
-    void createNormalizesSerialSavesAssetAndRecordsAudit() {
+    void createNormalizesSerialTruncatesSecondsAndRecordsAudit() {
         when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
         when(assetRepository.saveAndFlush(any(Asset.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.id()).thenReturn(3L);
 
         AssetResponse response = assetService.create(
-                new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", " ds1za-001 ", "4-ch scope", 1L, 2L), 3L);
+                new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", " ds1za-001 ", "4-ch scope", 1L, 2L));
 
         assertEquals("DS1ZA-001", response.serialNumber());
         assertEquals(AssetStatus.AVAILABLE, response.status());
+        assertEquals(EXPECTED_NOW, response.createdAt());
         verify(auditService).record(3L, "ASSET_CREATED", "ASSET", null, "Created asset Rigol #1 (S/N DS1ZA-001)");
     }
 
@@ -111,7 +120,7 @@ class AssetServiceTest {
         ConflictException ex = assertThrows(
                 ConflictException.class,
                 () -> assetService.create(
-                        new CreateAssetRequest("Rigol #2", "Rigol DS1054Z", "ds1za-001", null, 1L, 2L), 3L));
+                        new CreateAssetRequest("Rigol #2", "Rigol DS1054Z", "ds1za-001", null, 1L, 2L)));
 
         assertEquals("SERIAL_NUMBER_TAKEN", ex.getCode());
         verify(assetRepository, never()).saveAndFlush(any());
@@ -125,47 +134,48 @@ class AssetServiceTest {
         NotFoundException ex = assertThrows(
                 NotFoundException.class,
                 () -> assetService.create(
-                        new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", "ds1za-001", null, 99L, 2L), 3L));
+                        new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", "ds1za-001", null, 99L, 2L)));
 
         assertEquals("CATEGORY_NOT_FOUND", ex.getCode());
     }
 
     @Test
     void updateRejectsRetiredAsset() {
-        Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, FIXED_NOW);
-        retired.retire(FIXED_NOW);
+        Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
+        retired.retire(EXPECTED_NOW);
         when(assetRepository.findWithDetailsById(6L)).thenReturn(Optional.of(retired));
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
 
         InvalidStateTransitionException ex = assertThrows(
                 InvalidStateTransitionException.class,
-                () -> assetService.update(
-                        6L, new UpdateAssetRequest("Updated Uno", "Arduino Uno R3", "Desc", 1L, 2L), 3L));
+                () -> assetService.update(6L, new UpdateAssetRequest("Updated Uno", "Arduino Uno R3", "Desc", 1L, 2L)));
 
         assertEquals("ASSET_RETIRED", ex.getCode());
     }
 
     @Test
     void retireMarksAssetRetiredAndRecordsAudit() {
-        Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, FIXED_NOW);
+        Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
         when(assetRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(asset));
         when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
+        when(currentUser.id()).thenReturn(3L);
 
-        AssetResponse response = assetService.retire(7L, 3L);
+        AssetResponse response = assetService.retire(7L);
 
         assertEquals(AssetStatus.RETIRED, response.status());
+        assertEquals(EXPECTED_NOW, response.updatedAt());
         verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", null, "Retired asset Rigol #1 (S/N DS1ZA-001)");
     }
 
     @Test
     void retireRejectsAlreadyRetiredAsset() {
-        Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, FIXED_NOW);
-        asset.retire(FIXED_NOW);
+        Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        asset.retire(EXPECTED_NOW);
         when(assetRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(asset));
 
         InvalidStateTransitionException ex =
-                assertThrows(InvalidStateTransitionException.class, () -> assetService.retire(7L, 3L));
+                assertThrows(InvalidStateTransitionException.class, () -> assetService.retire(7L));
 
         assertEquals("ASSET_RETIRED", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());

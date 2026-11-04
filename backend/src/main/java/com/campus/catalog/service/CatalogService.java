@@ -8,6 +8,7 @@ import com.campus.catalog.repository.AssetRepository;
 import com.campus.common.error.NotFoundException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -67,7 +68,7 @@ public class CatalogService implements CatalogApi {
         Asset asset = assetRepository
                 .findByIdForUpdate(assetId)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
-        asset.markUnderMaintenance(LocalDateTime.now(clock));
+        asset.markUnderMaintenance(LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
     }
 
     @Override
@@ -76,7 +77,7 @@ public class CatalogService implements CatalogApi {
         Asset asset = assetRepository
                 .findByIdForUpdate(assetId)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
-        asset.markAvailable(LocalDateTime.now(clock));
+        asset.markAvailable(LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
     }
 
     @Override
