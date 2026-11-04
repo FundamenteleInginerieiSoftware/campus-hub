@@ -24,6 +24,13 @@ Other modules (`reservation`, `incident`, `reassignment`) interact with the cata
 | `markAvailable(Long assetId)` | `incident` (when resolved) | Moves asset back to `AVAILABLE` (rejects `RETIRED` assets with `409 ASSET_RETIRED`) |
 | `lockForBooking(Long assetId)` | `reservation` | Acquires a `PESSIMISTIC_WRITE` (`SELECT ... FOR UPDATE`) lock inside the caller's `@Transactional` booking method |
 
+## REST Endpoints (`com.campus.catalog.web`)
+
+- `GET /api/v1/categories`, `POST|PUT|DELETE /api/v1/admin/categories/**`: category list and admin CRUD (`409 CATEGORY_NAME_TAKEN`, `409 CATEGORY_IN_USE`).
+- `GET /api/v1/lab-rooms`, `POST|PUT|DELETE /api/v1/admin/lab-rooms/**`: lab room list and admin CRUD (`409 LAB_ROOM_CODE_TAKEN`, `409 LAB_ROOM_IN_USE`).
+- `GET /api/v1/assets`: paginated search and filtering (`AssetSpecifications.withFilters` + `@EntityGraph(attributePaths = {"category", "labRoom"})` + sort whitelist + `PageResponse<AssetResponse>`). Hides `RETIRED` equipment from `STUDENT` queries while keeping all statuses visible to `ADMIN` inventory views.
+- `GET /api/v1/assets/{id}`, `POST /api/v1/admin/assets`, `PUT /api/v1/admin/assets/{id}`, `POST /api/v1/admin/assets/{id}/retire`: equipment details, inventory registration/update, and soft retirement (`409 SERIAL_NUMBER_TAKEN`, `409 ASSET_RETIRED`).
+
 ## How to test
 
 ```bash
@@ -31,5 +38,6 @@ cd backend
 ./gradlew test --tests "com.campus.catalog.*"
 ```
 
-- `CatalogServiceTest`: unit tests with Mockito and a fixed `Clock`.
-- `AssetRepositoryTest`: `@DataJpaTest` against the local PostgreSQL `campus_test` database verifying `findByIdForUpdate` and case-insensitive uniqueness constraints.
+- `CatalogServiceTest`, `AssetServiceTest`, `CategoryServiceTest`, `LabRoomServiceTest`: unit tests with Mockito and a fixed `Clock`.
+- `AssetRepositoryTest`: `@DataJpaTest` against the local PostgreSQL `campus_test` database verifying `findByIdForUpdate`, case-insensitive uniqueness constraints, `AssetSpecifications` filter combinations, and `@EntityGraph` eager loading.
+- `AssetControllerTest`, `CategoryControllerTest`, `LabRoomControllerTest`: `@WebMvcTest` with `SecurityConfig` verifying status codes, role checks, validation, and `ProblemDetail` error codes.

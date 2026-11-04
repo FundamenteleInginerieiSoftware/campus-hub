@@ -20,9 +20,8 @@
 
 | Missing | Owner | Waits on |
 |---|---|---|
-| `GET /api/v1/assets` search + paging | Liviu (#92, open) | Matei's review |
 | `CatalogSeeder` with several assets of the same model (demo + reassignment) | Liviu | – |
-| Catalog page, asset details page, admin inventory page | Liviu | #92 |
+| Catalog page, asset details page, admin inventory page | Liviu | – |
 | Booking on the asset details page (calendar component exists, #87) | Calin | Liviu's asset details page |
 | Register page | Stefania | – (backend `/auth/register` is on `main`) |
 | Run the full M1 flow on a fresh database, tag `v0.1.0` | Matei (with Stefania) | everything above |
@@ -32,9 +31,6 @@
 | PR | Owner | What | Next step |
 |---|---|---|---|
 | #88 | Matei | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Approved, CI green: merge |
-| #89 | Liviu | Catalog admin actor via `CurrentUser` (closes #69) | **Matei reviews** (requested 2 Nov) |
-| #90 | Liviu | Local disk storage with security checks (closes #71) | **Matei reviews** (security review; the S3 version must use the same key format) |
-| #92 | Liviu | Asset search + filters + paging (closes #91), stacked on #89 | **Matei reviews**; base → `main` after #89 |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 ---
@@ -60,9 +56,8 @@
 
 | When | Task | Waits on |
 |---|---|---|
-| **W5 (now)** | Get #89 → #92 merged (rebase #92 onto `main` after #89) and #90 | Matei's reviews |
 | W6 | **`CatalogSeeder`** (`@Profile("dev") @Order(2)`): ~4 categories, 3 lab rooms, 15–20 assets, **several units of the same model**. Agree with Calin (his seeded bookings) and Stefania (demo script) | – |
-| W6 | Frontend: `src/api/catalog.ts` + **catalog page** (filters, paging, `UNDER_MAINTENANCE` greyed out) + **asset details** (slot for Calin's booking and Stefania's "report incident" button) + **admin inventory** (CRUD forms, 409 messages) | #92 |
+| W6 | Frontend: `src/api/catalog.ts` + **catalog page** (filters, paging, `UNDER_MAINTENANCE` greyed out) + **asset details** (slot for Calin's booking and Stefania's "report incident" button) + **admin inventory** (CRUD forms, 409 messages) | – |
 | W6 | `docs/modules/common.md` (how to throw errors, page, audit; storage/notification profiles) | – |
 | W7 | **Retire flow**: agree with Calin + Stefania what happens to a retired asset's future bookings (recommended: `AssetRetiredEvent`, handled by Calin's engine) | Team decision |
 | W7–W8 | `STALE_VERSION` test for asset updates · **audit log endpoint** `GET /api/v1/admin/audit-log` + **audit log page** | – |
