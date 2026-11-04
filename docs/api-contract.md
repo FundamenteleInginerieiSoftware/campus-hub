@@ -144,6 +144,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 | `VALIDATION_FAILED` | 400 | `@Valid` failed; see `errors` |
 | `MALFORMED_REQUEST` | 400 | unreadable JSON, wrong date format |
 | `INVALID_PARAMETER` | 400 | bad query parameter, e.g. an unknown `sort` field |
+| `REQUEST_REJECTED` | 400 | the URL was blocked by Spring Security's firewall (`;`, `..`, encoded `/` in the path) |
 | `UNAUTHORIZED` | 401 | no token, invalid or expired token |
 | `FORBIDDEN` | 403 | logged in, but not allowed (e.g. a student on `/api/v1/admin/**`) |
 | `STALE_VERSION` | 409 | someone else changed the row first (optimistic locking): reload and retry |
