@@ -249,6 +249,9 @@ class ReservationRepositoryTest {
     @DisplayName("existsOverlap: OVERDUE reservation acts open-ended and blocks subsequent slot until returned")
     void existsOverlapWithOverdueReservationTreatsIntervalAsOpenEnded() {
         // Overdue reservation: 10:00 - 12:00 on ASSET_ID
+        // Note: setUp() already creates existingReservation at 14:00 - 16:00.
+        // We test a slot at 16:30 - 18:00 (after existingReservation ends) so only the OVERDUE
+        // reservation can trigger the conflict.
         Reservation overdue = new Reservation(
                 USER_ID,
                 ASSET_ID,
@@ -259,9 +262,9 @@ class ReservationRepositoryTest {
         overdue.markOverdue();
         Reservation savedOverdue = reservationRepository.saveAndFlush(overdue);
 
-        // Subsequent slot: 13:30 - 15:00 (past 12:00 endTime)
-        LocalDateTime slotStart = LocalDateTime.of(2026, 11, 2, 13, 30);
-        LocalDateTime slotEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        // Subsequent slot: 16:30 - 18:00 (past 12:00 overdue endTime and after 14:00-16:00 existingReservation)
+        LocalDateTime slotStart = LocalDateTime.of(2026, 11, 2, 16, 30);
+        LocalDateTime slotEnd = LocalDateTime.of(2026, 11, 2, 18, 0);
 
         boolean overlapSubsequent = reservationRepository.existsOverlap(
                 ASSET_ID, slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES, -1L);
@@ -282,14 +285,12 @@ class ReservationRepositoryTest {
         savedOverdue.returnItem(LocalDateTime.of(2026, 11, 2, 13, 25));
         reservationRepository.saveAndFlush(savedOverdue);
 
-        // Note: existingReservation (from setUp) is 14:00 - 16:00, so check a slot after 16:00
+        // Same slot 16:30 - 18:00 now returns false because the overdue equipment was returned
         boolean overlapAfterReturn = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 16, 30),
-                LocalDateTime.of(2026, 11, 2, 18, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
-        assertThat(overlapAfterReturn).isFalse();
+                ASSET_ID, slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES, -1L);
+        assertThat(overlapAfterReturn)
+                .as("Same slot must become free immediately after overdue equipment is returned")
+                .isFalse();
     }
 
     @Test
