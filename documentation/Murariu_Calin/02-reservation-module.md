@@ -136,7 +136,7 @@ boolean existsOverlap(
 
 ##### Design & Defense Rationale for Open-Ended Overdue:
 1. **Why open-ended with no fixed cut-off:** In a campus lab, staff cannot predict when overdue equipment will actually be brought back. Allowing students to book an overdue asset for subsequent days or next week risks creating cascading unfulfillable commitments. Because the frontend calendar queries `/availability` per slot, the visual greyed-out state and the `409 RESERVATION_CONFLICT` response stay 100% consistent. Existing future confirmed bookings remain intact until reassigned or fulfilled.
-2. **`CHECKED_OUT` past scheduled `endTime`:** Between the exact `endTime` and the next scheduled run of `checkOverdue()` (a window of at most 1 minute), a `CHECKED_OUT` row only blocks up to its `endTime`. As soon as the scheduled job transitions the status to `OVERDUE`, the interval becomes open-ended.
+2. **`CHECKED_OUT` past scheduled `endTime`:** Between the exact `endTime` and the next scheduled run of `checkOverdue()` (the sweep runs every 5 minutes by default, `app.reservation.lifecycle-sweep-ms: 300000`), a `CHECKED_OUT` row only blocks up to its `endTime`. As soon as the scheduled job transitions the status to `OVERDUE`, the interval becomes open-ended.
 3. **Interaction with incidents (`markAvailable`):** If an asset is reported damaged while `OVERDUE` (causing the catalog asset to enter `UNDER_MAINTENANCE`), resolving the incident via `markAvailable` restores the operational status, but `existsOverlap` continues to protect the asset until the student actually returns the hardware to the desk (`RETURNED`).
 
 ---
