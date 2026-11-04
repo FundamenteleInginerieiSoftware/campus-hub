@@ -234,4 +234,38 @@ class ReservationTest {
         reservation.markNoShow();
         assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
     }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ReservationStatus.class,
+            names = {"CHECKED_OUT", "RETURNED", "CANCELLED", "FORCE_CANCELLED", "OVERDUE", "NO_SHOW"})
+    @DisplayName("markNoShow throws InvalidStateTransitionException from non-CONFIRMED statuses")
+    void markNoShowInvalidFromOtherStatuses(ReservationStatus initialStatus) {
+        Reservation r = createReservationInStatus(initialStatus);
+
+        assertThatThrownBy(r::markNoShow)
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName("markOverdue sets OVERDUE status from CHECKED_OUT")
+    void markOverdueValidFromCheckedOut() {
+        reservation.checkOut(now.plusHours(4));
+        reservation.markOverdue();
+        assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.OVERDUE);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ReservationStatus.class,
+            names = {"CONFIRMED", "RETURNED", "CANCELLED", "FORCE_CANCELLED", "OVERDUE", "NO_SHOW"})
+    @DisplayName("markOverdue throws InvalidStateTransitionException from non-CHECKED_OUT statuses")
+    void markOverdueInvalidFromOtherStatuses(ReservationStatus initialStatus) {
+        Reservation r = createReservationInStatus(initialStatus);
+
+        assertThatThrownBy(r::markOverdue)
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
 }
