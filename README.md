@@ -11,7 +11,7 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (4 Nov 2026, week 5):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), `/users/me`, dev test accounts and `CurrentUser`**, the **catalog** with admin CRUD and retire, **reservations** (booking with overlap check, my reservations, cancel, availability, admin check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine** and **ArchUnit** architecture rules. **The whole prototype demo runs on `main`** (admins create the assets in Swagger; there is no catalog seed data yet). The **frontend** has started: scaffold, login, layout and routes, My reservations and the booking calendar (`cd frontend && npm ci && npm run dev`). **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
+> **Status (4 Nov 2026, week 5):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), `/users/me`, dev test accounts and `CurrentUser`**, the **catalog** with admin CRUD and retire, **reservations** (booking with overlap check, my reservations, cancel, availability, admin check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine**, **ArchUnit** architecture rules and the **Docker image** for AWS. **The whole prototype demo runs on `main`** (admins create the assets in Swagger; there is no catalog seed data yet). The **frontend** has started: scaffold, login, layout and routes, My reservations and the booking calendar (`cd frontend && npm ci && npm run dev`). **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
 
 ---
 
@@ -205,11 +205,14 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
 | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106 |
+| Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
 | No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
-| Personal docs 01-18 | #14 + each PR above |
+| Personal docs 01-19 | #14 + each PR above |
 
-**Next:** Terraform parts 1 + 2 (W5); Dockerfile + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
+**In review:** #126–#129 (old token on `/auth/**`, firewall JSON, disabled users lose access at once, S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds).
+
+**Next:** Terraform parts 1 + 2 (W5); push the image to ECR + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -281,7 +284,7 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Register page (approved) | #107 |
 | Incident start-repair, reject, my incidents, incident details (approved) | #108 |
 
-**Next:** confirm the 🟡 "Spring serves the React build in prod" row in `docs/decisions.md` (issue #105; Matei's Dockerfile depends on it); photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
+**Next:** merge #111 (ADR-002 ✅) and #107 (register page); fix #108; photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
 
 ### Everyone
 
