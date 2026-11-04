@@ -104,19 +104,24 @@ public interface SubstituteStrategy {
 
 ---
 
-### 4. Reassignment Service: `ReassignmentService.java`
+### 4. Reassignment Service: `ReassignmentService.java` & `ReassignmentBookingProcessor.java`
 
 Located in `com.campus.reassignment.service`.
 
-#### Method: `handle(AssetDamagedEvent event)`
+#### Orchestrator & Per-Booking Isolation
 ```java
-@Transactional(propagation = Propagation.REQUIRES_NEW)
+// ReassignmentService.java (orchestrator - non-transactional)
 public void handle(AssetDamagedEvent event)
+
+// ReassignmentBookingProcessor.java (per-booking worker)
+@Transactional(propagation = Propagation.REQUIRES_NEW)
+public Optional<ReassignmentExecutionResult> processSingleBooking(
+        AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged)
 ```
 
-#### Why `Propagation.REQUIRES_NEW`?
-- **Transaction Isolation:** Reassignment runs in its own distinct transaction after incident creation commits.
-- If one booking reassignment encounters an issue, the already-committed incident report is unaffected.
+#### Why `Propagation.REQUIRES_NEW` per booking?
+- **Transaction Isolation:** Reassignment runs in its own distinct transactions after incident creation commits (`AFTER_COMMIT`).
+- **Bug #112 Fix (Per-booking boundary):** Previously, all bookings were processed in one single `REQUIRES_NEW` transaction. If one reservation had a concurrent update (e.g. cancelled by the student in the UI or swept by the no-show job), the stale entity in Hibernate caused an optimistic locking failure on commit that rolled back the entire batch, after emails were already sent. With `ReassignmentBookingProcessor` having `@Transactional(propagation = Propagation.REQUIRES_NEW)`, each booking commits independently, and notifications are sent only post-commit.
 - **Rollback Resilience:** `ReservationService.moveToAsset` is configured with `noRollbackFor = SubstituteNoLongerFreeException.class`, ensuring that if a candidate asset becomes unavailable between selection and move, the transaction is not poisoned and cleanly falls back to the next strategy.
 
 ---
