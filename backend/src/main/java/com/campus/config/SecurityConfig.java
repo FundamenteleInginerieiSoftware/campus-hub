@@ -6,6 +6,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,7 +19,11 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -53,13 +58,23 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers("/api/v1/**")
                         .authenticated()
+                        // Other API paths and actuator endpoints stay closed. This must stay above
+                        // the GET rule below, or that rule would open them.
+                        .requestMatchers("/api/**", "/actuator/**")
+                        .denyAll()
+                        // The React app in prod (ADR-002, SpaConfig): index.html, /assets/*.js and
+                        // pages like /reservations. They hold no data (all data comes from /api, which
+                        // needs a token), so anyone may load them, like any website's login page.
+                        .requestMatchers(HttpMethod.GET, "/**")
+                        .permitAll()
                         // A path nobody listed above is closed by default, so a forgotten rule
                         // fails safe instead of leaving something open.
                         .anyRequest()
                         .denyAll())
                 // Reads "Authorization: Bearer <token>" and validates it with jwtDecoder() below.
                 // An invalid or expired token is answered here, with our 401 JSON.
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(rolesFromToken()))
+                .oauth2ResourceServer(oauth2 -> oauth2.bearerTokenResolver(ignoreTokenOnAuthPaths())
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(rolesFromToken()))
                         .authenticationEntryPoint(errors))
                 // No token at all (401), or a role that isn't enough (403).
                 .exceptionHandling(
@@ -101,6 +116,17 @@ public class SecurityConfig {
     // can make a token that passes.
     private static SecretKey secretKey(String secret) {
         return new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+    }
+
+    // Bug fixed (#116): login and register answered 401 when the browser still sent an old token.
+    // The token filter runs before the permitAll() rules and rejects any invalid token it finds, and
+    // Stefania's API client sends the saved token on every call, so an expired one blocked the login
+    // that would replace it. Fix: on /api/v1/auth/** don't read the header at all (these paths need
+    // no token); everywhere else read it as before.
+    private static BearerTokenResolver ignoreTokenOnAuthPaths() {
+        RequestMatcher authPaths = PathPatternRequestMatcher.withDefaults().matcher("/api/v1/auth/**");
+        DefaultBearerTokenResolver header = new DefaultBearerTokenResolver();
+        return request -> authPaths.matches(request) ? null : header.resolve(request);
     }
 
     // By default Spring reads permissions from a "scope" claim. Our tokens carry roles: ["ADMIN"]

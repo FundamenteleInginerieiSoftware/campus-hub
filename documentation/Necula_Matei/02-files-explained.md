@@ -1,12 +1,13 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) and the first admin on AWS (`18-prod-admin-bootstrap.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`) and the login fix for old tokens (`20-auth-ignores-old-token.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
 campus-hub/
 ├── README.md  CONTRIBUTING.md  AGENTS.md  CLAUDE.md
 ├── .gitignore  .gitattributes  .editorconfig
+├── Dockerfile  .dockerignore                             (19-dockerfile.md)
 ├── .github/
 │   ├── CODEOWNERS  pull_request_template.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
@@ -22,7 +23,7 @@ campus-hub/
     └── src/
         ├── main/java/com/campus/  CampusHubApplication.java, config/SecurityConfig.java,
         │                          config/OpenApiConfig.java, config/SecurityErrorHandler.java,
-        │                          config/AsyncConfig.java,
+        │                          config/AsyncConfig.java, config/SpaConfig.java,
         │                          user/web/AuthController.java, <module>/package-info.java,
         │                          user/api/Role.java, user/domain/User.java,
         │                          user/repository/UserRepository.java, user/service/UserService.java,
@@ -37,8 +38,8 @@ campus-hub/
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
-        │                          UserSeederTest, AdminBootstrapTest
-        └── test/resources/application-test.yml
+        │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest
+        └── test/resources/application-test.yml  static/index.html
 ```
 
 ---
@@ -55,6 +56,8 @@ campus-hub/
 | `.gitignore` | Files Git must never upload: build output, editor settings, passwords. |
 | `.gitattributes` | Same line endings on Windows, Mac and Linux, so files don't look "completely changed". |
 | `.editorconfig` | Same formatting basics in every editor (spaces, indentation, encoding). |
+| `Dockerfile` | The recipe for the box the app runs in on AWS: it builds the website, puts it inside the backend, and keeps only what is needed to run (`19-dockerfile.md`). |
+| `.dockerignore` | Files the recipe never copies: Git history, downloaded libraries, build output, passwords. |
 
 ### `.github/` (GitHub settings stored as files)
 | File | What it does |
@@ -123,6 +126,8 @@ campus-hub/
 | `AsyncConfig.java` | Lets the app do work in the background or on a timer (late-return checks, moving bookings after damage). In tests, that work runs immediately. |
 | `AsyncConfigTest` | Checks background work is switched on and runs immediately in tests. |
 | `ErrorJsonTest` | Checks that wrong input (a missing field, broken data, a page that doesn't exist) still gets an error with its short code (`12-error-codes-fix.md`). |
+| `SpaConfig.java` | On AWS, sends the website for every address that isn't a file or the API, so reloading a page like "My reservations" works (`19-dockerfile.md`). |
+| `SpaFrontendTest` | Checks that the website and its pages load without a login, and that a missing file or an API path doesn't get the website by mistake. |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -161,6 +166,7 @@ campus-hub/
 | `ci.yml` | One job named **`ci`**, which is the exact name the `protect-main` ruleset requires. A `postgres:18` service container with `campus_test`; `SPRING_DATASOURCE_*` env vars point the tests at it. Java 25 (Temurin) + `gradle/actions/setup-gradle@v6`, then `./gradlew build` and the JaCoCo report as an artifact. Every backend step has `if: hashFiles('backend/gradlew') != ''` and every frontend step `hashFiles('frontend/package.json')`, so docs-only PRs (like #12) still pass. |
 | Templates | PR checklist uses `./gradlew build`; the task template's Definition of Done says "works from a fresh database (reset in pgAdmin)". |
 | `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |
+| `Dockerfile` / `.dockerignore` | 3 stages: `node:24-slim` builds `frontend/dist`; `eclipse-temurin:25-jdk` caches Gradle dependencies, copies `dist` into `src/main/resources/static`, runs `bootJar` (no tests, CI ran them); `eclipse-temurin:25-jre-alpine` runs only `app.jar` as non-root user `app`, `SPRING_PROFILES_ACTIVE=prod`, `HEALTHCHECK` on `/actuator/health`, `-XX:MaxRAMPercentage=75`. `.dockerignore` keeps `.git`, `node_modules`, build output and `.env` files out. Details in `19-dockerfile.md`. |
 
 ### `build.gradle`
 | Part | What and why |
@@ -195,9 +201,10 @@ campus-hub/
 ### Code
 | File | Key points |
 |---|---|
-| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), then `/api/v1/admin/**` → `hasRole("ADMIN")` (must stay above the next rule), `/api/v1/**` → any valid JWT, anything else → `denyAll()`. `JwtDecoder` and `JwtEncoder` share one HS256 key from `app.jwt.secret` (≥ 32 bytes); defining the decoder also stops Boot from creating a default user with a random password. The roles converter reads the `roles` claim and adds `ROLE_`. `PasswordEncoder` = delegating encoder (`{bcrypt}` hashes). 401/403 go to `SecurityErrorHandler` (wired on both the resource server and `exceptionHandling`). |
+| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), then `/api/v1/admin/**` → `hasRole("ADMIN")` (must stay above the next rule), `/api/v1/**` → any valid JWT, other `/api/**` and `/actuator/**` → `denyAll()`, then `GET /**` → `permitAll()` (the React build, ADR-002), anything else → `denyAll()`. `bearerTokenResolver` returns `null` on `/api/v1/auth/**`, so an old token can't make login/register fail with 401 (#116, `20-auth-ignores-old-token.md`). `JwtDecoder` and `JwtEncoder` share one HS256 key from `app.jwt.secret` (≥ 32 bytes); defining the decoder also stops Boot from creating a default user with a random password. The roles converter reads the `roles` claim and adds `ROLE_`. `PasswordEncoder` = delegating encoder (`{bcrypt}` hashes). 401/403 go to `SecurityErrorHandler` (wired on both the resource server and `exceptionHandling`). |
 | `SecurityErrorHandler` | Implements `AuthenticationEntryPoint` (401 `UNAUTHORIZED`) and `AccessDeniedHandler` (403 `FORBIDDEN`), writing `ProblemDetail`-shaped JSON (`application/problem+json`) with Boot's Jackson 3 `JsonMapper`. Needed because filter errors never reach Liviu's `@RestControllerAdvice`. Created with `new` in `SecurityConfig`, so `@WebMvcTest` + `@Import(SecurityConfig.class)` still works. |
 | `AsyncConfig` | `@EnableAsync` + `@EnableScheduling` (both off by default). A `@Profile("test")` `SyncTaskExecutor` bean makes `@Async` run on the caller's thread in tests, and replaces Boot's pool there. |
+| `SpaConfig` | `WebMvcConfigurer` registering `/**` → `classpath:/static/` (replaces Boot's default handler for that pattern) with a `PathResourceResolver` subclass: existing file → the file; path starting `api/` or containing a dot → `null` (404); else `index.html` if present. Resource handlers run only after no controller matched. In dev `static/` is empty, so it changes nothing. Details in `19-dockerfile.md`. |
 | `OpenApiConfig` | Annotations only: `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` + `@OpenAPIDefinition(security = @SecurityRequirement(name = "bearerAuth"))`, so the scheme applies to every endpoint and teammates don't annotate controllers. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. `POST /register` (`@ResponseStatus(CREATED)`) and `POST /login` take `@Valid @RequestBody` records and only call `AuthService`. Public through the `/api/v1/auth/**` rule. |
 | `AuthService` | `register`: `existsByEmailIgnoreCase` → `409 EMAIL_TAKEN`, BCrypt hash, role always `STUDENT`, `saveAndFlush` inside a try so a simultaneous duplicate (UNIQUE column) also becomes 409. `login`: `findByEmailIgnoreCase` → `filter(isEnabled)` → `filter(passwordEncoder.matches)` → else `401 INVALID_CREDENTIALS` (same error for every case). Token: `JwtClaimsSet` with `sub` (id), `email`, `roles`, `iat`/`exp` from the shared `Clock` + `app.jwt.expiration` (8 h, bound as `Duration`), signed with the HS256 `JwtEncoder`. Details in `13-auth-register-login.md`. |
@@ -228,14 +235,15 @@ campus-hub/
 | Test | What it proves |
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
-| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. With real tokens signed by our `JwtEncoder`: a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 outside `/api/v1/`. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
+| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. With real tokens signed by our `JwtEncoder`: a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 on other `/api` paths and on a `POST` outside the API; a broken token on `/api/v1/auth/ping` is ignored (200). Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
 | `ErrorJsonTest` | `@SpringBootTest` + MockMvc with a test-only `@RestController` (`@Import`, since `main` has no `@Valid` endpoint yet) and `jwt()` from spring-security-test as the token: blank field → 400 `VALIDATION_FAILED` + `errors[].field`; broken JSON → 400 `MALFORMED_REQUEST`; unknown path → 404 `NOT_FOUND`. All three failed before the fix. |
+| `SpaFrontendTest` | `@SpringBootTest` + MockMvc with `test/resources/static/index.html` as a stand-in build: `/` forwards to `index.html` (Boot's welcome page; MockMvc doesn't follow forwards), `/reservations` and `/admin/incidents` return it without a token, `/assets/index-old.js` → 404, an unknown `/api/v1` path → 401 JSON, not HTML. |
 | `AsyncConfigTest` | `@SpringBootTest` with a test-only `@Async` bean: it is a proxy (async on) and runs on the test thread (sync executor). Its value is read through a method, because fields of a Spring proxy stay empty. |
 | `AuthRequestsTest` | Plain unit test (no Spring, `Validation.buildDefaultValidatorFactory()`): the record rules and the `UserResponse` mapper. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. `AuthService` is a `@MockitoBean`; tests: ping, register 201 (no `passwordHash` in the JSON), bad email + short password → 400 `VALIDATION_FAILED` with 2 field errors, login 200, wrong password → 401 `INVALID_CREDENTIALS`. |
 | `UserServiceTest` | Plain Mockito (`@ExtendWith(MockitoExtension.class)`, no Spring): known id → `UserSummary` without the hash; unknown id → `NotFoundException` with code `USER_NOT_FOUND`; `exists` follows the repository; `me()` with a mocked `CurrentUser` (found / `USER_NOT_FOUND`). The id is set with `ReflectionTestUtils` because only the database sets it. |
 | `AuthServiceTest` | Mockito, only `UserRepository` mocked; the real BCrypt encoder and a real `NimbusJwtEncoder` with a test key. The token is decoded with a `JwtTimestampValidator` on the fixed clock, so claims and expiry are checked exactly. 7 tests: register OK / taken / race, login OK / wrong password / unknown email / disabled. |
-| `AuthFlowIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back): register → login → token gets 404 on an unknown `/api/v1` path (past security) and 403 on `/api/v1/admin/**`; a second register with other capitals → 409 `EMAIL_TAKEN`; `GET /api/v1/users/me` with the token → 200 (own email, `STUDENT`, no `passwordHash`), without → 401 `UNAUTHORIZED`. |
+| `AuthFlowIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back): register → login → token gets 404 on an unknown `/api/v1` path (past security) and 403 on `/api/v1/admin/**`; a second register with other capitals → 409 `EMAIL_TAKEN`; `GET /api/v1/users/me` with the token → 200 (own email, `STUDENT`, no `passwordHash`), without → 401 `UNAUTHORIZED`; login while an expired token is still sent → 200. |
 | `UserSeederTest` | Mockito: `count() = 0` → `saveAll` captured (`ArgumentCaptor`), emails + roles in order, all hashes match `password`; `count() = 3` → `saveAll` never called. |
 | `AdminBootstrapTest` | Mockito, real BCrypt encoder: missing → one `ADMIN` saved, email lowercased + trimmed, hash ≠ password and matches it; existing email → no `save`; blank email or password → no repository call; `"short"` → `IllegalStateException`, no `save`. |
 | `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |

@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Wed 4 Nov 2026, evening (W5).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Wed 4 Nov 2026, late evening (W5).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -23,16 +23,23 @@
 | `CatalogSeeder` with several assets of the same model (demo + reassignment) | Liviu | – |
 | Catalog page, asset details page, admin inventory page | Liviu | – |
 | Booking on the asset details page (calendar component exists, #87) | Calin | Liviu's asset details page |
-| Register page | Stefania | #107 (approved) |
+| Register page | Stefania | #107 (approved, merge) |
 | Run the full M1 flow on a fresh database, tag `v0.1.0` | Matei (with Stefania) | everything above |
 
 ## 3. Open PRs right now
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
-| #107 | Stefania | Register page | Approved: merge |
-| #108 | Stefania | Incident start-repair, reject, my incidents, incident details | Approved: merge |
-| #110 | Liviu | `ConstraintViolationException` / `HandlerMethodValidationException` → 400 `VALIDATION_FAILED` (closes #103) | Approved by Matei: merge |
+| #107 | Stefania | Register page | Approved: update branch, merge |
+| #108 | Stefania | Incident start-repair, reject, my incidents, incident details | Changes requested (Matei): lock the asset before releasing it, skip RETIRED |
+| #111 | Stefania | ADR-002 ✅ (Spring serves the React build) | Approved: update branch, merge |
+| #110 | Liviu | `ConstraintViolationException` / `HandlerMethodValidationException` → 400 `VALIDATION_FAILED` (closes #103) | Approved: update branch, merge |
+| #126, #127, #128, #129 | Matei | Fixes #116, #118, #117, #115 (old token on `/auth/**`, firewall JSON, disabled users, S3 + SES adapters) | Approved; merged in this order, each one rebased and re-approved after the previous |
+| #135 | Matei | `users.created_at` in whole seconds (closes #134) | Needs 1 approval |
+| #130 | Calin | Timestamps in whole seconds (closes #123) | Approved with nits: test clock needs nanos |
+| #131 | Calin | No check-out while the asset is overdue or not bookable (#113) | Changes requested: the check runs after `checkOut`, so it never fires |
+| #132 | Calin | Reassignment: one transaction per booking (#112) | Changes requested: the test passes without the fix; docs still say one transaction |
+| #133 | Calin | My reservations loader + error reset (#122) | Changes requested: clicking the current page leaves the spinner on |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 ---
@@ -43,11 +50,11 @@
 |---|---|---|
 | **W5 (now)** | **Terraform part 1** (`infra/`): S3 state bucket, VPC, 1 public subnet + 2 private DB subnets, no NAT, security groups (EC2 only from CloudFront, RDS only from EC2); `terraform plan` | – |
 | W5 | **Terraform part 2**: RDS PostgreSQL 18 (`db.t4g.micro`, private, encrypted), S3 photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`; first `apply`, stop RDS when idle | Part 1 |
-| W6 | **`backend/Dockerfile`** (2 stages, JDK 25, non-root, builds the React app into the image) · run it locally with `prod` · push to ECR | **Stefania confirms 🟡 ADR-002** |
+| W6 | ~~Dockerfile~~ (✅ #114) · run the image locally with `prod` (needs #129) · push to ECR | Terraform part 2 (ECR) |
 | W6 | Check every endpoint has a Swagger summary · run the M1 flow mid-week · tag `v0.1.0` · status update | Section 2 |
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront | Dockerfile, Terraform |
-| W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · **`S3StorageService`** (`@Profile("prod")`, same key format and checks as Liviu's local one, #90 on `main`) · first live deploy **by the end of W8** | – |
-| W9 | **`SesNotificationService`** (sandbox, verified team emails, send after commit, never roll back) · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
+| W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · `S3StorageService` (in review, #129) · first live deploy **by the end of W8** | – |
+| W9 | `SesNotificationService` (in review, #129) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
 | W9 | Frontend: **admin reservations desk page** (today's pickups/returns, check-out/return, 409 messages), Stefania reviews | Calin's `src/api/reservations.ts` (on `main`) |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
 | W10 | Security pass (IDOR with two student tokens, students rejected on admin endpoints, no stack traces) · load smoke test · restore an RDS snapshot once · cost check | – |
