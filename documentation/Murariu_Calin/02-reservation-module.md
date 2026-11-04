@@ -115,9 +115,12 @@ Located in `com.campus.reservation.repository`.
     select count(r) > 0 from Reservation r
     where r.assetId = :assetId
       and r.status in :statuses
-      and r.startTime < :end
-      and r.endTime > :start
       and r.id <> :ignoreId
+      and (
+        (r.status <> com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end and r.endTime > :start)
+        or
+        (r.status = com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end)
+      )
     """)
 boolean existsOverlap(
         @Param("assetId") Long assetId,
@@ -128,9 +131,8 @@ boolean existsOverlap(
 ```
 
 #### Overlap Formula:
-Two half-open intervals $[S_1, E_1)$ and $[S_2, E_2)$ overlap **if and only if** $S_1 < E_2$ and $E_1 > S_2$.
-- Abutting slots (e.g. 10:00–12:00 and 12:00–14:00) do NOT collide ($12:00 < 12:00$ is `false`).
-- Active statuses tested: `CONFIRMED`, `CHECKED_OUT`, `OVERDUE`.
+- **Standard interval (`CONFIRMED`, `CHECKED_OUT`):** Two half-open intervals $[S_1, E_1)$ and $[S_2, E_2)$ overlap **if and only if** $S_1 < E_2$ and $E_1 > S_2$. Abutting slots (e.g. 10:00–12:00 and 12:00–14:00) do NOT collide ($12:00 < 12:00$ is `false`).
+- **Open-ended interval (`OVERDUE`, #113):** When equipment has not been returned past its scheduled end time, it enters `OVERDUE`. Because the asset is physically unreturned, the interval is open-ended $[S_1, +\infty)$, so it collides with any requested slot ending after $S_1$ ($S_1 < E_2$). The asset remains blocked in `/availability` and cannot be booked until marked `RETURNED`.
 
 ---
 
