@@ -38,6 +38,7 @@ export default function App() {
 
         {/* Admin only */}
         <Route path="admin" element={<RequireAdmin />}>
+          <Route index element={<Navigate to="reservations" replace />} />
           <Route
             path="reservations"
             element={
