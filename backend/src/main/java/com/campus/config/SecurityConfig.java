@@ -1,24 +1,32 @@
 package com.campus.config;
 
+import com.campus.user.api.Role;
+import com.campus.user.api.UserApi;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
@@ -38,7 +46,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain apiChain(HttpSecurity http, JsonMapper jsonMapper) throws Exception {
+    SecurityFilterChain apiChain(HttpSecurity http, JsonMapper jsonMapper, ObjectProvider<UserApi> users)
+            throws Exception {
         // Turns 401 and 403 into ProblemDetail JSON instead of an empty body.
         SecurityErrorHandler errors = new SecurityErrorHandler(jsonMapper);
 
@@ -75,7 +84,7 @@ public class SecurityConfig {
                 // Reads "Authorization: Bearer <token>" and validates it with jwtDecoder() below.
                 // An invalid or expired token is answered here, with our 401 JSON.
                 .oauth2ResourceServer(oauth2 -> oauth2.bearerTokenResolver(ignoreTokenOnAuthPaths())
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(rolesFromToken()))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(activeUserFromToken(users)))
                         .authenticationEntryPoint(errors))
                 // No token at all (401), or a role that isn't enough (403).
                 .exceptionHandling(
@@ -139,15 +148,21 @@ public class SecurityConfig {
         return request -> authPaths.matches(request) ? null : header.resolve(request);
     }
 
-    // By default Spring reads permissions from a "scope" claim. Our tokens carry roles: ["ADMIN"]
-    // instead, so read that claim and add the ROLE_ prefix that hasRole("ADMIN") looks for.
-    private static JwtAuthenticationConverter rolesFromToken() {
-        JwtGrantedAuthoritiesConverter roles = new JwtGrantedAuthoritiesConverter();
-        roles.setAuthoritiesClaimName("roles");
-        roles.setAuthorityPrefix("ROLE_");
-
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(roles);
-        return converter;
+    // Turns a valid token into the logged-in user. Runs after the signature and expiry checks.
+    // Bug fixed (#117): the role used to come from the token's "roles" claim and nobody checked the
+    // account, so a disabled, deleted or demoted user kept their old access until the token expired
+    // (up to 8 h). Fix: look the user up on every request; gone or disabled = 401, and the role comes
+    // from the database (ROLE_ prefix for hasRole("ADMIN")). The "roles" claim stays in the token
+    // (docs/api-contract.md section 3), but no longer decides anything.
+    // ObjectProvider: UserApi is fetched only when a real token arrives. Liviu's @WebMvcTest slices
+    // import this class without a UserApi bean, and they log in with jwt(), which skips this step.
+    private static Converter<Jwt, AbstractAuthenticationToken> activeUserFromToken(ObjectProvider<UserApi> users) {
+        return jwt -> {
+            Role role = users.getObject()
+                    .findActiveRole(Long.valueOf(jwt.getSubject()))
+                    .orElseThrow(() -> new InvalidBearerTokenException("The account is disabled or no longer exists"));
+            return new JwtAuthenticationToken(
+                    jwt, List.of(new SimpleGrantedAuthority("ROLE_" + role.name())), jwt.getSubject());
+        };
     }
 }

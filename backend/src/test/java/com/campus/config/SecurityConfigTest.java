@@ -7,7 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.campus.user.api.Role;
+import com.campus.user.domain.User;
+import com.campus.user.repository.UserRepository;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +24,9 @@ import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Starts the whole app and checks which paths are public, which need a token and which need ADMIN.
@@ -27,6 +34,8 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+// Rolled back after each test: the users saved by bearer() don't stay in campus_test.
+@Transactional
 class SecurityConfigTest {
 
     // Bug fixed (#67): the probes used /api/v1/assets and /api/v1/admin/assets. Once Liviu mapped
@@ -43,6 +52,9 @@ class SecurityConfigTest {
 
     @Autowired
     PasswordEncoder passwordEncoder;
+
+    @Autowired
+    UserRepository userRepository;
 
     @Test
     void healthCheckIsPublic() throws Exception {
@@ -128,6 +140,33 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden());
     }
 
+    // #117: the account is checked on every request, not only at login.
+    @Test
+    void disabledUserIsRejectedAlthoughTheTokenIsValid() throws Exception {
+        User user = newUser(Role.STUDENT);
+        ReflectionTestUtils.setField(user, "enabled", false);
+        Long id = userRepository.save(user).getId();
+
+        mockMvc.perform(get(PROBE).header("Authorization", bearer(id, "STUDENT")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void deletedUserIsRejectedAlthoughTheTokenIsValid() throws Exception {
+        mockMvc.perform(get(PROBE).header("Authorization", bearer(999_999L, "STUDENT")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // The token says ADMIN (e.g. issued before a demotion), the database says STUDENT: the database wins.
+    @Test
+    void roleComesFromTheDatabaseNotFromTheToken() throws Exception {
+        Long studentId = userRepository.save(newUser(Role.STUDENT)).getId();
+
+        mockMvc.perform(get(ADMIN_PROBE).header("Authorization", bearer(studentId, "ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     void passwordsAreStoredAsBcryptHashes() {
         String hash = passwordEncoder.encode("password");
@@ -137,11 +176,27 @@ class SecurityConfigTest {
         assertThat(passwordEncoder.matches("wrong", hash)).isFalse();
     }
 
+    // A real user with this role in the database, and a token for it. Since #117 the token alone
+    // isn't enough: SecurityConfig looks the user up on every request.
+    private String bearer(String role) {
+        Long id = userRepository.save(newUser(Role.valueOf(role))).getId();
+        return bearer(id, role);
+    }
+
+    private static User newUser(Role role) {
+        return new User(
+                role + "-" + UUID.randomUUID() + "@campus.test",
+                "{bcrypt}unused",
+                "Security Test",
+                role,
+                LocalDateTime.of(2026, 11, 4, 12, 0));
+    }
+
     // Same claims login will put in real tokens (docs/api-contract.md section 3). No "exp" here,
     // so the test doesn't need the clock; the decoder only checks expiry when the claim is present.
-    private String bearer(String role) {
+    private String bearer(Long userId, String role) {
         JwtClaimsSet claims = JwtClaimsSet.builder()
-                .subject("1")
+                .subject(String.valueOf(userId))
                 .claim("roles", List.of(role))
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
