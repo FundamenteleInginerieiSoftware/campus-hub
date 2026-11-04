@@ -1,0 +1,15 @@
+# Files Docker never copies into the build. Keeps the build fast and secrets out of the image.
+.git
+**/node_modules
+frontend/dist
+backend/build
+backend/.gradle
+backend/uploads
+.idea
+.vscode
+**/*.iml
+**/.env
+**/*.env.local
+infra
+docs
+documentation
