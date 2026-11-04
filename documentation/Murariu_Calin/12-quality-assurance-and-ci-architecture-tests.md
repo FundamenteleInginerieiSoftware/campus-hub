@@ -96,10 +96,10 @@ static final ArchRule entities_must_not_use_ordinal_enum_mapping = fields()
 - Added `markNoShowInvalidFromOtherStatuses`: parameterized test over 6 non-`CONFIRMED` statuses, verifying `InvalidStateTransitionException` (`INVALID_RESERVATION_STATUS_TRANSITION`).
 
 #### 4. `ReservationControllerTest.java` Web Slices
-- Added `createWithInvalidBodyReturns400`: missing payload fields trigger 400 with `VALIDATION_ERROR`.
-- Added `createOutsideLabHoursReturns400`: `OUTSIDE_LAB_HOURS` business rule error yields 400.
-- Added `createWithConflictReturns409`: `RESERVATION_CONFLICT` yields 409 with problem detail code.
-- Added `checkAvailabilityMissingBothIdsReturns400`: querying availability without IDs yields 400 `INVALID_AVAILABILITY_QUERY`.
+- Added `createWithInvalidBodyReturns400`: missing payload fields trigger 400 with `VALIDATION_FAILED` (RFC 9457).
+- Added `createOutsideOpeningHoursReturns409`: `OUTSIDE_OPENING_HOURS` business rule conflict yields 409 (`BusinessRuleException`).
+- Added `createWithConflictReturns409`: `RESERVATION_CONFLICT` slot collision yields 409 with problem detail code.
+- Added `checkAvailabilityMissingBothIdsReturns409`: querying availability without IDs yields 409 `MISSING_PARAMETER`.
 
 #### 5. `AdminReservationControllerTest.java` Web Slices
 - Added `returnItemReturns404WhenNotFound`: missing reservation returns 404 `RESERVATION_NOT_FOUND`.
@@ -111,6 +111,6 @@ static final ArchRule entities_must_not_use_ordinal_enum_mapping = fields()
 ---
 
 ### 3. Verification & CI Status
-- Backend test suite: `./gradlew spotlessApply build` executes 298 tests with 100% pass rate.
+- Backend test suite: `./gradlew spotlessApply build` executes 308 tests with 100% pass rate.
 - JaCoCo test report: Module service coverage exceeds the 70% threshold.
 - Frontend: `npm run lint` and `npm run build` pass with zero errors.

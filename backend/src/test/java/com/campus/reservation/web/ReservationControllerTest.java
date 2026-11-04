@@ -196,10 +196,10 @@ class ReservationControllerTest {
 
     @Test
     @DisplayName("POST /api/v1/reservations outside lab hours returns 409 Conflict")
-    void createOutsideLabHoursReturns409() throws Exception {
+    void createOutsideOpeningHoursReturns409() throws Exception {
         when(reservationService.createReservation(any()))
                 .thenThrow(new BusinessRuleException(
-                        "OUTSIDE_LAB_HOURS", "Reservations can only be made between 08:00 and 20:00"));
+                        "OUTSIDE_OPENING_HOURS", "Reservations can only be made between 08:00 and 20:00"));
 
         mockMvc.perform(post("/api/v1/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -211,7 +211,7 @@ class ReservationControllerTest {
                         }
                         """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("OUTSIDE_LAB_HOURS"));
+                .andExpect(jsonPath("$.code").value("OUTSIDE_OPENING_HOURS"));
     }
 
     @Test
@@ -234,16 +234,34 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/reservations/availability with categoryId returns 200 with free assets")
+    void checkAvailabilityCategoryReturns200() throws Exception {
+        AvailabilityResponse resp = AvailabilityResponse.forCategory(
+                5L, LocalDateTime.of(2026, 11, 2, 14, 0), LocalDateTime.of(2026, 11, 2, 16, 0), List.of(10L, 20L));
+        when(reservationService.checkAvailability(isNull(), eq(5L), any(), any()))
+                .thenReturn(resp);
+
+        mockMvc.perform(get("/api/v1/reservations/availability")
+                        .param("categoryId", "5")
+                        .param("startTime", "2026-11-02T14:00:00")
+                        .param("endTime", "2026-11-02T16:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.categoryId").value(5))
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.availableAssetIds.length()").value(2));
+    }
+
+    @Test
     @DisplayName("GET /api/v1/reservations/availability without assetId or categoryId returns 409 Conflict")
     void checkAvailabilityMissingBothIdsReturns409() throws Exception {
         when(reservationService.checkAvailability(isNull(), isNull(), any(), any()))
                 .thenThrow(new BusinessRuleException(
-                        "INVALID_AVAILABILITY_QUERY", "Either assetId or categoryId must be provided"));
+                        "MISSING_PARAMETER", "Either assetId or categoryId must be provided"));
 
         mockMvc.perform(get("/api/v1/reservations/availability")
                         .param("startTime", "2026-11-02T14:00:00")
                         .param("endTime", "2026-11-02T16:00:00"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("INVALID_AVAILABILITY_QUERY"));
+                .andExpect(jsonPath("$.code").value("MISSING_PARAMETER"));
     }
 }
