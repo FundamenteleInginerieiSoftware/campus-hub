@@ -41,19 +41,18 @@ public class LabRoomService {
         }
 
         LabRoom labRoom = new LabRoom(normalizedCode, request.name(), request.building());
+        LabRoom saved;
         try {
-            LabRoom saved = labRoomRepository.saveAndFlush(labRoom);
-            auditService.record(
-                    currentUser.id(),
-                    "LAB_ROOM_CREATED",
-                    "LAB_ROOM",
-                    saved.getId(),
-                    "Created lab room " + saved.getCode());
-            return LabRoomResponse.from(saved);
+            saved = labRoomRepository.saveAndFlush(labRoom);
         } catch (DataIntegrityViolationException ex) {
             // Concurrent creates can both pass existsByCodeIgnoreCase; the DB unique index stops the second with 409.
             throw codeTaken(normalizedCode);
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate code (#120).
+        auditService.record(
+                currentUser.id(), "LAB_ROOM_CREATED", "LAB_ROOM", saved.getId(), "Created lab room " + saved.getCode());
+        return LabRoomResponse.from(saved);
     }
 
     @Transactional
@@ -65,19 +64,18 @@ public class LabRoomService {
         }
 
         labRoom.update(normalizedCode, request.name(), request.building());
+        LabRoom saved;
         try {
-            LabRoom saved = labRoomRepository.saveAndFlush(labRoom);
-            auditService.record(
-                    currentUser.id(),
-                    "LAB_ROOM_UPDATED",
-                    "LAB_ROOM",
-                    saved.getId(),
-                    "Updated lab room " + saved.getCode());
-            return LabRoomResponse.from(saved);
+            saved = labRoomRepository.saveAndFlush(labRoom);
         } catch (DataIntegrityViolationException ex) {
             // A concurrent create or rename can pass the check above; the DB unique index stops it with 409.
             throw codeTaken(normalizedCode);
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate code (#120).
+        auditService.record(
+                currentUser.id(), "LAB_ROOM_UPDATED", "LAB_ROOM", saved.getId(), "Updated lab room " + saved.getCode());
+        return LabRoomResponse.from(saved);
     }
 
     @Transactional
@@ -90,11 +88,13 @@ public class LabRoomService {
         try {
             labRoomRepository.delete(labRoom);
             labRoomRepository.flush();
-            auditService.record(
-                    currentUser.id(), "LAB_ROOM_DELETED", "LAB_ROOM", id, "Deleted lab room " + labRoom.getCode());
         } catch (DataIntegrityViolationException ex) {
             throw roomInUse(labRoom.getCode());
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a lab room in use (#120).
+        auditService.record(
+                currentUser.id(), "LAB_ROOM_DELETED", "LAB_ROOM", id, "Deleted lab room " + labRoom.getCode());
     }
 
     private LabRoom findOrThrow(Long id) {
