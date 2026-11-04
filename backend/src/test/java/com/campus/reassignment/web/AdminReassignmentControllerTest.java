@@ -82,4 +82,24 @@ class AdminReassignmentControllerTest {
                 .andExpect(jsonPath("$.content[0].outcome").value("REASSIGNED"))
                 .andExpect(jsonPath("$.content[0].strategy").value("SameModelStrategy"));
     }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reassignments returns 400 when page is negative")
+    void getLogsInvalidPageReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reassignments").param("page", "-1")).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(reassignmentService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reassignments returns 400 when size is zero or exceeds 100")
+    void getLogsInvalidSizeReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reassignments").param("size", "0")).andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/admin/reassignments").param("size", "101")).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(reassignmentService);
+    }
 }
