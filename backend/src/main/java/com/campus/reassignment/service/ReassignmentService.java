@@ -80,10 +80,7 @@ public class ReassignmentService {
                     }
                 }
             } catch (RuntimeException e) {
-                log.warn(
-                        "Skipping reassignment for booking #{} due to concurrent update or failure: {}",
-                        booking.id(),
-                        e.getMessage());
+                log.warn("Skipping reassignment for booking #{} due to concurrent update or failure", booking.id(), e);
             }
         }
     }

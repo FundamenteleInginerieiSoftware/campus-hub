@@ -24,13 +24,14 @@ sequenceDiagram
     deactivate List
 
     activate Reass
-    Note over Reass: @Transactional(REQUIRES_NEW)
+    Note over Reass: Orchestrates per-booking execution
     Reass->>Cat: getAsset(event.assetId)
     Cat-->>Reass: damaged AssetSummary
     Reass->>Res: findUpcomingActiveByAsset(event.assetId, now)
     Res-->>Reass: List<ReservationSummary>
 
     loop For each upcoming booking (chronological)
+        Note over Reass: ReassignmentBookingProcessor (@Transactional, REQUIRES_NEW)
         Reass->>Strat: findSubstitute(booking, damaged)
         activate Strat
         Note over Strat: Strategy 1: SameModelStrategy (@Order 1)<br/>Strategy 2: SameCategoryStrategy (@Order 2)
@@ -44,12 +45,13 @@ sequenceDiagram
         alt Substitute asset found
             Reass->>Res: moveToAsset(bookingId, candidateId, reason)
             Reass->>Log: save(ReassignmentLog[outcome=REASSIGNED, strategy=...])
+            Note over Reass: Booking transaction commits
             Reass->>Notif: notifyUser(userId, "Reservation moved to substitute asset")
         else No substitute available
             Reass->>Res: forceCancel(bookingId, reason)
             Reass->>Log: save(ReassignmentLog[outcome=FORCE_CANCELLED, reason=...])
+            Note over Reass: Booking transaction commits
             Reass->>Notif: notifyUser(userId, "Reservation cancelled due to damaged asset")
         end
     end
-    Note over Reass: Reassignment transaction commits
     deactivate Reass

@@ -23,11 +23,16 @@ import org.springframework.transaction.annotation.Transactional;
  * Executes automated disaster-recovery reassignment or force-cancellation for a single
  * reservation inside an isolated {@link Propagation#REQUIRES_NEW} transaction.
  *
- * <p>Bug fixed: previously, the entire reassignment loop in {@link ReassignmentService} executed
- * within a single transaction. If one reservation encountered an optimistic locking conflict (e.g.
- * cancelled concurrently by the student or released by the no-show sweep), the entire batch rolled
- * back even though notifications had already been dispatched. With isolated per-booking transactions,
- * each booking commits independently, and notifications are only dispatched after successful commit.
+ * <p>Bug fixed (#112): previously, the entire reassignment loop in {@link ReassignmentService} executed
+ * within a single transaction. When one reservation encountered an optimistic locking conflict (e.g.
+ * cancelled concurrently in another transaction), the engine's L1 Hibernate session held a stale
+ * cached entity whose status still appeared CONFIRMED; when flushing, Hibernate detected the @Version
+ * mismatch and threw an ObjectOptimisticLockingFailureException that rolled back the entire batch,
+ * even though student notification emails had already been dispatched.
+ *
+ * <p>Fix: each booking runs in an isolated {@link Propagation#REQUIRES_NEW} transaction with its own
+ * fresh persistence context, so it reads the latest database state and commits independently.
+ * Notifications are dispatched by {@link ReassignmentService} only after each booking transaction commits.
  */
 @Slf4j
 @Service
@@ -39,8 +44,7 @@ class ReassignmentBookingProcessor {
     private final List<SubstituteStrategy> strategies;
     private final Clock clock;
 
-    record ReassignmentExecutionResult(
-            ReassignmentOutcome outcome, Long substituteAssetId, String substituteAssetName, String strategyName) {}
+    record ReassignmentExecutionResult(ReassignmentOutcome outcome, String substituteAssetName) {}
 
     /**
      * Processes a single reservation on a damaged asset in an isolated transaction.
@@ -50,8 +54,6 @@ class ReassignmentBookingProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<ReassignmentExecutionResult> processSingleBooking(
             AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) {
-        boolean reassigned = false;
-
         for (SubstituteStrategy strategy : strategies) {
             Optional<AssetSummary> substituteOpt = strategy.findSubstitute(booking, damaged);
             if (substituteOpt.isPresent()) {
@@ -59,7 +61,6 @@ class ReassignmentBookingProcessor {
                 try {
                     boolean moved =
                             reservationApi.moveToAsset(booking.id(), candidate.id(), "Incident #" + event.incidentId());
-                    reassigned = true;
 
                     if (moved) {
                         ReassignmentLog logEntry = new ReassignmentLog(
@@ -72,10 +73,10 @@ class ReassignmentBookingProcessor {
                                 LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
                         reassignmentLogRepository.save(logEntry);
 
-                        return Optional.of(new ReassignmentExecutionResult(
-                                ReassignmentOutcome.REASSIGNED, candidate.id(), candidate.name(), strategy.name()));
+                        return Optional.of(
+                                new ReassignmentExecutionResult(ReassignmentOutcome.REASSIGNED, candidate.name()));
                     }
-                    // Reservation was no longer CONFIRMED when moveToAsset ran; skip it.
+                    // Reservation was no longer CONFIRMED when moveToAsset ran; skip it cleanly.
                     return Optional.empty();
                 } catch (SubstituteNoLongerFreeException e) {
                     log.warn(
@@ -86,24 +87,22 @@ class ReassignmentBookingProcessor {
             }
         }
 
-        if (!reassigned) {
-            boolean cancelled =
-                    reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+        // If no strategy found a free substitute, force-cancel the reservation
+        boolean cancelled =
+                reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
 
-            if (cancelled) {
-                ReassignmentLog logEntry = new ReassignmentLog(
-                        event.incidentId(),
-                        booking.id(),
-                        event.assetId(),
-                        null,
-                        ReassignmentOutcome.FORCE_CANCELLED,
-                        null,
-                        LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
-                reassignmentLogRepository.save(logEntry);
+        if (cancelled) {
+            ReassignmentLog logEntry = new ReassignmentLog(
+                    event.incidentId(),
+                    booking.id(),
+                    event.assetId(),
+                    null,
+                    ReassignmentOutcome.FORCE_CANCELLED,
+                    null,
+                    LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
+            reassignmentLogRepository.save(logEntry);
 
-                return Optional.of(
-                        new ReassignmentExecutionResult(ReassignmentOutcome.FORCE_CANCELLED, null, null, null));
-            }
+            return Optional.of(new ReassignmentExecutionResult(ReassignmentOutcome.FORCE_CANCELLED, null));
         }
 
         return Optional.empty();

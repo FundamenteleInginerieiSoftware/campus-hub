@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,8 +40,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @DataJpaTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -83,6 +87,9 @@ class ReassignmentRollbackIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @MockitoBean
     private CatalogApi catalogApi;
@@ -212,9 +219,23 @@ class ReassignmentRollbackIT {
         when(catalogApi.findAvailableByCategory(500L, DAMAGED_ASSET_ID)).thenReturn(List.of(subFree));
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
 
-        // Cancel b2 concurrently before the engine reaches it
-        b2.cancel(LocalDateTime.of(2026, 11, 2, 12, 0), "Cancelled concurrently by student");
-        reservationRepository.saveAndFlush(b2);
+        // Simulate student concurrently cancelling b2 in a separate committed transaction
+        // while b1's notification is being dispatched (exact #112 race condition)
+        TransactionTemplate tt = new TransactionTemplate(transactionManager);
+        tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        doAnswer(invocation -> {
+                    tt.execute(status -> {
+                        Reservation r2 =
+                                reservationRepository.findById(b2.getId()).orElseThrow();
+                        r2.cancel(LocalDateTime.of(2026, 11, 2, 12, 0), "Cancelled concurrently by student");
+                        reservationRepository.saveAndFlush(r2);
+                        return null;
+                    });
+                    return null;
+                })
+                .when(notificationService)
+                .notifyUser(eq(USER_ID), eq("Reservation Reassigned"), anyString());
 
         AssetDamagedEvent event =
                 new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
