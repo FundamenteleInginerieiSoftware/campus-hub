@@ -13,15 +13,17 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Executes automated disaster-recovery reassignment or force-cancellation for a single
- * reservation inside an isolated {@link Propagation#REQUIRES_NEW} transaction.
+ * reservation inside isolated {@code REQUIRES_NEW} transactions.
  *
  * <p>Bug fixed (#112): previously, the entire reassignment loop in {@link ReassignmentService} executed
  * within a single transaction. When one reservation encountered an optimistic locking conflict (e.g.
@@ -30,81 +32,135 @@ import org.springframework.transaction.annotation.Transactional;
  * mismatch and threw an ObjectOptimisticLockingFailureException that rolled back the entire batch,
  * even though student notification emails had already been dispatched.
  *
- * <p>Fix: each booking runs in an isolated {@link Propagation#REQUIRES_NEW} transaction with its own
- * fresh persistence context, so it reads the latest database state and commits independently.
- * Notifications are dispatched by {@link ReassignmentService} only after each booking transaction commits.
+ * <p>Bug fixed (#149): previously, {@code processSingleBooking} started the {@code REQUIRES_NEW}
+ * transaction before calling {@code strategy.findSubstitute}, which loaded candidate {@code Asset}
+ * entities into the L1 persistence context without a row lock before {@code moveToAsset} called
+ * {@code lockForBooking}. In addition, if the first candidate threw {@link SubstituteNoLongerFreeException},
+ * the processor immediately abandoned the current strategy instead of trying remaining free candidates
+ * of the same strategy.
+ *
+ * <p>Fix: candidate discovery runs outside the write transaction, and each candidate move attempt (or
+ * final force-cancellation) runs in its own fresh {@code REQUIRES_NEW} persistence context so
+ * {@code lockForBooking} is always the first touch of {@code Asset}.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 class ReassignmentBookingProcessor {
 
     private final ReservationApi reservationApi;
     private final ReassignmentLogRepository reassignmentLogRepository;
     private final List<SubstituteStrategy> strategies;
     private final Clock clock;
+    private final TransactionTemplate requiresNewTx;
+
+    ReassignmentBookingProcessor(
+            ReservationApi reservationApi,
+            ReassignmentLogRepository reassignmentLogRepository,
+            List<SubstituteStrategy> strategies,
+            Clock clock) {
+        this(reservationApi, reassignmentLogRepository, strategies, clock, null);
+    }
+
+    @Autowired
+    ReassignmentBookingProcessor(
+            ReservationApi reservationApi,
+            ReassignmentLogRepository reassignmentLogRepository,
+            List<SubstituteStrategy> strategies,
+            Clock clock,
+            PlatformTransactionManager transactionManager) {
+        this.reservationApi = reservationApi;
+        this.reassignmentLogRepository = reassignmentLogRepository;
+        this.strategies = strategies;
+        this.clock = clock;
+        if (transactionManager != null) {
+            TransactionTemplate tt = new TransactionTemplate(transactionManager);
+            tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            this.requiresNewTx = tt;
+        } else {
+            this.requiresNewTx = null;
+        }
+    }
 
     record ReassignmentExecutionResult(ReassignmentOutcome outcome, String substituteAssetName) {}
 
     /**
-     * Processes a single reservation on a damaged asset in an isolated transaction.
+     * Processes a single reservation on a damaged asset, trying all candidates of each strategy
+     * in order before falling back to force-cancellation.
      *
      * @return {@link Optional} containing execution details if moved or force-cancelled, or empty if skipped.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<ReassignmentExecutionResult> processSingleBooking(
             AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) {
         for (SubstituteStrategy strategy : strategies) {
-            Optional<AssetSummary> substituteOpt = strategy.findSubstitute(booking, damaged);
-            if (substituteOpt.isPresent()) {
-                AssetSummary candidate = substituteOpt.get();
+            List<AssetSummary> candidates = resolveCandidates(strategy, booking, damaged);
+            for (AssetSummary candidate : candidates) {
                 try {
-                    boolean moved =
-                            reservationApi.moveToAsset(booking.id(), candidate.id(), "Incident #" + event.incidentId());
+                    return inRequiresNewTransaction(() -> {
+                        boolean moved = reservationApi.moveToAsset(
+                                booking.id(), candidate.id(), "Incident #" + event.incidentId());
 
-                    if (moved) {
-                        ReassignmentLog logEntry = new ReassignmentLog(
-                                event.incidentId(),
-                                booking.id(),
-                                event.assetId(),
-                                candidate.id(),
-                                ReassignmentOutcome.REASSIGNED,
-                                strategy.name(),
-                                LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
-                        reassignmentLogRepository.save(logEntry);
+                        if (moved) {
+                            ReassignmentLog logEntry = new ReassignmentLog(
+                                    event.incidentId(),
+                                    booking.id(),
+                                    event.assetId(),
+                                    candidate.id(),
+                                    ReassignmentOutcome.REASSIGNED,
+                                    strategy.name(),
+                                    LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
+                            reassignmentLogRepository.save(logEntry);
 
-                        return Optional.of(
-                                new ReassignmentExecutionResult(ReassignmentOutcome.REASSIGNED, candidate.name()));
-                    }
-                    // Reservation was no longer CONFIRMED when moveToAsset ran; skip it cleanly.
-                    return Optional.empty();
+                            return Optional.of(
+                                    new ReassignmentExecutionResult(ReassignmentOutcome.REASSIGNED, candidate.name()));
+                        }
+                        // Reservation was no longer CONFIRMED when moveToAsset ran; skip it cleanly.
+                        return Optional.empty();
+                    });
                 } catch (SubstituteNoLongerFreeException e) {
                     log.warn(
-                            "Candidate asset {} was no longer free when moving reservation #{}, falling back to next strategy",
+                            "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
                             candidate.id(),
                             booking.id());
                 }
             }
         }
 
-        // If no strategy found a free substitute, force-cancel the reservation
-        boolean cancelled =
-                reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+        // If no strategy found a free substitute, force-cancel the reservation in a fresh REQUIRES_NEW transaction
+        return inRequiresNewTransaction(() -> {
+            boolean cancelled =
+                    reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
 
-        if (cancelled) {
-            ReassignmentLog logEntry = new ReassignmentLog(
-                    event.incidentId(),
-                    booking.id(),
-                    event.assetId(),
-                    null,
-                    ReassignmentOutcome.FORCE_CANCELLED,
-                    null,
-                    LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
-            reassignmentLogRepository.save(logEntry);
+            if (cancelled) {
+                ReassignmentLog logEntry = new ReassignmentLog(
+                        event.incidentId(),
+                        booking.id(),
+                        event.assetId(),
+                        null,
+                        ReassignmentOutcome.FORCE_CANCELLED,
+                        null,
+                        LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
+                reassignmentLogRepository.save(logEntry);
 
-            return Optional.of(new ReassignmentExecutionResult(ReassignmentOutcome.FORCE_CANCELLED, null));
+                return Optional.of(new ReassignmentExecutionResult(ReassignmentOutcome.FORCE_CANCELLED, null));
+            }
+
+            return Optional.empty();
+        });
+    }
+
+    private static List<AssetSummary> resolveCandidates(
+            SubstituteStrategy strategy, ReservationSummary booking, AssetSummary damaged) {
+        List<AssetSummary> candidates = strategy.findCandidates(booking, damaged);
+        if (candidates != null && !candidates.isEmpty()) {
+            return candidates;
         }
+        return strategy.findSubstitute(booking, damaged).stream().toList();
+    }
 
-        return Optional.empty();
+    private <T> T inRequiresNewTransaction(Supplier<T> action) {
+        if (requiresNewTx == null) {
+            return action.get();
+        }
+        return requiresNewTx.execute(status -> action.get());
     }
 }

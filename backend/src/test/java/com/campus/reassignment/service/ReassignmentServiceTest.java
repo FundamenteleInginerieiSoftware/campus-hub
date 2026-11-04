@@ -178,6 +178,42 @@ class ReassignmentServiceTest {
     }
 
     @Test
+    @DisplayName("Tries remaining candidates of the same strategy before falling back to next strategy (#149)")
+    void triesRemainingCandidatesOfSameStrategyBeforeFallingBack() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+        AssetSummary secondSameModelSubstitute =
+                new AssetSummary(25L, "Second Same-Model Scope", "DS1054Z", 1L, 100L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.findCandidates(booking, damagedAsset))
+                .thenReturn(List.of(substituteAsset, secondSameModelSubstitute));
+        when(primaryStrategy.name()).thenReturn("SameModelStrategy");
+
+        doThrow(new SubstituteNoLongerFreeException("Candidate 20 raced"))
+                .when(reservationApi)
+                .moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
+        when(reservationApi.moveToAsset(1L, 25L, "Incident #" + INCIDENT_ID)).thenReturn(true);
+
+        reassignmentService.handle(event);
+
+        verify(reservationApi).moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
+        verify(reservationApi).moveToAsset(1L, 25L, "Incident #" + INCIDENT_ID);
+        verify(secondaryStrategy, never()).findCandidates(any(), any());
+        verify(secondaryStrategy, never()).findSubstitute(any(), any());
+        verify(reassignmentLogRepository)
+                .save(argThat(log -> log.getToAssetId().equals(25L)
+                        && log.getOutcome() == ReassignmentOutcome.REASSIGNED
+                        && log.getStrategy().equals("SameModelStrategy")));
+        verify(notificationService)
+                .notifyUser(eq(USER_ID), eq("Reservation Reassigned"), contains("Second Same-Model Scope"));
+    }
+
+    @Test
     @DisplayName("Force cancels booking when no strategy finds a free substitute")
     void forceCancelsWhenNoSubstituteFound() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
