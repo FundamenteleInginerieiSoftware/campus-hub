@@ -361,7 +361,7 @@ public class ReservationService implements ReservationApi {
     @Override
     public Optional<ReservationSummary> findCurrentCheckout(Long assetId) {
         return reservationRepository
-                .findFirstByAssetIdAndStatusIn(
+                .findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
                         assetId, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE))
                 .map(r -> new ReservationSummary(
                         r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
@@ -390,6 +390,23 @@ public class ReservationService implements ReservationApi {
         }
 
         reservation.checkOut(now);
+
+        // Bug fixed: check that asset is bookable (operational) before desk check-out. Throws 409 ASSET_NOT_BOOKABLE
+        // if the asset was retired or marked under maintenance between booking and check-out.
+        if (!catalogApi.isBookable(reservation.getAssetId())) {
+            throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset is not available for check-out");
+        }
+
+        // Bug fixed: prevent check-out when the asset is still held by another reservation (CHECKED_OUT or OVERDUE).
+        // Prevents double check-outs when an earlier student hasn't returned equipment yet.
+        Optional<ReservationSummary> currentHolder = findCurrentCheckout(reservation.getAssetId());
+        if (currentHolder.isPresent() && !currentHolder.get().id().equals(reservation.getId())) {
+            throw new ConflictException(
+                    "RESERVATION_CONFLICT",
+                    "Asset is currently checked out or overdue under reservation #"
+                            + currentHolder.get().id());
+        }
+
         auditService.record(
                 currentUser.id(), "CHECK_OUT_RESERVATION", "Reservation", reservation.getId(), "Checked out at " + now);
         return ReservationResponse.from(reservation);
