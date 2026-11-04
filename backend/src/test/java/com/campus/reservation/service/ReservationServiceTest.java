@@ -99,6 +99,7 @@ class ReservationServiceTest {
         assertThat(response.userId()).isEqualTo(USER_ID);
         assertThat(response.assetId()).isEqualTo(ASSET_ID);
         assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(response.createdAt().getNano()).isZero();
 
         // Strict lock order verification
         InOrder inOrder = inOrder(catalogApi, reservationRepository, auditService);

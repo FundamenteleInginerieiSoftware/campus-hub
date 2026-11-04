@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -76,14 +77,15 @@ public class Reservation {
         this.assetId = Objects.requireNonNull(assetId, "assetId must not be null");
         this.startTime = Objects.requireNonNull(startTime, "startTime must not be null");
         this.endTime = Objects.requireNonNull(endTime, "endTime must not be null");
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        this.createdAt =
+                Objects.requireNonNull(createdAt, "createdAt must not be null").truncatedTo(ChronoUnit.SECONDS);
         this.status = ReservationStatus.CONFIRMED;
     }
 
     public void checkOut(LocalDateTime now) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CHECKED_OUT;
-        this.checkedOutAt = now;
+        this.checkedOutAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
     }
 
     public void returnItem(LocalDateTime now) {
@@ -93,13 +95,13 @@ public class Reservation {
                     "Cannot return reservation in status " + this.status + "; expected CHECKED_OUT or OVERDUE");
         }
         this.status = ReservationStatus.RETURNED;
-        this.returnedAt = now;
+        this.returnedAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
     }
 
     public void cancel(LocalDateTime now, String reason) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CANCELLED;
-        this.cancelledAt = now;
+        this.cancelledAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
         this.cancelReason = reason;
     }
 
@@ -109,7 +111,7 @@ public class Reservation {
         }
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.FORCE_CANCELLED;
-        this.cancelledAt = now;
+        this.cancelledAt = now != null ? now.truncatedTo(ChronoUnit.SECONDS) : null;
         this.cancelReason = reason;
     }
 

@@ -14,6 +14,7 @@ import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -76,7 +77,7 @@ public class ReassignmentService {
                                     candidate.id(),
                                     ReassignmentOutcome.REASSIGNED,
                                     strategy.name(),
-                                    LocalDateTime.now(clock));
+                                    LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
                             reassignmentLogRepository.save(logEntry);
 
                             sendNotificationSafely(
@@ -109,7 +110,7 @@ public class ReassignmentService {
                             null,
                             ReassignmentOutcome.FORCE_CANCELLED,
                             null,
-                            LocalDateTime.now(clock));
+                            LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
                     reassignmentLogRepository.save(logEntry);
 
                     sendNotificationSafely(

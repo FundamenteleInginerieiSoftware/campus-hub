@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -63,7 +64,7 @@ public class ReservationService implements ReservationApi {
     @Transactional
     public ReservationResponse createReservation(CreateReservationRequest req) {
         Long userId = currentUser.id();
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 
         validateReservationRequest(req, now);
 
@@ -156,7 +157,7 @@ public class ReservationService implements ReservationApi {
     @Transactional
     public ReservationResponse cancelReservation(Long id) {
         Reservation r = loadOwnedOrAdmin(id);
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 
         if (!currentUser.isAdmin() && !now.isBefore(r.getStartTime())) {
             throw new ConflictException(
@@ -352,7 +353,7 @@ public class ReservationService implements ReservationApi {
             return false;
         }
 
-        r.forceCancel(LocalDateTime.now(clock), reason);
+        r.forceCancel(LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS), reason);
         auditService.record(null, "FORCE_CANCEL_RESERVATION", "Reservation", r.getId(), reason);
         return true;
     }
@@ -378,7 +379,7 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
         LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
 
@@ -403,7 +404,7 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         reservation.returnItem(now);
         auditService.record(
                 currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at " + now);
