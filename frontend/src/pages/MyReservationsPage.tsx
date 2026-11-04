@@ -102,13 +102,7 @@ function statusLabel(status: ReservationStatus): string {
 }
 
 export default function MyReservationsPage() {
-  const [pageData, setPageData] = useState<PageResponse<Reservation>>({
-    content: [],
-    page: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 0,
-  })
+  const [pageData, setPageData] = useState<PageResponse<Reservation> | null>(null)
   const [pageNumber, setPageNumber] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -171,6 +165,7 @@ export default function MyReservationsPage() {
     fetchMyReservations(pageNumber, 10, statusFilter)
       .then(async (response) => {
         if (ignore) return
+        setError(null)
         setPageData(response)
 
         const neededAssetIds = [
@@ -211,6 +206,8 @@ export default function MyReservationsPage() {
   function handleTabChange(val: string) {
     setFilterTab(val as 'all' | 'active' | 'past')
     setPageNumber(0)
+    setPageData(null)
+    setError(null)
     setLoading(true)
   }
 
@@ -231,6 +228,7 @@ export default function MyReservationsPage() {
       setCancellingReservation(null)
       setActionNotice(`Reservation #${cancelledId} was successfully cancelled.`)
       // Refresh the current page and summary counters.
+      setError(null)
       setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
@@ -456,6 +454,8 @@ export default function MyReservationsPage() {
         columns={columns}
         rowKey={(r) => r.id}
         onPageChange={(newPage) => {
+          setPageData(null)
+          setError(null)
           setLoading(true)
           setPageNumber(newPage)
         }}
