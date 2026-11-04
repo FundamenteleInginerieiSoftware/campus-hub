@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.firewall.RequestRejectedHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import tools.jackson.databind.json.JsonMapper;
@@ -80,6 +81,15 @@ public class SecurityConfig {
                 .exceptionHandling(
                         handling -> handling.authenticationEntryPoint(errors).accessDeniedHandler(errors));
         return http.build();
+    }
+
+    /**
+     * Answers URLs that Spring Security's firewall blocks (e.g. {@code /api/v1/..;/x}) with our
+     * ProblemDetail JSON. Spring finds this bean by its type and uses it instead of its default.
+     */
+    @Bean
+    RequestRejectedHandler requestRejectedHandler(JsonMapper jsonMapper) {
+        return new SecurityErrorHandler(jsonMapper);
     }
 
     /**

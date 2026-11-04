@@ -34,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -46,7 +47,10 @@ class ReassignmentServiceTest {
     private static final Long INCIDENT_ID = 100L;
     private static final Long USER_ID = 42L;
 
-    private final Clock clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    // Fixed clock with nanos: 2026-11-02T08:00:00.123456789Z -> In Europe/Bucharest (UTC+2 in winter) this is
+    // 2026-11-02T10:00:00.123456789 (Monday)
+    private final Clock clock =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00.123456789Z"), ZoneId.of("Europe/Bucharest"));
 
     @Mock
     private CatalogApi catalogApi;
@@ -104,13 +108,17 @@ class ReassignmentServiceTest {
         reassignmentService.handle(event);
 
         verify(reservationApi).moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
-        verify(reassignmentLogRepository)
-                .save(argThat(log -> log.getIncidentId().equals(INCIDENT_ID)
-                        && log.getReservationId().equals(1L)
-                        && log.getFromAssetId().equals(DAMAGED_ASSET_ID)
-                        && log.getToAssetId().equals(SUBSTITUTE_ASSET_ID)
-                        && log.getOutcome() == ReassignmentOutcome.REASSIGNED
-                        && log.getStrategy().equals("SameModelStrategy")));
+        ArgumentCaptor<ReassignmentLog> captor = ArgumentCaptor.forClass(ReassignmentLog.class);
+        verify(reassignmentLogRepository).save(captor.capture());
+        ReassignmentLog savedLog = captor.getValue();
+        assertThat(savedLog.getIncidentId()).isEqualTo(INCIDENT_ID);
+        assertThat(savedLog.getReservationId()).isEqualTo(1L);
+        assertThat(savedLog.getFromAssetId()).isEqualTo(DAMAGED_ASSET_ID);
+        assertThat(savedLog.getToAssetId()).isEqualTo(SUBSTITUTE_ASSET_ID);
+        assertThat(savedLog.getOutcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
+        assertThat(savedLog.getStrategy()).isEqualTo("SameModelStrategy");
+        assertThat(savedLog.getCreatedAt().getNano()).isZero();
+        assertThat(savedLog.getCreatedAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0, 0));
         verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Reassigned"), contains("Substitute Scope"));
     }
 

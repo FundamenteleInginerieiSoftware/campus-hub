@@ -83,7 +83,7 @@ public class Reservation {
     public void checkOut(LocalDateTime now) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CHECKED_OUT;
-        this.checkedOutAt = now;
+        this.checkedOutAt = Objects.requireNonNull(now, "now must not be null");
     }
 
     public void returnItem(LocalDateTime now) {
@@ -93,13 +93,13 @@ public class Reservation {
                     "Cannot return reservation in status " + this.status + "; expected CHECKED_OUT or OVERDUE");
         }
         this.status = ReservationStatus.RETURNED;
-        this.returnedAt = now;
+        this.returnedAt = Objects.requireNonNull(now, "now must not be null");
     }
 
     public void cancel(LocalDateTime now, String reason) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CANCELLED;
-        this.cancelledAt = now;
+        this.cancelledAt = Objects.requireNonNull(now, "now must not be null");
         this.cancelReason = reason;
     }
 
@@ -109,7 +109,7 @@ public class Reservation {
         }
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.FORCE_CANCELLED;
-        this.cancelledAt = now;
+        this.cancelledAt = Objects.requireNonNull(now, "now must not be null");
         this.cancelReason = reason;
     }
 
