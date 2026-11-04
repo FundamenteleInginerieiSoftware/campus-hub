@@ -115,9 +115,12 @@ Located in `com.campus.reservation.repository`.
     select count(r) > 0 from Reservation r
     where r.assetId = :assetId
       and r.status in :statuses
-      and r.startTime < :end
-      and r.endTime > :start
       and r.id <> :ignoreId
+      and (
+        (r.status <> com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end and r.endTime > :start)
+        or
+        (r.status = com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end)
+      )
     """)
 boolean existsOverlap(
         @Param("assetId") Long assetId,
@@ -128,9 +131,13 @@ boolean existsOverlap(
 ```
 
 #### Overlap Formula:
-Two half-open intervals $[S_1, E_1)$ and $[S_2, E_2)$ overlap **if and only if** $S_1 < E_2$ and $E_1 > S_2$.
-- Abutting slots (e.g. 10:00–12:00 and 12:00–14:00) do NOT collide ($12:00 < 12:00$ is `false`).
-- Active statuses tested: `CONFIRMED`, `CHECKED_OUT`, `OVERDUE`.
+- **Standard interval (`CONFIRMED`, `CHECKED_OUT`):** Two half-open intervals $[S_1, E_1)$ and $[S_2, E_2)$ overlap **if and only if** $S_1 < E_2$ and $E_1 > S_2$. Abutting slots (e.g. 10:00–12:00 and 12:00–14:00) do NOT collide ($12:00 < 12:00$ is `false`).
+- **Open-ended interval (`OVERDUE`, #113):** When equipment has not been returned past its scheduled end time, the background sweep marks it `OVERDUE`. Because the equipment is still in the student's physical possession, the interval becomes open-ended $[S_1, +\infty)$, so it collides with any requested slot ending after $S_1$ ($S_1 < E_2$). The asset remains blocked in `/availability` and new bookings are rejected with `409 RESERVATION_CONFLICT` until the desk marks the equipment `RETURNED`.
+
+##### Design & Defense Rationale for Open-Ended Overdue:
+1. **Why open-ended with no fixed cut-off:** In a campus lab, staff cannot predict when overdue equipment will actually be brought back. Allowing students to book an overdue asset for subsequent days or next week risks creating cascading unfulfillable commitments. Because the frontend calendar queries `/availability` per slot, the visual greyed-out state and the `409 RESERVATION_CONFLICT` response stay 100% consistent. Existing future confirmed bookings remain intact until reassigned or fulfilled.
+2. **`CHECKED_OUT` past scheduled `endTime`:** Between the exact `endTime` and the next scheduled run of `checkOverdue()` (the sweep runs every 5 minutes by default, `app.reservation.lifecycle-sweep-ms: 300000`), a `CHECKED_OUT` row only blocks up to its `endTime`. As soon as the scheduled job transitions the status to `OVERDUE`, the interval becomes open-ended.
+3. **Interaction with incidents (`markAvailable`):** If an asset is reported damaged while `OVERDUE` (causing the catalog asset to enter `UNDER_MAINTENANCE`), resolving the incident via `markAvailable` restores the operational status, but `existsOverlap` continues to protect the asset until the student actually returns the hardware to the desk (`RETURNED`).
 
 ---
 
