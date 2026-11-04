@@ -12,7 +12,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -71,24 +70,20 @@ public class Reservation {
     @Column(name = "version", nullable = false)
     private Long version;
 
-    // Bug fixed (#123): timestamps truncated to whole seconds to strictly match the API contract
-    // (ISO-8601 without nanos) and Postgres storage (Postgres keeps at most microseconds; without
-    // truncation, in-memory nanos returned by POST differed from values loaded by subsequent GETs).
     public Reservation(
             Long userId, Long assetId, LocalDateTime startTime, LocalDateTime endTime, LocalDateTime createdAt) {
         this.userId = Objects.requireNonNull(userId, "userId must not be null");
         this.assetId = Objects.requireNonNull(assetId, "assetId must not be null");
         this.startTime = Objects.requireNonNull(startTime, "startTime must not be null");
         this.endTime = Objects.requireNonNull(endTime, "endTime must not be null");
-        this.createdAt =
-                Objects.requireNonNull(createdAt, "createdAt must not be null").truncatedTo(ChronoUnit.SECONDS);
+        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         this.status = ReservationStatus.CONFIRMED;
     }
 
     public void checkOut(LocalDateTime now) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CHECKED_OUT;
-        this.checkedOutAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
+        this.checkedOutAt = Objects.requireNonNull(now, "now must not be null");
     }
 
     public void returnItem(LocalDateTime now) {
@@ -98,13 +93,13 @@ public class Reservation {
                     "Cannot return reservation in status " + this.status + "; expected CHECKED_OUT or OVERDUE");
         }
         this.status = ReservationStatus.RETURNED;
-        this.returnedAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
+        this.returnedAt = Objects.requireNonNull(now, "now must not be null");
     }
 
     public void cancel(LocalDateTime now, String reason) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.CANCELLED;
-        this.cancelledAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
+        this.cancelledAt = Objects.requireNonNull(now, "now must not be null");
         this.cancelReason = reason;
     }
 
@@ -114,7 +109,7 @@ public class Reservation {
         }
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.FORCE_CANCELLED;
-        this.cancelledAt = Objects.requireNonNull(now, "now must not be null").truncatedTo(ChronoUnit.SECONDS);
+        this.cancelledAt = Objects.requireNonNull(now, "now must not be null");
         this.cancelReason = reason;
     }
 

@@ -479,6 +479,8 @@ public class ReservationService implements ReservationApi {
 
     // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET
     // return consistent values without subsecond drift between API responses and PostgreSQL storage.
+    // Note: because boundary comparisons (e.g. past check) use this truncated now, a booking starting at
+    // 10:00:00 requested at 10:00:00.9 is accepted within the same second rather than being flagged as BOOKING_IN_PAST.
     private LocalDateTime now() {
         return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }

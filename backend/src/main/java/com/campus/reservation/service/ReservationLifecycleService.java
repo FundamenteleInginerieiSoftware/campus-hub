@@ -56,12 +56,16 @@ public class ReservationLifecycleService {
             fixedDelayString = "${app.reservation.lifecycle-sweep-ms:300000}",
             initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")
     public LifecycleSweepSummary runLifecycleSweep() {
-        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime now = now();
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
 
         return new LifecycleSweepSummary(now, noShowCount, overdueCount, cascadedIds.size(), cascadedIds);
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 
     private int processNoShows(LocalDateTime now) {
