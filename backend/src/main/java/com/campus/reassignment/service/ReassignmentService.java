@@ -13,6 +13,7 @@ import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -50,7 +51,7 @@ public class ReassignmentService {
      */
     public void handle(AssetDamagedEvent event) {
         AssetSummary damaged = catalogApi.getAsset(event.assetId());
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now);
 
         List<ReservationSummary> sortedBookings = upcoming.stream()
@@ -83,6 +84,12 @@ public class ReassignmentService {
                 log.warn("Skipping reassignment for booking #{} due to concurrent update or failure", booking.id(), e);
             }
         }
+    }
+
+    // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so timestamps
+    // in logs and responses do not drift with subsecond differences.
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 
     private void sendNotificationSafely(Long userId, String subject, String body) {
