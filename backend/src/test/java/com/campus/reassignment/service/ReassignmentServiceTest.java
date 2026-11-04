@@ -76,13 +76,10 @@ class ReassignmentServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReassignmentBookingProcessor bookingProcessor = new ReassignmentBookingProcessor(
+                reservationApi, reassignmentLogRepository, List.of(primaryStrategy, secondaryStrategy), clock);
         reassignmentService = new ReassignmentService(
-                catalogApi,
-                reservationApi,
-                notificationService,
-                reassignmentLogRepository,
-                List.of(primaryStrategy, secondaryStrategy),
-                clock);
+                catalogApi, reservationApi, notificationService, bookingProcessor, reassignmentLogRepository, clock);
     }
 
     @Test
