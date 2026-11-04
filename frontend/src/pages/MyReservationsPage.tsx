@@ -457,6 +457,7 @@ export default function MyReservationsPage() {
         columns={columns}
         rowKey={(r) => r.id}
         onPageChange={(newPage) => {
+          // Mantine's Pagination calls onChange even for the current page; without this guard the spinner never clears.
           if (newPage === pageNumber) return
           setPageData(null)
           setError(null)
