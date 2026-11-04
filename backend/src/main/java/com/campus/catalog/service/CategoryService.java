@@ -8,6 +8,7 @@ import com.campus.catalog.web.CategoryResponse;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.security.CurrentUser;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -22,6 +23,7 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final AssetRepository assetRepository;
     private final AuditService auditService;
+    private final CurrentUser currentUser;
 
     @Transactional(readOnly = true)
     public List<CategoryResponse> listAll() {
@@ -31,7 +33,7 @@ public class CategoryService {
     }
 
     @Transactional
-    public CategoryResponse create(CategoryRequest request, Long actorId) {
+    public CategoryResponse create(CategoryRequest request) {
         String trimmedName = request.name().trim();
         if (categoryRepository.existsByNameIgnoreCase(trimmedName)) {
             throw nameTaken(trimmedName);
@@ -41,7 +43,11 @@ public class CategoryService {
         try {
             Category saved = categoryRepository.saveAndFlush(category);
             auditService.record(
-                    actorId, "CATEGORY_CREATED", "CATEGORY", saved.getId(), "Created category " + saved.getName());
+                    currentUser.id(),
+                    "CATEGORY_CREATED",
+                    "CATEGORY",
+                    saved.getId(),
+                    "Created category " + saved.getName());
             return CategoryResponse.from(saved);
         } catch (DataIntegrityViolationException ex) {
             // Concurrent creates can both pass existsByNameIgnoreCase; the DB unique index stops the second with 409.
@@ -50,7 +56,7 @@ public class CategoryService {
     }
 
     @Transactional
-    public CategoryResponse update(Long id, CategoryRequest request, Long actorId) {
+    public CategoryResponse update(Long id, CategoryRequest request) {
         Category category = findOrThrow(id);
         String trimmedName = request.name().trim();
         if (categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmedName, id)) {
@@ -61,7 +67,11 @@ public class CategoryService {
         try {
             Category saved = categoryRepository.saveAndFlush(category);
             auditService.record(
-                    actorId, "CATEGORY_UPDATED", "CATEGORY", saved.getId(), "Updated category " + saved.getName());
+                    currentUser.id(),
+                    "CATEGORY_UPDATED",
+                    "CATEGORY",
+                    saved.getId(),
+                    "Updated category " + saved.getName());
             return CategoryResponse.from(saved);
         } catch (DataIntegrityViolationException ex) {
             // A concurrent create or rename can pass the check above; the DB unique index stops it with 409.
@@ -70,7 +80,7 @@ public class CategoryService {
     }
 
     @Transactional
-    public void delete(Long id, Long actorId) {
+    public void delete(Long id) {
         Category category = findOrThrow(id);
         if (assetRepository.existsByCategoryId(id)) {
             throw categoryInUse(category.getName());
@@ -79,7 +89,8 @@ public class CategoryService {
         try {
             categoryRepository.delete(category);
             categoryRepository.flush();
-            auditService.record(actorId, "CATEGORY_DELETED", "CATEGORY", id, "Deleted category " + category.getName());
+            auditService.record(
+                    currentUser.id(), "CATEGORY_DELETED", "CATEGORY", id, "Deleted category " + category.getName());
         } catch (DataIntegrityViolationException ex) {
             throw categoryInUse(category.getName());
         }

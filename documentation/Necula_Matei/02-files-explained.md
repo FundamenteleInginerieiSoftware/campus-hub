@@ -11,7 +11,7 @@ campus-hub/
 │   ├── CODEOWNERS  pull_request_template.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
 │   └── workflows/ci.yml
-├── docs/  decisions.md  api-contract.md
+├── docs/  decisions.md  api-contract.md  plan-w4-w6.md  whats-left.md
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
 │   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
@@ -125,6 +125,12 @@ campus-hub/
 | File | What it does |
 |---|---|
 | `docs/prototype/campus-hub-prototype.html` | A clickable preview of the whole app with fake data. Open it by double-clicking; it needs no server. |
+
+### `docs/`: team status
+| File | What it does |
+|---|---|
+| `docs/plan-w4-w6.md` | The detailed plan for weeks 4–6, up to the first milestone (M1, 15 Nov). |
+| `docs/whats-left.md` | One list per team member of what is still to do, week by week, until the defense. Each of us deletes a row when the PR that finishes it is merged. |
 
 ### `docs/`: AWS architecture (doc `09-aws-architecture.md`)
 | File | What it does |

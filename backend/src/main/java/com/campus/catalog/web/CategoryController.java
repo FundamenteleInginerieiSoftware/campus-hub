@@ -33,19 +33,19 @@ public class CategoryController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a category (409 CATEGORY_NAME_TAKEN if duplicate)")
     public CategoryResponse create(@Valid @RequestBody CategoryRequest request) {
-        return categoryService.create(request, AdminActor.currentUserId());
+        return categoryService.create(request);
     }
 
     @PutMapping("/api/v1/admin/categories/{id}")
     @Operation(summary = "Update a category (404 CATEGORY_NOT_FOUND, 409 CATEGORY_NAME_TAKEN)")
     public CategoryResponse update(@PathVariable Long id, @Valid @RequestBody CategoryRequest request) {
-        return categoryService.update(id, request, AdminActor.currentUserId());
+        return categoryService.update(id, request);
     }
 
     @DeleteMapping("/api/v1/admin/categories/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete an unused category (409 CATEGORY_IN_USE if assets reference it)")
     public void delete(@PathVariable Long id) {
-        categoryService.delete(id, AdminActor.currentUserId());
+        categoryService.delete(id);
     }
 }

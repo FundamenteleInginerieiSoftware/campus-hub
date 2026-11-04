@@ -6,7 +6,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -24,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -63,12 +61,12 @@ class CategoryControllerTest {
     }
 
     @Test
-    void adminCreateReturns201AndExtractsJwtSubject() throws Exception {
-        when(categoryService.create(any(CategoryRequest.class), eq(3L)))
+    @WithMockUser(roles = "ADMIN")
+    void adminCreateReturns201() throws Exception {
+        when(categoryService.create(any(CategoryRequest.class)))
                 .thenReturn(new CategoryResponse(10L, "Oscilloscopes", "Signal lab"));
 
         mockMvc.perform(post("/api/v1/admin/categories")
-                        .with(jwt().jwt(j -> j.subject("3")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": "Oscilloscopes", "description": "Signal lab"}"""))
@@ -76,7 +74,7 @@ class CategoryControllerTest {
                 .andExpect(jsonPath("$.id").value(10))
                 .andExpect(jsonPath("$.name").value("Oscilloscopes"));
 
-        verify(categoryService).create(any(CategoryRequest.class), eq(3L));
+        verify(categoryService).create(any(CategoryRequest.class));
     }
 
     @Test
@@ -94,7 +92,7 @@ class CategoryControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void updateMissingCategoryReturns404() throws Exception {
-        when(categoryService.update(eq(99L), any(CategoryRequest.class), any()))
+        when(categoryService.update(eq(99L), any(CategoryRequest.class)))
                 .thenThrow(new NotFoundException("CATEGORY_NOT_FOUND", "Category 99 was not found"));
 
         mockMvc.perform(put("/api/v1/admin/categories/99")
@@ -110,7 +108,7 @@ class CategoryControllerTest {
     void deleteInUseCategoryReturns409() throws Exception {
         doThrow(new ConflictException("CATEGORY_IN_USE", "Category cannot be deleted"))
                 .when(categoryService)
-                .delete(eq(1L), any());
+                .delete(1L);
 
         mockMvc.perform(delete("/api/v1/admin/categories/1"))
                 .andExpect(status().isConflict())
