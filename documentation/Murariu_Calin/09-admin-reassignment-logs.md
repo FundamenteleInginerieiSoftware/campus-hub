@@ -60,7 +60,7 @@ This endpoint serves as the direct backend data source for Stefania's frontend *
 
 ### 3. Layer Breakdown
 
-1. **Repository:** `ReassignmentLogRepository.findAllByOrderByCreatedAtDesc(Pageable pageable)` executes an index-backed `ORDER BY created_at DESC` query.
+1. **Repository:** `ReassignmentLogRepository.findAllByOrderByCreatedAtDesc(Pageable pageable)` executes an `ORDER BY created_at DESC` query (at our lab scale, PostgreSQL performs an in-memory scan + sort in sub-milliseconds; the existing index `idx_reassignment_log_incident` covers incident queries, and a `created_at` index can be added if audit log volume grows).
 2. **Service:** `ReassignmentService.getLogs(int page, int size)` marked `@Transactional(readOnly = true)`. Maps entities to `ReassignmentLogResponse` records inside transaction boundaries, adhering to `open-in-view=false`.
 3. **Controller:** `AdminReassignmentController` handles web layer mapping, OpenAPI annotations, and delegating to the service layer.
 
@@ -71,4 +71,6 @@ This endpoint serves as the direct backend data source for Stefania's frontend *
 | `AdminReassignmentControllerTest` | `getLogsUnauthenticatedReturns401` | Asserts anonymous request receives HTTP 401 |
 | `AdminReassignmentControllerTest` | `getLogsForbiddenForStudent` | Asserts authenticated `STUDENT` receives HTTP 403 |
 | `AdminReassignmentControllerTest` | `getLogsSuccessForAdmin` | Asserts authenticated `ADMIN` receives HTTP 200 with JSON pagination |
+| `AdminReassignmentControllerTest` | `getLogsInvalidPageReturns400` | Asserts `page=-1` receives HTTP 400 Bad Request via `@Min(0)` |
+| `AdminReassignmentControllerTest` | `getLogsInvalidSizeReturns400` | Asserts `size=0` and `size=101` receive HTTP 400 Bad Request via `@Min(1) @Max(100)` |
 | `ReassignmentServiceTest` | `getLogsReturnsPaginatedResponse` | Asserts entity-to-DTO mapping and pagination metadata correctness |
