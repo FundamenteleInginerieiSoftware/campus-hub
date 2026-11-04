@@ -166,6 +166,14 @@ If the user previously had `60` minutes selected and switches start time to `19:
 
 ---
 
+### 3. Engine Indicators: "Moved" and "Force-Cancelled"
+
+In accordance with W8 requirements (`docs/whats-left.md`), student bookings affected by incidents or disaster-recovery actions are explicitly labeled:
+- **Moved Bookings:** When `originalAssetId != null`, the equipment cell displays an outlined blue badge (`<IconArrowsExchange size={12} /> Moved from Asset #X`) with a full tooltip explaining the substitute change.
+- **Force-Cancelled Bookings:** When an incident cannot find any free substitute, the reservation is force-cancelled. The Status cell displays an orange badge (`Force-cancelled by engine`) with a tooltip providing the incident ID and damage reason from `cancelReason`.
+
+---
+
 ## Verification & Build Status
 
 1. **Linter Check:**

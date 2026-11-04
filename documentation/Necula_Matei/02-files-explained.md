@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`) and "who am I?" (`17-users-me.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) and the first admin on AWS (`18-prod-admin-bootstrap.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -27,16 +27,17 @@ campus-hub/
         │                          user/api/Role.java, user/domain/User.java,
         │                          user/repository/UserRepository.java, user/service/UserService.java,
         │                          user/service/AuthService.java, user/service/UserSeeder.java,
+        │                          user/service/AdminBootstrap.java,
         │                          user/api/UserApi.java, user/api/UserSummary.java,
         │                          user/web/{Register,Login}Request.java, {User,Login}Response.java,
-│                          user/web/UserController.java
+        │                          user/web/UserController.java
         ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
         │                    db/migration/V2026_10_21_1500__platform_init.sql
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
-        │                          UserSeederTest
+        │                          UserSeederTest, AdminBootstrapTest
         └── test/resources/application-test.yml
 ```
 
@@ -58,7 +59,7 @@ campus-hub/
 ### `.github/` (GitHub settings stored as files)
 | File | What it does |
 |---|---|
-| `CODEOWNERS` | Says who must review changes in each folder. GitHub asks them automatically. |
+| `CODEOWNERS` | Says who GitHub asks to review. Since 4 Nov: the whole team, on every PR. |
 | `pull_request_template.md` | The form every pull request starts with: what, why, how to test, a checklist. |
 | `ISSUE_TEMPLATE/` | Forms for new issues: bug, task, user story. |
 | `workflows/ci.yml` | The robot that builds and tests every pull request. It must be green before merging. |
@@ -111,6 +112,8 @@ campus-hub/
 | `AuthFlowIT` | Signs up, logs in and uses the ticket on the real app, like the website will (also "who am I?" with and without a ticket). |
 | `UserSeeder.java` | On a laptop, creates 3 test accounts at startup (2 students, 1 admin, password `password`) if there are no users yet. |
 | `UserSeederTest` | Checks the 3 accounts are created in an empty table, and nothing happens when users exist. |
+| `AdminBootstrap.java` | On AWS, creates the first admin account at startup from the `ADMIN_EMAIL` / `ADMIN_PASSWORD` settings, if that account doesn't exist yet. |
+| `AdminBootstrapTest` | Checks the admin is created with a scrambled password, an existing account is left alone, nothing happens when a setting is empty, and a too-short password stops the app. |
 
 ### Backend: login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`)
 | File | What it does |
@@ -154,7 +157,7 @@ campus-hub/
 | File | Key points |
 |---|---|
 | `AGENTS.md` | Starts with an override table: the plan PDFs say Maven / Java 21 / H2, the repo uses **Gradle / Java 25 / PostgreSQL 18**. Then: session start checks, the v2 ownership table, the "never" list, workflow, architecture rules, week plan, WAIT-or-go checks (`onmain`/`inmain` shell helpers), cross-module contracts. |
-| `CODEOWNERS` | Every line is owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania), so either can approve. **The last matching rule wins**, so specific paths (`user/admin/`, `workflows/ci.yml`) come after general ones (`user/`, `.github/`). `ci.yml` also lists me because it is a required check. |
+| `CODEOWNERS` | One line, `*` = all four of us, so GitHub requests every teammate on every PR (never the author). Since 4 Nov 2026 the `protect-main` ruleset no longer requires a code owner's approval: 1 approval from anyone is enough. Before that, every path had owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania). |
 | `ci.yml` | One job named **`ci`**, which is the exact name the `protect-main` ruleset requires. A `postgres:18` service container with `campus_test`; `SPRING_DATASOURCE_*` env vars point the tests at it. Java 25 (Temurin) + `gradle/actions/setup-gradle@v6`, then `./gradlew build` and the JaCoCo report as an artifact. Every backend step has `if: hashFiles('backend/gradlew') != ''` and every frontend step `hashFiles('frontend/package.json')`, so docs-only PRs (like #12) still pass. |
 | Templates | PR checklist uses `./gradlew build`; the task template's Definition of Done says "works from a fresh database (reset in pgAdmin)". |
 | `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |
@@ -199,6 +202,7 @@ campus-hub/
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. `POST /register` (`@ResponseStatus(CREATED)`) and `POST /login` take `@Valid @RequestBody` records and only call `AuthService`. Public through the `/api/v1/auth/**` rule. |
 | `AuthService` | `register`: `existsByEmailIgnoreCase` → `409 EMAIL_TAKEN`, BCrypt hash, role always `STUDENT`, `saveAndFlush` inside a try so a simultaneous duplicate (UNIQUE column) also becomes 409. `login`: `findByEmailIgnoreCase` → `filter(isEnabled)` → `filter(passwordEncoder.matches)` → else `401 INVALID_CREDENTIALS` (same error for every case). Token: `JwtClaimsSet` with `sub` (id), `email`, `roles`, `iat`/`exp` from the shared `Clock` + `app.jwt.expiration` (8 h, bound as `Duration`), signed with the HS256 `JwtEncoder`. Details in `13-auth-register-login.md`. |
 | `UserSeeder` | `@Component @Profile("dev") @Order(1)` `CommandLineRunner`: if `count() == 0`, `saveAll` student1 (id 1), student2 (id 2), admin (id 3), password `password` (one BCrypt hash), `created_at` from the `Clock`. Order 1 so Liviu's (2) and Calin's (3) seeders find users. Details in `14-user-seeder.md`. |
+| `AdminBootstrap` | `@Component @Profile("prod")` `CommandLineRunner`, values from `app.admin.email` / `app.admin.password` (`@Value`, constructor). Blank → log + skip; `existsByEmailIgnoreCase` → skip (never resets a password or promotes a student); password < 8 chars or > 72 UTF-8 bytes → `IllegalStateException` (app doesn't start); else `save` one `ADMIN` with a BCrypt hash, `created_at` from the `Clock`. Logs the email, never the password. Details in `18-prod-admin-bootstrap.md`. |
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
 | `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
 | `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
@@ -233,6 +237,7 @@ campus-hub/
 | `AuthServiceTest` | Mockito, only `UserRepository` mocked; the real BCrypt encoder and a real `NimbusJwtEncoder` with a test key. The token is decoded with a `JwtTimestampValidator` on the fixed clock, so claims and expiry are checked exactly. 7 tests: register OK / taken / race, login OK / wrong password / unknown email / disabled. |
 | `AuthFlowIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back): register → login → token gets 404 on an unknown `/api/v1` path (past security) and 403 on `/api/v1/admin/**`; a second register with other capitals → 409 `EMAIL_TAKEN`; `GET /api/v1/users/me` with the token → 200 (own email, `STUDENT`, no `passwordHash`), without → 401 `UNAUTHORIZED`. |
 | `UserSeederTest` | Mockito: `count() = 0` → `saveAll` captured (`ArgumentCaptor`), emails + roles in order, all hashes match `password`; `count() = 3` → `saveAll` never called. |
+| `AdminBootstrapTest` | Mockito, real BCrypt encoder: missing → one `ADMIN` saved, email lowercased + trimmed, hash ≠ password and matches it; existing email → no `save`; blank email or password → no repository call; `"short"` → `IllegalStateException`, no `save`. |
 | `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |
 
 Result: `./gradlew build` → BUILD SUCCESSFUL, 32 tests (6 after #13, +2 for users, +9 from Liviu's #22, +12 for login foundations, +3 for `UserService`), locally on PostgreSQL 18.

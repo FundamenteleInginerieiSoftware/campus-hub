@@ -286,18 +286,31 @@ export default function MyReservationsPage() {
     },
     {
       header: 'Status',
-      render: (r) => (
-        <div>
-          <Badge color={statusColor(r.status)} variant="filled">
-            {statusLabel(r.status)}
-          </Badge>
-          {r.cancelReason && (
-            <Text size="xs" c="dimmed" mt={2} maw={180} truncate>
-              {r.cancelReason}
-            </Text>
-          )}
-        </div>
-      ),
+      render: (r) => {
+        const isForceCancelled = r.status === 'FORCE_CANCELLED'
+
+        return (
+          <div>
+            <Badge color={statusColor(r.status)} variant="filled">
+              {statusLabel(r.status)}
+            </Badge>
+            {isForceCancelled && (
+              <Tooltip label={r.cancelReason ?? 'Cancelled by automatic reassignment engine'}>
+                <Badge size="xs" variant="light" color="orange" mt={4} style={{ display: 'block', maxWidth: 'fit-content' }}>
+                  Force-cancelled by engine
+                </Badge>
+              </Tooltip>
+            )}
+            {r.cancelReason && !isForceCancelled && (
+              <Tooltip label={r.cancelReason}>
+                <Text size="xs" c="dimmed" mt={2} maw={180} truncate>
+                  {r.cancelReason}
+                </Text>
+              </Tooltip>
+            )}
+          </div>
+        )
+      },
     },
     {
       header: 'Actions',

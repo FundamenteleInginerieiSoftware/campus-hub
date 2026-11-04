@@ -2,11 +2,13 @@ package com.campus.reassignment.service;
 
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.web.ReassignmentLogResponse;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
@@ -17,6 +19,9 @@ import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -125,5 +130,15 @@ public class ReassignmentService {
             log.error(
                     "Failed to deliver notification to user {} for subject '{}': {}", userId, subject, e.getMessage());
         }
+    }
+
+    /**
+     * Retrieves a paginated history of reassignment logs for administrator review, newest first.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ReassignmentLogResponse> getLogs(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return PageResponse.from(logPage, ReassignmentLogResponse::from);
     }
 }

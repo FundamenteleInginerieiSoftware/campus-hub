@@ -109,4 +109,44 @@ class SameCategoryStrategyTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    @DisplayName("Strictly excludes candidates with RETIRED status even if free")
+    void strictlyExcludesRetiredCandidates() {
+        AssetSummary retiredCandidate = new AssetSummary(20L, "Retired Scope", "DS2000", 5L, 100L, AssetStatus.RETIRED);
+
+        when(catalogApi.findAvailableByCategory(5L, 10L)).thenReturn(List.of(retiredCandidate));
+
+        Optional<AssetSummary> result = strategy.findSubstitute(reservation, damaged);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Strictly excludes candidates with UNDER_MAINTENANCE status")
+    void strictlyExcludesUnderMaintenanceCandidates() {
+        AssetSummary maintenanceCandidate =
+                new AssetSummary(20L, "Broken Scope", "DS2000", 5L, 100L, AssetStatus.UNDER_MAINTENANCE);
+
+        when(catalogApi.findAvailableByCategory(5L, 10L)).thenReturn(List.of(maintenanceCandidate));
+
+        Optional<AssetSummary> result = strategy.findSubstitute(reservation, damaged);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Breaks ties deterministically by lowest asset ID when both in same room and free")
+    void breaksTieByLowestAssetId() {
+        AssetSummary higherId = new AssetSummary(50L, "Scope 50", "DS2000", 5L, 100L, AssetStatus.AVAILABLE);
+        AssetSummary lowerId = new AssetSummary(20L, "Scope 20", "DS2000", 5L, 100L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.findAvailableByCategory(5L, 10L)).thenReturn(List.of(higherId, lowerId));
+        when(reservationApi.isAssetFree(eq(20L), eq(start), eq(end), eq(1L))).thenReturn(true);
+
+        Optional<AssetSummary> result = strategy.findSubstitute(reservation, damaged);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().id()).isEqualTo(20L);
+    }
 }

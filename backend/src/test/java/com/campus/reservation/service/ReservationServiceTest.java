@@ -207,6 +207,136 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("Allows booking exactly 30 minutes (minimum allowed duration)")
+    void allowsBookingExactly30Minutes() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 14, 30);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.createReservation(req);
+        assertThat(response).isNotNull();
+        assertThat(response.startTime()).isEqualTo(start);
+        assertThat(response.endTime()).isEqualTo(end);
+    }
+
+    @Test
+    @DisplayName("Allows booking exactly 4 hours (maximum allowed duration)")
+    void allowsBookingExactly4Hours() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 14, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.createReservation(req);
+        assertThat(response).isNotNull();
+        assertThat(response.startTime()).isEqualTo(start);
+        assertThat(response.endTime()).isEqualTo(end);
+    }
+
+    @Test
+    @DisplayName("Allows booking starting right at opening hour (08:00)")
+    void allowsBookingAtOpeningBoundary() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 3, 8, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 3, 9, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.createReservation(req);
+        assertThat(response).isNotNull();
+        assertThat(response.startTime()).isEqualTo(start);
+    }
+
+    @Test
+    @DisplayName("Allows booking ending right at closing hour (20:00)")
+    void allowsBookingAtClosingBoundary() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 3, 19, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 3, 20, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.createReservation(req);
+        assertThat(response).isNotNull();
+        assertThat(response.endTime()).isEqualTo(end);
+    }
+
+    @Test
+    @DisplayName("Rejects when booking starts before 08:00 even if ending within opening hours")
+    void rejectsWhenSlotStartsBefore0800() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 3, 7, 30);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 3, 8, 30);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+
+        assertThatThrownBy(() -> reservationService.createReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "OUTSIDE_OPENING_HOURS");
+    }
+
+    @Test
+    @DisplayName("Rejects when booking starts within opening hours but ends after 20:00")
+    void rejectsWhenSlotEndsAfter2000() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 3, 19, 30);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 3, 20, 30);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+
+        assertThatThrownBy(() -> reservationService.createReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "OUTSIDE_OPENING_HOURS");
+    }
+
+    @Test
+    @DisplayName("Allows booking exactly at 14-day horizon boundary")
+    void allowsBookingAt14DayHorizon() {
+        // Clock is at 2026-11-02 08:00 Europe/Bucharest. 14 days ahead = 2026-11-16 (Monday)
+        LocalDateTime start = LocalDateTime.of(2026, 11, 16, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 16, 12, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.createReservation(req);
+        assertThat(response).isNotNull();
+    }
+
+    @Test
     @DisplayName("Rejects when booking is more than 14 days in advance (BOOKING_TOO_FAR_AHEAD)")
     void rejectsWhenBookingTooFarAhead() {
         // Clock is at 2026-11-02 -> 15 days ahead is 2026-11-17

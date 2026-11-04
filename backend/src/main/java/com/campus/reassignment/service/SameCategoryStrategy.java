@@ -1,5 +1,6 @@
 package com.campus.reassignment.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.reservation.api.ReservationApi;
@@ -14,7 +15,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Reassignment strategy that selects an alternative substitute asset from the same category,
- * prioritizing equipment located in the same lab room.
+ * prioritizing equipment located in the same lab room, strictly excluding non-operational
+ * (RETIRED or UNDER_MAINTENANCE) assets.
  */
 @Component
 @Order(2)
@@ -34,8 +36,10 @@ class SameCategoryStrategy implements SubstituteStrategy {
         List<AssetSummary> candidates = catalogApi.findAvailableByCategory(damaged.categoryId(), damaged.id());
 
         return candidates.stream()
+                .filter(candidate -> candidate.status() == AssetStatus.AVAILABLE)
                 .sorted(Comparator.comparing((AssetSummary a) -> Objects.equals(a.labRoomId(), damaged.labRoomId()))
-                        .reversed())
+                        .reversed()
+                        .thenComparing(AssetSummary::id))
                 .filter(candidate -> reservationApi.isAssetFree(
                         candidate.id(), reservation.start(), reservation.end(), reservation.id()))
                 .findFirst();

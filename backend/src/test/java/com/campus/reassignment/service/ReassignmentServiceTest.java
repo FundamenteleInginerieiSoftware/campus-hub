@@ -1,5 +1,6 @@
 package com.campus.reassignment.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -16,6 +17,7 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
+import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationApi;
@@ -242,5 +244,45 @@ class ReassignmentServiceTest {
 
         verify(reassignmentLogRepository, never()).save(any());
         verify(notificationService, never()).notifyUser(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("getLogs returns paginated response mapped from repository")
+    void getLogsReturnsPaginatedResponse() {
+        LocalDateTime now = LocalDateTime.of(2026, 11, 2, 10, 0);
+        ReassignmentLog logEntry = new ReassignmentLog(
+                INCIDENT_ID,
+                1L,
+                DAMAGED_ASSET_ID,
+                SUBSTITUTE_ASSET_ID,
+                ReassignmentOutcome.REASSIGNED,
+                "SameModelStrategy",
+                now);
+
+        org.springframework.data.domain.Page<ReassignmentLog> page = new org.springframework.data.domain.PageImpl<>(
+                List.of(logEntry), org.springframework.data.domain.PageRequest.of(0, 10), 1);
+
+        when(reassignmentLogRepository.findAllByOrderByCreatedAtDesc(
+                        any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(page);
+
+        com.campus.common.paging.PageResponse<com.campus.reassignment.web.ReassignmentLogResponse> response =
+                reassignmentService.getLogs(0, 10);
+
+        assertThat(response.content()).hasSize(1);
+        assertThat(response.page()).isEqualTo(0);
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.totalElements()).isEqualTo(1);
+        assertThat(response.totalPages()).isEqualTo(1);
+
+        com.campus.reassignment.web.ReassignmentLogResponse item =
+                response.content().get(0);
+        assertThat(item.incidentId()).isEqualTo(INCIDENT_ID);
+        assertThat(item.reservationId()).isEqualTo(1L);
+        assertThat(item.fromAssetId()).isEqualTo(DAMAGED_ASSET_ID);
+        assertThat(item.toAssetId()).isEqualTo(SUBSTITUTE_ASSET_ID);
+        assertThat(item.outcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
+        assertThat(item.strategy()).isEqualTo("SameModelStrategy");
+        assertThat(item.createdAt()).isEqualTo(now);
     }
 }
