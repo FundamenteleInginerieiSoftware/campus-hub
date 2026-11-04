@@ -192,7 +192,7 @@ Every business rule stipulated in Handbook §10.2 is verified with dedicated hap
 | Rule | Description | Error Code / Status | Test Methods |
 |---|---|---|---|
 | **R1: Time Direction** | `endTime` must be strictly after `startTime` | `409 INVALID_TIME_RANGE` | `rejectsWhenEndTimeNotAfterStartTime` |
-| **R2: Temporal Validty** | Cannot book slots in the past relative to `Clock` | `409 BOOKING_IN_PAST` | `rejectsWhenBookingInPast` |
+| **R2: Temporal Validity** | Cannot book slots in the past relative to `Clock` | `409 BOOKING_IN_PAST` | `rejectsWhenBookingInPast` |
 | **R3: Minute Alignment** | `startTime` and `endTime` minutes must be `:00` or `:30` | `409 SLOT_NOT_ALIGNED` | `rejectsWhenMinutesNotAligned` |
 | **R4: Second Alignment** | `startTime` and `endTime` seconds and nanos must be `0` | `409 SLOT_NOT_ALIGNED` | `rejectsWhenSecondsNotAligned` |
 | **R5: Duration Range** | Min 30m, Max 4h (240m) | `409 INVALID_DURATION` | `rejectsWhenDurationExceeds4Hours`, `allowsBookingExactly30Minutes`, `allowsBookingExactly4Hours` |
