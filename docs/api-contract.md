@@ -144,12 +144,16 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | `@Valid` failed; see `errors` |
 | `MALFORMED_REQUEST` | 400 | unreadable JSON, wrong date format |
-| `INVALID_PARAMETER` | 400 | bad query parameter, e.g. an unknown `sort` field |
+| `INVALID_PARAMETER` | 400 | bad or missing query parameter, e.g. unknown `sort` field or missing required param |
+| `BAD_REQUEST` | 400 | generic Spring MVC client error |
 | `REQUEST_REJECTED` | 400 | the URL was blocked by Spring Security's firewall (`;`, `..`, encoded `/` in the path) |
 | `UNAUTHORIZED` | 401 | no token, invalid or expired token |
 | `FORBIDDEN` | 403 | logged in, but not allowed (e.g. a student on `/api/v1/admin/**`) |
+| `NOT_FOUND` | 404 | endpoint or path does not exist |
+| `METHOD_NOT_ALLOWED` | 405 | HTTP method not supported on this endpoint |
 | `STALE_VERSION` | 409 | someone else changed the row first (optimistic locking): reload and retry |
 | `PHOTO_TOO_LARGE` | 413 | upload over 5 MB |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | request `Content-Type` not supported |
 | `INTERNAL_ERROR` | 500 | anything unexpected (details only in the server log) |
 
 ### Auth and users (Matei, Stefania)
