@@ -16,7 +16,7 @@ campus-hub/
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
 │   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
-├── documentation/Necula_Matei/
+├── documentation/Necula_Matei/  README.md  NN-topic.md   (my notes)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
     ├── gradlew  gradlew.bat  gradle/wrapper/
@@ -145,6 +145,11 @@ campus-hub/
 |---|---|
 | `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
 | `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
+
+### `documentation/Necula_Matei/` (my notes)
+| File | What it does |
+|---|---|
+| `README.md` | The index of my notes: what I own, where to start reading, and one row per note with the PR it came with. |
 
 ### Not uploaded to GitHub (local only)
 | What | Why |
