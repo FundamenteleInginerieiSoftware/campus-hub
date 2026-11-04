@@ -15,13 +15,21 @@ import org.springframework.data.repository.query.Param;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long>, JpaSpecificationExecutor<Reservation> {
 
+    // Bug fixed (#113): previously, an OVERDUE booking only blocked up to its original endTime.
+    // If a student failed to return equipment, subsequent slots were accepted by existsOverlap and
+    // /availability showed the asset as free, allowing a second student to book the unreturned asset.
+    // Fix: treat OVERDUE reservations as open-ended from startTime onward (startTime < :end).
+    // The asset remains blocked for all future slots until the desk marks the equipment RETURNED.
     @Query("""
         select count(r) > 0 from Reservation r
         where r.assetId = :assetId
           and r.status in :statuses
-          and r.startTime < :end
-          and r.endTime > :start
           and r.id <> :ignoreId
+          and (
+            (r.status <> com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end and r.endTime > :start)
+            or
+            (r.status = com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end)
+          )
         """)
     boolean existsOverlap(
             @Param("assetId") Long assetId,
@@ -74,11 +82,16 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
         """)
     List<Reservation> findCheckedOutPastEnd(@Param("now") LocalDateTime now);
 
+    // Bug fixed (#113): open-ended interval for OVERDUE rows so category-wide availability
+    // flags the unreturned asset as busy for all upcoming slots until returned.
     @Query("""
         select distinct r.assetId from Reservation r
         where r.status in :statuses
-          and r.startTime < :end
-          and r.endTime > :start
+          and (
+            (r.status <> com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end and r.endTime > :start)
+            or
+            (r.status = com.campus.reservation.api.ReservationStatus.OVERDUE and r.startTime < :end)
+          )
         """)
     List<Long> findBusyAssetIds(
             @Param("start") LocalDateTime start,
