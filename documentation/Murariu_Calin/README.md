@@ -29,6 +29,7 @@ Each document is structured in two parts:
 | 08 | [`08-frontend-reservations-and-booking.md`](./08-frontend-reservations-and-booking.md) | Frontend Reservations & Booking Calendar | My Reservations page, Google Calendar week view, 20:00 closing rule, integration guide for Liviu |
 | 09 | [`09-admin-reassignment-logs.md`](./09-admin-reassignment-logs.md) | Admin Reassignment Logs Endpoint | `GET /api/v1/admin/reassignments`, audit trail pagination, `ReassignmentLogResponse`, unblocking frontend logs |
 | 10 | [`10-concurrency-pessimistic-locking.md`](./10-concurrency-pessimistic-locking.md) | Multi-Thread Concurrency & Row Locking | Pessimistic `SELECT FOR UPDATE`, `ReservationConcurrencyIT`, preventing double booking |
+| 11 | [`11-strategy-pattern-design.md`](./11-strategy-pattern-design.md) | Strategy Pattern Design & Architecture | GoF Strategy pattern deep dive, Spring `@Order` injection, OCP extensibility, tie-breaking, defense Q&A |
 
 ---
 
