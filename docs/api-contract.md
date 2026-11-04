@@ -57,9 +57,9 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 ```json
 // LoginResponse
 {
-    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-    "expiresIn": 28800,
-    "user": { "id": 1, "email": "student1@campus.test", "fullName": "Student One", "role": "STUDENT" }
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "expiresIn": 28800,
+  "user": { "id": 1, "email": "student1@campus.test", "fullName": "Student One", "role": "STUDENT" }
 }
 // UserResponse
 { "id": 1, "email": "student1@campus.test", "fullName": "Student One", "role": "STUDENT" }
@@ -100,12 +100,12 @@ Every error is an **RFC 9457 `ProblemDetail`** JSON object with an extra **`code
 
 ```json
 {
-    "type": "about:blank",
-    "title": "Conflict",
-    "status": 409,
-    "detail": "Asset 12 is already booked between 14:00 and 16:00",
-    "instance": "/api/v1/reservations",
-    "code": "RESERVATION_CONFLICT"
+  "type": "about:blank",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Asset 12 is already booked between 14:00 and 16:00",
+  "instance": "/api/v1/reservations",
+  "code": "RESERVATION_CONFLICT"
 }
 ```
 
@@ -113,10 +113,10 @@ Validation errors (400) add a list of field errors:
 
 ```json
 {
-    "type": "about:blank", "title": "Bad Request", "status": 400,
-    "detail": "Validation failed", "instance": "/api/v1/auth/register",
-    "code": "VALIDATION_FAILED",
-    "errors": [ { "field": "email", "message": "must be a well-formed email address" } ]
+  "type": "about:blank", "title": "Bad Request", "status": 400,
+  "detail": "Validation failed", "instance": "/api/v1/auth/register",
+  "code": "VALIDATION_FAILED",
+  "errors": [ { "field": "email", "message": "must be a well-formed email address" } ]
 }
 ```
 
