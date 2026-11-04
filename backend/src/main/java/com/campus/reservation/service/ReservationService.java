@@ -389,15 +389,26 @@ public class ReservationService implements ReservationApi {
                     "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
         }
 
-        reservation.checkOut(now);
+        // Fast fail if not in CONFIRMED state before locking
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+            reservation.checkOut(now);
+        }
 
-        // Bug fixed: check that asset is bookable (operational) before desk check-out. Throws 409 ASSET_NOT_BOOKABLE
-        // if the asset was retired or marked under maintenance between booking and check-out.
+        // Lock the asset row first to serialize simultaneous desk check-outs on the same physical equipment
+        catalogApi.lockForBooking(reservation.getAssetId());
+
+        // Bug fixed (#113): these checks must run BEFORE reservation.checkOut(now).
+        // If checkOut() ran first, Hibernate auto-flush would write status=CHECKED_OUT to the DB
+        // before findCurrentCheckout runs; with ORDER BY startTime DESC, the query would return
+        // *this* reservation instead of an earlier OVERDUE one, masking the conflict.
+
+        // 1. Check that asset is bookable (operational). Throws 409 ASSET_NOT_BOOKABLE if marked
+        // under maintenance or retired between booking and check-out.
         if (!catalogApi.isBookable(reservation.getAssetId())) {
             throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset is not available for check-out");
         }
 
-        // Bug fixed: prevent check-out when the asset is still held by another reservation (CHECKED_OUT or OVERDUE).
+        // 2. Prevent check-out when the asset is still held by another reservation (CHECKED_OUT or OVERDUE).
         // Prevents double check-outs when an earlier student hasn't returned equipment yet.
         Optional<ReservationSummary> currentHolder = findCurrentCheckout(reservation.getAssetId());
         if (currentHolder.isPresent() && !currentHolder.get().id().equals(reservation.getId())) {
@@ -406,6 +417,8 @@ public class ReservationService implements ReservationApi {
                     "Asset is currently checked out or overdue under reservation #"
                             + currentHolder.get().id());
         }
+
+        reservation.checkOut(now);
 
         auditService.record(
                 currentUser.id(), "CHECK_OUT_RESERVATION", "Reservation", reservation.getId(), "Checked out at " + now);

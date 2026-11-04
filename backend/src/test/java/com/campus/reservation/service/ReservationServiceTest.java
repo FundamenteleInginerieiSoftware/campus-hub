@@ -974,6 +974,8 @@ class ReservationServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .extracting("code")
                 .isEqualTo("ASSET_NOT_BOOKABLE");
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
     }
 
     @Test
@@ -1008,6 +1010,8 @@ class ReservationServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .extracting("code")
                 .isEqualTo("RESERVATION_CONFLICT");
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
     }
 
     @Test
