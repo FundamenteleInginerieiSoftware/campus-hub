@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Wed 4 Nov 2026, late evening (W5).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Thu 5 Nov 2026 (W5).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -10,7 +10,7 @@
 
 | When | Milestone | Status |
 |---|---|---|
-| W4 | Prototype demo in Swagger | ✅ runs on `main` since 31 Oct (tag `v0.1.0-prototype` not set yet) |
+| W4 | Prototype demo in Swagger | ✅ runs on `main` since 31 Oct (tag `v0.1.0-prototype`) |
 | **Sun 15 Nov (end of W6)** | **M1 `v0.1.0`**: locally, a student registers, logs in, browses, books (conflicts rejected), sees My reservations; an admin adds assets; CI green; Swagger complete | Backend almost there; **frontend pages missing** (section 2) |
 | **Sun 6 Dec (end of W9)** | **M2 `v0.2.0`**: everything locally **and on AWS**, incl. incident with photo → automatic reassignment → notification | Not started on AWS |
 | Mon 7 Dec (W10) | **Feature freeze**: tests and bugs only | |
@@ -33,14 +33,15 @@
 | #107 | Stefania | Register page | Approved: update branch, merge |
 | #108 | Stefania | Incident start-repair, reject, my incidents, incident details | Changes requested (Matei): lock the asset before releasing it, skip RETIRED |
 | #111 | Stefania | ADR-002 ✅ (Spring serves the React build) | Approved: update branch, merge |
-| #110 | Liviu | `ConstraintViolationException` / `HandlerMethodValidationException` → 400 `VALIDATION_FAILED` (closes #103) | Approved: update branch, merge |
-| #126, #127, #128, #129 | Matei | Fixes #116, #118, #117, #115 (old token on `/auth/**`, firewall JSON, disabled users, S3 + SES adapters) | Approved; merged in this order, each one rebased and re-approved after the previous |
-| #135 | Matei | `users.created_at` in whole seconds (closes #134) | Needs 1 approval |
-| #130 | Calin | Timestamps in whole seconds (closes #123) | Approved with nits: test clock needs nanos |
-| #131 | Calin | No check-out while the asset is overdue or not bookable (#113) | Changes requested: the check runs after `checkOut`, so it never fires |
-| #132 | Calin | Reassignment: one transaction per booking (#112) | Changes requested: the test passes without the fix; docs still say one transaction |
-| #133 | Calin | My reservations loader + error reset (#122) | Changes requested: clicking the current page leaves the spinner on |
+| #142 | Stefania | Keep the token when the backend is down on startup (closes #124) | Needs 1 approval |
+| #129 | Matei | S3 + SES adapters for `prod` (closes #115) | Needs re-approval after merging main |
+| #135 | Matei | `users.created_at` in whole seconds (closes #134) | Needs re-approval after merging main |
+| #138 | Matei | Admin reservations desk page | Needs re-approval after merging main |
+| #139 | Matei | Security pass tests (IDOR, admin-only endpoints, error bodies) | Needs re-approval after merging main |
+| #141 | Calin | OVERDUE bookings block the asset until returned (closes #113) | Approved before his last push: needs re-approval |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
+
+Open issue **#140**: project assistant design questions, waiting for the team's answers.
 
 ---
 
@@ -55,9 +56,9 @@
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront | Dockerfile, Terraform |
 | W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · `S3StorageService` (in review, #129) · first live deploy **by the end of W8** | – |
 | W9 | `SesNotificationService` (in review, #129) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
-| W9 | Frontend: **admin reservations desk page** (today's pickups/returns, check-out/return, 409 messages), Stefania reviews | Calin's `src/api/reservations.ts` (on `main`) |
+| W9 | Frontend: **admin reservations desk page** (today's pickups/returns, check-out/return, 409 messages): done early, in review (#138) | – |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
-| W10 | Security pass (IDOR with two student tokens, students rejected on admin endpoints, no stack traces) · load smoke test · restore an RDS snapshot once · cost check | – |
+| W10 | Security pass (IDOR with two student tokens, students rejected on admin endpoints, no stack traces): done early as tests, in review (#139) · load smoke test · restore an RDS snapshot once · cost check | – |
 | W11–W12 | Deployment + component diagrams · security chapter (JWT sequence, RBAC table, threats) · CI/CD description · runbook · demo on AWS + local fallback + video · `terraform destroy` after grading | – |
 
 ## 5. Liviu Nedelcu: catalog + shared services
