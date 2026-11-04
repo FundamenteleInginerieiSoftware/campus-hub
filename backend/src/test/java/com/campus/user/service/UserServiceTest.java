@@ -52,6 +52,28 @@ class UserServiceTest {
     }
 
     @Test
+    void findActiveRoleGivesTheRoleOfAnEnabledUser() {
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user(Role.ADMIN, true)));
+
+        assertThat(userService.findActiveRole(5L)).contains(Role.ADMIN);
+    }
+
+    @Test
+    void findActiveRoleIsEmptyForDisabledOrMissingUsers() {
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user(Role.STUDENT, false)));
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThat(userService.findActiveRole(5L)).isEmpty();
+        assertThat(userService.findActiveRole(99L)).isEmpty();
+    }
+
+    private static User user(Role role, boolean enabled) {
+        User user = new User("u@campus.test", "{bcrypt}hash", "U", role, LocalDateTime.of(2026, 11, 4, 9, 0));
+        ReflectionTestUtils.setField(user, "enabled", enabled);
+        return user;
+    }
+
+    @Test
     void getByIdThrowsUserNotFoundForUnknownId() {
         when(userRepository.findById(99L)).thenReturn(Optional.empty());
 

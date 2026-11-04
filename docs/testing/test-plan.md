@@ -13,7 +13,7 @@ The purpose of this Test Plan is to define the testing strategy, quality gates, 
 
 As a multi-tenant university lab management system where equipment is reserved and automatically reassigned upon equipment failure, software reliability and concurrency guarantees are critical. The testing suite must ensure that:
 1. **Overlap Prevention:** No two students can reserve the same equipment item during overlapping time windows under any circumstance, including simultaneous concurrent requests.
-2. **Transaction Isolation & Fault Tolerance:** Automatic reassignment runs in an isolated transaction (`REQUIRES_NEW`) after the incident report is successfully committed, preventing rollback cascades.
+2. **Transaction Isolation & Fault Tolerance:** Automatic reassignment runs in isolated per-booking transactions (`REQUIRES_NEW`) after the incident report is successfully committed, preventing rollback cascades across bookings or back to the incident.
 3. **Module Encapsulation:** Modules (`catalog`, `reservation`, `incident`, `reassignment`, `user`) communicate strictly via public `api` packages and Spring Application Events, enforced via ArchUnit.
 4. **Deterministic Time Handling:** All business logic depending on time operates via a shared `Clock` bean, guaranteeing reproducible test execution independent of execution time and timezone discrepancies.
 5. **Quality Gates & Targets:** Every pull request must pass spotless formatting, ArchUnit architecture rules, and complete test execution (unit + integration), targeting ~ 70% line coverage on service packages (enforcement gate planned for W10).
