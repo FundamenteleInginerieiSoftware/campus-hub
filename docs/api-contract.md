@@ -76,6 +76,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 | Disabled user | `401 INVALID_CREDENTIALS` as well |
 | Token | HS256-signed JWT, lifetime **8 h**, no refresh token (known limitation, documented in the report) |
 | Expired/invalid token | `401 UNAUTHORIZED`: the frontend clears the token and redirects to the login page |
+| Account disabled or deleted after login | `401 UNAUTHORIZED` on the next request: every request checks the account (#117) |
 
 ### Token claims
 
@@ -83,7 +84,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 |---|---|---|
 | `sub` | `"1"` (user id as a string) | `CurrentUser.id()` (Stefania) |
 | `email` | `"student1@campus.test"` | display only |
-| `roles` | `["STUDENT"]` or `["ADMIN"]` | Spring turns it into `ROLE_STUDENT` / `ROLE_ADMIN` (`hasRole("ADMIN")`) |
+| `roles` | `["STUDENT"]` or `["ADMIN"]` | information only: since #117 the backend reads the role from the database on every request, so a role change counts at once |
 | `iat`, `exp` | epoch seconds | expiry check |
 
 Don't rename claims after W3: `CurrentUser` and the frontend depend on them.

@@ -2,11 +2,13 @@ package com.campus.user.service;
 
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
+import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
 import com.campus.user.api.UserSummary;
 import com.campus.user.domain.User;
 import com.campus.user.repository.UserRepository;
 import com.campus.user.web.UserResponse;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,13 @@ public class UserService implements UserApi {
     @Transactional(readOnly = true)
     public boolean exists(Long id) {
         return userRepository.existsById(id);
+    }
+
+    // One primary-key lookup per request with a token (see SecurityConfig).
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Role> findActiveRole(Long id) {
+        return userRepository.findById(id).filter(User::isEnabled).map(User::getRole);
     }
 
     // GET /api/v1/users/me. The id comes from the token (Stefania's CurrentUser), never from the request,
