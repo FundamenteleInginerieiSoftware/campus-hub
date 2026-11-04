@@ -14,6 +14,7 @@ import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -49,7 +50,7 @@ public class ReassignmentService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(AssetDamagedEvent event) {
         AssetSummary damaged = catalogApi.getAsset(event.assetId());
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now);
 
         List<ReservationSummary> sortedBookings = upcoming.stream()
@@ -76,7 +77,7 @@ public class ReassignmentService {
                                     candidate.id(),
                                     ReassignmentOutcome.REASSIGNED,
                                     strategy.name(),
-                                    LocalDateTime.now(clock));
+                                    now());
                             reassignmentLogRepository.save(logEntry);
 
                             sendNotificationSafely(
@@ -109,7 +110,7 @@ public class ReassignmentService {
                             null,
                             ReassignmentOutcome.FORCE_CANCELLED,
                             null,
-                            LocalDateTime.now(clock));
+                            now());
                     reassignmentLogRepository.save(logEntry);
 
                     sendNotificationSafely(
@@ -121,6 +122,12 @@ public class ReassignmentService {
                 }
             }
         }
+    }
+
+    // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so timestamps
+    // in logs and responses do not drift with subsecond differences.
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 
     private void sendNotificationSafely(Long userId, String subject, String body) {
