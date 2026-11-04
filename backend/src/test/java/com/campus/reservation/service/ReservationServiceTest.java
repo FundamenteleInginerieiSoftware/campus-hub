@@ -18,6 +18,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
@@ -1290,5 +1291,37 @@ class ReservationServiceTest {
         assertThat(response.categoryId()).isEqualTo(categoryId);
         assertThat(response.availableAssetIds()).containsExactly(10L, 30L);
         assertThat(response.conflictReason()).isNull();
+    }
+
+    @Test
+    @DisplayName(
+            "checkAvailability: returns available false with NO_ASSETS_AVAILABLE when all category assets are busy")
+    void checkAvailabilityReturnsNoAssetsAvailableWhenCategoryExhausted() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Long categoryId = 5L;
+
+        AssetSummary a1 = new AssetSummary(10L, "Scope 1", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.findAvailableByCategory(categoryId, -1L)).thenReturn(List.of(a1));
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(10L));
+
+        AvailabilityResponse response = reservationService.checkAvailability(null, categoryId, start, end);
+
+        assertThat(response.available()).isFalse();
+        assertThat(response.availableAssetIds()).isEmpty();
+        assertThat(response.conflictReason()).isEqualTo("NO_ASSETS_AVAILABLE");
+    }
+
+    @Test
+    @DisplayName("getMyReservations and getAdminReservations reject page offset overflow (#150)")
+    void paginationRejectsHugePageOffsetOverflow() {
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
     }
 }
