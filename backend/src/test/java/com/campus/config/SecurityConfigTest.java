@@ -2,6 +2,7 @@ package com.campus.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -97,9 +98,17 @@ class SecurityConfigTest {
                 .andExpect(status().isNotFound());
     }
 
+    // Since the Dockerfile PR, a GET outside /api is open (the React app, see SpaFrontendTest).
+    // Everything else outside /api/v1 must still be closed, even for an admin.
     @Test
-    void pathsOutsideTheApiAreDeniedEvenWithAToken() throws Exception {
-        mockMvc.perform(get("/something-else").header("Authorization", bearer("ADMIN")))
+    void otherApiPathsAreDeniedEvenWithAToken() throws Exception {
+        mockMvc.perform(get("/api/v2/something").header("Authorization", bearer("ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void writesOutsideTheApiAreDeniedEvenWithAToken() throws Exception {
+        mockMvc.perform(post("/something-else").header("Authorization", bearer("ADMIN")))
                 .andExpect(status().isForbidden());
     }
 
