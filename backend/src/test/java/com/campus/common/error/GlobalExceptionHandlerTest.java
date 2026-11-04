@@ -5,14 +5,22 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.campus.common.error.GlobalExceptionHandler.FieldErrorItem;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Path;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -80,6 +88,76 @@ class GlobalExceptionHandlerTest {
                         new FieldErrorItem("email", "must be a well-formed email address"),
                         new FieldErrorItem("password", "size must be between 8 and 72")),
                 problem.getProperties().get("errors"));
+    }
+
+    @Test
+    void mapsConstraintViolationExceptionWithFieldList() {
+        @SuppressWarnings("unchecked")
+        ConstraintViolation<Object> violation = mock(ConstraintViolation.class);
+        Path path = mock(Path.class);
+        when(path.toString()).thenReturn("getLogs.page");
+        when(violation.getPropertyPath()).thenReturn(path);
+        when(violation.getMessage()).thenReturn("must be greater than or equal to 0");
+
+        ConstraintViolationException ex = new ConstraintViolationException("Validation failed", Set.of(violation));
+
+        ProblemDetail problem = handler.handleConstraintViolation(ex);
+
+        assertEquals(400, problem.getStatus());
+        assertEquals("VALIDATION_FAILED", problem.getProperties().get("code"));
+        assertEquals("Validation failed", problem.getDetail());
+        @SuppressWarnings("unchecked")
+        List<FieldErrorItem> errors =
+                (List<FieldErrorItem>) problem.getProperties().get("errors");
+        assertEquals(1, errors.size());
+        assertEquals("getLogs.page", errors.getFirst().field());
+        assertEquals("must be greater than or equal to 0", errors.getFirst().message());
+    }
+
+    @Test
+    void mapsConstraintViolationExtractingLeafPropertyNameWhenNodesPresent() {
+        @SuppressWarnings("unchecked")
+        ConstraintViolation<Object> violation = mock(ConstraintViolation.class);
+        Path path = mock(Path.class);
+        Path.Node methodNode = mock(Path.Node.class);
+        when(methodNode.getName()).thenReturn("getLogs");
+        Path.Node paramNode = mock(Path.Node.class);
+        when(paramNode.getName()).thenReturn("page");
+        when(path.iterator()).thenReturn(List.of(methodNode, paramNode).iterator());
+        when(violation.getPropertyPath()).thenReturn(path);
+        when(violation.getMessage()).thenReturn("must be greater than or equal to 0");
+
+        ConstraintViolationException ex = new ConstraintViolationException("Validation failed", Set.of(violation));
+
+        ProblemDetail problem = handler.handleConstraintViolation(ex);
+
+        assertEquals(400, problem.getStatus());
+        @SuppressWarnings("unchecked")
+        List<FieldErrorItem> errors =
+                (List<FieldErrorItem>) problem.getProperties().get("errors");
+        assertEquals("page", errors.getFirst().field());
+    }
+
+    @Test
+    void mapsHandlerMethodValidationExceptionWithParameterErrors() {
+        HandlerMethodValidationException ex = mock(HandlerMethodValidationException.class);
+        ParameterValidationResult result = mock(ParameterValidationResult.class);
+        MethodParameter methodParam = mock(MethodParameter.class);
+        when(methodParam.getParameterName()).thenReturn("size");
+        when(result.getMethodParameter()).thenReturn(methodParam);
+        MessageSourceResolvable resolvable = mock(MessageSourceResolvable.class);
+        when(resolvable.getDefaultMessage()).thenReturn("must be less than or equal to 100");
+        when(result.getResolvableErrors()).thenReturn(List.of(resolvable));
+        when(ex.getParameterValidationResults()).thenReturn(List.of(result));
+
+        ProblemDetail problem = handler.handleHandlerMethodValidation(ex);
+
+        assertEquals(400, problem.getStatus());
+        assertEquals("VALIDATION_FAILED", problem.getProperties().get("code"));
+        @SuppressWarnings("unchecked")
+        List<FieldErrorItem> errors =
+                (List<FieldErrorItem>) problem.getProperties().get("errors");
+        assertEquals(List.of(new FieldErrorItem("size", "must be less than or equal to 100")), errors);
     }
 
     @Test
