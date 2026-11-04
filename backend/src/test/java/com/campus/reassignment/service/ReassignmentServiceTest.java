@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class ReassignmentServiceTest {
@@ -256,7 +258,7 @@ class ReassignmentServiceTest {
         ReservationSummary b3 = new ReservationSummary(
                 3L, 30L, DAMAGED_ASSET_ID, start3, start3.plusHours(2), ReservationStatus.CONFIRMED);
 
-        ReassignmentBookingProcessor mockProcessor = org.mockito.Mockito.mock(ReassignmentBookingProcessor.class);
+        ReassignmentBookingProcessor mockProcessor = mock(ReassignmentBookingProcessor.class);
         ReassignmentService service = new ReassignmentService(
                 catalogApi, reservationApi, notificationService, mockProcessor, reassignmentLogRepository, clock);
 
@@ -268,8 +270,7 @@ class ReassignmentServiceTest {
                 .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
                         ReassignmentOutcome.REASSIGNED, "Sub 1")));
         when(mockProcessor.processSingleBooking(eq(event), eq(b2), eq(damagedAsset)))
-                .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(
-                        "Stale version on b2", new Throwable()));
+                .thenThrow(new ObjectOptimisticLockingFailureException("Stale version on b2", new Throwable()));
         when(mockProcessor.processSingleBooking(eq(event), eq(b3), eq(damagedAsset)))
                 .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
                         ReassignmentOutcome.REASSIGNED, "Sub 3")));
