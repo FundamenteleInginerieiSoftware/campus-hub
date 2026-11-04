@@ -235,11 +235,13 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   function selectSlot(day: string, time: string) {
     setSelectedDay(day)
     setSelectedStartTime(time)
+    setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
   function handleDurationChange(val: number) {
     setDurationMinutes(val)
+    setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 

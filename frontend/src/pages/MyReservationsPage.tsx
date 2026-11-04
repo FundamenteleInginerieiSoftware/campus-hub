@@ -20,7 +20,7 @@ import {
   IconCheck,
   IconPlus,
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import {
   cancelReservation,
@@ -58,6 +58,13 @@ function formatSlotTime(startTime: string, endTime: string): string {
   const startPart = startTime.split('T')[1]?.slice(0, 5) ?? ''
   const endPart = endTime.split('T')[1]?.slice(0, 5) ?? ''
   return `${startPart} – ${endPart}`
+}
+
+function parseLocalIso(isoString: string): Date {
+  const [datePart, timePart = '00:00:00'] = isoString.split('T')
+  const [year, month, day] = datePart.split('-').map(Number)
+  const [hour = 0, minute = 0, second = 0] = timePart.split(':').map(Number)
+  return new Date(year, month - 1, day, hour, minute, second)
 }
 
 function statusColor(status: ReservationStatus): string {
@@ -129,7 +136,10 @@ export default function MyReservationsPage() {
   })
 
   // Cache for resolved asset names to enrich the table rows.
+  // assetCacheRef mirrors assetCache so the fetch effect can skip already-cached IDs
+  // without adding assetCache to the effect dependency array.
   const [assetCache, setAssetCache] = useState<Record<number, AssetSummary>>({})
+  const assetCacheRef = useRef<Record<number, AssetSummary>>({})
 
   // Increment this counter to re-fetch the current reservations page and summary.
   const [reloadToken, setReloadToken] = useState(0)
@@ -175,7 +185,10 @@ export default function MyReservationsPage() {
           ...new Set(
             response.content
               .flatMap((r) => [r.assetId, r.originalAssetId])
-              .filter((id): id is number => id !== null && id !== undefined),
+              .filter(
+                (id): id is number =>
+                  id !== null && id !== undefined && !assetCacheRef.current[id],
+              ),
           ),
         ]
 
@@ -189,6 +202,7 @@ export default function MyReservationsPage() {
               if (item) newEntries[item.id] = item
             }
             if (Object.keys(newEntries).length > 0) {
+              assetCacheRef.current = { ...assetCacheRef.current, ...newEntries }
               setAssetCache((prev) => ({ ...prev, ...newEntries }))
             }
           }
@@ -316,7 +330,8 @@ export default function MyReservationsPage() {
     {
       header: 'Actions',
       render: (r) => {
-        const canCancel = r.status === 'CONFIRMED'
+        // Backend rejects cancellation once startTime is reached (!now.isBefore(startTime)).
+        const canCancel = r.status === 'CONFIRMED' && parseLocalIso(r.startTime) > new Date()
         if (!canCancel) return null
         return (
           <Button
