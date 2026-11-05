@@ -50,6 +50,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 22 | `22-token-account-check.md` | Fix: blocked accounts lose access at once | #128 (in review) |
 | 23 | `23-s3-ses-adapters.md` | Photos in S3, e-mails through SES (prod profile) | #129 (in review) |
 | 24 | `24-user-created-at-seconds.md` | Fix: `users.created_at` stored in whole seconds | #135 (in review) |
+| 31 | `31-security-chapter.md` | Security chapter of the final report (`docs/report/security.md`) + JWT sequence diagram | (in review) |
 
 Notes 21–24 get their link here once their PR is merged.
 
