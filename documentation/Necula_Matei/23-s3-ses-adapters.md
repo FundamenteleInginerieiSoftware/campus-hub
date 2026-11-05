@@ -75,7 +75,7 @@ No AWS access keys: the EC2 instance role provides them. Don't set `SERVER_PORT`
 |---|---|
 | Calin's `ReassignmentService`, `ReservationLifecycleService` | `NotificationService` (gets SES in prod) |
 | Stefania's photo upload (W5) | `StorageService` (gets S3 in prod) |
-| Terraform part 1 / 2 | The bucket, the SES identity for `MAIL_FROM`, and the instance-role permissions `s3:PutObject/GetObject/DeleteObject` + `ses:SendEmail` |
+| Terraform part 1 / 2 | The bucket, the SES identity for `MAIL_FROM`, and the instance-role permissions `s3:PutObject/GetObject/DeleteObject` on `<bucket-arn>/*`, **`s3:ListBucket` on `<bucket-arn>`** (without it a missing photo is a 403, not a 404: see `29-s3-ses-hardening.md`) + `ses:SendEmail` |
 
 **SES sandbox:** a new AWS account can only send to verified addresses until AWS lifts the sandbox. For the demo: verify the team's addresses in SES, or request production access.
 
