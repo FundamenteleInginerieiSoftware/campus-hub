@@ -27,6 +27,8 @@ import {
   fetchAssetSummary,
   fetchMyReservations,
   fetchMyReservationSummary,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type Reservation,
   type ReservationStatus,
@@ -318,15 +320,22 @@ export default function MyReservationsPage() {
       render: (r) => {
         const canCancel = r.status === 'CONFIRMED'
         if (!canCancel) return null
+        const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
         return (
-          <Button
-            size="xs"
-            variant="light"
-            color="red"
-            onClick={() => handleStartCancel(r)}
+          <Tooltip
+            label="Students can only cancel before the reservation start time (Europe/Bucharest)."
+            disabled={!hasStartedInBucharest}
           >
-            Cancel
-          </Button>
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              disabled={hasStartedInBucharest}
+              onClick={() => handleStartCancel(r)}
+            >
+              Cancel
+            </Button>
+          </Tooltip>
         )
       },
     },

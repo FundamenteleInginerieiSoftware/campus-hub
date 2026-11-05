@@ -26,6 +26,8 @@ import { useNavigate } from 'react-router'
 import {
   checkAvailability,
   createReservation,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type AvailabilityResponse,
   type Reservation,
@@ -154,7 +156,7 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
  */
 export default function CalendarBookingView({ asset, onBack, onSuccess }: Props) {
   const navigate = useNavigate()
-  const [today] = useState(() => new Date())
+  const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
   const maxBookingDate = useMemo(() => new Date(today.getTime() + 14 * 86400000), [today])
 
@@ -253,7 +255,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setCurrentMonday(prevMon)
 
     // Shift selectedDay back by 7 days so it stays in the displayed week
-    const currSel = new Date(selectedDay)
+    const currSel = parseCampusLocalDateTime(selectedDay)
     const prevSel = new Date(currSel)
     prevSel.setDate(currSel.getDate() - 7)
 
@@ -272,7 +274,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setCurrentMonday(nextMon)
 
     // Shift selectedDay forward by 7 days so it stays in the displayed week
-    const currSel = new Date(selectedDay)
+    const currSel = parseCampusLocalDateTime(selectedDay)
     const nextSel = new Date(currSel)
     nextSel.setDate(currSel.getDate() + 7)
 
@@ -281,9 +283,11 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }
 
   function handleToday() {
-    setCurrentMonday(getMonday(today))
-    const todayKey = formatDateKey(today)
-    const validSlot = findFirstValidSlotForDay(today, today)
+    const freshToday = nowInBucharest()
+    setToday(freshToday)
+    setCurrentMonday(getMonday(freshToday))
+    const todayKey = formatDateKey(freshToday)
+    const validSlot = findFirstValidSlotForDay(freshToday, freshToday)
     selectSlot(todayKey, validSlot)
   }
 
