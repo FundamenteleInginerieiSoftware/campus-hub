@@ -40,6 +40,11 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
 
     long countByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses);
 
+    // Acquires a transaction-scoped PostgreSQL advisory lock keyed by userId so two simultaneous
+    // booking requests from the same student on different assets serialize before counting active bookings.
+    @Query(value = "SELECT count(*) FROM (SELECT pg_advisory_xact_lock(:userId)) AS quota_lock", nativeQuery = true)
+    long lockUserQuota(@Param("userId") Long userId);
+
     long countByUserIdAndOriginalAssetIdIsNotNull(Long userId);
 
     Page<Reservation> findByUserIdOrderByStartTimeAsc(Long userId, Pageable pageable);

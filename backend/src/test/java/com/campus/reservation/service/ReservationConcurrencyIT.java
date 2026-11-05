@@ -43,6 +43,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 class ReservationConcurrencyIT {
 
     private static final Long ASSET_ID = 601L;
+    private static final Long ASSET_ID_2 = 602L;
+    private static final Long ASSET_ID_3 = 603L;
     private static final Long USER_1_ID = 101L;
     private static final Long USER_2_ID = 102L;
 
@@ -87,7 +89,9 @@ class ReservationConcurrencyIT {
 
         jdbcTemplate.update("""
             INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
-            VALUES (601, 'Keysight DSOX1204G', 'DSOX1204G', 'SN-CONC-601', 'AVAILABLE', 600, 600, NOW(), NOW())
+            VALUES (601, 'Keysight DSOX1204G #1', 'DSOX1204G', 'SN-CONC-601', 'AVAILABLE', 600, 600, NOW(), NOW()),
+                   (602, 'Keysight DSOX1204G #2', 'DSOX1204G', 'SN-CONC-602', 'AVAILABLE', 600, 600, NOW(), NOW()),
+                   (603, 'Keysight DSOX1204G #3', 'DSOX1204G', 'SN-CONC-603', 'AVAILABLE', 600, 600, NOW(), NOW())
             ON CONFLICT (id) DO NOTHING
             """);
     }
@@ -96,7 +100,7 @@ class ReservationConcurrencyIT {
     void tearDown() {
         reservationRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?)", USER_1_ID, USER_2_ID);
-        jdbcTemplate.update("DELETE FROM assets WHERE id = ?", ASSET_ID);
+        jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?, ?)", ASSET_ID, ASSET_ID_2, ASSET_ID_3);
         jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 600");
         jdbcTemplate.update("DELETE FROM categories WHERE id = 600");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", USER_1_ID, USER_2_ID);
@@ -187,6 +191,92 @@ class ReservationConcurrencyIT {
         assertThat(reservation.getStartTime()).isEqualTo(start);
         assertThat(reservation.getEndTime()).isEqualTo(end);
         assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName(
+            "User advisory lock prevents quota bypass: when same student with 1 active booking races on 2 different assets, exactly 1 wins")
+    void sameStudentTwoDifferentAssetsCannotBypassActiveQuotaLimit() throws Exception {
+        // Student 101 already has 1 active booking on ASSET_ID (601)
+        setupSecurityContext(USER_1_ID);
+        try {
+            reservationService.createReservation(new CreateReservationRequest(
+                    ASSET_ID, LocalDateTime.of(2026, 11, 4, 10, 0), LocalDateTime.of(2026, 11, 4, 12, 0)));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        // Now Student 101 fires 2 simultaneous requests for 2 different assets (602 and 603)
+        LocalDateTime start = LocalDateTime.of(2026, 11, 4, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 4, 16, 0);
+        CreateReservationRequest reqAsset2 = new CreateReservationRequest(ASSET_ID_2, start, end);
+        CreateReservationRequest reqAsset3 = new CreateReservationRequest(ASSET_ID_3, start, end);
+
+        int threads = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch readyLatch = new CountDownLatch(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger limitReachedCount = new AtomicInteger(0);
+        List<Throwable> unexpectedExceptions = new CopyOnWriteArrayList<>();
+
+        Runnable bookAsset2 = () -> {
+            setupSecurityContext(USER_1_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                reservationService.createReservation(reqAsset2);
+                successCount.incrementAndGet();
+            } catch (ConflictException ex) {
+                if ("RESERVATION_LIMIT_REACHED".equals(ex.getCode())) {
+                    limitReachedCount.incrementAndGet();
+                } else {
+                    unexpectedExceptions.add(ex);
+                }
+            } catch (Throwable t) {
+                unexpectedExceptions.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        };
+
+        Runnable bookAsset3 = () -> {
+            setupSecurityContext(USER_1_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                reservationService.createReservation(reqAsset3);
+                successCount.incrementAndGet();
+            } catch (ConflictException ex) {
+                if ("RESERVATION_LIMIT_REACHED".equals(ex.getCode())) {
+                    limitReachedCount.incrementAndGet();
+                } else {
+                    unexpectedExceptions.add(ex);
+                }
+            } catch (Throwable t) {
+                unexpectedExceptions.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        };
+
+        Future<?> f1 = executor.submit(bookAsset2);
+        Future<?> f2 = executor.submit(bookAsset3);
+
+        assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        startLatch.countDown();
+
+        f1.get(10, TimeUnit.SECONDS);
+        f2.get(10, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        assertThat(unexpectedExceptions).isEmpty();
+        assertThat(successCount.get()).isEqualTo(1);
+        assertThat(limitReachedCount.get()).isEqualTo(1);
+
+        long activeCount = reservationRepository.countByUserIdAndStatusIn(USER_1_ID, ReservationStatus.ACTIVE_STATUSES);
+        assertThat(activeCount).isEqualTo(2L);
     }
 
     private void setupSecurityContext(Long userId) {
