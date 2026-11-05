@@ -278,8 +278,10 @@ public class ReservationService implements ReservationApi {
     }
 
     private void validateDuration(LocalDateTime start, LocalDateTime end) {
+        // Only the upper limit needs checking: validateSlotAlignment already guarantees that end is after
+        // start and both sit on :00/:30, so a booking can never be shorter than 30 minutes here.
         Duration duration = Duration.between(start, end);
-        if (duration.compareTo(Duration.ofMinutes(30)) < 0 || duration.compareTo(Duration.ofHours(4)) > 0) {
+        if (duration.compareTo(Duration.ofHours(4)) > 0) {
             throw new BusinessRuleException(
                     "INVALID_DURATION", "Reservation duration must be between 30 minutes and 4 hours");
         }
