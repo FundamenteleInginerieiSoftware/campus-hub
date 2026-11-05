@@ -72,9 +72,9 @@ On AWS the app runs as one "container": a sealed box with Java and our program i
 | `POST /api/v1/auth/login` (student1) | 200 with `accessToken` |
 | `docker exec ... id` | `uid=100(app)`, not root |
 
-### Known limitation: `prod` doesn't start yet
+### Known limitation (fixed): `prod` didn't start
 
-With `SPRING_PROFILES_ACTIVE=prod` the app stops at startup: `ReassignmentService required a bean of type NotificationService`. In `prod` Liviu's dev adapters are off (`@Profile("!prod")`), and my `SesNotificationService` and `S3StorageService` (`@Profile("prod")`) come in W8. Until then, run the image locally with `-e SPRING_PROFILES_ACTIVE=dev`. Not a Dockerfile bug: the image is right, the prod beans are missing.
+With `SPRING_PROFILES_ACTIVE=prod` the app used to stop at startup: `ReassignmentService required a bean of type NotificationService`. In `prod` Liviu's dev adapters are off (`@Profile("!prod")`), and the AWS versions were missing. Fixed by `S3StorageService` + `SesNotificationService` (#115, `23-s3-ses-adapters.md`, which also lists the env variables `prod` needs). Not a Dockerfile bug: the image was right, the prod beans were missing.
 
 ### Next
 
