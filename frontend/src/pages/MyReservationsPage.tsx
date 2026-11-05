@@ -27,6 +27,8 @@ import {
   fetchAssetSummary,
   fetchMyReservations,
   fetchMyReservationSummary,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type Reservation,
   type ReservationStatus,
@@ -168,6 +170,7 @@ export default function MyReservationsPage() {
   // Fetch paginated reservations with server-side status filtering.
   useEffect(() => {
     let ignore = false
+    let steppingBack = false
     const statusFilter: ReservationStatus[] | undefined =
       filterTab === 'active'
         ? ['CONFIRMED', 'CHECKED_OUT', 'OVERDUE']
@@ -178,6 +181,13 @@ export default function MyReservationsPage() {
     fetchMyReservations(pageNumber, 10, statusFilter)
       .then(async (response) => {
         if (ignore) return
+        // Bug fixed: cancelling the last item on page > 1 returned an empty page and hid the pagination controls.
+        // Fix: step back to the last non-empty page automatically when totalPages shrinks below pageNumber + 1.
+        if (response.content.length === 0 && response.totalPages > 0 && pageNumber >= response.totalPages) {
+          steppingBack = true
+          setPageNumber(response.totalPages - 1)
+          return
+        }
         setError(null)
         setPageData(response)
 
@@ -212,7 +222,7 @@ export default function MyReservationsPage() {
         if (!ignore) setError(err)
       })
       .finally(() => {
-        if (!ignore) setLoading(false)
+        if (!ignore && !steppingBack) setLoading(false)
       })
 
     return () => {
@@ -333,15 +343,26 @@ export default function MyReservationsPage() {
         // Backend rejects cancellation once startTime is reached (!now.isBefore(startTime)).
         const canCancel = r.status === 'CONFIRMED' && parseLocalIso(r.startTime) > new Date()
         if (!canCancel) return null
+        const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
         return (
-          <Button
-            size="xs"
-            variant="light"
-            color="red"
-            onClick={() => handleStartCancel(r)}
+          <Tooltip
+            label="Students can only cancel before the reservation start time (Europe/Bucharest)."
+            disabled={!hasStartedInBucharest}
           >
-            Cancel
-          </Button>
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              // Not 'disabled': a disabled button swallows hover events, so the Mantine Tooltip would never show.
+              // data-disabled gives the same look; the click is ignored once the slot has started.
+              data-disabled={hasStartedInBucharest || undefined}
+              onClick={() => {
+                if (!hasStartedInBucharest) handleStartCancel(r)
+              }}
+            >
+              Cancel
+            </Button>
+          </Tooltip>
         )
       },
     },

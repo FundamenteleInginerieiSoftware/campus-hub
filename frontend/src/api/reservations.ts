@@ -136,3 +136,37 @@ export function checkAvailability(params: {
 export function fetchAssetSummary(assetId: number) {
   return apiFetch<AssetSummary>(`/api/v1/assets/${assetId}`)
 }
+
+/**
+ * Returns a Date object whose local year, month, day, hour, minute, and second
+ * match the current wall-clock time in Europe/Bucharest (the shared campus clock zone).
+ */
+export function nowInBucharest(): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Bucharest',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date())
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0)
+
+  const hour = get('hour') === 24 ? 0 : get('hour')
+  return new Date(get('year'), get('month') - 1, get('day'), hour, get('minute'), get('second'))
+}
+
+/**
+ * Parses an ISO-8601 local timestamp without offset ("YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD")
+ * into a Date with matching year/month/day/hour/minute/second, avoiding UTC date-only parsing skew.
+ */
+export function parseCampusLocalDateTime(isoString: string): Date {
+  const [datePart, timePart = '00:00:00'] = isoString.split('T')
+  const [y, m, d] = datePart.split('-').map(Number)
+  const [hh = 0, mm = 0, ss = 0] = timePart.split(':').map(Number)
+  return new Date(y, m - 1, d, hh, mm, ss)
+}
