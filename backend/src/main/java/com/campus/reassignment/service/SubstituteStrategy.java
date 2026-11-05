@@ -12,14 +12,14 @@ public interface SubstituteStrategy {
 
     String name();
 
-    Optional<AssetSummary> findSubstitute(ReservationSummary reservation, AssetSummary damaged);
-
     /**
      * Returns all free candidate substitutes ordered by strategy preference (e.g. same lab room first,
      * then lowest ID) so the reassignment processor can try the next candidate of the same strategy
      * if the first one becomes busy concurrently (#149).
      */
-    default List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged) {
-        return findSubstitute(reservation, damaged).stream().toList();
+    List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged);
+
+    default Optional<AssetSummary> findSubstitute(ReservationSummary reservation, AssetSummary damaged) {
+        return findCandidates(reservation, damaged).stream().findFirst();
     }
 }

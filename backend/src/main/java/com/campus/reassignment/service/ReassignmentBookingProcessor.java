@@ -11,8 +11,10 @@ import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,14 +55,6 @@ class ReassignmentBookingProcessor {
     private final Clock clock;
     private final TransactionTemplate requiresNewTx;
 
-    ReassignmentBookingProcessor(
-            ReservationApi reservationApi,
-            ReassignmentLogRepository reassignmentLogRepository,
-            List<SubstituteStrategy> strategies,
-            Clock clock) {
-        this(reservationApi, reassignmentLogRepository, strategies, clock, null);
-    }
-
     @Autowired
     ReassignmentBookingProcessor(
             ReservationApi reservationApi,
@@ -72,13 +66,9 @@ class ReassignmentBookingProcessor {
         this.reassignmentLogRepository = reassignmentLogRepository;
         this.strategies = strategies;
         this.clock = clock;
-        if (transactionManager != null) {
-            TransactionTemplate tt = new TransactionTemplate(transactionManager);
-            tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-            this.requiresNewTx = tt;
-        } else {
-            this.requiresNewTx = null;
-        }
+        TransactionTemplate tt = new TransactionTemplate(transactionManager);
+        tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.requiresNewTx = tt;
     }
 
     record ReassignmentExecutionResult(ReassignmentOutcome outcome, String substituteAssetName) {}
@@ -91,9 +81,14 @@ class ReassignmentBookingProcessor {
      */
     public Optional<ReassignmentExecutionResult> processSingleBooking(
             AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) {
+        Set<Long> attemptedCandidateIds = new HashSet<>();
         for (SubstituteStrategy strategy : strategies) {
-            List<AssetSummary> candidates = resolveCandidates(strategy, booking, damaged);
+            List<AssetSummary> candidates = strategy.findCandidates(booking, damaged);
             for (AssetSummary candidate : candidates) {
+                // Bug fixed (#149): skip candidates that were already tried and threw in an earlier strategy
+                if (!attemptedCandidateIds.add(candidate.id())) {
+                    continue;
+                }
                 try {
                     return inRequiresNewTransaction(() -> {
                         boolean moved = reservationApi.moveToAsset(
@@ -148,19 +143,7 @@ class ReassignmentBookingProcessor {
         });
     }
 
-    private static List<AssetSummary> resolveCandidates(
-            SubstituteStrategy strategy, ReservationSummary booking, AssetSummary damaged) {
-        List<AssetSummary> candidates = strategy.findCandidates(booking, damaged);
-        if (candidates != null && !candidates.isEmpty()) {
-            return candidates;
-        }
-        return strategy.findSubstitute(booking, damaged).stream().toList();
-    }
-
     private <T> T inRequiresNewTransaction(Supplier<T> action) {
-        if (requiresNewTx == null) {
-            return action.get();
-        }
         return requiresNewTx.execute(status -> action.get());
     }
 }
