@@ -36,7 +36,7 @@ static final ArchRule no_unparameterized_datetime_now = noClasses()
         .callMethod(Instant.class, "now")
         .because("All date and time calculations must use the shared Clock bean (e.g. LocalDateTime.now(clock)) to ensure deterministic tests and proper time zone handling");
 ```
-- **Why it matters:** Enforces deterministic time. Prevents hard-to-reproduce bugs between local machines (`Europe/Bucharest`) and CI/AWS runners (`UTC`).
+- **Why it matters:** Enforces deterministic time. Prevents hard-to-reproduce bugs between local machines (`Europe/Bucharest`) and CI/AWS runners (`UTC`). Extended in `#156` to also forbid zero-argument `LocalDate.now()`, `LocalTime.now()`, `ZonedDateTime.now()`, and `OffsetDateTime.now()`.
 
 #### Rule 5: `@Transactional` Placement Boundary (`AGENTS.md` §5)
 ```java
@@ -55,9 +55,10 @@ static final ArchRule repositories_must_not_be_transactional = noClasses()
         .areAssignableTo(Repository.class)
         .should()
         .beAnnotatedWith(Transactional.class)
+        .orShould(new ArchCondition<JavaClass>("have @Transactional methods") { ... })
         .because("@Transactional belongs on service methods only, never on repositories (AGENTS.md §5)");
 ```
-- **Why it matters:** Guarantees that transaction lifecycles begin and end inside `@Service` business methods. Controllers simply orchestrate DTO mapping, and repositories rely on standard Spring Data transaction boundaries.
+- **Why it matters:** Guarantees that transaction lifecycles begin and end inside `@Service` business methods (also inspects individual repository methods and controller methods, avoiding `noClasses()` condition inversion). Controllers simply orchestrate DTO mapping, and repositories rely on standard Spring Data transaction boundaries.
 
 #### Rule 6: Enum Mapping Safety (`AGENTS.md` §5)
 ```java
@@ -72,6 +73,16 @@ static final ArchRule entities_must_not_use_ordinal_enum_mapping = fields()
         .because("Database enums must be VARCHAR(32) with EnumType.STRING to prevent silent data corruption if enum constants are reordered (AGENTS.md §5)");
 ```
 - **Why it matters:** Protects PostgreSQL databases against silent integer-order corruption when enum values change or expand.
+
+#### Rules 7–14: Spring Boot 4 Idioms, One-Origin CORS, `PageResponse<T>`, Lazy JPA Associations, `/api/v1/admin` Prefix, `@Entity`-Free `api` Facades, No Standard Streams & Plain-ID Cross-Module Entity References
+- **`no_legacy_spring_boot_2_or_3_imports`**: Forbids `javax.persistence..`, `javax.validation..`, `com.fasterxml.jackson.databind..` (Jackson 2), and `io.jsonwebtoken..` (`jjwt`).
+- **`controllers_must_not_use_cross_origin`**: Forbids `@CrossOrigin` on controller classes and individual methods (Vite dev proxy and CloudFront prod serve from a single origin).
+- **`controllers_must_not_return_spring_page`**: Ensures paginated endpoints return `PageResponse<T>`, never Spring Data's `Page<T>`.
+- **`entities_must_not_use_one_to_many` & `entities_many_to_one_must_be_lazy`**: Enforces `@ManyToOne(fetch = FetchType.LAZY)` and forbids `@OneToMany` on JPA entities.
+- **`admin_controllers_must_map_under_admin_prefix` & `admin_endpoints_must_map_under_admin_prefix`**: Guarantees every `Admin*Controller` and any admin-mapped method (including in catalog controllers) maps under `/api/v1/admin/**` so `SecurityConfig` enforces `ROLE_ADMIN`.
+- **`api_packages_must_not_expose_entities`**: Ensures no class or interface in `..api..` exposes `@Entity` types in method return types, parameter types, or record/field types, keeping cross-module contracts purely DTO/record-based.
+- **`no_standard_streams`**: Forbids `System.out` and `System.err` in production code, requiring structured SLF4J logging (`@Slf4j`).
+- **`entities_must_not_reference_entities_from_other_modules`**: Enforces that JPA `@Entity` fields never reference `@Entity` types from another module (`AGENTS.md` §5: cross-module references must be plain IDs such as `Long assetId`).
 
 ---
 
