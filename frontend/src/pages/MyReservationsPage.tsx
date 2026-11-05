@@ -62,13 +62,6 @@ function formatSlotTime(startTime: string, endTime: string): string {
   return `${startPart} – ${endPart}`
 }
 
-function parseLocalIso(isoString: string): Date {
-  const [datePart, timePart = '00:00:00'] = isoString.split('T')
-  const [year, month, day] = datePart.split('-').map(Number)
-  const [hour = 0, minute = 0, second = 0] = timePart.split(':').map(Number)
-  return new Date(year, month - 1, day, hour, minute, second)
-}
-
 function statusColor(status: ReservationStatus): string {
   switch (status) {
     case 'CONFIRMED':
@@ -341,7 +334,7 @@ export default function MyReservationsPage() {
       header: 'Actions',
       render: (r) => {
         // Backend rejects cancellation once startTime is reached (!now.isBefore(startTime)).
-        const canCancel = r.status === 'CONFIRMED' && parseLocalIso(r.startTime) > new Date()
+        const canCancel = r.status === 'CONFIRMED'
         if (!canCancel) return null
         const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
         return (

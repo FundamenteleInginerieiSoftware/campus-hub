@@ -33,6 +33,6 @@ We fixed all three issues so the UI avoids unnecessary network calls, hides inva
    - Adding `assetCache` directly to the `useEffect` dependency array would re-trigger `fetchMyReservations` every time a new asset is cached.
    - Instead, `fetchedAssetIdsRef = useRef<Set<number>>(new Set())` records each asset ID as soon as its `fetchAssetSummary(id)` promise succeeds, filtering `neededAssetIds` in O(1) time before firing `Promise.all`.
 2. **Client-Side Start-Time Guard (`canStudentCancelReservation`):**
-   - Parses the ISO-8601 local timestamp (`YYYY-MM-DDTHH:mm:ss`) into local date components and verifies `new Date() < startDate` in addition to `r.status === 'CONFIRMED'`.
+   - Uses the single Bucharest-based check from #174 (`nowInBucharest() >= parseCampusLocalDateTime(startTime)`); there is no second parser or start-time check in this PR. `canCancel` is computed on render, so a click right after the start time still reaches the backend and the student sees the 409 in the modal.
 3. **Automatic Error Reset (`CalendarBookingView`):**
    - Both `selectSlot(day, time)` (used by grid clicks, `handlePrevWeek`, `handleNextWeek`, and `handleToday`) and `handleDurationChange(val)` now call `setBookingError(null)`.
