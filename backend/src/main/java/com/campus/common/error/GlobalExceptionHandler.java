@@ -3,6 +3,7 @@ package com.campus.common.error;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
+import java.net.URI;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.core.PropertyReferenceException;
@@ -12,6 +13,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -30,6 +32,7 @@ public class GlobalExceptionHandler {
 
     private ProblemDetail buildProblem(HttpStatus status, String code, String detail) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setType(URI.create("about:blank"));
         problem.setTitle(status.getReasonPhrase());
         problem.setProperty("code", code);
         return problem;
@@ -104,6 +107,14 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return buildProblem(
                 HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "Invalid value for parameter '" + ex.getName() + "'");
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ProblemDetail handleMissingParameter(MissingServletRequestParameterException ex) {
+        return buildProblem(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_PARAMETER",
+                "Required parameter '" + ex.getParameterName() + "' is missing");
     }
 
     @ExceptionHandler(PropertyReferenceException.class)
