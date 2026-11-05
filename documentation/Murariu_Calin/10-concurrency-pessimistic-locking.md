@@ -66,3 +66,17 @@ Student Thread 1                           Student Thread 2
    - Exactly one thread finishes successfully (`successCount == 1`).
    - Exactly one thread catches `ConflictException` with code `"RESERVATION_CONFLICT"` (`conflictCount == 1`).
    - `reservationRepository.findAll()` confirms exactly 1 reservation exists in PostgreSQL.
+
+### 3. Per-User Advisory Lock for Active Quota Enforcement (`#169`)
+
+While `CatalogApi.lockForBooking(assetId)` serializes concurrent bookings on the **same** asset, a single student who already has 1 active booking could previously fire two simultaneous requests for two **different** assets (`assetId = 602` and `assetId = 603`). Because those requests lock different rows in `assets`, both could read `countByUserIdAndStatusIn(userId, ACTIVE_STATUSES) == 1` under PostgreSQL `READ COMMITTED` and end up with 3 active bookings.
+
+- **Fix (`ReservationRepository.lockUserQuota`):**
+  ```java
+  @Query(value = "SELECT count(*) FROM (SELECT pg_advisory_xact_lock(:userId)) AS quota_lock", nativeQuery = true)
+  long lockUserQuota(@Param("userId") Long userId);
+  ```
+- **Acyclic Lock Ordering (No Deadlocks):**
+  Every booking transaction acquires locks in the strict order `asset row lock -> user advisory lock`. No transaction ever acquires an asset row lock while holding a user advisory lock, making the wait-for graph a DAG (cycle-free).
+- **Multi-Threaded Verification (`sameStudentTwoDifferentAssetsCannotBypassActiveQuotaLimit`):**
+  `ReservationConcurrencyIT` verifies that when Student 101 (with 1 active booking on asset `601`) simultaneously books assets `602` and `603` across two threads, `successCount == 1`, `limitReachedCount == 1` (`409 RESERVATION_LIMIT_REACHED`), and the database contains exactly 2 active bookings.

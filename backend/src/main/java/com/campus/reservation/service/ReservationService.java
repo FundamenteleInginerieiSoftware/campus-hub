@@ -86,9 +86,13 @@ public class ReservationService implements ReservationApi {
         }
 
         // 4. Active limit check for students (admins bypass this rule).
-        // Known limitation: Two parallel requests from the same student for two different assets
-        // lock different asset rows, so both could pass the < 2 check concurrently.
+        // Bug fixed (#169): two parallel requests from the same student for two different assets
+        // lock different asset rows, so both could previously pass the < 2 check under READ COMMITTED.
+        // Fix: acquire a transaction-scoped PostgreSQL advisory lock on userId before counting.
+        // Lock order is always asset row -> user advisory lock (nothing locks an asset after the user lock),
+        // so deadlocks cannot occur.
         if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
             if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");

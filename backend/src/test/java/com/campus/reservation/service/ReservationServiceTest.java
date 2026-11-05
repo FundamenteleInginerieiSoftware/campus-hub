@@ -110,6 +110,7 @@ class ReservationServiceTest {
         inOrder.verify(catalogApi).isBookable(ASSET_ID);
         inOrder.verify(reservationRepository)
                 .existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L);
+        inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
         inOrder.verify(reservationRepository).countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         inOrder.verify(reservationRepository).save(any(Reservation.class));
         inOrder.verify(auditService).record(eq(USER_ID), eq("CREATE_RESERVATION"), eq("Reservation"), any(), any());
