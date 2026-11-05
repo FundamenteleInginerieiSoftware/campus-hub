@@ -2,6 +2,7 @@ package com.campus.reassignment.service;
 
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
@@ -106,6 +107,16 @@ public class ReassignmentService {
      */
     @Transactional(readOnly = true)
     public PageResponse<ReassignmentLogResponse> getLogs(int page, int size) {
+        if (page < 0) {
+            throw new InvalidParameterException("Page index must not be negative");
+        }
+        if (size < 1 || size > 100) {
+            throw new InvalidParameterException("Page size must be between 1 and 100");
+        }
+        // Bug fixed (#150): prevents integer overflow when Hibernate casts pageable.getOffset() to int.
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidParameterException("Page offset exceeds maximum supported value");
+        }
         Pageable pageable = PageRequest.of(page, size);
         Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);

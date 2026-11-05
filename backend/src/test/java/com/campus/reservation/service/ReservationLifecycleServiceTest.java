@@ -365,4 +365,70 @@ class ReservationLifecycleServiceTest {
         verify(notificationService).notifyUser(eq(103L), eq("Proactive Reservation Reassignment"), any());
         verify(notificationService).notifyUser(eq(104L), eq("Proactive Reservation Reassignment"), any());
     }
+
+    @Test
+    @DisplayName(
+            "Preventive cascade prioritizes same lab room first, then lowest ID, and queries catalog once per overdue asset (#155)")
+    void cascadePrioritizesSameLabRoomAndQueriesCatalogOnce() {
+        LocalDateTime now = LocalDateTime.now(clock); // 10:00
+
+        Reservation overdueRes = new Reservation(
+                102L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 1, 12, 0));
+        ReflectionTestUtils.setField(overdueRes, "id", 22L);
+
+        // Two threatened bookings within the 60m horizon on the same overdue asset
+        Reservation threatened1 = new Reservation(
+                103L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 1, 15, 0));
+        ReflectionTestUtils.setField(threatened1, "id", 33L);
+
+        Reservation threatened2 = new Reservation(
+                104L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 1, 15, 0));
+        ReflectionTestUtils.setField(threatened2, "id", 44L);
+
+        // Overdue asset is in labRoomId = 100L
+        AssetSummary overdueAsset = new AssetSummary(ASSET_ID, "Scope 1", "Tek-100", 1L, 100L, AssetStatus.AVAILABLE);
+        // Lower ID (15L) but in a different room (200L)
+        AssetSummary differentRoomSub = new AssetSummary(15L, "Scope 15", "Tek-100", 1L, 200L, AssetStatus.AVAILABLE);
+        // Non-available unit in the same room (should be filtered out)
+        AssetSummary retiredSub = new AssetSummary(18L, "Scope 18", "Tek-100", 1L, 100L, AssetStatus.RETIRED);
+        // Same room (100L) with higher ID (25L) -> must win over differentRoomSub (15L)
+        AssetSummary sameRoomSub = new AssetSummary(25L, "Scope 25", "Tek-100", 1L, 100L, AssetStatus.AVAILABLE);
+
+        when(reservationRepository.findConfirmedBeforeCutoff(now.minusMinutes(30)))
+                .thenReturn(List.of());
+        when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of());
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
+        when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now))
+                .thenReturn(List.of(threatened1, threatened2));
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(overdueAsset);
+        when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID))
+                .thenReturn(List.of(differentRoomSub, retiredSub, sameRoomSub));
+
+        // Both substitutes (15L in different room and 25L in same room) are free, so the strategy
+        // ordering alone determines that sameRoomSub (25L) is selected first over differentRoomSub (15L).
+        when(reservationService.isAssetFree(anyLong(), any(), any(), anyLong())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(25L), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(44L), eq(25L), any())).thenReturn(true);
+
+        LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
+
+        assertThat(summary.preventivelyReassignedCount()).isEqualTo(2);
+        assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L, 44L);
+        verify(reservationService).moveToAsset(eq(33L), eq(25L), any());
+        verify(reservationService).moveToAsset(eq(44L), eq(25L), any());
+        verify(catalogApi).getAsset(ASSET_ID);
+        verify(catalogApi).findAvailableByModel("Tek-100", ASSET_ID);
+    }
 }

@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`) and the S3/SES adapters (`23-s3-ses-adapters.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`) and the admin Reservations desk page (`26-reservations-desk-page.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -17,6 +17,7 @@ campus-hub/
 │   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/  README.md  NN-topic.md   (my notes)
+├── frontend/src/  pages/ReservationsDeskPage.tsx  api/reservationDesk.ts   (26-reservations-desk-page.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
     ├── gradlew  gradlew.bat  gradle/wrapper/
@@ -40,8 +41,7 @@ campus-hub/
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
-        │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest, S3StorageServiceTest,
-        │                          SesNotificationServiceTest, ProdProfileStartupTest
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`) and the admin Reservations desk page (`26-reservations-desk-page.md`), explained twice: first in simple terms, then technically.
         └── test/resources/application-test.yml  static/index.html
 ```
 
@@ -104,7 +104,7 @@ campus-hub/
 | `Role.java` | The two kinds of user: student and admin. |
 | `User.java` | One user as the code sees it: email, scrambled password, name, role, blocked or not. |
 | `UserRepository.java` | Finds a user by email, whatever capitals were typed. |
-| `UserRepositoryTest` | Checks the lookup ignores capitals and that the same email can't be used twice. |
+| `UserRepositoryTest` | Checks the lookup ignores capitals, that the same email can't be used twice, and that a user's creation time reads back exactly as it was saved. |
 | `UserApi.java` | The "front desk" other parts of the app ask about users ("who is user 5, what's their e-mail?"). |
 | `UserSummary.java` | The answer they get: id, e-mail, name, role. Never the password. |
 | `UserService.java` | The person behind the front desk: really looks the user up and answers, or says "no such user". Also answers "who am I?" for the logged-in user. |
@@ -131,6 +131,7 @@ campus-hub/
 | `ErrorJsonTest` | Checks that wrong input (a missing field, broken data, a page that doesn't exist) still gets an error with its short code (`12-error-codes-fix.md`). |
 | `SpaConfig.java` | On AWS, sends the website for every address that isn't a file or the API, so reloading a page like "My reservations" works (`19-dockerfile.md`). |
 | `SpaFrontendTest` | Checks that the website and its pages load without a login, and that a missing file or an API path doesn't get the website by mistake. |
+| `SecurityPassIT` | The security check-up: a student can't see or cancel another student's booking (it looks "not found"), can't book or report in someone else's name, can't open any admin page, and error messages never show program internals (`25-security-pass-tests.md`). |
 
 ### Backend: AWS adapters (`23-s3-ses-adapters.md`)
 | File | What it does |
@@ -157,6 +158,12 @@ campus-hub/
 |---|---|
 | `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
 | `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
+
+### Frontend: Reservations desk (`26-reservations-desk-page.md`)
+| File | What it does |
+|---|---|
+| `frontend/src/pages/ReservationsDeskPage.tsx` | The admin's page at the lab counter (`/admin/reservations`): three lists (to pick up today, out now, overdue), a "Check out" button when a student takes the equipment and a "Return" button when they bring it back. On a phone each booking is a card. |
+| `frontend/src/api/reservationDesk.ts` | The three calls the page makes to Calin's admin reservation endpoints: search, check out, return. |
 
 ### `documentation/Necula_Matei/` (my notes)
 | File | What it does |
@@ -231,7 +238,7 @@ campus-hub/
 | `UserSeeder` | `@Component @Profile("dev") @Order(1)` `CommandLineRunner`: if `count() == 0`, `saveAll` student1 (id 1), student2 (id 2), admin (id 3), password `password` (one BCrypt hash), `created_at` from the `Clock`. Order 1 so Liviu's (2) and Calin's (3) seeders find users. Details in `14-user-seeder.md`. |
 | `AdminBootstrap` | `@Component @Profile("prod")` `CommandLineRunner`, values from `app.admin.email` / `app.admin.password` (`@Value`, constructor). Blank → log + skip; `existsByEmailIgnoreCase` → skip (never resets a password or promotes a student); password < 8 chars or > 72 UTF-8 bytes → `IllegalStateException` (app doesn't start); else `save` one `ADMIN` with a BCrypt hash, `created_at` from the `Clock`. Logs the email, never the password. Details in `18-prod-admin-bootstrap.md`. |
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
-| `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`). No setters. |
+| `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`) and cuts it to whole seconds (#134, `24-user-created-at-seconds.md`). No setters. |
 | `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
 | `RegisterRequest` / `LoginRequest` | Records with Jakarta validation (contract §3): register = `@Email` ≤ 255, password 8–72, name ≤ 100, no `role` field (always `STUDENT`); login = only `@NotBlank` (same 401 for every wrong input). |
 | `UserResponse` / `LoginResponse` | `UserResponse(id, email, fullName, role)` + `public static from(User)`, called inside the service transaction. `LoginResponse(accessToken, expiresIn, user)`, `expiresIn` in seconds. |
@@ -251,11 +258,18 @@ campus-hub/
 | `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
 | ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
 
+### Frontend: Reservations desk
+| File | Key points |
+|---|---|
+| `ReservationsDeskPage.tsx` | Tabs = one status each (`CONFIRMED` / `CHECKED_OUT` / `OVERDUE`); only "To pick up" sends `date` (default: today in Europe/Bucharest via `Intl.DateTimeFormat('en-CA', …)`). One effect loads the open tab (`ignore` flag against stale answers, `loading` ends in `finally` only for the latest request), a second one loads the tab counts with `size=1`. Asset names via Calin's `fetchAssetSummary` (Liviu's `GET /api/v1/assets/{id}`); students as `Student #id` (no admin user lookup endpoint yet). Buttons call check-out / return, then reload; 409s show the text from `errorMessages.ts` with "Could not … reservation #id" as title. `<PagedTable>` on desktop, a local `PhoneList` (same columns, one card per booking) below 48em. Details in `26-reservations-desk-page.md`. |
+| `reservationDesk.ts` | `searchReservations({ status, date, page, size })` → `GET /api/v1/admin/reservations`, `checkOutReservation(id)` → `POST …/{id}/check-out`, `returnReservation(id)` → `POST …/{id}/return`. Types (`Reservation`, `ReservationStatus`) imported from Calin's `src/api/reservations.ts`, not copied. |
+
 ### Tests
 | Test | What it proves |
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
 | `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. `@Transactional`; each token belongs to a real user saved by the test (rolled back). With real tokens signed by our `JwtEncoder`: a disabled or deleted user gets 401, a token claiming ADMIN for a student gets 403; a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 on other `/api` paths and on a `POST` outside the API; a broken token on `/api/v1/auth/ping` is ignored (200); `/api/v1/auth/ping;x=1` (blocked by the firewall) → 400 `REQUEST_REJECTED` JSON. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
+| `SecurityPassIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back), real users and login tokens, asset + booking created through Liviu's and Calin's REST endpoints: student B gets 404 `RESERVATION_NOT_FOUND` on A's reservation (`GET`, `cancel`), same as for a missing id; B's `/me` lists are empty; `userId` / `reportedById` in the body are ignored. Every `/api/v1/admin/**` mapping read from `RequestMappingHandlerMapping` (16 on `main`) → student 403 `FORBIDDEN`, no token 401 `UNAUTHORIZED`. 9 error cases + a test-only endpoint throwing a `DataIntegrityViolationException` → ProblemDetail with `code`, no stack trace, class name or SQL. |
 | `ErrorJsonTest` | `@SpringBootTest` + MockMvc with a test-only `@RestController` (`@Import`, since `main` has no `@Valid` endpoint yet) and `jwt()` from spring-security-test as the token: blank field → 400 `VALIDATION_FAILED` + `errors[].field`; broken JSON → 400 `MALFORMED_REQUEST`; unknown path → 404 `NOT_FOUND`. All three failed before the fix. |
 | `SpaFrontendTest` | `@SpringBootTest` + MockMvc with `test/resources/static/index.html` as a stand-in build: `/` forwards to `index.html` (Boot's welcome page; MockMvc doesn't follow forwards), `/reservations` and `/admin/incidents` return it without a token, `/assets/index-old.js` → 404, an unknown `/api/v1` path → 401 JSON, not HTML. |
 | `S3StorageServiceTest` | Mockito `S3Client`: store captures bucket, generated key and content type; a fake PNG and a traversal key never reach S3; load returns the bytes, a missing key is `PHOTO_NOT_FOUND`; delete sends the exact request. |
@@ -269,6 +283,6 @@ campus-hub/
 | `AuthFlowIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back): register → login → token gets 404 on an unknown `/api/v1` path (past security) and 403 on `/api/v1/admin/**`; a second register with other capitals → 409 `EMAIL_TAKEN`; `GET /api/v1/users/me` with the token → 200 (own email, `STUDENT`, no `passwordHash`), without → 401 `UNAUTHORIZED`; login while an expired token is still sent → 200. |
 | `UserSeederTest` | Mockito: `count() = 0` → `saveAll` captured (`ArgumentCaptor`), emails + roles in order, all hashes match `password`; `count() = 3` → `saveAll` never called. |
 | `AdminBootstrapTest` | Mockito, real BCrypt encoder: missing → one `ADMIN` saved, email lowercased + trimmed, hash ≠ password and matches it; existing email → no `save`; blank email or password → no repository call; `"short"` → `IllegalStateException`, no `save`. |
-| `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). |
+| `UserRepositoryTest` | `@DataJpaTest`: Flyway + JPA only, on `campus_test`, rolled back after each test. Finds a user with different capitals; a duplicate email with other capitals throws `DataIntegrityViolationException` (`saveAndFlush` forces the INSERT inside the test). Saving a user with nanoseconds, then reading it back after `entityManager.clear()`, gives the same whole-second `createdAt` (#134). |
 
 Result: `./gradlew build` → BUILD SUCCESSFUL, 32 tests (6 after #13, +2 for users, +9 from Liviu's #22, +12 for login foundations, +3 for `UserService`), locally on PostgreSQL 18.

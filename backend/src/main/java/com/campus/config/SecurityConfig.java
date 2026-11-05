@@ -159,10 +159,23 @@ public class SecurityConfig {
     private static Converter<Jwt, AbstractAuthenticationToken> activeUserFromToken(ObjectProvider<UserApi> users) {
         return jwt -> {
             Role role = users.getObject()
-                    .findActiveRole(Long.valueOf(jwt.getSubject()))
+                    .findActiveRole(userId(jwt))
                     .orElseThrow(() -> new InvalidBearerTokenException("The account is disabled or no longer exists"));
             return new JwtAuthenticationToken(
                     jwt, List.of(new SimpleGrantedAuthority("ROLE_" + role.name())), jwt.getSubject());
         };
+    }
+
+    // Bug fixed (#158): Long.valueOf(jwt.getSubject()) threw NumberFormatException when "sub" was
+    // missing or not a number. That exception is not an authentication error, so Spring Security
+    // didn't catch it and the client got a 500. Our login always puts the user id there, but an old
+    // token format or a bug of ours could still send one. Fix: treat such a token like any other bad
+    // token, with InvalidBearerTokenException, which Spring turns into our usual 401 JSON.
+    private static Long userId(Jwt jwt) {
+        try {
+            return Long.valueOf(jwt.getSubject());
+        } catch (NumberFormatException e) { // also covers a missing "sub": Long.valueOf(null) throws it
+            throw new InvalidBearerTokenException("The token does not name a user");
+        }
     }
 }

@@ -18,6 +18,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
@@ -109,6 +110,7 @@ class ReservationServiceTest {
         inOrder.verify(catalogApi).isBookable(ASSET_ID);
         inOrder.verify(reservationRepository)
                 .existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L);
+        inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
         inOrder.verify(reservationRepository).countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         inOrder.verify(reservationRepository).save(any(Reservation.class));
         inOrder.verify(auditService).record(eq(USER_ID), eq("CREATE_RESERVATION"), eq("Reservation"), any(), any());
@@ -1206,7 +1208,6 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
@@ -1217,6 +1218,7 @@ class ReservationServiceTest {
         assertThat(response.assetId()).isEqualTo(ASSET_ID);
         assertThat(response.availableAssetIds()).containsExactly(ASSET_ID);
         assertThat(response.conflictReason()).isNull();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1227,7 +1229,6 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(true);
@@ -1237,6 +1238,7 @@ class ReservationServiceTest {
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
         assertThat(response.availableAssetIds()).isEmpty();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1247,13 +1249,13 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
 
         AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
 
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("ASSET_NOT_BOOKABLE");
         assertThat(response.availableAssetIds()).isEmpty();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1290,5 +1292,37 @@ class ReservationServiceTest {
         assertThat(response.categoryId()).isEqualTo(categoryId);
         assertThat(response.availableAssetIds()).containsExactly(10L, 30L);
         assertThat(response.conflictReason()).isNull();
+    }
+
+    @Test
+    @DisplayName(
+            "checkAvailability: returns available false with NO_ASSETS_AVAILABLE when all category assets are busy")
+    void checkAvailabilityReturnsNoAssetsAvailableWhenCategoryExhausted() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Long categoryId = 5L;
+
+        AssetSummary a1 = new AssetSummary(10L, "Scope 1", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.findAvailableByCategory(categoryId, -1L)).thenReturn(List.of(a1));
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(10L));
+
+        AvailabilityResponse response = reservationService.checkAvailability(null, categoryId, start, end);
+
+        assertThat(response.available()).isFalse();
+        assertThat(response.availableAssetIds()).isEmpty();
+        assertThat(response.conflictReason()).isEqualTo("NO_ASSETS_AVAILABLE");
+    }
+
+    @Test
+    @DisplayName("getMyReservations and getAdminReservations reject page offset overflow (#150)")
+    void paginationRejectsHugePageOffsetOverflow() {
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
     }
 }
