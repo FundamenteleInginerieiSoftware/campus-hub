@@ -67,6 +67,18 @@ class AuthFlowIT {
                 .andExpect(jsonPath("$.accessToken").isNotEmpty());
     }
 
+    // #165: a phone keyboard or a copy-paste often adds a space around the email.
+    @Test
+    void registerTrimsSpacesAroundTheEmail() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(" Spaced@Campus.test ")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("spaced@campus.test"));
+
+        login("spaced@campus.test");
+    }
+
     @Test
     void sameEmailTwiceIs409() throws Exception {
         register("twice@campus.test");
