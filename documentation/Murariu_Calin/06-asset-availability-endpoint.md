@@ -52,8 +52,8 @@ GET /api/v1/reservations/availability?assetId=1&startTime=...&endTime=...
   ├── 1. Parameter validation (must provide either assetId or categoryId, but not both)
   ├── 2. validateSlotRules (Mon-Fri 08:00-20:00, :00/:30 alignment, 30m-4h duration, max 14 days)
   ├── 3. If assetId != null:
-  │      ├── catalogApi.getAsset(id) (404 ASSET_NOT_FOUND if unknown)
-  │      ├── catalogApi.isBookable(id) (false -> ASSET_NOT_BOOKABLE)
+  │      ├── AssetSummary asset = catalogApi.getAsset(id) (404 ASSET_NOT_FOUND if unknown)
+  │      ├── asset.status() == AssetStatus.AVAILABLE (single catalog lookup, #155; false -> ASSET_NOT_BOOKABLE)
   │      └── isAssetFree(id, start, end, null) (false -> RESERVATION_CONFLICT)
   └── 4. If categoryId != null:
          ├── catalogApi.findAvailableByCategory(categoryId, -1L)
