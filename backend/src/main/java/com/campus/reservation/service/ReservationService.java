@@ -5,6 +5,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
@@ -112,6 +113,7 @@ public class ReservationService implements ReservationApi {
      * Retrieves a paginated list of reservations for the current authenticated user filtered by statuses.
      */
     public PageResponse<ReservationResponse> getMyReservations(List<ReservationStatus> statuses, int page, int size) {
+        validatePagination(page, size);
         Long userId = currentUser.id();
         Pageable pageable = PageRequest.of(page, size);
 
@@ -452,6 +454,7 @@ public class ReservationService implements ReservationApi {
     @Transactional(readOnly = true)
     public PageResponse<ReservationResponse> getAdminReservations(
             ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size) {
+        validatePagination(page, size);
         Specification<Reservation> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (status != null) {
@@ -508,6 +511,19 @@ public class ReservationService implements ReservationApi {
         r.markOverdue();
         auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
         return true;
+    }
+
+    // Bug fixed (#150): prevents integer overflow when Hibernate casts pageable.getOffset() to int.
+    private static void validatePagination(int page, int size) {
+        if (page < 0) {
+            throw new InvalidParameterException("Page index must not be negative");
+        }
+        if (size < 1 || size > 100) {
+            throw new InvalidParameterException("Page size must be between 1 and 100");
+        }
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidParameterException("Page offset exceeds maximum supported value");
+        }
     }
 
     // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET

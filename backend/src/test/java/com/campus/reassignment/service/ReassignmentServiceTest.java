@@ -1,6 +1,7 @@
 package com.campus.reassignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -16,6 +17,7 @@ import static org.mockito.Mockito.when;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
@@ -332,5 +334,13 @@ class ReassignmentServiceTest {
         assertThat(item.outcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
         assertThat(item.strategy()).isEqualTo("SameModelStrategy");
         assertThat(item.createdAt()).isEqualTo(now);
+    }
+
+    @Test
+    @DisplayName("getLogs rejects huge page offset overflow (#150)")
+    void getLogsRejectsHugePageOffsetOverflow() {
+        assertThatThrownBy(() -> reassignmentService.getLogs(999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
     }
 }
