@@ -221,12 +221,13 @@ class ReservationConcurrencyIT {
         AtomicInteger limitReachedCount = new AtomicInteger(0);
         List<Throwable> unexpectedExceptions = new CopyOnWriteArrayList<>();
 
-        Runnable bookAsset2 = () -> {
+        // Both threads run the same booking code; only the asset differs.
+        java.util.function.Consumer<CreateReservationRequest> bookAs = request -> {
             setupSecurityContext(USER_1_ID);
             readyLatch.countDown();
             try {
                 startLatch.await();
-                reservationService.createReservation(reqAsset2);
+                reservationService.createReservation(request);
                 successCount.incrementAndGet();
             } catch (ConflictException ex) {
                 if ("RESERVATION_LIMIT_REACHED".equals(ex.getCode())) {
@@ -241,35 +242,19 @@ class ReservationConcurrencyIT {
             }
         };
 
-        Runnable bookAsset3 = () -> {
-            setupSecurityContext(USER_1_ID);
-            readyLatch.countDown();
-            try {
-                startLatch.await();
-                reservationService.createReservation(reqAsset3);
-                successCount.incrementAndGet();
-            } catch (ConflictException ex) {
-                if ("RESERVATION_LIMIT_REACHED".equals(ex.getCode())) {
-                    limitReachedCount.incrementAndGet();
-                } else {
-                    unexpectedExceptions.add(ex);
-                }
-            } catch (Throwable t) {
-                unexpectedExceptions.add(t);
-            } finally {
-                SecurityContextHolder.clearContext();
-            }
-        };
+        // shutdown() is in finally so a timeout below does not leave the two threads running.
+        try {
+            Future<?> f1 = executor.submit(() -> bookAs.accept(reqAsset2));
+            Future<?> f2 = executor.submit(() -> bookAs.accept(reqAsset3));
 
-        Future<?> f1 = executor.submit(bookAsset2);
-        Future<?> f2 = executor.submit(bookAsset3);
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+            startLatch.countDown();
 
-        assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
-        startLatch.countDown();
-
-        f1.get(10, TimeUnit.SECONDS);
-        f2.get(10, TimeUnit.SECONDS);
-        executor.shutdown();
+            f1.get(10, TimeUnit.SECONDS);
+            f2.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
 
         assertThat(unexpectedExceptions).isEmpty();
         assertThat(successCount.get()).isEqualTo(1);
