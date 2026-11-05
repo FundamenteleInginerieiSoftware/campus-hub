@@ -3,6 +3,7 @@ package com.campus.catalog.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 class LabRoomServiceTest {
@@ -63,6 +65,21 @@ class LabRoomServiceTest {
                 () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B")));
 
         assertEquals("LAB_ROOM_CODE_TAKEN", ex.getCode());
+    }
+
+    @Test
+    void createDoesNotCatchAuditFailureAsDuplicateCode() {
+        LabRoom saved = new LabRoom("B204", "Embedded Lab", "Building B");
+        when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false);
+        when(labRoomRepository.saveAndFlush(any(LabRoom.class))).thenReturn(saved);
+        when(currentUser.id()).thenReturn(3L);
+        doThrow(new DataIntegrityViolationException("actor_id FK failure"))
+                .when(auditService)
+                .record(any(), any(), any(), any(), any());
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B")));
     }
 
     @Test

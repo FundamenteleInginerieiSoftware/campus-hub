@@ -8,6 +8,7 @@ import com.campus.common.error.GlobalExceptionHandler.FieldErrorItem;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
+import java.net.URI;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -38,6 +40,7 @@ class GlobalExceptionHandlerTest {
         assertEquals("Not Found", problem.getTitle());
         assertEquals("Asset 12 not found", problem.getDetail());
         assertEquals("ASSET_NOT_FOUND", problem.getProperties().get("code"));
+        assertEquals(URI.create("about:blank"), problem.getType());
     }
 
     @Test
@@ -170,6 +173,18 @@ class GlobalExceptionHandlerTest {
         assertEquals(400, problem.getStatus());
         assertEquals("INVALID_PARAMETER", problem.getProperties().get("code"));
         assertEquals("Invalid value for parameter 'id'", problem.getDetail());
+    }
+
+    @Test
+    void mapsMissingServletRequestParameterExceptionTo400InvalidParameter() {
+        MissingServletRequestParameterException ex = new MissingServletRequestParameterException("assetId", "Long");
+
+        ProblemDetail problem = handler.handleMissingParameter(ex);
+
+        assertEquals(400, problem.getStatus());
+        assertEquals("INVALID_PARAMETER", problem.getProperties().get("code"));
+        assertEquals("Required parameter 'assetId' is missing", problem.getDetail());
+        assertEquals(URI.create("about:blank"), problem.getType());
     }
 
     @Test
