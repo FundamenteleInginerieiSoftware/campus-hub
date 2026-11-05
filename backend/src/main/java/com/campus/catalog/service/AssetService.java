@@ -55,6 +55,9 @@ public class AssetService {
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new InvalidParameterException("Page size must be between 1 and " + MAX_PAGE_SIZE);
         }
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidParameterException("Page offset exceeds maximum supported value");
+        }
 
         Pageable pageable = PageRequest.of(page, size, parseSort(sort));
         boolean excludeRetired = !currentUser.isAdmin();
@@ -85,20 +88,23 @@ public class AssetService {
         Asset asset = new Asset(
                 request.name(), request.model(), normalizedSerial, request.description(), category, labRoom, now());
 
+        Asset saved;
         try {
-            Asset saved = assetRepository.saveAndFlush(asset);
-            auditService.record(
-                    currentUser.id(),
-                    "ASSET_CREATED",
-                    "ASSET",
-                    saved.getId(),
-                    "Created asset " + saved.getName() + " (S/N " + saved.getSerialNumber() + ")");
-            return AssetResponse.from(saved);
+            saved = assetRepository.saveAndFlush(asset);
         } catch (DataIntegrityViolationException ex) {
             // Concurrent creates can both pass existsBySerialNumberIgnoreCase; the DB unique index stops the second
             // with 409.
             throw serialTaken(normalizedSerial);
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate serial (#120).
+        auditService.record(
+                currentUser.id(),
+                "ASSET_CREATED",
+                "ASSET",
+                saved.getId(),
+                "Created asset " + saved.getName() + " (S/N " + saved.getSerialNumber() + ")");
+        return AssetResponse.from(saved);
     }
 
     @Transactional
