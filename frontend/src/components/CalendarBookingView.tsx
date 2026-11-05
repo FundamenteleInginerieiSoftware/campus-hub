@@ -166,7 +166,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   const navigate = useNavigate()
   const [today] = useState(() => new Date())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
-  const maxBookingDate = useMemo(() => new Date(today.getTime() + 14 * 86400000), [today])
+  const maxBookingDate = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14, today.getHours(), today.getMinutes(), today.getSeconds()), [today])
 
   // Current view's Monday
   const [currentMonday, setCurrentMonday] = useState(() => initialSchedule.monday)

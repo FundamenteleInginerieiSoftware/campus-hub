@@ -176,7 +176,7 @@ In accordance with W8 requirements (`docs/whats-left.md`), student bookings affe
 
 - **`Today` Button & Week Navigation (`CalendarBookingView.tsx`):** Reused `initialSchedule` in `handleToday()` and local-time date parsing (`parseDateKey`) in `handlePrevWeek()` / `handleNextWeek()` so clicking `Today` on a weekend or after `19:30` jumps to the next valid weekday slot instead of requesting `09:00` on a weekend/past time.
 - **Exact 14-Day Slot Horizon (`CalendarBookingView.tsx`):** Evaluated `toSlotDate(d, stepTime) > maxBookingDate` per 30-minute cell and `toSlotDate(d, '08:00') > maxBookingDate` on day headers so time slots on day `+14` later than the current time of day are disabled in the grid rather than failing with `409 BOOKING_TOO_FAR_AHEAD`.
-- **Empty Last Page Step-Back (`MyReservationsPage.tsx`):** When cancelling the last reservation on `pageNumber > 0` shrinks `totalPages` below `pageNumber + 1`, the effect automatically steps back to `response.totalPages - 1` so pagination controls remain visible and earlier pages are displayed immediately.
+- **Empty Last Page Step-Back (`MyReservationsPage.tsx`):** When cancelling the last reservation on `pageNumber > 0` shrinks `totalPages` below `pageNumber + 1`, the effect automatically steps back to `response.totalPages - 1` so pagination controls remain visible and earlier pages are displayed immediately. The step-back only matters on the Active tab; on the All tab the cancelled row stays in the list, so the page does not shrink.
 
 ---
 
