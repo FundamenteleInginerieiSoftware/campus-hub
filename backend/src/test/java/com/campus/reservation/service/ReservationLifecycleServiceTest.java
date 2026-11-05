@@ -416,12 +416,10 @@ class ReservationLifecycleServiceTest {
         when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID))
                 .thenReturn(List.of(differentRoomSub, retiredSub, sameRoomSub));
 
-        when(reservationService.isAssetFree(25L, threatened1.getStartTime(), threatened1.getEndTime(), 33L))
-                .thenReturn(true);
+        // Both substitutes (15L in different room and 25L in same room) are free, so the strategy
+        // ordering alone determines that sameRoomSub (25L) is selected first over differentRoomSub (15L).
+        when(reservationService.isAssetFree(anyLong(), any(), any(), anyLong())).thenReturn(true);
         when(reservationService.moveToAsset(eq(33L), eq(25L), any())).thenReturn(true);
-
-        when(reservationService.isAssetFree(25L, threatened2.getStartTime(), threatened2.getEndTime(), 44L))
-                .thenReturn(true);
         when(reservationService.moveToAsset(eq(44L), eq(25L), any())).thenReturn(true);
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();

@@ -43,7 +43,7 @@ class ReservationSeeder implements CommandLineRunner {
 
         // Bug fixed (#155): only seed sample reservations onto operational (AVAILABLE) assets.
         List<Long> assetIds = jdbcTemplate.query(
-                "select id from assets where status = 'AVAILABLE' order by id asc limit 2",
+                "select id from assets where status = 'AVAILABLE' order by id asc limit 1",
                 (rs, rowNum) -> rs.getLong("id"));
 
         if (!userApi.exists(STUDENT_1_ID) || !userApi.exists(STUDENT_2_ID) || assetIds.isEmpty()) {
