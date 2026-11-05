@@ -14,7 +14,7 @@ import {
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { IconAlertTriangle, IconCheck, IconRefresh } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../api/errorMessages.ts'
 import { checkOutReservation, returnReservation, searchReservations } from '../api/reservationDesk.ts'
 import { fetchAssetSummary, type AssetSummary, type Reservation, type ReservationStatus } from '../api/reservations.ts'
@@ -68,6 +68,10 @@ export default function ReservationsDeskPage() {
   const [pageData, setPageData] = useState<PageResponse<Reservation> | null>(null)
   const [counts, setCounts] = useState<Record<Tab, number | null>>({ pickup: null, out: null, overdue: null })
   const [assets, setAssets] = useState<Record<number, AssetSummary>>({})
+  // Ids of assets already loaded or being loaded. A ref, not state: the list effect reads it after an
+  // await, and a ref always gives the current set there (a state value would be the one from the render
+  // that started the request).
+  const requestedAssetIds = useRef(new Set<number>())
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown>(null)
 
@@ -87,19 +91,47 @@ export default function ReservationsDeskPage() {
     // "ignore" drops the answer of a request the user has already moved away from
     // (other tab or day), so a slow old answer can't overwrite the new list.
     let ignore = false
+    let steppingBack = false
     searchFor(tab, date, pageNumber)
       .then(async (response) => {
         if (ignore) return
+
+        // Bug fixed (#148): after a check-out or return of the only row on the last page, the reload asked
+        // for a page that no longer exists, got no rows and showed "No equipment is out right now." with no
+        // page buttons, while the tab still counted 20. Fix: step back to the last page that still exists
+        // (page 0 if nothing is left). Changing pageNumber runs this effect again; loading stays on until then.
+        if (response.content.length === 0 && pageNumber > 0 && pageNumber >= response.totalPages) {
+          steppingBack = true
+          setPageData(null) // the old rows hold the booking that was just handled; don't leave its button
+          setPageNumber(Math.max(response.totalPages - 1, 0))
+          return
+        }
+
         // The backend sorts newest first; at the desk the earliest booking comes first.
+        // Known limit: we only sort the 20 rows of this page. With more than 20 bookings the earliest ones
+        // are on the last page, not the first. Once Calin's sortDir parameter (#172) is on main, the server
+        // can sort ascending across all pages and this line goes away.
         const sorted = [...response.content].sort((a, b) => a.startTime.localeCompare(b.startTime))
         setPageData({ ...response, content: sorted })
         setLoadError(null)
 
         // Asset names come from Liviu's public GET /api/v1/assets/{id}, one call per asset on the page.
         // If one fails, that row just shows "Asset #id".
-        const ids = [...new Set(sorted.map((r) => r.assetId))]
-        const found = await Promise.all(ids.map((id) => fetchAssetSummary(id).catch(() => null)))
-        if (ignore) return
+        // Bug fixed (#166): every tab switch, day change or refresh fetched every asset on the page again,
+        // even the ones we already had. Fix: only fetch ids not asked for yet. A failed one is removed from
+        // the set, so the next load tries it again. The names are kept even if the user has moved on
+        // meanwhile: they are already marked as asked for, so no later load would fetch them.
+        const ids = [...new Set(sorted.map((r) => r.assetId))].filter((id) => !requestedAssetIds.current.has(id))
+        ids.forEach((id) => requestedAssetIds.current.add(id))
+        const found = await Promise.all(
+          ids.map((id) =>
+            fetchAssetSummary(id).catch(() => {
+              requestedAssetIds.current.delete(id)
+              return null
+            }),
+          ),
+        )
+        if (found.length === 0) return
         setAssets((prev) => {
           const next = { ...prev }
           for (const asset of found) {
@@ -113,7 +145,8 @@ export default function ReservationsDeskPage() {
       })
       .finally(() => {
         // Only the latest request may end the loading state; an ignored one would end it too early.
-        if (!ignore) setLoading(false)
+        // When stepping back a page, the next request ends it.
+        if (!ignore && !steppingBack) setLoading(false)
       })
     return () => {
       ignore = true
@@ -154,6 +187,9 @@ export default function ReservationsDeskPage() {
     setLoading(true)
     setDate(value)
     setPageNumber(0)
+    // Bug fixed (#166): the old day's rows and their Check out buttons stayed clickable while the new day
+    // loaded (the table only shows its loader when there is no page). Fix: clear them, like changeTab does.
+    setPageData(null)
   }
 
   function changePage(newPage: number) {
@@ -161,6 +197,7 @@ export default function ReservationsDeskPage() {
     if (newPage === pageNumber) return
     setLoading(true)
     setPageNumber(newPage)
+    setPageData(null) // same bug as in changeDate: no old page's buttons while the new page loads
   }
 
   function reload() {

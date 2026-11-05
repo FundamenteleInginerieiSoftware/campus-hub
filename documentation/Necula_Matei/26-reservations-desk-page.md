@@ -23,6 +23,7 @@ When a student comes to the lab to pick up a booked oscilloscope, the admin behi
 6. **If the backend says no, the page says why in plain words.** For example, a student can only pick up from 15 minutes before to 30 minutes after the start, so clicking too early shows "Could not check out reservation #1: Pick-up window is closed (allowed from 15 min before start to 30 min after start)."
 7. **After every click the lists reload**, so the admin always sees the real state, also when a colleague at another desk did something in the meantime.
 8. **On a phone each booking is a small card** with its button, so nothing hides off the side of the screen.
+9. **Review fixes (Calin, #166 and #148):** while another day or page loads, the old rows disappear (no clicking an old button); equipment names already loaded aren't asked for again; and handing out the last booking of the last page goes back to the previous page instead of showing an empty list.
 
 **Result:** the "Reservations desk" placeholder is replaced by a working page. Tested on the real app: a booking was checked out and returned through the page, and a check-out outside the pick-up window showed the friendly error.
 
@@ -64,7 +65,7 @@ The endpoints are under `/api/v1/admin/**`, so my `SecurityConfig` already lets 
 | `ignore` flag in both effects | The cleanup sets `ignore = true`; a late answer of an old request is dropped | Without it, switching tabs fast could show the old tab's rows (the bug found in review of Calin's page) |
 | `loading` | Set to `true` in each handler that changes the effect's inputs, set to `false` in `finally` only by the latest request | `oxlint` warns about `setState` directly inside an effect (`set-state-in-effect`). Each handler first checks that something changed (same tab, same day, same page → return), otherwise the effect doesn't run and the spinner would never stop |
 | `changePage` guard | `if (newPage === pageNumber) return` | Mantine's `Pagination` also calls `onChange` when the current page is clicked again (review of Calin's page) |
-| `setPageData(null)` on tab change | Shows the loader instead of the old rows | The old tab's rows would show the wrong button for a moment |
+| `setPageData(null)` on tab, day and page change | Shows the loader instead of the old rows | The old rows would show clickable buttons for a moment (day and page added after review, see below) |
 | `runAction` | Calls check-out or return, shows a green notice or a red alert, then **always** reloads | After a 409 the row is usually out of date (already returned, no-show job ran), so reloading shows the truth |
 | Error alert | Title "Could not check out reservation #1", text from `errorMessage()` (`errorMessages.ts`) | Calin already added `CHECKOUT_WINDOW_CLOSED`, `INVALID_RESERVATION_STATUS_TRANSITION`, `RESERVATION_NOT_FOUND` there, so no new codes were needed. The title says which row failed |
 | `busyId` | The clicked button shows a spinner, the others are disabled | No double clicks while a request is running |
@@ -86,6 +87,18 @@ The endpoints are under `/api/v1/admin/**`, so my `SecurityConfig` already lets 
 | Phone width 390 px | Cards, buttons visible, `scrollWidth = 390` (no sideways page scroll) |
 | Dark mode (the top-bar toggle) | Readable |
 
+### Review fixes (Calin's issues #166 and #148)
+
+| Issue | Bug | Fix |
+|---|---|---|
+| #166 point 2 | `changeDate` and `changePage` only set `loading`. `PagedTable` / `PhoneList` show the loader only when `loading && !page`, so the old day's or page's rows and their Check out / Return buttons stayed clickable during the request | Both also call `setPageData(null)`, like `changeTab` |
+| #166 point 3 | Every load fetched `GET /api/v1/assets/{id}` for every asset on the page, even cached ones | A `useRef(new Set<number>())` of ids already asked for; only new ids are fetched. A ref, not the `assets` state, because the effect reads it after an `await` and a ref is never stale. A failed fetch removes its id, so the next load retries it. Results are stored even if the request was abandoned (`ignore`), otherwise an id would stay "asked for" without a name |
+| #148 part 2 | Return the only row on the last page (e.g. page 2 of "Out now" with 21 items): the reload asks for page 1 (0-based), gets `content: []`, `totalPages: 1` → empty text, no pagination, tab still says 20 | If the page is empty, `pageNumber > 0` and `pageNumber >= totalPages`: clear the rows and `setPageNumber(max(totalPages - 1, 0))`. That re-runs the effect; a `steppingBack` flag keeps `loading` on until the new page arrives. The `>= totalPages` check makes sure the new page number really differs, otherwise the effect wouldn't run again and the spinner would never stop |
+
+**Known limit (#166 point 1), not fixed yet:** the server sorts `startTime` DESC across all pages and the page only sorts its own 20 rows ascending, so with more than 20 rows the earliest bookings are on the last page. Calin's PR #172 adds a `sortDir` parameter to `GET /api/v1/admin/reservations`; once it is on `main`, the page will ask for ascending order and drop the client sort. A comment at the sort line says so.
+
+**How tested:** `npm ci && npm run lint && npm run build` (0 lint warnings, build OK). The code paths were checked by reading them through: day/page change → rows cleared → loader; second visit to a tab → no asset requests for known ids; 21 → 20 items with page 1 open → effect runs for page 0 and shows 20 rows with the loader in between.
+
 ### Problems hit and fixes
 
 | Problem | Fix |
@@ -98,7 +111,7 @@ The endpoints are under `/api/v1/admin/**`, so my `SecurityConfig` already lets 
 
 | What | Who |
 |---|---|
-| The search sorts newest first and has no `sort` parameter; I sort each page on the client. With more than 20 pick-ups in one day, page 2 holds the earlier ones. A `sort=startTime,asc` option would fix it | Calin (only if needed) |
+| The search sorts newest first; I sort each page on the client. With more than 20 rows the earliest ones are on the last page. Calin's `sortDir` (#172) fixes it once merged; then the page uses it | Calin (#172), then me |
 | No student names: an admin `GET /api/v1/admin/users/{id}` (or names in `ReservationResponse`) would let the desk show "Ana Pop" instead of "Student #2" | Stefania (user admin endpoints) |
 | The search takes one `status`; the counts need 3 small requests | Fine for now |
 
