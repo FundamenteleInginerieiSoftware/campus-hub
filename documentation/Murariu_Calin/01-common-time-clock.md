@@ -93,3 +93,6 @@ To ensure the React frontend evaluates booking windows (`CalendarBookingView.tsx
 
 1. **`nowInBucharest(): Date`** — Uses `Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', ... }).formatToParts(new Date())` to construct a `Date` whose local `getFullYear()`, `getMonth()`, `getDate()`, `getHours()`, `getMinutes()`, and `getSeconds()` match current Bucharest campus time.
 2. **`parseCampusLocalDateTime(isoString: string): Date`** — Splits ISO-8601 local timestamps (`"YYYY-MM-DDTHH:mm:ss"` or `"YYYY-MM-DD"`) into numeric components rather than calling `new Date("YYYY-MM-DD")` (which ECMAScript parses as UTC midnight, causing day shifts in negative UTC offsets).
+
+3. **One date parser, one "today":** the calendar uses parseCampusLocalDateTime for day keys too (no second parser), the 14-day horizon is built as 
+ew Date(y, m, d + 14, h, min, s) from the Bucharest "today" (DST-safe, same as backend plusDays(14)), and the **Today** button recomputes getInitialSchedule(nowInBucharest()) so weekends and after 19:30 jump to the next valid slot (#151). The Cancel button uses data-disabled instead of disabled so its Tooltip still shows.
