@@ -23,6 +23,7 @@ import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
@@ -72,12 +73,15 @@ class ReservationServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private NotificationService notificationService;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
-        reservationService =
-                new ReservationService(reservationRepository, catalogApi, currentUser, auditService, clock);
+        reservationService = new ReservationService(
+                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
     }
 
     @Test
@@ -647,11 +651,14 @@ class ReservationServiceTest {
         ReservationResponse response = reservationService.cancelReservation(1L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
-        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), any());
+        assertThat(response.cancelReason()).isEqualTo("Cancelled by user");
+        verify(auditService)
+                .record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), eq("Cancelled by user"));
+        verify(notificationService, never()).notifyUser(anyLong(), any(), any());
     }
 
     @Test
-    @DisplayName("cancelReservation succeeds for admin even after start time")
+    @DisplayName("cancelReservation succeeds for admin even after start time and notifies student with admin reason")
     void cancelReservationAdminAfterStartSucceeds() {
         when(currentUser.id()).thenReturn(999L);
         when(currentUser.isAdmin()).thenReturn(true);
@@ -661,11 +668,25 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 9, 0), // Start was 09:00 (clock is 10:00)
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
 
         ReservationResponse response = reservationService.cancelReservation(1L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(response.cancelReason()).isEqualTo("Cancelled by administrator");
+        verify(auditService)
+                .record(
+                        eq(999L),
+                        eq("CANCEL_RESERVATION"),
+                        eq("Reservation"),
+                        eq(1L),
+                        eq("Cancelled by administrator"));
+        verify(notificationService)
+                .notifyUser(
+                        eq(USER_ID),
+                        eq("Reservation Cancelled by Administrator"),
+                        eq("Your reservation #1 has been cancelled by an administrator."));
     }
 
     @Test
@@ -1175,6 +1196,32 @@ class ReservationServiceTest {
         assertThat(page.content()).hasSize(1);
         assertThat(page.content().get(0).id()).isEqualTo(301L);
         assertThat(page.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getAdminReservations: supports ascending sortDir and rejects invalid sortDir")
+    void getAdminReservationsSortDirValidation() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 301L);
+
+        when(reservationRepository.findAll(
+                        any(org.springframework.data.jpa.domain.Specification.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
+
+        PageResponse<ReservationResponse> ascPage =
+                reservationService.getAdminReservations(ReservationStatus.CONFIRMED, null, null, null, 0, 20, "asc");
+        assertThat(ascPage.content()).hasSize(1);
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(
+                        ReservationStatus.CONFIRMED, null, null, null, 0, 20, "invalid"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
     }
 
     @Test

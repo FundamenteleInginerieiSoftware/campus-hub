@@ -11,6 +11,7 @@ import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -43,10 +45,13 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Service managing reservations and implementing the public {@link ReservationApi} facade.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -56,6 +61,7 @@ public class ReservationService implements ReservationApi {
     private final CatalogApi catalogApi;
     private final CurrentUser currentUser;
     private final AuditService auditService;
+    private final NotificationService notificationService;
     private final Clock clock;
 
     /**
@@ -176,8 +182,38 @@ public class ReservationService implements ReservationApi {
             throw new ConflictException("CANCELLATION_NOT_ALLOWED", "Only CONFIRMED reservations can be cancelled");
         }
 
-        r.cancel(now, "Cancelled by user");
-        auditService.record(currentUser.id(), "CANCEL_RESERVATION", "Reservation", r.getId(), "Cancelled by user");
+        // Bug fixed: previously, admin cancellations on another student's booking still recorded
+        // "Cancelled by user" and never notified the student. Fix: distinguish admin-initiated
+        // cancellations from self-cancellations and notify the reservation owner after commit.
+        boolean cancelledByAdminForAnotherUser = !r.getUserId().equals(currentUser.id());
+        String reason = cancelledByAdminForAnotherUser ? "Cancelled by administrator" : "Cancelled by user";
+        r.cancel(now, reason);
+        auditService.record(currentUser.id(), "CANCEL_RESERVATION", "Reservation", r.getId(), reason);
+
+        if (cancelledByAdminForAnotherUser) {
+            Long ownerId = r.getUserId();
+            Long reservationId = r.getId();
+            Runnable notifyTask = () -> {
+                try {
+                    notificationService.notifyUser(
+                            ownerId,
+                            "Reservation Cancelled by Administrator",
+                            "Your reservation #" + reservationId + " has been cancelled by an administrator.");
+                } catch (Exception e) {
+                    log.warn("Failed to notify user {} of admin cancellation: {}", ownerId, e.getMessage());
+                }
+            };
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        notifyTask.run();
+                    }
+                });
+            } else {
+                notifyTask.run();
+            }
+        }
         return ReservationResponse.from(r);
     }
 
@@ -462,7 +498,27 @@ public class ReservationService implements ReservationApi {
     @Transactional(readOnly = true)
     public PageResponse<ReservationResponse> getAdminReservations(
             ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size) {
+        return getAdminReservations(status, userId, assetId, date, page, size, "desc");
+    }
+
+    /**
+     * Retrieves a paginated and dynamically filtered list of reservations for administrators
+     * with configurable sort direction on {@code startTime} (and secondary tie-breaker {@code id}).
+     *
+     * <p>Avoids JPQL null-check tricks by using Spring Data JPA {@link Specification}.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ReservationResponse> getAdminReservations(
+            ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size, String sortDir) {
         validatePagination(page, size);
+        Sort.Direction direction;
+        if (sortDir == null || sortDir.equalsIgnoreCase("desc")) {
+            direction = Sort.Direction.DESC;
+        } else if (sortDir.equalsIgnoreCase("asc")) {
+            direction = Sort.Direction.ASC;
+        } else {
+            throw new BusinessRuleException("INVALID_PARAMETER", "sortDir must be 'asc' or 'desc'");
+        }
         Specification<Reservation> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (status != null) {
@@ -483,7 +539,8 @@ public class ReservationService implements ReservationApi {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"));
+        Pageable pageable =
+                PageRequest.of(page, size, Sort.by(direction, "startTime").and(Sort.by(direction, "id")));
         Page<Reservation> reservationPage = reservationRepository.findAll(spec, pageable);
         return PageResponse.from(reservationPage, ReservationResponse::from);
     }
