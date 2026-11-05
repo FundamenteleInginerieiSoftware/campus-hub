@@ -193,6 +193,13 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 **Tests:** service unit tests with Mockito (no Spring context) · `@DataJpaTest` for custom queries (runs against the local `campus_test` database, not an embedded one) · `@WebMvcTest` + `@WithMockUser(roles = "ADMIN")` for status codes and security · a few `@SpringBootTest` for critical flows · fixed `Clock` in tests · `@MockitoBean` · target ~70% line coverage on `service/` · every bug fix gets a test first · names `XxxServiceTest`, `XxxControllerIT`, methods like `rejectsOverlappingReservation()`.
 
+**Tests that explain themselves** (the professor may break something at the defense; a red test must say what broke and where: `docs/testing/defense-playbook.md`):
+- One business rule per test, named after the rule. Every assertion gets a message with the rule and the class/method that owns it: `.as("overlap: 14-16 must block 15-17; see ReservationService.createReservation")`. On a wrong HTTP status, put the response body (ProblemDetail `code`) in the message.
+- Dates relative to a fixed `Clock`, never a hard-coded calendar day (#94).
+- **Coverage is not the goal: don't write tests just to reach 100% JaCoCo.** ~70% on `service/` (gate from W10). To find missing tests, use mutation testing: `./gradlew pitest` breaks the code on purpose and lists every break no test caught (survived mutants). Before W10 each owner adds tests for the survivors in their module that are real rules (skip logging/`toString` noise).
+- `DemoFlowIT` (Matei, root test package) runs the whole demo through the HTTP API; its failure message names the step, the owner and the class to open. If you change an endpoint it uses, keep it green.
+- When a test fails, read its message first, then `git diff`. Don't "fix" a test to make it pass unless the rule itself changed (team decision).
+
 ---
 
 ## 6. Documentation rules
@@ -257,8 +264,8 @@ Dates are approximate (W1 = week of 5 Oct 2026); real dates go in `docs/decision
 | W7 | Business logic | EC2 + CloudFront first deploy (ADR-002) | Retire flow; audit log endpoint + page | **Reassignment engine v1** + tests | My incidents, incident details, admin incident queue |
 | W8 | Business logic | `deploy.yml`, `S3StorageService` | Tests; help Calin with substitute queries | Reassignment log endpoint + notifications; overdue/no-show jobs; concurrency test | Reassignment log view; UI polish |
 | W9 | **M2 feature complete** `v0.2.0` | SES, secrets, **admin reservations desk page**; SQS only if ahead | Polish + docs | Full incident → reassignment flow local + AWS | Integration of all screens; prod build |
-| W10 | **Feature freeze**: tests & bugs only | Alarms, budget, load + security smoke tests | Coverage >= 70% | Integration tests; test plan | Manual E2E checklist, UI polish |
-| W11 | Docs & demo | Deployment + component diagrams, security/AWS chapters, runbook | Final class/ER/state diagrams, module docs | State/sequence diagrams, Strategy doc, **test report** | User manual, Observer doc, demo script, 2 rehearsals |
+| W10 | **Feature freeze**: tests & bugs only; everyone: tests for PIT survivors in their module | Alarms, budget, load + security smoke tests | Coverage >= 70% | Integration tests; test plan | Manual E2E checklist, UI polish |
+| W11 | Docs & demo | Deployment + component diagrams, security/AWS chapters, runbook | Final class/ER/state diagrams, module docs | State/sequence diagrams, Strategy doc, **test report** | User manual, Observer doc, demo script, 2 rehearsals, **break-it drill** (`docs/testing/defense-playbook.md` §6) |
 | W12 | Buffer + defense `v1.0.0` | Keep AWS up for demo, then tear down | Q&A prep | Q&A prep | Q&A prep |
 
 **M1:** locally, a student registers, logs in, browses, books (conflicts rejected), sees "my reservations"; an admin adds assets; CI green; Swagger complete. **M2:** everything works locally and on AWS, including incident with photo -> automatic reassignment -> notification. **After feature freeze: no new features.**
@@ -365,6 +372,9 @@ The backend commands work once the Gradle skeleton is on `main`.
 | Format code | `cd backend && ./gradlew spotlessApply` |
 | One test class | `cd backend && ./gradlew test --tests AssetServiceTest` |
 | Coverage report | after `build`: `backend/build/reports/jacoco/test/html/index.html` |
+| Mutation testing (on demand, not in `build`) | `cd backend && ./gradlew pitest` → `backend/build/reports/pitest/index.html` (survived mutants = breaks no test caught) |
+| Run every test again (Gradle skips unchanged ones) | `cd backend && ./gradlew test --rerun` |
+| Something is broken: what changed? | `git status` · `git diff` · `git diff <last tag>` · `git bisect` (steps in `docs/testing/defense-playbook.md` §1) |
 | Reset local DB | stop the app, then in pgAdmin (or `psql`): `DROP DATABASE campus WITH (FORCE); CREATE DATABASE campus OWNER campus;` |
 | Look at the data | pgAdmin (or IntelliJ's Database tool): `localhost:5432`, database `campus`, user `campus` / `campus` |
 | Health | <http://localhost:8080/actuator/health> |
