@@ -1,6 +1,7 @@
 package com.campus.user.web;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -13,11 +14,15 @@ import java.nio.charset.StandardCharsets;
  * handler). No role field: register always creates a STUDENT, so nobody can make themselves admin.
  */
 public record RegisterRequest(
-        @NotBlank @Email @Size(max = 255) String email,
+        @Schema(example = "ana.popescu@campus.test") @NotBlank @Email @Size(max = 255)
+        String email,
         // 72 is BCrypt's limit, but in bytes: letters like "ș" take 2 bytes, so a long password full
         // of them can still be too long for BCrypt. Contract rule, still to confirm (api-contract §3).
-        @NotBlank @Size(min = 8, max = 72) String password,
-        @NotBlank @Size(max = 100) String fullName) {
+        @Schema(example = "parola123") @NotBlank @Size(min = 8, max = 72)
+        String password,
+
+        @Schema(example = "Ana Popescu") @NotBlank @Size(max = 100)
+        String fullName) {
 
     // Bug fixed (#165): @Email checked the raw value, so " ana@campus.test " (a space from a phone
     // keyboard or a copy-paste) got 400 before AuthService could trim it. Fix: Jackson builds the

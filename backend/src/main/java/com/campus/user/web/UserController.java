@@ -2,6 +2,7 @@ package com.campus.user.web;
 
 import com.campus.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,7 +19,8 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/me")
-    @Operation(summary = "The account of the token's user (401 without a token)")
+    @Operation(summary = "The account of the token's user")
+    @ApiResponse(responseCode = "200", description = "The logged-in user")
     public UserResponse me() {
         return userService.me();
     }
