@@ -72,7 +72,8 @@ public class ReassignmentService {
                                 "Reservation Reassigned",
                                 "Your reservation #" + booking.id() + " has been reassigned to asset "
                                         + result.substituteAssetName() + " due to equipment maintenance.");
-                    } else if (result.outcome() == ReassignmentOutcome.FORCE_CANCELLED) {
+                    } else {
+                        // The only other outcome is FORCE_CANCELLED.
                         sendNotificationSafely(
                                 booking.userId(),
                                 "Reservation Cancelled",
