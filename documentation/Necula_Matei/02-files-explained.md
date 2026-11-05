@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`) and the account check on every request (`22-token-account-check.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`) and the S3/SES adapters (`23-s3-ses-adapters.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -23,7 +23,9 @@ campus-hub/
     └── src/
         ├── main/java/com/campus/  CampusHubApplication.java, config/SecurityConfig.java,
         │                          config/OpenApiConfig.java, config/SecurityErrorHandler.java,
-        │                          config/AsyncConfig.java, config/SpaConfig.java,
+        │                          config/AsyncConfig.java, config/SpaConfig.java, config/AwsConfig.java,
+        │                          storage/service/S3StorageService.java,
+        │                          notification/service/SesNotificationService.java,
         │                          user/web/AuthController.java, <module>/package-info.java,
         │                          user/api/Role.java, user/domain/User.java,
         │                          user/repository/UserRepository.java, user/service/UserService.java,
@@ -38,7 +40,8 @@ campus-hub/
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
-        │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest
+        │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest, S3StorageServiceTest,
+        │                          SesNotificationServiceTest, ProdProfileStartupTest
         └── test/resources/application-test.yml  static/index.html
 ```
 
@@ -129,6 +132,15 @@ campus-hub/
 | `SpaConfig.java` | On AWS, sends the website for every address that isn't a file or the API, so reloading a page like "My reservations" works (`19-dockerfile.md`). |
 | `SpaFrontendTest` | Checks that the website and its pages load without a login, and that a missing file or an API path doesn't get the website by mistake. |
 
+### Backend: AWS adapters (`23-s3-ses-adapters.md`)
+| File | What it does |
+|---|---|
+| `AwsConfig.java` | On AWS only: creates the connections to S3 (photos) and SES (e-mails). No keys: the AWS server lends its permissions. |
+| `S3StorageService.java` | On AWS, saves incident photos in a private S3 bucket instead of a folder (same checks as on a laptop). |
+| `SesNotificationService.java` | On AWS, sends real e-mails to users instead of writing them to the log. A failed e-mail is logged and never undoes the booking change. |
+| `S3StorageServiceTest`, `SesNotificationServiceTest` | Check what we ask S3 and SES to do, without connecting to AWS. |
+| `ProdProfileStartupTest` | Starts the whole app in AWS mode, so a missing piece shows up in CI instead of on the server. |
+
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
 |---|---|
@@ -178,7 +190,7 @@ campus-hub/
 |---|---|
 | Plugins | `java`, `jacoco`, `org.springframework.boot` 4.1.1, `io.spring.dependency-management` (manages library versions), `com.diffplug.spotless` 8.10.4. |
 | `java.toolchain` | `JavaLanguageVersion.of(25)`: compiles with JDK 25 whatever JDK runs Gradle. |
-| Dependencies | Boot starters: webmvc, data-jpa, validation, security, oauth2-resource-server (JWT), flyway + `flyway-database-postgresql`, actuator. Plus springdoc **3.1.1** (the line for Boot 4), Lombok (compile only), DevTools (dev only), the PostgreSQL driver (runtime), and the matching `-test` starters. No H2. |
+| Dependencies | Boot starters: webmvc, data-jpa, validation, security, oauth2-resource-server (JWT), flyway + `flyway-database-postgresql`, actuator. Plus springdoc **3.1.1** (the line for Boot 4), Lombok (compile only), DevTools (dev only), the PostgreSQL driver (runtime), and the matching `-test` starters. No H2. AWS SDK v2 through its BOM (`platform('software.amazon.awssdk:bom:2.57.0')`) with `s3` + `sesv2` for the prod adapters (`23-s3-ses-adapters.md`). |
 | `spotless` | palantir-java-format 2.102.0 + remove unused imports. `build` runs `spotlessCheck`, so unformatted code fails CI; fix with `./gradlew spotlessApply`. |
 | `test` task | `systemProperty 'spring.profiles.active', 'test'` makes every test use `application-test.yml`. `finalizedBy jacocoTestReport` writes coverage to `build/reports/jacoco/test/html/`. |
 
@@ -210,6 +222,9 @@ campus-hub/
 | `SecurityErrorHandler` | Implements `AuthenticationEntryPoint` (401 `UNAUTHORIZED`), `AccessDeniedHandler` (403 `FORBIDDEN`) and `RequestRejectedHandler` (400 `REQUEST_REJECTED` for URLs the firewall blocks; a `@Bean` in `SecurityConfig`, because Spring finds it by type, `21-firewall-error-json.md`), writing `ProblemDetail`-shaped JSON (`application/problem+json`) with Boot's Jackson 3 `JsonMapper`. Needed because filter errors never reach Liviu's `@RestControllerAdvice`. Created with `new` in `SecurityConfig`, so `@WebMvcTest` + `@Import(SecurityConfig.class)` still works. |
 | `AsyncConfig` | `@EnableAsync` + `@EnableScheduling` (both off by default). A `@Profile("test")` `SyncTaskExecutor` bean makes `@Async` run on the caller's thread in tests, and replaces Boot's pool there. |
 | `SpaConfig` | `WebMvcConfigurer` registering `/**` → `classpath:/static/` (replaces Boot's default handler for that pattern) with a `PathResourceResolver` subclass: existing file → the file; path starting `api/` or containing a dot → `null` (404); else `index.html` if present. Resource handlers run only after no controller matched. In dev `static/` is empty, so it changes nothing. Details in `19-dockerfile.md`. |
+| `AwsConfig` | `@Profile("prod")`: `S3Client` and `SesV2Client` with `Region.of(app.aws-region)` and the SDK's default credentials chain (EC2 instance role; looked up on the first call, so the context starts without AWS). |
+| `S3StorageService` | `@Profile("prod") StorageService`: Liviu's `StorageValidation` (type, 5 MB, magic bytes, key pattern), `PutObjectRequest` with the content type into `app.storage.photo-bucket`, `getObjectAsBytes` → `ByteArrayResource`, `NoSuchKeyException` → 404 `PHOTO_NOT_FOUND`, `deleteObject` (S3 is already a no-op for missing keys). |
+| `SesNotificationService` | `@Profile("prod") NotificationService`: address from `UserApi.getById(id).email()`, `SendEmailRequest` with a simple UTF-8 subject + text body from `app.mail.from`. `SdkException` is caught and logged, so a failed e-mail can't roll back Calin's transaction. |
 | `OpenApiConfig` | Annotations only: `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` + `@OpenAPIDefinition(security = @SecurityRequirement(name = "bearerAuth"))`, so the scheme applies to every endpoint and teammates don't annotate controllers. |
 | `AuthController` | `GET /api/v1/auth/ping` returns the record `PingResponse("pong")`, which Spring turns into `{"message":"pong"}`. `POST /register` (`@ResponseStatus(CREATED)`) and `POST /login` take `@Valid @RequestBody` records and only call `AuthService`. Public through the `/api/v1/auth/**` rule. |
 | `AuthService` | `register`: `existsByEmailIgnoreCase` → `409 EMAIL_TAKEN`, BCrypt hash, role always `STUDENT`, `saveAndFlush` inside a try so a simultaneous duplicate (UNIQUE column) also becomes 409. `login`: `findByEmailIgnoreCase` → `filter(isEnabled)` → `filter(passwordEncoder.matches)` → else `401 INVALID_CREDENTIALS` (same error for every case). Token: `JwtClaimsSet` with `sub` (id), `email`, `roles`, `iat`/`exp` from the shared `Clock` + `app.jwt.expiration` (8 h, bound as `Duration`), signed with the HS256 `JwtEncoder`. Details in `13-auth-register-login.md`. |
@@ -243,6 +258,9 @@ campus-hub/
 | `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. `@Transactional`; each token belongs to a real user saved by the test (rolled back). With real tokens signed by our `JwtEncoder`: a disabled or deleted user gets 401, a token claiming ADMIN for a student gets 403; a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 on other `/api` paths and on a `POST` outside the API; a broken token on `/api/v1/auth/ping` is ignored (200); `/api/v1/auth/ping;x=1` (blocked by the firewall) → 400 `REQUEST_REJECTED` JSON. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
 | `ErrorJsonTest` | `@SpringBootTest` + MockMvc with a test-only `@RestController` (`@Import`, since `main` has no `@Valid` endpoint yet) and `jwt()` from spring-security-test as the token: blank field → 400 `VALIDATION_FAILED` + `errors[].field`; broken JSON → 400 `MALFORMED_REQUEST`; unknown path → 404 `NOT_FOUND`. All three failed before the fix. |
 | `SpaFrontendTest` | `@SpringBootTest` + MockMvc with `test/resources/static/index.html` as a stand-in build: `/` forwards to `index.html` (Boot's welcome page; MockMvc doesn't follow forwards), `/reservations` and `/admin/incidents` return it without a token, `/assets/index-old.js` → 404, an unknown `/api/v1` path → 401 JSON, not HTML. |
+| `S3StorageServiceTest` | Mockito `S3Client`: store captures bucket, generated key and content type; a fake PNG and a traversal key never reach S3; load returns the bytes, a missing key is `PHOTO_NOT_FOUND`; delete sends the exact request. |
+| `SesNotificationServiceTest` | Mockito `SesV2Client` + `UserApi`: the captured request has the user's address, sender, subject and body; an `SesV2Exception` doesn't propagate. |
+| `ProdProfileStartupTest` | `@SpringBootTest` + `@ActiveProfiles("prod")` with stand-ins for the env variables: the context starts and `StorageService` / `NotificationService` are the S3 / SES versions (#115). |
 | `AsyncConfigTest` | `@SpringBootTest` with a test-only `@Async` bean: it is a proxy (async on) and runs on the test thread (sync executor). Its value is read through a method, because fields of a Spring proxy stay empty. |
 | `AuthRequestsTest` | Plain unit test (no Spring, `Validation.buildDefaultValidatorFactory()`): the record rules and the `UserResponse` mapper. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. `AuthService` is a `@MockitoBean`; tests: ping, register 201 (no `passwordHash` in the JSON), bad email + short password → 400 `VALIDATION_FAILED` with 2 field errors, login 200, wrong password → 401 `INVALID_CREDENTIALS`. |
