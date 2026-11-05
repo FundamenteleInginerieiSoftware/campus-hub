@@ -1220,7 +1220,7 @@ class ReservationServiceTest {
 
         assertThatThrownBy(() -> reservationService.getAdminReservations(
                         ReservationStatus.CONFIRMED, null, null, null, 0, 20, "invalid"))
-                .isInstanceOf(BusinessRuleException.class)
+                .isInstanceOf(InvalidParameterException.class)
                 .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
     }
 

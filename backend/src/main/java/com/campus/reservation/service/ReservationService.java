@@ -517,7 +517,7 @@ public class ReservationService implements ReservationApi {
         } else if (sortDir.equalsIgnoreCase("asc")) {
             direction = Sort.Direction.ASC;
         } else {
-            throw new BusinessRuleException("INVALID_PARAMETER", "sortDir must be 'asc' or 'desc'");
+            throw new InvalidParameterException("sortDir must be 'asc' or 'desc'");
         }
         Specification<Reservation> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
