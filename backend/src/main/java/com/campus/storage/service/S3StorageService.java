@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * Incident photos in the private S3 bucket, in prod. Same contract as Liviu's {@code
@@ -63,6 +64,20 @@ public class S3StorageService implements StorageService {
             return new ByteArrayResource(bytes);
         } catch (NoSuchKeyException e) {
             throw new NotFoundException("PHOTO_NOT_FOUND", "Photo was not found");
+        } catch (S3Exception e) {
+            // Bug fixed (#148): S3 only says "404 NoSuchKey" to a role that may list the bucket
+            // (s3:ListBucket); without it, a missing key comes back as 403 AccessDenied, so the user got
+            // a 500 with no hint why. The real fix is that permission on the instance role (Terraform,
+            // doc 29). We don't turn the 403 into a 404: it can also mean a wrong bucket or role, and
+            // hiding it would make those invisible. It stays a 500, but the log now names the likely cause.
+            if (e.statusCode() == 403) {
+                log.error(
+                        "S3 denied GetObject for key={} in bucket={}. If the photo is missing, the instance role"
+                                + " probably lacks s3:ListBucket on the bucket (S3 then answers 403 instead of 404)",
+                        key,
+                        bucket);
+            }
+            throw e;
         }
     }
 
