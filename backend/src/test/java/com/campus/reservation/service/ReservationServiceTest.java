@@ -1207,7 +1207,6 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
@@ -1218,6 +1217,7 @@ class ReservationServiceTest {
         assertThat(response.assetId()).isEqualTo(ASSET_ID);
         assertThat(response.availableAssetIds()).containsExactly(ASSET_ID);
         assertThat(response.conflictReason()).isNull();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1228,7 +1228,6 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(true);
@@ -1238,6 +1237,7 @@ class ReservationServiceTest {
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
         assertThat(response.availableAssetIds()).isEmpty();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1248,13 +1248,13 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
 
         AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
 
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("ASSET_NOT_BOOKABLE");
         assertThat(response.availableAssetIds()).isEmpty();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
