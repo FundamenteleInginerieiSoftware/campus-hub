@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
+import ReservationsDeskPage from './pages/ReservationsDeskPage.tsx'
 
 // All pages of the app. Each owner replaces their <PlaceholderPage> with the real page component.
 // Pages under <AppLayout> get the side menu and need a login; pages under "admin" also need ADMIN.
@@ -38,12 +39,7 @@ export default function App() {
 
         {/* Admin only */}
         <Route path="admin" element={<RequireAdmin />}>
-          <Route
-            path="reservations"
-            element={
-              <PlaceholderPage title="Reservations desk" description="Pickups, returns and today's bookings." owner="Matei" />
-            }
-          />
+          <Route path="reservations" element={<ReservationsDeskPage />} />
           <Route
             path="incidents"
             element={

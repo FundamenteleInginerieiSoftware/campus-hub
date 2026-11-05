@@ -17,6 +17,7 @@ campus-hub/
 │   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/  README.md  NN-topic.md   (my notes)
+├── frontend/src/  pages/ReservationsDeskPage.tsx  api/reservationDesk.ts   (26-reservations-desk-page.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
     ├── gradlew  gradlew.bat  gradle/wrapper/
@@ -158,6 +159,12 @@ campus-hub/
 | `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
 | `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
 
+### Frontend: Reservations desk (`26-reservations-desk-page.md`)
+| File | What it does |
+|---|---|
+| `frontend/src/pages/ReservationsDeskPage.tsx` | The admin's page at the lab counter (`/admin/reservations`): three lists (to pick up today, out now, overdue), a "Check out" button when a student takes the equipment and a "Return" button when they bring it back. On a phone each booking is a card. |
+| `frontend/src/api/reservationDesk.ts` | The three calls the page makes to Calin's admin reservation endpoints: search, check out, return. |
+
 ### `documentation/Necula_Matei/` (my notes)
 | File | What it does |
 |---|---|
@@ -250,6 +257,12 @@ campus-hub/
 |---|---|
 | `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
 | ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
+
+### Frontend: Reservations desk
+| File | Key points |
+|---|---|
+| `ReservationsDeskPage.tsx` | Tabs = one status each (`CONFIRMED` / `CHECKED_OUT` / `OVERDUE`); only "To pick up" sends `date` (default: today in Europe/Bucharest via `Intl.DateTimeFormat('en-CA', …)`). One effect loads the open tab (`ignore` flag against stale answers, `loading` ends in `finally` only for the latest request), a second one loads the tab counts with `size=1`. Asset names via Calin's `fetchAssetSummary` (Liviu's `GET /api/v1/assets/{id}`); students as `Student #id` (no admin user lookup endpoint yet). Buttons call check-out / return, then reload; 409s show the text from `errorMessages.ts` with "Could not … reservation #id" as title. `<PagedTable>` on desktop, a local `PhoneList` (same columns, one card per booking) below 48em. Details in `26-reservations-desk-page.md`. |
+| `reservationDesk.ts` | `searchReservations({ status, date, page, size })` → `GET /api/v1/admin/reservations`, `checkOutReservation(id)` → `POST …/{id}/check-out`, `returnReservation(id)` → `POST …/{id}/return`. Types (`Reservation`, `ReservationStatus`) imported from Calin's `src/api/reservations.ts`, not copied. |
 
 ### Tests
 | Test | What it proves |
