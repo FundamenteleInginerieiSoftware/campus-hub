@@ -40,6 +40,19 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
 
     long countByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses);
 
+    // Acquires a transaction-scoped PostgreSQL advisory lock for this student, so two simultaneous
+    // booking requests from the same student on different assets wait for each other before counting
+    // active bookings (the asset row locks alone don't, because they lock different rows).
+    // Wrapped in count(*) only because pg_advisory_xact_lock returns void, which Spring Data cannot map
+    // as a result; selecting it inside a subquery gives us a normal number back.
+    // Two-key form: key 1 means "reservation quota", key 2 is the user id. The one-key form shares one
+    // number space with every other advisory lock in the database, so user 5 would block asset 5 if
+    // someone later locks by asset id. The user id is cast to int because the two-key form takes two ints.
+    @Query(
+            value = "SELECT count(*) FROM (SELECT pg_advisory_xact_lock(1, CAST(:userId AS integer))) AS quota_lock",
+            nativeQuery = true)
+    long lockUserQuota(@Param("userId") Long userId);
+
     long countByUserIdAndOriginalAssetIdIsNotNull(Long userId);
 
     Page<Reservation> findByUserIdOrderByStartTimeAsc(Long userId, Pageable pageable);

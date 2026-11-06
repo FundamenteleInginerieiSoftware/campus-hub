@@ -94,7 +94,9 @@ class ReservationSeederTest {
         ReservationSeeder seeder = new ReservationSeeder(reservationRepository, userApi, jdbcTemplate, clock);
 
         when(reservationRepository.count()).thenReturn(0L);
-        when(jdbcTemplate.query(anyString(), org.mockito.ArgumentMatchers.<RowMapper<Long>>any()))
+        when(jdbcTemplate.query(
+                        org.mockito.ArgumentMatchers.contains("status = 'AVAILABLE'"),
+                        org.mockito.ArgumentMatchers.<RowMapper<Long>>any()))
                 .thenReturn(List.of(10L, 20L));
         when(userApi.exists(1L)).thenReturn(true);
         when(userApi.exists(2L)).thenReturn(true);

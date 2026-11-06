@@ -16,6 +16,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -24,9 +26,10 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 // Mockito instead of a real bucket: the test checks what we ask S3 to do, without AWS.
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class S3StorageServiceTest {
 
     private static final byte[] PNG = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00};
@@ -81,6 +84,18 @@ class S3StorageServiceTest {
                 .isInstanceOf(NotFoundException.class)
                 .extracting("code")
                 .isEqualTo("PHOTO_NOT_FOUND");
+    }
+
+    // #148: without s3:ListBucket, S3 answers 403 instead of 404 for a missing key. That is a setup
+    // error on our side, not a missing photo, so it stays an error and the log names the fix.
+    @Test
+    void loadDeniedByS3IsRethrownAndLogsTheMissingPermission(CapturedOutput output) {
+        S3Exception denied = (S3Exception)
+                S3Exception.builder().statusCode(403).message("Access Denied").build();
+        when(s3.getObjectAsBytes(any(GetObjectRequest.class))).thenThrow(denied);
+
+        assertThatThrownBy(() -> storage.load(KEY)).isSameAs(denied);
+        assertThat(output).contains("s3:ListBucket");
     }
 
     @Test

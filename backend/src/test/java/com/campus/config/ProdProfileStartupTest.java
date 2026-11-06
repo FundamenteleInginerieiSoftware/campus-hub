@@ -7,6 +7,7 @@ import com.campus.notification.service.SesNotificationService;
 import com.campus.storage.api.StorageService;
 import com.campus.storage.service.S3StorageService;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -40,5 +41,7 @@ class ProdProfileStartupTest {
     void prodUsesTheAwsAdapters() {
         assertThat(storage).isInstanceOf(S3StorageService.class);
         assertThat(notifications).isInstanceOf(SesNotificationService.class);
+        // #171: a proxy means Spring honours @Async on notifyUser, so e-mails don't block the caller.
+        assertThat(AopUtils.isAopProxy(notifications)).isTrue();
     }
 }
