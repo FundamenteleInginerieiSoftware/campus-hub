@@ -44,8 +44,11 @@ public class CategoryService {
         try {
             saved = categoryRepository.saveAndFlush(category);
         } catch (DataIntegrityViolationException ex) {
-            // Concurrent creates can both pass existsByNameIgnoreCase; the DB unique index stops the second with 409.
-            throw nameTaken(trimmedName);
+            // Check if the name was actually taken by a concurrent insert; otherwise rethrow (#167).
+            if (categoryRepository.existsByNameIgnoreCase(trimmedName)) {
+                throw nameTaken(trimmedName);
+            }
+            throw ex;
         }
 
         // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate name (#120).
@@ -67,8 +70,11 @@ public class CategoryService {
         try {
             saved = categoryRepository.saveAndFlush(category);
         } catch (DataIntegrityViolationException ex) {
-            // A concurrent create or rename can pass the check above; the DB unique index stops it with 409.
-            throw nameTaken(trimmedName);
+            // Check if the name was actually taken by a concurrent insert/update; otherwise rethrow (#167).
+            if (categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmedName, id)) {
+                throw nameTaken(trimmedName);
+            }
+            throw ex;
         }
 
         // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate name (#120).
