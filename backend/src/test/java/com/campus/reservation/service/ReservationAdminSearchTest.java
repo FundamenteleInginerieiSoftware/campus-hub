@@ -7,6 +7,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
@@ -73,6 +74,7 @@ class ReservationAdminSearchTest {
                 mock(CatalogApi.class),
                 mock(CurrentUser.class),
                 mock(AuditService.class),
+                mock(NotificationService.class),
                 clock);
     }
 

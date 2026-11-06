@@ -66,6 +66,7 @@ If any teammate accidentally violates these rules, the build breaks immediately 
 - **Liviu (Catalog):** Validates that new catalog endpoints and services remain completely decoupled from booking or incident logic.
 - **Stefania (Incidents & CI):** Ensures incident reporting interacts with assets purely via `CatalogApi` and notifies reassignment via `AssetDamagedEvent` without direct class imports.
 - **Calin (Reservations & Reassignment):** Maintains clear separation between the booking engine (`reservation`) and the strategy-based reassignment engine (`reassignment`).
+- **Shared Package Independence (`#156`):** Added `shared_modules_do_not_depend_on_feature_modules` in `ModuleBoundaryArchitectureTest` to guarantee that `com.campus.common..`, `com.campus.storage..`, and `com.campus.notification..` never import domain/service/repository/web classes from feature modules (`catalog`, `reservation`, `incident`, `reassignment`). (Note: `config` is excluded as `SecurityConfig` requires `UserApi`).
 
 ---
 

@@ -139,7 +139,8 @@ class AssetServiceTest {
 
     @Test
     void createRejectsDuplicateSerialOnConcurrentRace() {
-        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
+        // First check returns false, but concurrent insert causes the second check in the catch block to return true.
+        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false, true);
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
         when(assetRepository.saveAndFlush(any(Asset.class)))
@@ -152,6 +153,35 @@ class AssetServiceTest {
 
         assertEquals("SERIAL_NUMBER_TAKEN", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createRethrowsDataIntegrityViolationWhenSerialNotTaken() {
+        // Serial is NOT taken, meaning the DataIntegrityViolationException is a FK constraint failure (#167).
+        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        when(assetRepository.saveAndFlush(any(Asset.class)))
+                .thenThrow(new DataIntegrityViolationException("foreign key violation on category_id"));
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> assetService.create(
+                        new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", "ds1za-001", null, 1L, 2L)));
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createRejectsSerialNumberWhenLengthExpandsBeyondLimit() {
+        // 100 chars ending with 'ß'; in Locale.ROOT uppercase it expands to 101 chars ("SS") (#167).
+        String expandingSerial = "A".repeat(99) + "ß";
+
+        InvalidParameterException ex = assertThrows(
+                InvalidParameterException.class,
+                () -> assetService.create(new CreateAssetRequest("Scope", "DS1054Z", expandingSerial, null, 1L, 2L)));
+
+        assertEquals("INVALID_PARAMETER", ex.getCode());
+        verify(assetRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -186,18 +216,19 @@ class AssetServiceTest {
     }
 
     @Test
-    void updateRejectsRetiredAsset() {
+    void updateRejectsRetiredAssetWithoutQueryingForeignKeys() {
         Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
         retired.retire(EXPECTED_NOW);
         when(assetRepository.findWithDetailsById(6L)).thenReturn(Optional.of(retired));
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
-        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
 
         InvalidStateTransitionException ex = assertThrows(
                 InvalidStateTransitionException.class,
                 () -> assetService.update(6L, new UpdateAssetRequest("Updated Uno", "Arduino Uno R3", "Desc", 1L, 2L)));
 
         assertEquals("ASSET_RETIRED", ex.getCode());
+        // Category and labRoom must NOT be queried if the asset is already retired (#160).
+        verify(categoryRepository, never()).findById(any());
+        verify(labRoomRepository, never()).findById(any());
     }
 
     @Test

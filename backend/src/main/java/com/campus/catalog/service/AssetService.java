@@ -14,6 +14,7 @@ import com.campus.catalog.web.UpdateAssetRequest;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
@@ -78,6 +79,10 @@ public class AssetService {
     @Transactional
     public AssetResponse create(CreateAssetRequest request) {
         String normalizedSerial = request.serialNumber().trim().toUpperCase(Locale.ROOT);
+        // Guard against characters whose uppercase expands (e.g. 'ß' -> 'SS') exceeding VARCHAR(100) (#167).
+        if (normalizedSerial.length() > 100) {
+            throw new InvalidParameterException("Serial number must not exceed 100 characters");
+        }
         if (assetRepository.existsBySerialNumberIgnoreCase(normalizedSerial)) {
             throw serialTaken(normalizedSerial);
         }
@@ -92,9 +97,12 @@ public class AssetService {
         try {
             saved = assetRepository.saveAndFlush(asset);
         } catch (DataIntegrityViolationException ex) {
-            // Concurrent creates can both pass existsBySerialNumberIgnoreCase; the DB unique index stops the second
-            // with 409.
-            throw serialTaken(normalizedSerial);
+            // Check if the serial was actually taken by a concurrent insert; otherwise rethrow so unexpected
+            // FK or check constraint errors are not falsely reported as duplicate serial (#167).
+            if (assetRepository.existsBySerialNumberIgnoreCase(normalizedSerial)) {
+                throw serialTaken(normalizedSerial);
+            }
+            throw ex;
         }
 
         // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate serial (#120).
@@ -112,6 +120,11 @@ public class AssetService {
         Asset asset = assetRepository
                 .findWithDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
+
+        // Check retired status early before executing DB queries for category and lab room (#160).
+        if (asset.getStatus() == AssetStatus.RETIRED) {
+            throw new InvalidStateTransitionException("ASSET_RETIRED", "Retired asset cannot be modified");
+        }
 
         Category category = findCategoryOrThrow(request.categoryId());
         LabRoom labRoom = findLabRoomOrThrow(request.labRoomId());
