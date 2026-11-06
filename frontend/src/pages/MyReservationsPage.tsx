@@ -27,6 +27,8 @@ import {
   fetchAssetSummary,
   fetchMyReservations,
   fetchMyReservationSummary,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type Reservation,
   type ReservationStatus,
@@ -326,15 +328,26 @@ export default function MyReservationsPage() {
       render: (r) => {
         const canCancel = r.status === 'CONFIRMED'
         if (!canCancel) return null
+        const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
         return (
-          <Button
-            size="xs"
-            variant="light"
-            color="red"
-            onClick={() => handleStartCancel(r)}
+          <Tooltip
+            label="Students can only cancel before the reservation start time (Europe/Bucharest)."
+            disabled={!hasStartedInBucharest}
           >
-            Cancel
-          </Button>
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              // Not 'disabled': a disabled button swallows hover events, so the Mantine Tooltip would never show.
+              // data-disabled gives the same look; the click is ignored once the slot has started.
+              data-disabled={hasStartedInBucharest || undefined}
+              onClick={() => {
+                if (!hasStartedInBucharest) handleStartCancel(r)
+              }}
+            >
+              Cancel
+            </Button>
+          </Tooltip>
         )
       },
     },

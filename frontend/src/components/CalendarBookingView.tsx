@@ -26,6 +26,8 @@ import { useNavigate } from 'react-router'
 import {
   checkAvailability,
   createReservation,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type AvailabilityResponse,
   type Reservation,
@@ -71,11 +73,6 @@ function formatDateKey(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function parseDateKey(dateKey: string): Date {
-  const [y, m, d] = dateKey.split('-').map(Number)
-  return new Date(y, m - 1, d)
 }
 
 function toSlotDate(day: Date, timeStr: string): Date {
@@ -164,7 +161,7 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
  */
 export default function CalendarBookingView({ asset, onBack, onSuccess }: Props) {
   const navigate = useNavigate()
-  const [today] = useState(() => new Date())
+  const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
   const maxBookingDate = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14, today.getHours(), today.getMinutes(), today.getSeconds()), [today])
 
@@ -271,11 +268,11 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setCurrentMonday(prevMon)
 
     // Shift selectedDay back by 7 days in local time so it stays in the displayed week
-    const currSel = parseDateKey(selectedDay)
+    const currSel = parseCampusLocalDateTime(selectedDay)
     const prevSel = new Date(currSel)
     prevSel.setDate(currSel.getDate() - 7)
 
-    const firstValidDay = parseDateKey(initialSchedule.day)
+    const firstValidDay = parseCampusLocalDateTime(initialSchedule.day)
     const targetDay = prevSel >= firstValidDay ? prevSel : firstValidDay
     const targetKey = formatDateKey(targetDay)
     let targetTime = selectedStartTime
@@ -296,7 +293,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setCurrentMonday(nextMon)
 
     // Shift selectedDay forward by 7 days in local time and clamp against the 14-day horizon
-    const currSel = parseDateKey(selectedDay)
+    const currSel = parseCampusLocalDateTime(selectedDay)
     const nextSel = new Date(currSel)
     nextSel.setDate(currSel.getDate() + 7)
 
@@ -308,10 +305,13 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
 
   // Bug fixed: clicking "Today" on a weekend or after 19:30 previously selected 09:00 on today,
   // which immediately failed availability with OUTSIDE_OPENING_HOURS or BOOKING_IN_PAST.
-  // Fix: reuse initialSchedule so weekends and late evenings jump to the next valid weekday slot.
+  // Fix: recompute the schedule from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
   function handleToday() {
-    setCurrentMonday(initialSchedule.monday)
-    selectSlot(initialSchedule.day, initialSchedule.time)
+    const freshToday = nowInBucharest()
+    const schedule = getInitialSchedule(freshToday)
+    setToday(freshToday)
+    setCurrentMonday(schedule.monday)
+    selectSlot(schedule.day, schedule.time)
   }
 
   async function handleConfirmBooking() {
