@@ -19,4 +19,5 @@
 | 06 | [06-catalog-asset-search.md](06-catalog-asset-search.md) | Paginated asset search and filtering with `Specification` and `@EntityGraph` (#92) |
 | 07 | [07-catalog-audit-and-pagination-fixes.md](07-catalog-audit-and-pagination-fixes.md) | Fixes: Page offset bounds, audit error isolation, and error contract (#119, #120, #121) |
 | 08 | [08-catalog-optimizations-and-edge-cases.md](08-catalog-optimizations-and-edge-cases.md) | Catalog query optimizations, timestamp seconds, and constraint verification (#147, #160, #167, PR #192) |
-| 09 | `09-dev-catalog-seeder.md` | Development catalog seeder with multi-unit models for automated reassignment demos |
+| 09 | [09-dev-catalog-seeder.md](09-dev-catalog-seeder.md) | Development catalog seeder with multi-unit models for automated reassignment demos (#193) |
+| 10 | [10-catalog-frontend-pages.md](10-catalog-frontend-pages.md) | Equipment catalog, asset details, and admin inventory frontend pages |
