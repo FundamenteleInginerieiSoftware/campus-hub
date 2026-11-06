@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -55,6 +56,9 @@ public class User {
         this.fullName = fullName.trim();
         this.role = role;
         this.enabled = true;
-        this.createdAt = createdAt;
+        // Bug fixed (#134): LocalDateTime.now(clock) has nanoseconds, but PostgreSQL TIMESTAMP keeps only
+        // microseconds, so the saved user and the same row read back later had different times.
+        // Fix: keep whole seconds, the same format as every time in the API (#123 did this for reservations).
+        this.createdAt = createdAt.truncatedTo(ChronoUnit.SECONDS);
     }
 }

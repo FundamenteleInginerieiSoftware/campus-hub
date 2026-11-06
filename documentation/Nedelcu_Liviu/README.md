@@ -14,4 +14,7 @@
 | 01 | [01-shared-foundations.md](01-shared-foundations.md) | Shared error handling (`ProblemDetail`), `PageResponse`, and Audit/Storage/Notification interfaces & dev adapters (#22) |
 | 02 | [02-catalog-domain-and-api.md](02-catalog-domain-and-api.md) | Catalog tables, JPA entities, pessimistic booking lock, and `CatalogApi` facade (#24) |
 | 03 | [03-database-audit-service.md](03-database-audit-service.md) | PostgreSQL `audit_logs` migration and `DatabaseAuditService` (#64) |
-| 04 | [04-catalog-admin-crud.md](04-catalog-admin-crud.md) | Category, lab room, and asset admin CRUD, asset details, and retire flow (#66, #73) |
+| 04 | [04-catalog-admin-crud.md](04-catalog-admin-crud.md) | Category, lab room, and asset admin CRUD, asset details, and retire flow (#66, #73, #89) |
+| 05 | [05-local-storage-service.md](05-local-storage-service.md) | Local disk storage with magic-byte, size, and path-traversal security checks (#90) |
+| 06 | [06-catalog-asset-search.md](06-catalog-asset-search.md) | Paginated asset search and filtering with `Specification` and `@EntityGraph` (#92) |
+| 07 | `07-catalog-audit-and-pagination-fixes.md` | Fixes: Page offset bounds, audit error isolation, and error contract (#119, #120, #121) |

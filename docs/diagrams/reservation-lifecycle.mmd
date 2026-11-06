@@ -1,0 +1,18 @@
+stateDiagram-v2
+    [*] --> CONFIRMED: Student books slot (POST /api/v1/reservations)
+
+    CONFIRMED --> CHECKED_OUT: Admin checks out equipment (POST /admin/reservations/{id}/check-out)
+    CONFIRMED --> CANCELLED: Student or Admin cancels (POST /reservations/{id}/cancel)
+    CONFIRMED --> NO_SHOW: Scheduled job marks no-show (30m past start without checkout)
+    CONFIRMED --> CONFIRMED: Engine reassigns to substitute asset (AssetDamagedEvent)
+    CONFIRMED --> FORCE_CANCELLED: Engine force-cancels (no substitute available)
+
+    CHECKED_OUT --> RETURNED: Admin returns equipment on time (POST /admin/reservations/{id}/return)
+    CHECKED_OUT --> OVERDUE: Scheduled job marks overdue (end time passed without return)
+
+    OVERDUE --> RETURNED: Admin returns equipment late (POST /admin/reservations/{id}/return)
+
+    RETURNED --> [*]
+    CANCELLED --> [*]
+    FORCE_CANCELLED --> [*]
+    NO_SHOW --> [*]

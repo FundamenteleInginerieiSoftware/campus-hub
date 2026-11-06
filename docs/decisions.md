@@ -13,7 +13,8 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 |---|---|---|---|
 | 2026-10-21 | **Role split v2** (final) | ✅ | Matei: auth/security, build files, all AWS, admin reservations desk page. Liviu: catalog + shared services (errors, paging, audit, storage/notification interfaces + local versions). Calin: reservations + reassignment engine, `Clock`, ArchUnit. Stefania: incidents, user admin + `CurrentUser`, frontend lead, CI. Full table in `AGENTS.md` §1 |
 | 2026-10-21 | Each member builds the frontend pages of their own module | ✅ | Following Stefania's conventions; she reviews every frontend PR |
-| 2026-10-08 | Review buddies: **Matei ↔ Liviu**, **Calin ↔ Stefania** | ✅ | `.github/CODEOWNERS` requests owner + buddy automatically |
+| 2026-11-04 | **No more review buddies: anyone can review anyone's PR** | ✅ | Matei. 1 approval from any teammate is enough (ruleset: code owner review off); `.github/CODEOWNERS` requests all four of us on every PR. The 24h rule stays: the first one free picks it up. Code ownership (who writes what) is unchanged |
+| 2026-10-08 | ~~Review buddies: Matei ↔ Liviu, Calin ↔ Stefania~~ | ✅ | Replaced on 2026-11-04 (row above) |
 | 2026-10-08 | GitHub Flow: branch per issue, PR + 1 approval + green `ci`, **squash merge**, Conventional Commits | ✅ | Ruleset `protect-main` |
 | 2026-10-08 | All files removed from `main` (#10) and the project restarted | ✅ | Restart PRs: #12 (repo guides), #13 (Gradle skeleton), #14 (Matei's docs) |
 | – | Weekly meeting day/time, chat channel | ⏳ | Fill in at the next meeting |
@@ -44,7 +45,7 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 | Date | Decision | Status | Notes |
 |---|---|---|---|
 | 2026-10-23 | **AWS: one EC2 instance (Docker) behind CloudFront + RDS PostgreSQL 18**; no ECS, ALB or NAT gateway | ✅ | [ADR-002](adr/002-single-ec2-behind-cloudfront.md), diagram `docs/diagrams/aws-architecture.drawio`. Replaces ECS Fargate + ALB from the plan PDFs. ~$35/month at most, paid by the credits |
-| 2026-10-23 | In prod, the Spring Boot app also serves the React build (one Docker image, one origin) | 🟡 | ADR-002. Stefania: please confirm. Dev is unchanged (Vite proxy); Matei's Dockerfile runs `npm ci && npm run build` and copies `frontend/dist` into the image |
+| 2026-10-23 | In prod, the Spring Boot app also serves the React build (one Docker image, one origin) | ✅ | ADR-002, confirmed by Stefania on 2026-11-04 (issue #105). Dev is unchanged (Vite proxy); Matei's Dockerfile runs `npm ci && npm run build` and copies `frontend/dist` into the image |
 | 2026-10-23 | Prod secrets in **SSM Parameter Store** `SecureString` (`/campus/*`), not Secrets Manager | ✅ | [ADR-003](adr/003-ssm-parameter-store-for-secrets.md). Free; no rotation (documented limitation) |
 | 2026-10-23 | **Local-first:** everyone works locally; AWS only for deploys (W7–W9) and the demo, all through Terraform | ✅ | [ADR-001](adr/001-local-first.md) |
 | 2026-10-23 | AWS account stays on the **Free plan** ($100 credits until 17 Mar 2027), no AWS Organizations / Identity Center; budget alerts $5 / $20 / $40 | ✅ | [ADR-005](adr/005-aws-account-free-plan.md). Only Matei has AWS access |

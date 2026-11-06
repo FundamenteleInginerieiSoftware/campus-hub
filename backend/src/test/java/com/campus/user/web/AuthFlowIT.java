@@ -54,6 +54,31 @@ class AuthFlowIT {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
+    // #116: the browser still sends the old token from localStorage when the user logs in again.
+    @Test
+    void loginWorksWhileAnExpiredTokenIsStillSent() throws Exception {
+        register("stale@campus.test");
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .header("Authorization", "Bearer an-old-expired-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\": \"stale@campus.test\", \"password\": \"secret123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    // #165: a phone keyboard or a copy-paste often adds a space around the email.
+    @Test
+    void registerTrimsSpacesAroundTheEmail() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(" Spaced@Campus.test ")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("spaced@campus.test"));
+
+        login("spaced@campus.test");
+    }
+
     @Test
     void sameEmailTwiceIs409() throws Exception {
         register("twice@campus.test");

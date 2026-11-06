@@ -1,0 +1,57 @@
+sequenceDiagram
+    autonumber
+    actor User as Student / Reporter
+    participant Inc as IncidentService (Stefania)
+    participant Pub as ApplicationEventPublisher (Spring)
+    participant List as LocalAssetDamagedListener (Calin)
+    participant Reass as ReassignmentService (Calin)
+    participant Cat as CatalogApi (Liviu)
+    participant Res as ReservationApi / ReservationService (Calin)
+    participant Strat as SubstituteStrategy (Calin)
+    participant Log as ReassignmentLogRepository (Calin)
+    participant Notif as NotificationService (Liviu)
+
+    User->>Inc: reportIncident(assetId, description, severity)
+    activate Inc
+    Inc->>Cat: markUnderMaintenance(assetId)
+    Inc->>Pub: publishEvent(AssetDamagedEvent)
+    Note over Inc,Pub: Incident transaction commits
+    deactivate Inc
+
+    Pub->>List: on(AssetDamagedEvent) (AFTER_COMMIT)
+    activate List
+    List->>Reass: handle(event)
+    deactivate List
+
+    activate Reass
+    Note over Reass: Orchestrates per-booking execution
+    Reass->>Cat: getAsset(event.assetId)
+    Cat-->>Reass: damaged AssetSummary
+    Reass->>Res: findUpcomingActiveByAsset(event.assetId, now)
+    Res-->>Reass: List<ReservationSummary>
+
+    loop For each upcoming booking (chronological)
+        Note over Reass: ReassignmentBookingProcessor (@Transactional, REQUIRES_NEW)
+        Reass->>Strat: findSubstitute(booking, damaged)
+        activate Strat
+        Note over Strat: Strategy 1: SameModelStrategy (@Order 1)<br/>Strategy 2: SameCategoryStrategy (@Order 2)
+        Strat->>Cat: findAvailableByModel(...) / findAvailableByCategory(...)
+        Cat-->>Strat: candidate assets
+        Strat->>Res: isAssetFree(candidateId, start, end, bookingId)
+        Res-->>Strat: boolean free
+        Strat-->>Reass: Optional<AssetSummary>
+        deactivate Strat
+
+        alt Substitute asset found
+            Reass->>Res: moveToAsset(bookingId, candidateId, reason)
+            Reass->>Log: save(ReassignmentLog[outcome=REASSIGNED, strategy=...])
+            Note over Reass: Booking transaction commits
+            Reass->>Notif: notifyUser(userId, "Reservation moved to substitute asset")
+        else No substitute available
+            Reass->>Res: forceCancel(bookingId, reason)
+            Reass->>Log: save(ReassignmentLog[outcome=FORCE_CANCELLED, reason=...])
+            Note over Reass: Booking transaction commits
+            Reass->>Notif: notifyUser(userId, "Reservation cancelled due to damaged asset")
+        end
+    end
+    deactivate Reass

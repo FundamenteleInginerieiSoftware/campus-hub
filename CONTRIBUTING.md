@@ -18,7 +18,7 @@ Short version of the team rules (handbook §7 Git, §8 database, §9 code, §13 
 | 4. Before pushing | `cd backend && ./gradlew spotlessApply build` (local PostgreSQL must be running) |
 | 5. Sync daily | `git fetch && git rebase origin/main`, then `git push --force-with-lease` (**only on your own branch**) |
 | 6. Open a PR | Fill in the template, link the issue (`Closes #12`). Keep it **under ~400 changed lines**. |
-| 7. Review | Your review buddy reviews **within 24h**. Ask questions, don't nitpick formatting (Spotless does that). |
+| 7. Review | Any teammate reviews **within 24h** (GitHub requests everyone; the first one free picks it up). Ask questions, don't nitpick formatting (Spotless does that). |
 | 8. Merge | **Squash and merge** after 1 approval. The branch is deleted automatically. |
 
 ### Branch names
@@ -49,7 +49,7 @@ Pairing? The person who typed commits and adds `Co-authored-by: Name <email>`.
 
 ## 2. Who owns what
 
-The owner (or their review buddy) must approve changes in their area. `.github/CODEOWNERS` requests them automatically.
+Anyone can review and approve any PR (1 approval is enough). Ownership below is about who **writes** the code, not who reviews it.
 
 | Path | Owner | Others may… |
 |---|---|---|

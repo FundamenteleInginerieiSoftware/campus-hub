@@ -1,6 +1,7 @@
 package com.campus.reassignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -8,13 +9,16 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
@@ -34,9 +38,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @ExtendWith(MockitoExtension.class)
 class ReassignmentServiceTest {
@@ -46,7 +53,10 @@ class ReassignmentServiceTest {
     private static final Long INCIDENT_ID = 100L;
     private static final Long USER_ID = 42L;
 
-    private final Clock clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    // Fixed clock with nanos: 2026-11-02T08:00:00.123456789Z -> In Europe/Bucharest (UTC+2 in winter) this is
+    // 2026-11-02T10:00:00.123456789 (Monday)
+    private final Clock clock =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00.123456789Z"), ZoneId.of("Europe/Bucharest"));
 
     @Mock
     private CatalogApi catalogApi;
@@ -76,13 +86,15 @@ class ReassignmentServiceTest {
 
     @BeforeEach
     void setUp() {
-        reassignmentService = new ReassignmentService(
-                catalogApi,
+        PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        ReassignmentBookingProcessor bookingProcessor = new ReassignmentBookingProcessor(
                 reservationApi,
-                notificationService,
                 reassignmentLogRepository,
                 List.of(primaryStrategy, secondaryStrategy),
-                clock);
+                clock,
+                transactionManager);
+        reassignmentService = new ReassignmentService(
+                catalogApi, reservationApi, notificationService, bookingProcessor, reassignmentLogRepository, clock);
     }
 
     @Test
@@ -96,7 +108,7 @@ class ReassignmentServiceTest {
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
                 .thenReturn(List.of(booking));
-        when(primaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.of(substituteAsset));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(primaryStrategy.name()).thenReturn("SameModelStrategy");
         when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
                 .thenReturn(true);
@@ -104,13 +116,17 @@ class ReassignmentServiceTest {
         reassignmentService.handle(event);
 
         verify(reservationApi).moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
-        verify(reassignmentLogRepository)
-                .save(argThat(log -> log.getIncidentId().equals(INCIDENT_ID)
-                        && log.getReservationId().equals(1L)
-                        && log.getFromAssetId().equals(DAMAGED_ASSET_ID)
-                        && log.getToAssetId().equals(SUBSTITUTE_ASSET_ID)
-                        && log.getOutcome() == ReassignmentOutcome.REASSIGNED
-                        && log.getStrategy().equals("SameModelStrategy")));
+        ArgumentCaptor<ReassignmentLog> captor = ArgumentCaptor.forClass(ReassignmentLog.class);
+        verify(reassignmentLogRepository).save(captor.capture());
+        ReassignmentLog savedLog = captor.getValue();
+        assertThat(savedLog.getIncidentId()).isEqualTo(INCIDENT_ID);
+        assertThat(savedLog.getReservationId()).isEqualTo(1L);
+        assertThat(savedLog.getFromAssetId()).isEqualTo(DAMAGED_ASSET_ID);
+        assertThat(savedLog.getToAssetId()).isEqualTo(SUBSTITUTE_ASSET_ID);
+        assertThat(savedLog.getOutcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
+        assertThat(savedLog.getStrategy()).isEqualTo("SameModelStrategy");
+        assertThat(savedLog.getCreatedAt().getNano()).isZero();
+        assertThat(savedLog.getCreatedAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0, 0));
         verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Reassigned"), contains("Substitute Scope"));
     }
 
@@ -125,7 +141,7 @@ class ReassignmentServiceTest {
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
                 .thenReturn(List.of(booking));
-        when(primaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.of(substituteAsset));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(primaryStrategy.name()).thenReturn("SameModelStrategy");
         when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
                 .thenReturn(true);
@@ -152,17 +168,87 @@ class ReassignmentServiceTest {
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
                 .thenReturn(List.of(booking));
-        when(primaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.of(substituteAsset));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         doThrow(new SubstituteNoLongerFreeException("No longer free"))
                 .when(reservationApi)
                 .moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
 
-        when(secondaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.of(fallbackSubstitute));
+        when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(fallbackSubstitute));
         when(secondaryStrategy.name()).thenReturn("SameCategoryStrategy");
         when(reservationApi.moveToAsset(1L, 30L, "Incident #" + INCIDENT_ID)).thenReturn(true);
 
         reassignmentService.handle(event);
 
+        verify(reservationApi).moveToAsset(1L, 30L, "Incident #" + INCIDENT_ID);
+        verify(reassignmentLogRepository)
+                .save(argThat(log -> log.getToAssetId().equals(30L)
+                        && log.getOutcome() == ReassignmentOutcome.REASSIGNED
+                        && log.getStrategy().equals("SameCategoryStrategy")));
+    }
+
+    @Test
+    @DisplayName("Tries remaining candidates of the same strategy before falling back to next strategy (#149)")
+    void triesRemainingCandidatesOfSameStrategyBeforeFallingBack() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+        AssetSummary secondSameModelSubstitute =
+                new AssetSummary(25L, "Second Same-Model Scope", "DS1054Z", 1L, 100L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.findCandidates(booking, damagedAsset))
+                .thenReturn(List.of(substituteAsset, secondSameModelSubstitute));
+        when(primaryStrategy.name()).thenReturn("SameModelStrategy");
+
+        doThrow(new SubstituteNoLongerFreeException("Candidate 20 raced"))
+                .when(reservationApi)
+                .moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
+        when(reservationApi.moveToAsset(1L, 25L, "Incident #" + INCIDENT_ID)).thenReturn(true);
+
+        reassignmentService.handle(event);
+
+        verify(reservationApi).moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
+        verify(reservationApi).moveToAsset(1L, 25L, "Incident #" + INCIDENT_ID);
+        verify(secondaryStrategy, never()).findCandidates(any(), any());
+        verify(reassignmentLogRepository)
+                .save(argThat(log -> log.getToAssetId().equals(25L)
+                        && log.getOutcome() == ReassignmentOutcome.REASSIGNED
+                        && log.getStrategy().equals("SameModelStrategy")));
+        verify(notificationService)
+                .notifyUser(eq(USER_ID), eq("Reservation Reassigned"), contains("Second Same-Model Scope"));
+    }
+
+    @Test
+    @DisplayName(
+            "Candidate that threw in primary strategy is not retried if present in secondary strategy candidates (#149)")
+    void candidateAlreadyAttemptedInPrimaryStrategyIsSkippedInSecondaryStrategy() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+        AssetSummary fallbackSubstitute =
+                new AssetSummary(30L, "Category Substitute", "DS2000", 1L, 100L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
+        doThrow(new SubstituteNoLongerFreeException("Asset 20 busy"))
+                .when(reservationApi)
+                .moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
+
+        when(secondaryStrategy.findCandidates(booking, damagedAsset))
+                .thenReturn(List.of(substituteAsset, fallbackSubstitute));
+        when(secondaryStrategy.name()).thenReturn("SameCategoryStrategy");
+        when(reservationApi.moveToAsset(1L, 30L, "Incident #" + INCIDENT_ID)).thenReturn(true);
+
+        reassignmentService.handle(event);
+
+        // Candidate 20 was tried only once (in primary strategy) and skipped in secondary strategy
+        verify(reservationApi, times(1)).moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
         verify(reservationApi).moveToAsset(1L, 30L, "Incident #" + INCIDENT_ID);
         verify(reassignmentLogRepository)
                 .save(argThat(log -> log.getToAssetId().equals(30L)
@@ -181,8 +267,8 @@ class ReassignmentServiceTest {
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
                 .thenReturn(List.of(booking));
-        when(primaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.empty());
-        when(secondaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.empty());
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
+        when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(reservationApi.forceCancel(1L, "Equipment failure, incident #" + INCIDENT_ID))
                 .thenReturn(true);
 
@@ -215,8 +301,8 @@ class ReassignmentServiceTest {
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
                 .thenReturn(List.of(laterBooking, earlierBooking));
 
-        when(primaryStrategy.findSubstitute(any(), any())).thenReturn(Optional.empty());
-        when(secondaryStrategy.findSubstitute(any(), any())).thenReturn(Optional.empty());
+        when(primaryStrategy.findCandidates(any(), any())).thenReturn(List.of());
+        when(secondaryStrategy.findCandidates(any(), any())).thenReturn(List.of());
 
         reassignmentService.handle(event);
 
@@ -236,7 +322,7 @@ class ReassignmentServiceTest {
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
                 .thenReturn(List.of(booking));
-        when(primaryStrategy.findSubstitute(booking, damagedAsset)).thenReturn(Optional.of(substituteAsset));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
                 .thenReturn(false);
 
@@ -244,6 +330,47 @@ class ReassignmentServiceTest {
 
         verify(reassignmentLogRepository, never()).save(any());
         verify(notificationService, never()).notifyUser(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Exception during single booking reassignment skips that booking and continues processing others")
+    void exceptionOnOneBookingContinuesProcessingRemainingBookings() {
+        LocalDateTime start1 = LocalDateTime.of(2026, 11, 2, 12, 0);
+        LocalDateTime start2 = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime start3 = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary b1 = new ReservationSummary(
+                1L, 10L, DAMAGED_ASSET_ID, start1, start1.plusHours(2), ReservationStatus.CONFIRMED);
+        ReservationSummary b2 = new ReservationSummary(
+                2L, 20L, DAMAGED_ASSET_ID, start2, start2.plusHours(2), ReservationStatus.CONFIRMED);
+        ReservationSummary b3 = new ReservationSummary(
+                3L, 30L, DAMAGED_ASSET_ID, start3, start3.plusHours(2), ReservationStatus.CONFIRMED);
+
+        ReassignmentBookingProcessor mockProcessor = mock(ReassignmentBookingProcessor.class);
+        ReassignmentService service = new ReassignmentService(
+                catalogApi, reservationApi, notificationService, mockProcessor, reassignmentLogRepository, clock);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+                .thenReturn(List.of(b1, b2, b3));
+
+        when(mockProcessor.processSingleBooking(eq(event), eq(b1), eq(damagedAsset)))
+                .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
+                        ReassignmentOutcome.REASSIGNED, "Sub 1")));
+        when(mockProcessor.processSingleBooking(eq(event), eq(b2), eq(damagedAsset)))
+                .thenThrow(new ObjectOptimisticLockingFailureException("Stale version on b2", new Throwable()));
+        when(mockProcessor.processSingleBooking(eq(event), eq(b3), eq(damagedAsset)))
+                .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
+                        ReassignmentOutcome.REASSIGNED, "Sub 3")));
+
+        service.handle(event);
+
+        verify(mockProcessor).processSingleBooking(eq(event), eq(b1), eq(damagedAsset));
+        verify(mockProcessor).processSingleBooking(eq(event), eq(b2), eq(damagedAsset));
+        verify(mockProcessor).processSingleBooking(eq(event), eq(b3), eq(damagedAsset));
+
+        verify(notificationService).notifyUser(eq(10L), eq("Reservation Reassigned"), contains("Sub 1"));
+        verify(notificationService).notifyUser(eq(30L), eq("Reservation Reassigned"), contains("Sub 3"));
+        verify(notificationService, never()).notifyUser(eq(20L), any(), any());
     }
 
     @Test
@@ -284,5 +411,13 @@ class ReassignmentServiceTest {
         assertThat(item.outcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
         assertThat(item.strategy()).isEqualTo("SameModelStrategy");
         assertThat(item.createdAt()).isEqualTo(now);
+    }
+
+    @Test
+    @DisplayName("getLogs rejects huge page offset overflow (#150)")
+    void getLogsRejectsHugePageOffsetOverflow() {
+        assertThatThrownBy(() -> reassignmentService.getLogs(999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
     }
 }

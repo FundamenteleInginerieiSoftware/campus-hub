@@ -51,7 +51,7 @@ public class AuthService {
     /** Creates a STUDENT account. Throws 409 EMAIL_TAKEN if the email is already used, whatever the letter case. */
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmailIgnoreCase(request.email().trim())) {
+        if (userRepository.existsByEmailIgnoreCase(request.email())) {
             throw emailTaken();
         }
         // Only the BCrypt hash is stored, never the password itself.

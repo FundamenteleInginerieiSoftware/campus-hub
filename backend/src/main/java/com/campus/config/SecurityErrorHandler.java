@@ -11,14 +11,16 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.firewall.RequestRejectedException;
+import org.springframework.security.web.firewall.RequestRejectedHandler;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Writes 401 and 403 as the same ProblemDetail JSON that Liviu's GlobalExceptionHandler produces
+ * Writes 401, 403 and firewall 400s as the same ProblemDetail JSON that Liviu's GlobalExceptionHandler produces
  * (docs/api-contract.md section 4). These errors happen in the security filters, before the request
  * reaches a controller, so his handler never sees them. Without this class the body would be empty.
  */
-class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDeniedHandler {
+class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDeniedHandler, RequestRejectedHandler {
 
     private final JsonMapper jsonMapper;
 
@@ -44,6 +46,21 @@ class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDeniedHand
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException e)
             throws IOException {
         write(request, response, HttpStatus.FORBIDDEN, "FORBIDDEN", "You are not allowed to do this");
+    }
+
+    // Bug fixed (#118): Spring Security's firewall blocks suspicious URLs (";", "..", encoded "/")
+    // before any other filter runs. Its default handler sent a bare 400 that Spring Boot turned into
+    // its own JSON without our "code". Spring uses a RequestRejectedHandler bean instead when there
+    // is one (SecurityConfig defines it), so these now get the same ProblemDetail as 401/403.
+    @Override
+    public void handle(HttpServletRequest request, HttpServletResponse response, RequestRejectedException e)
+            throws IOException {
+        write(
+                request,
+                response,
+                HttpStatus.BAD_REQUEST,
+                "REQUEST_REJECTED",
+                "The address contains characters that are not allowed");
     }
 
     private void write(

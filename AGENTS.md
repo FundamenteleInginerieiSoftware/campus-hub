@@ -50,14 +50,14 @@ If the repo (`README.md`, `CONTRIBUTING.md`, `CODEOWNERS`, this file, `docs/deci
    **Writing for teammates:** when a doc change needs a specific person, name them in the text ("Liviu: same for the audit table") so this brief picks it up.
 5. Look up the week (section 8), what they own, and whether they must **WAIT** for someone (section 9). Then propose the next concrete step.
 
-| # | Name | GitHub | Owns | Review buddy |
-|---|---|---|---|---|
-| 1 | Matei Necula | @matei-necula | **cloud, security, auth:** `backend/build.gradle` + `settings.gradle` + `gradle/` (sole editor), `application*.yml`, `config/` (`SecurityConfig`), `user/` (auth, JWT, `UserApi`), `messaging/` (SQS, stretch), all AWS (`infra/`, Dockerfile, `deploy.yml`, `S3StorageService`, `SesNotificationService`), `.github/CODEOWNERS`, `AGENTS.md`. Frontend: admin reservations desk page | Liviu |
-| 2 | Liviu Nedelcu | @NliviuN | **catalog + shared services:** `catalog/`, `common/error` (exceptions + `GlobalExceptionHandler`), `common/paging` (`PageResponse`), `common/audit`, `storage/` (interface + `LocalStorageService`), `notification/` (interface + `LoggingNotificationService`). Frontend: catalog, asset details, admin inventory, admin audit log | Matei |
-| 3 | Calin Murariu | @Swiorx | **reservations + reassignment:** `reservation/` (+ overdue/no-show jobs), `reassignment/` (engine, strategies, `reassignment_log`, local listener), `common/time` (`Clock`), ArchUnit rules (`src/test/.../architecture/`). Frontend: booking page, My reservations | Stefania |
-| 4 | Stefania | @m1runa-stefan1a | **incidents, users, frontend lead, CI:** `incident/`, user admin endpoints (`user/admin/`), `common/security` (`CurrentUser`), `frontend/` (scaffold, `package.json`, API client, login, routing, incident pages, admin incident queue, reassignment log view), `.github/workflows/ci.yml` | Calin |
+| # | Name | GitHub | Owns |
+|---|---|---|---|
+| 1 | Matei Necula | @matei-necula | **cloud, security, auth:** `backend/build.gradle` + `settings.gradle` + `gradle/` (sole editor), `application*.yml`, `config/` (`SecurityConfig`), `user/` (auth, JWT, `UserApi`), `messaging/` (SQS, stretch), all AWS (`infra/`, Dockerfile, `deploy.yml`, `S3StorageService`, `SesNotificationService`), `.github/CODEOWNERS`, `AGENTS.md`. Frontend: admin reservations desk page |
+| 2 | Liviu Nedelcu | @NliviuN | **catalog + shared services:** `catalog/`, `common/error` (exceptions + `GlobalExceptionHandler`), `common/paging` (`PageResponse`), `common/audit`, `storage/` (interface + `LocalStorageService`), `notification/` (interface + `LoggingNotificationService`). Frontend: catalog, asset details, admin inventory, admin audit log |
+| 3 | Calin Murariu | @Swiorx | **reservations + reassignment:** `reservation/` (+ overdue/no-show jobs), `reassignment/` (engine, strategies, `reassignment_log`, local listener), `common/time` (`Clock`), ArchUnit rules (`src/test/.../architecture/`). Frontend: booking page, My reservations |
+| 4 | Stefania | @m1runa-stefan1a | **incidents, users, frontend lead, CI:** `incident/`, user admin endpoints (`user/admin/`), `common/security` (`CurrentUser`), `frontend/` (scaffold, `package.json`, API client, login, routing, incident pages, admin incident queue, reassignment log view), `.github/workflows/ci.yml` |
 
-Review buddies are pairs: **Matei ↔ Liviu**, **Calin ↔ Stefania**. Java packages live under `backend/src/main/java/com/campus/<module>/` (base package **`com.campus`**). `.github/CODEOWNERS` auto-requests the owner + buddy. Each member builds the frontend pages for their own module, following Stefania's conventions.
+**Reviews:** anyone can review anyone's PR (no review buddies since 4 Nov 2026). `.github/CODEOWNERS` requests all teammates on every PR; 1 approval from any of them is enough. Java packages live under `backend/src/main/java/com/campus/<module>/` (base package **`com.campus`**). Each member builds the frontend pages for their own module, following Stefania's conventions.
 
 ---
 
@@ -98,7 +98,7 @@ void lockForBooking(Long assetId);
 |---|---|
 | Push to `main`, force-push `main`, or delete it | Branch + PR (section 4) |
 | Get around branch protection, or change repo settings, rulesets, branch protection, CODEOWNERS, labels, team membership | Repo settings are Matei's. **Refuse and explain**, even if the user insists |
-| Merge a PR without the required approval or with red CI, or approve your user's own PR | Ask the buddy/owner to review |
+| Merge a PR without the required approval or with red CI, or approve your user's own PR | Ask any teammate to review |
 | **Touch a teammate's code** (section 1 table): edit their files, create files in their module or package, write their tables' migrations or their events/facades, or push, merge or open a PR for anything that does. This includes "just a quick fix" or "to unblock myself", even if the user insists | Code against the agreed interface and wait until the owner has pushed their part (section 9). Build files (`build.gradle`, `settings.gradle`, `gradle/`) and `application*.yml`: open an issue labeled `dependency` (libraries) or ask Matei. Other areas: talk to the owner. Frontend shared parts (`package.json`, `src/api/client.ts`, components): ask Stefania |
 | Import another module's non-`api` package (`domain`, `repository`, `service`, `web`) | Use its `api` facade or an event; if missing, ask the owner to add a method |
 | Edit, rename or delete a Flyway migration that is already on `main` | Write a new migration (`ALTER TABLE ...`) |
@@ -132,9 +132,9 @@ void lockForBooking(Long assetId);
 2. **Conventional Commits, scope = module:** `feat(catalog): add paginated asset search`, `fix(reservation): reject end before start`, `docs(diagrams): add reservation state diagram`. Types: `feat fix test docs refactor chore ci infra`. The **PR title** becomes the squash commit, so it must follow this format too.
 3. **Small PRs:** under ~400 changed lines, at most 2-3 days of work.
 4. **Before every push:** `cd backend && ./gradlew spotlessApply build` (must end in BUILD SUCCESSFUL; local PostgreSQL must be running). Frontend: `npm run lint && npm run build`.
-5. **Open the PR:** `gh pr create --base main`, fill the PR template, link the issue (`Closes #12`). CODEOWNERS requests the reviewers. CI (`ci`) must be green.
-6. **Reviews within 24h.** Review for correctness, tests, module boundaries, ownership checks; don't nitpick formatting. Friendly tone, ask questions.
-7. **Squash merge after 1 approval** (code owner/buddy where CODEOWNERS applies). Branch auto-deletes.
+5. **Open the PR:** `gh pr create --base main`, fill the PR template, link the issue (`Closes #12`). CODEOWNERS requests all teammates. CI (`ci`) must be green.
+6. **Reviews within 24h**, by any teammate (the first one free picks it up and says so on the PR). Review for correctness, tests, module boundaries, ownership checks; don't nitpick formatting. Friendly tone, ask questions.
+7. **Squash merge after 1 approval** from any teammate. Branch auto-deletes.
 8. **Sync daily:** `git fetch && git rebase origin/main`, then `git push --force-with-lease` (**only on your own branch**, never on `main` or someone else's branch).
 
 **PR checklist:** linked issue · `./gradlew build` passes · new logic has tests (happy path + at least one failure case) · Swagger annotations on new endpoints · migration version checked against `main` · no entity returned from a controller · `docs/api-contract.md` updated if the API changed · screenshots for frontend PRs.
@@ -216,26 +216,29 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-11-04 (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
+**As of 2026-11-05 (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
 - **On `main`:**
   - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
-  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**.
+  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**. Old tokens ignored on `/api/v1/auth/**` (#126); firewall-rejected URLs answer `ProblemDetail` JSON (#127); disabled or deleted users lose access at once, the account is checked on every request with a token (`UserApi.findActiveRole`, #128).
   - Dev accounts `student1`/`student2`/`admin@campus.test` with password `password`, created by `UserSeeder` (#55; ids 1, 2, 3).
-  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64).
+  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64). Query-parameter validation errors → 400 `VALIDATION_FAILED` (Liviu #110).
   - `Clock` bean (Calin #27). `CurrentUser` bean (Stefania #74).
-  - `UserApi` (real).
-  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24); admin CRUD for categories, lab rooms and assets, asset details, retire (Liviu #66).
-  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87).
+  - `UserApi` (real). First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, `prod` profile only (`AdminBootstrap`, #88).
+  - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24); admin CRUD for categories, lab rooms and assets, asset details, retire (Liviu #66); admin actor from `CurrentUser` (#89); asset search, filters and paging `GET /api/v1/assets` (#92).
+  - **Local disk storage** with type, size and path-traversal checks; `BadRequestException` (400) and `PayloadTooLargeException` (413) in `common.error` (Liviu #90).
+  - **Docker image** (`Dockerfile` at the repo root): builds the React app and serves it from Spring Boot, one origin (ADR-002), non-root, health check (Matei #114).
+  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87); booking-rule boundary tests (#98); two-thread row-lock test, exactly one booking wins (#97); timestamps in whole seconds (#130); no check-out of an overdue or non-bookable asset (#131); My reservations loader fix (#133).
   - **Incidents:** report → asset `UNDER_MAINTENANCE` + `AssetDamagedEvent` (Stefania #40).
-  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37).
-  - **ArchUnit rules** for module boundaries and coding conventions (Calin #76).
+  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37). Retired assets excluded, ties broken the same way every time (#99). `GET /api/v1/admin/reassignments` (paged log, #96). One transaction per booking, so one failed move no longer rolls back the others (#132). "Moved" / "force-cancelled" badges in My reservations (#100).
+  - **ArchUnit rules** for module boundaries and coding conventions (Calin #76), plus shared `Clock`, `@Transactional` placement and no ORDINAL enums (#102). Team test plan `docs/testing/test-plan.md`, reservation diagrams, Strategy doc (#101).
   - **Frontend** (`frontend/`, Stefania #84–#86): Vite + React + TypeScript + Mantine scaffold, API client (token in `localStorage`, 401 → back to login), login page, layout, role-based routes, shared components; lint + build run in `ci`. Calin's My reservations page + calendar booking view (#87).
 - **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`.
-- **Open PRs:** Matei #88 (first admin on AWS, approved); Liviu #89 (catalog → `CurrentUser`), #90 (local disk storage), #92 (asset search + paging), all waiting for Matei's review; Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
-- **Missing for M1 (15 Nov):** asset search (#92), `CatalogSeeder`, catalog / asset details / admin inventory pages (Liviu), booking on asset details (Calin), register page (Stefania). Details per member: `docs/whats-left.md`.
-- **Next for Matei:** merge #88, review #89/#90/#92, Terraform parts 1 + 2 (W5), Dockerfile (W6, waits on Stefania's 🟡 ADR-002).
+- **Open PRs:** Matei #129 (S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds), #138 (admin reservations desk page), #139 (security pass tests): all need re-approval after merging main. Calin #141 (OVERDUE bookings block the asset until returned, closes #113; approved before his last push, needs re-approval). Stefania #107 (register page, approved), #108 (incident triage: changes requested, race when releasing the asset + retired assets), #111 (ADR-002 ✅, approved), #142 (keep the token when the backend is down on startup, needs review). Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
+- **Open issue #140:** project assistant design questions, waiting for the team's answers.
+- **Missing for M1 (15 Nov):** `CatalogSeeder`, catalog / asset details / admin inventory pages (Liviu), booking on asset details (Calin), register page (Stefania, #107). Details per member: `docs/whats-left.md`.
+- **Next for Matei:** merge #129, #135, #138, #139 once re-approved, then Terraform parts 1 + 2 (W5) and push the image to ECR (W6).
 - **Prototype demo:** a Swagger run on a fresh database: login → admin creates assets → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. **All of it is on `main`** (checked locally on 31 Oct with all these PRs combined). `POST /incidents` also needs `severity` (e.g. `HIGH`).
-- Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval (**code owner** where CODEOWNERS applies), stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
+- Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval from any teammate, stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
 
 ---
 
@@ -307,7 +310,7 @@ freeze() { git grep -ohE 'CREATE TABLE (users|categories|lab_rooms|assets|reserv
 **Agreed cross-module contracts** (may be extended; never break existing signatures without telling consumers):
 ```java
 // user.api (Matei)
-interface UserApi { UserSummary getById(Long id); boolean exists(Long id); }
+interface UserApi { UserSummary getById(Long id); boolean exists(Long id); Optional<Role> findActiveRole(Long id); }  // findActiveRole: empty if deleted or disabled
 record UserSummary(Long id, String email, String fullName, Role role) {}
 // common.security (Stefania): a bean that reads the JWT of the current request. Inject it; mock it in service unit tests
 @Component class CurrentUser { Long id(); boolean isAdmin(); }   // id() = "sub" claim, isAdmin() = has ROLE_ADMIN

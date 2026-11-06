@@ -29,6 +29,9 @@ Each document is structured in two parts:
 | 08 | [`08-frontend-reservations-and-booking.md`](./08-frontend-reservations-and-booking.md) | Frontend Reservations & Booking Calendar | My Reservations page, Google Calendar week view, 20:00 closing rule, integration guide for Liviu |
 | 09 | [`09-admin-reassignment-logs.md`](./09-admin-reassignment-logs.md) | Admin Reassignment Logs Endpoint | `GET /api/v1/admin/reassignments`, audit trail pagination, `ReassignmentLogResponse`, unblocking frontend logs |
 | 10 | [`10-concurrency-pessimistic-locking.md`](./10-concurrency-pessimistic-locking.md) | Multi-Thread Concurrency & Row Locking | Pessimistic `SELECT FOR UPDATE`, `ReservationConcurrencyIT`, preventing double booking |
+| 11 | [`11-strategy-pattern-design.md`](./11-strategy-pattern-design.md) | Strategy Pattern Design & Architecture | GoF Strategy pattern deep dive, Spring `@Order` injection, OCP extensibility, tie-breaking, defense Q&A |
+| 12 | [`12-quality-assurance-and-ci-architecture-tests.md`](./12-quality-assurance-and-ci-architecture-tests.md) | Quality Assurance & CI Architecture Rules | Automated ArchUnit quality gates, shared Clock enforcement, transactional boundaries, seeder/listener test expansion |
+| 13 | [`13-frontend-caching-and-cancel-guards.md`](./13-frontend-caching-and-cancel-guards.md) | Frontend Asset Cache & Cancel Guards | `fetchedAssetIdsRef` deduplication, pre-start cancellation guard, stale booking error reset |
 
 ---
 
@@ -47,4 +50,4 @@ Each document is structured in two parts:
   - `ReassignmentLog` entity and repository
   - `SubstituteStrategy` interface, `SameModelStrategy` & `SameCategoryStrategy`
   - Event listener `LocalAssetDamagedListener` on `AssetDamagedEvent`
-  - Isolated transaction engine (`Propagation.REQUIRES_NEW`)
+  - Isolated transaction engine (per-booking `Propagation.REQUIRES_NEW`)
