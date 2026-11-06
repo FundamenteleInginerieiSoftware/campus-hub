@@ -76,6 +76,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 | Disabled user | `401 INVALID_CREDENTIALS` as well |
 | Token | HS256-signed JWT, lifetime **8 h**, no refresh token (known limitation, documented in the report) |
 | Expired/invalid token | `401 UNAUTHORIZED`: the frontend clears the token and redirects to the login page |
+| Account disabled or deleted after login | `401 UNAUTHORIZED` on the next request: every request checks the account (#117) |
 
 ### Token claims
 
@@ -83,7 +84,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 |---|---|---|
 | `sub` | `"1"` (user id as a string) | `CurrentUser.id()` (Stefania) |
 | `email` | `"student1@campus.test"` | display only |
-| `roles` | `["STUDENT"]` or `["ADMIN"]` | Spring turns it into `ROLE_STUDENT` / `ROLE_ADMIN` (`hasRole("ADMIN")`) |
+| `roles` | `["STUDENT"]` or `["ADMIN"]` | information only: since #117 the backend reads the role from the database on every request, so a role change counts at once |
 | `iat`, `exp` | epoch seconds | expiry check |
 
 Don't rename claims after W3: `CurrentUser` and the frontend depend on them.
@@ -122,7 +123,7 @@ Validation errors (400) add a list of field errors:
 
 | Exception (`common.error`) | Status |
 |---|---|
-| `BadRequestException(code, msg)` | 400 |
+| `BadRequestException(code, msg)`, `InvalidParameterException(msg)` | 400 |
 | `UnauthorizedException(code, msg)` | 401 |
 | `ForbiddenException(code, msg)` | 403 |
 | `NotFoundException(code, msg)` | 404 |
@@ -143,11 +144,16 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | `@Valid` failed; see `errors` |
 | `MALFORMED_REQUEST` | 400 | unreadable JSON, wrong date format |
-| `INVALID_PARAMETER` | 400 | bad query parameter, e.g. an unknown `sort` field |
+| `INVALID_PARAMETER` | 400 | bad or missing query parameter, e.g. unknown `sort` field or missing required param |
+| `BAD_REQUEST` | 400 | generic Spring MVC client error |
+| `REQUEST_REJECTED` | 400 | the URL was blocked by Spring Security's firewall (`;`, `..`, encoded `/` in the path) |
 | `UNAUTHORIZED` | 401 | no token, invalid or expired token |
 | `FORBIDDEN` | 403 | logged in, but not allowed (e.g. a student on `/api/v1/admin/**`) |
+| `NOT_FOUND` | 404 | endpoint or path does not exist |
+| `METHOD_NOT_ALLOWED` | 405 | HTTP method not supported on this endpoint |
 | `STALE_VERSION` | 409 | someone else changed the row first (optimistic locking): reload and retry |
 | `PHOTO_TOO_LARGE` | 413 | upload over 5 MB |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | request `Content-Type` not supported |
 | `INTERNAL_ERROR` | 500 | anything unexpected (details only in the server log) |
 
 ### Auth and users (Matei, Stefania)
@@ -218,17 +224,17 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 
 | Method & path | Access | Request body | Response | Status & errors |
 |---|---|---|---|---|
-| `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` | `201` + `ReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
-| `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED` (accepts optional `status` filter, supporting single or multiple statuses e.g. `status=CONFIRMED&status=CHECKED_OUT`) |
+| `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` | `201` + `ReservationResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
+| `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED` (accepts optional `status` filter, supporting single or multiple statuses e.g. `status=CONFIRMED&status=CHECKED_OUT`) |
 | `GET /api/v1/reservations/me/summary` | Logged in | – | `200` + `ReservationSummaryResponse` | `401 UNAUTHORIZED` |
-| `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
-| `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
-| `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
+| `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
-| `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
 ```json
 // CreateReservationRequest
@@ -323,16 +329,24 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 
 ---
 
-### Catalog endpoints — Assets Details & Admin Inventory (Liviu)
+### Catalog endpoints — Assets Search, Details & Admin Inventory (Liviu)
 
 All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
 
 | Method & Path | Access | Response | Errors |
 |---|---|---|---|
+| `GET /api/v1/assets` | `STUDENT`, `ADMIN` | `200` `PageResponse<AssetResponse>` | `400 INVALID_PARAMETER` |
 | `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
 | `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
 | `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
 | `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
+
+`GET /api/v1/assets` optional query parameters:
+- `search`: case-insensitive substring match across `name`, `model`, and `serialNumber`
+- `categoryId`: numeric category ID
+- `labRoomId`: numeric lab room ID
+- `status`: `AVAILABLE | UNDER_MAINTENANCE | RETIRED` (retired items are hidden from `STUDENT` searches; `ADMIN` sees all statuses)
+- `page` (default `0`, `>= 0`), `size` (default `20`, `1..100`), `sort` (default `name,asc`; whitelisted fields: `name`, `model`, `serialNumber`, `status`, `createdAt`, `updatedAt`, direction `asc` or `desc`)
 
 ```json
 // CreateAssetRequest

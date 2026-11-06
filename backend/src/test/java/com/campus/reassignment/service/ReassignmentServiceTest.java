@@ -57,6 +57,7 @@ class ReassignmentServiceTest {
     // 2026-11-02T10:00:00.123456789 (Monday)
     private final Clock clock =
             Clock.fixed(Instant.parse("2026-11-02T08:00:00.123456789Z"), ZoneId.of("Europe/Bucharest"));
+    private static final LocalDateTime FIXED_NOW = LocalDateTime.of(2026, 11, 2, 10, 0, 0);
 
     @Mock
     private CatalogApi catalogApi;
@@ -106,7 +107,7 @@ class ReassignmentServiceTest {
                 new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(booking));
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(primaryStrategy.name()).thenReturn("SameModelStrategy");
@@ -139,7 +140,7 @@ class ReassignmentServiceTest {
                 new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(booking));
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(primaryStrategy.name()).thenReturn("SameModelStrategy");
@@ -166,7 +167,7 @@ class ReassignmentServiceTest {
                 new AssetSummary(30L, "Category Substitute", "DS2000", 1L, 100L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(booking));
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         doThrow(new SubstituteNoLongerFreeException("No longer free"))
@@ -265,7 +266,7 @@ class ReassignmentServiceTest {
                 new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(booking));
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
@@ -298,7 +299,7 @@ class ReassignmentServiceTest {
 
         // List returned in reverse order
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(laterBooking, earlierBooking));
 
         when(primaryStrategy.findCandidates(any(), any())).thenReturn(List.of());
@@ -320,7 +321,7 @@ class ReassignmentServiceTest {
                 new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(booking));
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
@@ -350,7 +351,7 @@ class ReassignmentServiceTest {
                 catalogApi, reservationApi, notificationService, mockProcessor, reassignmentLogRepository, clock);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
-        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), any()))
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
                 .thenReturn(List.of(b1, b2, b3));
 
         when(mockProcessor.processSingleBooking(eq(event), eq(b1), eq(damagedAsset)))

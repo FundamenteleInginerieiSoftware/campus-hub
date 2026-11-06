@@ -34,9 +34,12 @@ public class AdminReassignmentController {
             description = "Retrieves audit logs of automated reassignments and force-cancellations, newest first.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Reassignment audit logs retrieved"),
-        @ApiResponse(responseCode = "400", description = "Invalid pagination parameters"),
-        @ApiResponse(responseCode = "401", description = "Unauthenticated"),
-        @ApiResponse(responseCode = "403", description = "Admin role required")
+        @ApiResponse(
+                responseCode = "400",
+                description =
+                        "Validation failed on query parameters (VALIDATION_FAILED, page < 0, size outside 1-100)"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)")
     })
     public ResponseEntity<PageResponse<ReassignmentLogResponse>> getLogs(
             @RequestParam(defaultValue = "0") @Min(0) int page,

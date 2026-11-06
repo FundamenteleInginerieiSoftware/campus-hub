@@ -5,6 +5,10 @@ export type AuthState = {
   user: User | null
   // true only on the first load, while we check whether a saved token is still valid
   loading: boolean
+  // Set when that first check could not reach the backend (restarting, network down). The token is kept,
+  // because it may still be valid; RequireAuth shows a "try again" screen instead of the login page.
+  startupError: unknown
+  retry: () => void
   login: (email: string, password: string) => Promise<void>
   logout: () => void
 }
