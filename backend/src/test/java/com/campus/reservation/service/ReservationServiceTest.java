@@ -636,6 +636,16 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("getById throws 404 NotFound when reservation does not exist")
+    void getByIdNotFound() {
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.getById(999L))
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+    }
+
+    @Test
     @DisplayName("cancelReservation succeeds for owner before start time")
     void cancelReservationOwnerBeforeStartSucceeds() {
         when(currentUser.id()).thenReturn(USER_ID);
@@ -799,8 +809,9 @@ class ReservationServiceTest {
                         eq(newAssetId), any(), any(), eq(ReservationStatus.ACTIVE_STATUSES), anyLong()))
                 .thenReturn(false);
 
-        reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
+        boolean moved = reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
 
+        assertThat(moved).isTrue();
         assertThat(r.getAssetId()).isEqualTo(newAssetId);
         assertThat(r.getOriginalAssetId()).isEqualTo(ASSET_ID);
         verify(catalogApi).lockForBooking(newAssetId);
@@ -876,6 +887,7 @@ class ReservationServiceTest {
 
         assertThat(reservationService.markNoShow(10L)).isTrue();
         assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
+        verify(auditService).record(isNull(), eq("AUTO_NO_SHOW"), eq("Reservation"), eq(10L), any());
         assertThat(reservationService.markNoShow(10L)).isFalse();
 
         Reservation checkedOut = new Reservation(
@@ -890,6 +902,7 @@ class ReservationServiceTest {
 
         assertThat(reservationService.markOverdue(11L)).isTrue();
         assertThat(checkedOut.getStatus()).isEqualTo(ReservationStatus.OVERDUE);
+        verify(auditService).record(isNull(), eq("MARK_OVERDUE"), eq("Reservation"), eq(11L), any());
         assertThat(reservationService.markOverdue(11L)).isFalse();
     }
 
@@ -906,8 +919,9 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
 
-        reservationService.forceCancel(1L, "Damaged beyond repair");
+        boolean cancelled = reservationService.forceCancel(1L, "Damaged beyond repair");
 
+        assertThat(cancelled).isTrue();
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.FORCE_CANCELLED);
         verify(auditService).record(isNull(), eq("FORCE_CANCEL_RESERVATION"), eq("Reservation"), any(), any());
     }
@@ -1175,6 +1189,16 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("returnReservation: throws NotFoundException if reservation does not exist")
+    void returnReservationNotFound() {
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.returnReservation(999L))
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+    }
+
+    @Test
     @DisplayName("getAdminReservations: queries repository using specifications and returns PageResponse")
     void getAdminReservationsSuccess() {
         Reservation r = new Reservation(
@@ -1359,6 +1383,18 @@ class ReservationServiceTest {
         assertThat(response.available()).isFalse();
         assertThat(response.availableAssetIds()).isEmpty();
         assertThat(response.conflictReason()).isEqualTo("NO_ASSETS_AVAILABLE");
+    }
+
+    @Test
+    @DisplayName("findBusyAssetIds: delegates to repository with active statuses")
+    void findBusyAssetIdsDelegates() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(10L, 20L));
+
+        List<Long> busy = reservationService.findBusyAssetIds(start, end);
+        assertThat(busy).containsExactly(10L, 20L);
     }
 
     @Test

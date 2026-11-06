@@ -4,6 +4,7 @@ import com.campus.common.paging.PageResponse;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.ReservationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,7 +43,9 @@ public class ReservationController {
             description = "Books an available asset for a student within valid hours and quotas")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Reservation created successfully"),
-        @ApiResponse(responseCode = "400", description = "Validation failed on request body"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "Validation failed on request body (VALIDATION_FAILED, MALFORMED_REQUEST)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized (missing or invalid JWT)"),
         @ApiResponse(responseCode = "404", description = "Asset not found"),
         @ApiResponse(responseCode = "409", description = "Booking conflict, quota exceeded, or outside opening hours")
@@ -87,6 +90,9 @@ public class ReservationController {
                     "Checks whether a specific asset or any asset in a category is available for booking in a time window")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Availability evaluation returned"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "Missing or invalid query parameter (INVALID_PARAMETER, VALIDATION_FAILED)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "404", description = "Asset not found"),
         @ApiResponse(
@@ -98,8 +104,18 @@ public class ReservationController {
     public ResponseEntity<AvailabilityResponse> checkAvailability(
             @RequestParam(required = false) Long assetId,
             @RequestParam(required = false) Long categoryId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+            @Parameter(
+                            description = "Slot start time (must be aligned to :00 or :30, future weekday 09:00-20:00)",
+                            example = "2026-11-10T14:00:00")
+                    @RequestParam
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    LocalDateTime startTime,
+            @Parameter(
+                            description = "Slot end time (must be aligned to :00 or :30, max 4 hours duration)",
+                            example = "2026-11-10T16:00:00")
+                    @RequestParam
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    LocalDateTime endTime) {
         return ResponseEntity.ok(reservationService.checkAvailability(assetId, categoryId, startTime, endTime));
     }
 

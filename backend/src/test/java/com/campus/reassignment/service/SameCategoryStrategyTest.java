@@ -1,6 +1,8 @@
 package com.campus.reassignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -111,28 +113,41 @@ class SameCategoryStrategyTest {
     }
 
     @Test
-    @DisplayName("Strictly excludes candidates with RETIRED status even if free")
+    @DisplayName("Strictly excludes candidates with RETIRED status even when in same room")
     void strictlyExcludesRetiredCandidates() {
-        AssetSummary retiredCandidate = new AssetSummary(20L, "Retired Scope", "DS2000", 5L, 100L, AssetStatus.RETIRED);
+        AssetSummary sameRoomRetired = new AssetSummary(20L, "Retired Scope", "DS2000", 5L, 100L, AssetStatus.RETIRED);
+        AssetSummary differentRoomAvailable =
+                new AssetSummary(30L, "Working Scope", "DS2000", 5L, 200L, AssetStatus.AVAILABLE);
 
-        when(catalogApi.findAvailableByCategory(5L, 10L)).thenReturn(List.of(retiredCandidate));
+        when(catalogApi.findAvailableByCategory(5L, 10L)).thenReturn(List.of(sameRoomRetired, differentRoomAvailable));
+        when(reservationApi.isAssetFree(eq(30L), eq(start), eq(end), eq(1L))).thenReturn(true);
 
         Optional<AssetSummary> result = strategy.findSubstitute(reservation, damaged);
 
-        assertThat(result).isEmpty();
+        assertThat(result).isPresent();
+        assertThat(result.get().id()).isEqualTo(30L);
+        org.mockito.Mockito.verify(reservationApi, org.mockito.Mockito.never())
+                .isAssetFree(eq(20L), any(), any(), anyLong());
     }
 
     @Test
-    @DisplayName("Strictly excludes candidates with UNDER_MAINTENANCE status")
+    @DisplayName("Strictly excludes candidates with UNDER_MAINTENANCE status even when in same room")
     void strictlyExcludesUnderMaintenanceCandidates() {
-        AssetSummary maintenanceCandidate =
+        AssetSummary sameRoomMaintenance =
                 new AssetSummary(20L, "Broken Scope", "DS2000", 5L, 100L, AssetStatus.UNDER_MAINTENANCE);
+        AssetSummary differentRoomAvailable =
+                new AssetSummary(30L, "Working Scope", "DS2000", 5L, 200L, AssetStatus.AVAILABLE);
 
-        when(catalogApi.findAvailableByCategory(5L, 10L)).thenReturn(List.of(maintenanceCandidate));
+        when(catalogApi.findAvailableByCategory(5L, 10L))
+                .thenReturn(List.of(sameRoomMaintenance, differentRoomAvailable));
+        when(reservationApi.isAssetFree(eq(30L), eq(start), eq(end), eq(1L))).thenReturn(true);
 
         Optional<AssetSummary> result = strategy.findSubstitute(reservation, damaged);
 
-        assertThat(result).isEmpty();
+        assertThat(result).isPresent();
+        assertThat(result.get().id()).isEqualTo(30L);
+        org.mockito.Mockito.verify(reservationApi, org.mockito.Mockito.never())
+                .isAssetFree(eq(20L), any(), any(), anyLong());
     }
 
     @Test

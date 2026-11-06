@@ -141,6 +141,16 @@ class ReservationServiceRulesTest {
     }
 
     @Test
+    void checkAvailabilityValidatesSlotRules() {
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = now.plusHours(2);
+
+        assertThatThrownBy(() -> reservationService.checkAvailability(ASSET_ID, null, start, end))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_TIME_RANGE");
+    }
+
+    @Test
     void movingAnUnknownOrNotConfirmedReservationDoesNothing() {
         when(reservationRepository.findById(777L)).thenReturn(Optional.empty());
 
