@@ -140,7 +140,11 @@ class ReassignmentRollbackIT {
         reassignmentLogRepository.deleteAll();
         reservationRepository.deleteAll();
         jdbcTemplate.update(
-                "DELETE FROM assets WHERE id IN (?, ?, ?)", DAMAGED_ASSET_ID, SUB_MODEL_BUSY_ID, SUB_CAT_FREE_ID);
+                "DELETE FROM assets WHERE id IN (?, ?, ?, ?)",
+                DAMAGED_ASSET_ID,
+                SUB_MODEL_BUSY_ID,
+                SUB_CAT_FREE_ID,
+                SUB_MODEL_SECOND_FREE_ID);
         jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 500");
         jdbcTemplate.update("DELETE FROM categories WHERE id = 500");
         jdbcTemplate.update("DELETE FROM users WHERE id = 100");
