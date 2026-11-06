@@ -104,13 +104,14 @@ class AdminReservationControllerTest {
     @DisplayName("GET /api/v1/admin/reservations returns 200 with PageResponse for ADMIN")
     void searchReturns200() throws Exception {
         PageResponse<ReservationResponse> page = new PageResponse<>(List.of(checkedOutResponse), 0, 20, 1L, 1);
-        when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt()))
+        when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt(), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/reservations")
                         .param("status", "CHECKED_OUT")
                         .param("page", "0")
-                        .param("size", "20"))
+                        .param("size", "20")
+                        .param("sortDir", "asc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(1L))
                 .andExpect(jsonPath("$.content[0].status").value("CHECKED_OUT"))
