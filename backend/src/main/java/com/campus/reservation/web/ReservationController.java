@@ -102,8 +102,11 @@ public class ReservationController {
     })
     @GetMapping("/availability")
     public ResponseEntity<AvailabilityResponse> checkAvailability(
-            @RequestParam(required = false) Long assetId,
-            @RequestParam(required = false) Long categoryId,
+            @Parameter(description = "ID of the specific asset to check", example = "1") @RequestParam(required = false)
+                    Long assetId,
+            @Parameter(description = "Category ID to find any available asset within", example = "1")
+                    @RequestParam(required = false)
+                    Long categoryId,
             @Parameter(
                             description = "Slot start time (must be aligned to :00 or :30, future weekday 09:00-20:00)",
                             example = "2026-11-10T14:00:00")

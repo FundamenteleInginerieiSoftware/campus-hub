@@ -22,7 +22,7 @@ When building software for university labs, it is not enough for code to "pass" 
 | Component | Annotation | Purpose |
 |---|---|---|
 | `CreateReservationRequest` | `@Schema(example = "1")` on `assetId`, `@Schema(example = "2026-11-10T14:00:00")` on `startTime`, `@Schema(example = "2026-11-10T16:00:00")` on `endTime` | Provides slot-aligned future weekday times, preventing `SLOT_NOT_ALIGNED` or `BOOKING_IN_PAST` errors on interactive Swagger execution. |
-| `ReservationController.checkAvailability` | `@Parameter(example = "2026-11-10T14:00:00")` on `startTime` and `endTime` | Aligns query parameters with reservation slot boundaries. |
+| `ReservationController.checkAvailability` | `@Parameter(example = "1")` on `assetId`/`categoryId`, `@Parameter(example = "2026-11-10T14:00:00")` on `startTime` and `endTime` | Aligns query parameters with reservation slot boundaries and valid default IDs. |
 | `ReservationController` | `@ApiResponse(responseCode = "400", description = "... VALIDATION_FAILED, MALFORMED_REQUEST")` | Documents RFC 9457 `ProblemDetail` responses for invalid request payloads and query parameters. |
 | `AdminReservationController` & `AdminReassignmentController` | `@ApiResponse(responseCode = "400", description = "... VALIDATION_FAILED ...")` + `@Validated` | Documents query parameter validation on pagination bounds (`page >= 0`, `1 <= size <= 100`). |
 
@@ -31,7 +31,14 @@ When building software for university labs, it is not enough for code to "pass" 
 - **Root Cause:** `ReassignmentRollbackIT` seeded fixed rows with `users.id = 100`, `lab_rooms.id = 500`, and `categories.id = 500` without tearing them down in `@AfterEach`. When PostgreSQL identity sequence `users_id_seq` eventually reached `100` on persistent dev databases (`campus_test`), subsequent registration attempts hit duplicate key conflicts (`users_pkey`), causing intermittent `409 EMAIL_TAKEN` failures in unrelated test suites (such as `SecurityPassIT`).
 - **Fix:** Added comprehensive `@AfterEach` teardown deleting test rows in foreign-key order:
   ```java
-  jdbcTemplate.update("DELETE FROM assets WHERE id IN (701, 702, 703)");
+  reassignmentLogRepository.deleteAll();
+  reservationRepository.deleteAll();
+  jdbcTemplate.update(
+          "DELETE FROM assets WHERE id IN (?, ?, ?, ?)",
+          DAMAGED_ASSET_ID,
+          SUB_MODEL_BUSY_ID,
+          SUB_CAT_FREE_ID,
+          SUB_MODEL_SECOND_FREE_ID);
   jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 500");
   jdbcTemplate.update("DELETE FROM categories WHERE id = 500");
   jdbcTemplate.update("DELETE FROM users WHERE id = 100");

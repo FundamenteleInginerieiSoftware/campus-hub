@@ -181,7 +181,18 @@ class ReservationControllerTest {
         mockMvc.perform(get("/api/v1/reservations/availability")
                         .param("assetId", "10")
                         .param("endTime", "2026-11-02T16:00:00"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations with malformed JSON body returns 400 MALFORMED_REQUEST")
+    void createWithMalformedJsonReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{malformed-json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
     }
 
     @Test
