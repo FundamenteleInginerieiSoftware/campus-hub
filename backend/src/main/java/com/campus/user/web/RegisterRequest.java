@@ -19,6 +19,15 @@ public record RegisterRequest(
         @NotBlank @Size(min = 8, max = 72) String password,
         @NotBlank @Size(max = 100) String fullName) {
 
+    // Bug fixed (#165): @Email checked the raw value, so " ana@campus.test " (a space from a phone
+    // keyboard or a copy-paste) got 400 before AuthService could trim it. Fix: Jackson builds the
+    // record through this constructor and validation runs after that, so the rules see the trimmed
+    // value. The password is left as typed: spaces can be part of it.
+    public RegisterRequest {
+        email = email == null ? null : email.trim();
+        fullName = fullName == null ? null : fullName.trim();
+    }
+
     // Bug fixed: @Size counts characters, so 40 x "ș" (80 bytes) passed and BCrypt's encode() threw,
     // which was a 500. The validator also runs methods named isXxx() with a rule on them, so this
     // check turns it into 400 VALIDATION_FAILED. @JsonIgnore keeps it out of the JSON and Swagger.

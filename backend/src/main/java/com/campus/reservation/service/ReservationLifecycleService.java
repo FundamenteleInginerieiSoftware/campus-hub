@@ -1,5 +1,6 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.notification.api.NotificationService;
@@ -10,9 +11,12 @@ import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.LifecycleSweepSummary;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,12 +59,16 @@ public class ReservationLifecycleService {
             fixedDelayString = "${app.reservation.lifecycle-sweep-ms:300000}",
             initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")
     public LifecycleSweepSummary runLifecycleSweep() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
 
         return new LifecycleSweepSummary(now, noShowCount, overdueCount, cascadedIds.size(), cascadedIds);
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 
     private int processNoShows(LocalDateTime now) {
@@ -132,11 +140,32 @@ public class ReservationLifecycleService {
             List<Reservation> upcomingOnSameAsset =
                     reservationRepository.findUpcomingConfirmedByAsset(overdueAssetId, now);
 
-            for (Reservation threatened : upcomingOnSameAsset) {
-                if (threatened.getStartTime().isAfter(cascadeHorizon)) {
+            List<Reservation> threatenedBookings = new ArrayList<>();
+            for (Reservation upcoming : upcomingOnSameAsset) {
+                if (upcoming.getStartTime().isAfter(cascadeHorizon)) {
                     break;
                 }
-                if (tryPreventiveMove(threatened, overdueAssetId)) {
+                threatenedBookings.add(upcoming);
+            }
+            if (threatenedBookings.isEmpty()) {
+                continue;
+            }
+
+            // Bug fixed (#155): fetch the overdue asset and its ordered same-model substitutes once per
+            // overdueAssetId instead of inside the inner loop, and prioritize substitutes in the same lab room
+            // (then lowest ID) while strictly filtering for AVAILABLE status.
+            AssetSummary currentAsset = catalogApi.getAsset(overdueAssetId);
+            List<AssetSummary> orderedSubstitutes =
+                    catalogApi.findAvailableByModel(currentAsset.model(), overdueAssetId).stream()
+                            .filter(sub -> sub.status() == AssetStatus.AVAILABLE)
+                            .sorted(Comparator.comparing(
+                                            (AssetSummary a) -> Objects.equals(a.labRoomId(), currentAsset.labRoomId()))
+                                    .reversed()
+                                    .thenComparing(AssetSummary::id))
+                            .toList();
+
+            for (Reservation threatened : threatenedBookings) {
+                if (tryPreventiveMove(threatened, overdueAssetId, orderedSubstitutes)) {
                     cascadedReservationIds.add(threatened.getId());
                 }
             }
@@ -145,11 +174,9 @@ public class ReservationLifecycleService {
         return overdueCount;
     }
 
-    private boolean tryPreventiveMove(Reservation threatened, Long overdueAssetId) {
-        AssetSummary currentAsset = catalogApi.getAsset(overdueAssetId);
-        List<AssetSummary> substitutes = catalogApi.findAvailableByModel(currentAsset.model(), overdueAssetId);
-
-        for (AssetSummary sub : substitutes) {
+    private boolean tryPreventiveMove(
+            Reservation threatened, Long overdueAssetId, List<AssetSummary> orderedSubstitutes) {
+        for (AssetSummary sub : orderedSubstitutes) {
             if (!reservationService.isAssetFree(
                     sub.id(), threatened.getStartTime(), threatened.getEndTime(), threatened.getId())) {
                 continue;

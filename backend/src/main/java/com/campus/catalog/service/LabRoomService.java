@@ -7,6 +7,7 @@ import com.campus.catalog.web.LabRoomRequest;
 import com.campus.catalog.web.LabRoomResponse;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import java.util.List;
@@ -36,48 +37,60 @@ public class LabRoomService {
     @Transactional
     public LabRoomResponse create(LabRoomRequest request) {
         String normalizedCode = request.code().trim().toUpperCase(Locale.ROOT);
+        // Guard against characters whose uppercase expands (e.g. 'ß' -> 'SS') exceeding VARCHAR(20) (#167).
+        if (normalizedCode.length() > 20) {
+            throw new InvalidParameterException("Lab room code must not exceed 20 characters");
+        }
         if (labRoomRepository.existsByCodeIgnoreCase(normalizedCode)) {
             throw codeTaken(normalizedCode);
         }
 
         LabRoom labRoom = new LabRoom(normalizedCode, request.name(), request.building());
+        LabRoom saved;
         try {
-            LabRoom saved = labRoomRepository.saveAndFlush(labRoom);
-            auditService.record(
-                    currentUser.id(),
-                    "LAB_ROOM_CREATED",
-                    "LAB_ROOM",
-                    saved.getId(),
-                    "Created lab room " + saved.getCode());
-            return LabRoomResponse.from(saved);
+            saved = labRoomRepository.saveAndFlush(labRoom);
         } catch (DataIntegrityViolationException ex) {
-            // Concurrent creates can both pass existsByCodeIgnoreCase; the DB unique index stops the second with 409.
-            throw codeTaken(normalizedCode);
+            // Check if the code was actually taken by a concurrent insert; otherwise rethrow (#167).
+            if (labRoomRepository.existsByCodeIgnoreCase(normalizedCode)) {
+                throw codeTaken(normalizedCode);
+            }
+            throw ex;
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate code (#120).
+        auditService.record(
+                currentUser.id(), "LAB_ROOM_CREATED", "LAB_ROOM", saved.getId(), "Created lab room " + saved.getCode());
+        return LabRoomResponse.from(saved);
     }
 
     @Transactional
     public LabRoomResponse update(Long id, LabRoomRequest request) {
         LabRoom labRoom = findOrThrow(id);
         String normalizedCode = request.code().trim().toUpperCase(Locale.ROOT);
+        // Guard against characters whose uppercase expands (e.g. 'ß' -> 'SS') exceeding VARCHAR(20) (#167).
+        if (normalizedCode.length() > 20) {
+            throw new InvalidParameterException("Lab room code must not exceed 20 characters");
+        }
         if (labRoomRepository.existsByCodeIgnoreCaseAndIdNot(normalizedCode, id)) {
             throw codeTaken(normalizedCode);
         }
 
         labRoom.update(normalizedCode, request.name(), request.building());
+        LabRoom saved;
         try {
-            LabRoom saved = labRoomRepository.saveAndFlush(labRoom);
-            auditService.record(
-                    currentUser.id(),
-                    "LAB_ROOM_UPDATED",
-                    "LAB_ROOM",
-                    saved.getId(),
-                    "Updated lab room " + saved.getCode());
-            return LabRoomResponse.from(saved);
+            saved = labRoomRepository.saveAndFlush(labRoom);
         } catch (DataIntegrityViolationException ex) {
-            // A concurrent create or rename can pass the check above; the DB unique index stops it with 409.
-            throw codeTaken(normalizedCode);
+            // Check if the code was actually taken by a concurrent insert/update; otherwise rethrow (#167).
+            if (labRoomRepository.existsByCodeIgnoreCaseAndIdNot(normalizedCode, id)) {
+                throw codeTaken(normalizedCode);
+            }
+            throw ex;
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate code (#120).
+        auditService.record(
+                currentUser.id(), "LAB_ROOM_UPDATED", "LAB_ROOM", saved.getId(), "Updated lab room " + saved.getCode());
+        return LabRoomResponse.from(saved);
     }
 
     @Transactional
@@ -90,11 +103,13 @@ public class LabRoomService {
         try {
             labRoomRepository.delete(labRoom);
             labRoomRepository.flush();
-            auditService.record(
-                    currentUser.id(), "LAB_ROOM_DELETED", "LAB_ROOM", id, "Deleted lab room " + labRoom.getCode());
         } catch (DataIntegrityViolationException ex) {
             throw roomInUse(labRoom.getCode());
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a lab room in use (#120).
+        auditService.record(
+                currentUser.id(), "LAB_ROOM_DELETED", "LAB_ROOM", id, "Deleted lab room " + labRoom.getCode());
     }
 
     private LabRoom findOrThrow(Long id) {

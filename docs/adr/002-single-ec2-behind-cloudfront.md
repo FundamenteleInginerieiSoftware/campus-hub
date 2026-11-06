@@ -18,7 +18,7 @@ The plan suggested ECS Fargate + an Application Load Balancer + S3/CloudFront fo
 | Network | Small VPC: 1 public subnet (EC2), 2 private DB subnets (RDS needs 2 AZs). **No NAT gateway** |
 | Firewall | Security groups in a chain: EC2 accepts `8080` **only from CloudFront** (AWS prefix list `com.amazonaws.global.cloudfront.origin-facing`); RDS accepts `5432` **only from the EC2 security group**. No SSH port: shell access through SSM Session Manager |
 | Other services | S3 (photos), SES (emails), SSM Parameter Store (secrets, ADR-003), ECR (images), CloudWatch Logs (7 days) |
-| Permissions | The app uses the **EC2 instance role** (no AWS keys on the server): its own S3 bucket, `ses:SendEmail`, read `/campus/*` parameters, pull from ECR, write logs |
+| Permissions | The app uses the **EC2 instance role** (no AWS keys on the server): its own S3 bucket (`s3:PutObject/GetObject/DeleteObject` on the objects, `s3:ListBucket` on the bucket, so a missing photo is a 404 and not a 403), `ses:SendEmail`, read `/campus/*` parameters, pull from ECR, write logs |
 | Deploy | GitHub Actions (OIDC role, no stored AWS keys): build image → push to ECR tagged with the commit SHA → SSM Run Command on the instance: pull, restart the container, check `/actuator/health`. Rollback = run it again with the previous SHA |
 
 ## Why

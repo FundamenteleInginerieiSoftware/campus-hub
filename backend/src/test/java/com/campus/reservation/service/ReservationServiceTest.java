@@ -18,10 +18,12 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
@@ -54,8 +56,10 @@ class ReservationServiceTest {
     private static final Long USER_ID = 42L;
     private static final Long ASSET_ID = 10L;
 
-    // Fixed clock: 2026-11-02T08:00:00Z -> In Europe/Bucharest (UTC+2 in winter) this is 2026-11-02T10:00:00 (Monday)
-    private final Clock clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    // Fixed clock with nanos: 2026-11-02T08:00:00.123456789Z -> In Europe/Bucharest (UTC+2 in winter) this is
+    // 2026-11-02T10:00:00.123456789 (Monday)
+    private final Clock clock =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00.123456789Z"), ZoneId.of("Europe/Bucharest"));
 
     @Mock
     private ReservationRepository reservationRepository;
@@ -69,12 +73,15 @@ class ReservationServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private NotificationService notificationService;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
-        reservationService =
-                new ReservationService(reservationRepository, catalogApi, currentUser, auditService, clock);
+        reservationService = new ReservationService(
+                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
     }
 
     @Test
@@ -99,6 +106,7 @@ class ReservationServiceTest {
         assertThat(response.userId()).isEqualTo(USER_ID);
         assertThat(response.assetId()).isEqualTo(ASSET_ID);
         assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(response.createdAt().getNano()).isZero();
 
         // Strict lock order verification
         InOrder inOrder = inOrder(catalogApi, reservationRepository, auditService);
@@ -106,6 +114,7 @@ class ReservationServiceTest {
         inOrder.verify(catalogApi).isBookable(ASSET_ID);
         inOrder.verify(reservationRepository)
                 .existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L);
+        inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
         inOrder.verify(reservationRepository).countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         inOrder.verify(reservationRepository).save(any(Reservation.class));
         inOrder.verify(auditService).record(eq(USER_ID), eq("CREATE_RESERVATION"), eq("Reservation"), any(), any());
@@ -642,11 +651,14 @@ class ReservationServiceTest {
         ReservationResponse response = reservationService.cancelReservation(1L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
-        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), any());
+        assertThat(response.cancelReason()).isEqualTo("Cancelled by user");
+        verify(auditService)
+                .record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), eq("Cancelled by user"));
+        verify(notificationService, never()).notifyUser(anyLong(), any(), any());
     }
 
     @Test
-    @DisplayName("cancelReservation succeeds for admin even after start time")
+    @DisplayName("cancelReservation succeeds for admin even after start time and notifies student with admin reason")
     void cancelReservationAdminAfterStartSucceeds() {
         when(currentUser.id()).thenReturn(999L);
         when(currentUser.isAdmin()).thenReturn(true);
@@ -656,11 +668,25 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 9, 0), // Start was 09:00 (clock is 10:00)
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
 
         ReservationResponse response = reservationService.cancelReservation(1L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(response.cancelReason()).isEqualTo("Cancelled by administrator");
+        verify(auditService)
+                .record(
+                        eq(999L),
+                        eq("CANCEL_RESERVATION"),
+                        eq("Reservation"),
+                        eq(1L),
+                        eq("Cancelled by administrator"));
+        verify(notificationService)
+                .notifyUser(
+                        eq(USER_ID),
+                        eq("Reservation Cancelled by Administrator"),
+                        eq("Your reservation #1 has been cancelled by an administrator."));
     }
 
     @Test
@@ -896,7 +922,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
-        when(reservationRepository.findFirstByAssetIdAndStatusIn(
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
                         ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
                 .thenReturn(Optional.of(r));
 
@@ -917,7 +943,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
         r.markOverdue();
-        when(reservationRepository.findFirstByAssetIdAndStatusIn(
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
                         ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
                 .thenReturn(Optional.of(r));
 
@@ -943,6 +969,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 101L);
 
         when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(currentUser.id()).thenReturn(1L);
 
         ReservationResponse response = reservationService.checkOutReservation(101L);
@@ -950,6 +977,64 @@ class ReservationServiceTest {
         assertThat(response.status()).isEqualTo(ReservationStatus.CHECKED_OUT);
         assertThat(response.checkedOutAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
         verify(auditService).record(eq(1L), eq("CHECK_OUT_RESERVATION"), eq("Reservation"), eq(101L), any());
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: rejects if asset is not bookable (under maintenance or retired)")
+    void checkOutReservationRejectsWhenAssetNotBookable() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(101L))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("ASSET_NOT_BOOKABLE");
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
+    }
+
+    @Test
+    @DisplayName(
+            "checkOutReservation: rejects if asset is currently held by another reservation (checked out or overdue)")
+    void checkOutReservationRejectsWhenAssetCurrentlyHeldByAnotherBooking() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        // Previous reservation on same asset is currently OVERDUE or CHECKED_OUT
+        Reservation priorHolder = new Reservation(
+                999L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 10, 30, 8, 0));
+        ReflectionTestUtils.setField(priorHolder, "id", 99L);
+        priorHolder.checkOut(LocalDateTime.of(2026, 11, 2, 8, 0));
+        priorHolder.markOverdue();
+
+        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
+                .thenReturn(Optional.of(priorHolder));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(101L))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("RESERVATION_CONFLICT");
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
     }
 
     @Test
@@ -1114,6 +1199,32 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("getAdminReservations: supports ascending sortDir and rejects invalid sortDir")
+    void getAdminReservationsSortDirValidation() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 301L);
+
+        when(reservationRepository.findAll(
+                        any(org.springframework.data.jpa.domain.Specification.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
+
+        PageResponse<ReservationResponse> ascPage =
+                reservationService.getAdminReservations(ReservationStatus.CONFIRMED, null, null, null, 0, 20, "asc");
+        assertThat(ascPage.content()).hasSize(1);
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(
+                        ReservationStatus.CONFIRMED, null, null, null, 0, 20, "invalid"))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
+    }
+
+    @Test
     @DisplayName("checkAvailability: throws MISSING_PARAMETER if neither assetId nor categoryId is provided")
     void checkAvailabilityThrowsWhenNeitherAssetNorCategoryProvided() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
@@ -1144,7 +1255,6 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
@@ -1155,6 +1265,7 @@ class ReservationServiceTest {
         assertThat(response.assetId()).isEqualTo(ASSET_ID);
         assertThat(response.availableAssetIds()).containsExactly(ASSET_ID);
         assertThat(response.conflictReason()).isNull();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1165,7 +1276,6 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(true);
@@ -1175,6 +1285,7 @@ class ReservationServiceTest {
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
         assertThat(response.availableAssetIds()).isEmpty();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1185,13 +1296,13 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
 
         AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
 
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("ASSET_NOT_BOOKABLE");
         assertThat(response.availableAssetIds()).isEmpty();
+        verify(catalogApi, never()).isBookable(anyLong());
     }
 
     @Test
@@ -1228,5 +1339,37 @@ class ReservationServiceTest {
         assertThat(response.categoryId()).isEqualTo(categoryId);
         assertThat(response.availableAssetIds()).containsExactly(10L, 30L);
         assertThat(response.conflictReason()).isNull();
+    }
+
+    @Test
+    @DisplayName(
+            "checkAvailability: returns available false with NO_ASSETS_AVAILABLE when all category assets are busy")
+    void checkAvailabilityReturnsNoAssetsAvailableWhenCategoryExhausted() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Long categoryId = 5L;
+
+        AssetSummary a1 = new AssetSummary(10L, "Scope 1", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.findAvailableByCategory(categoryId, -1L)).thenReturn(List.of(a1));
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(10L));
+
+        AvailabilityResponse response = reservationService.checkAvailability(null, categoryId, start, end);
+
+        assertThat(response.available()).isFalse();
+        assertThat(response.availableAssetIds()).isEmpty();
+        assertThat(response.conflictReason()).isEqualTo("NO_ASSETS_AVAILABLE");
+    }
+
+    @Test
+    @DisplayName("getMyReservations and getAdminReservations reject page offset overflow (#150)")
+    void paginationRejectsHugePageOffsetOverflow() {
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 999_999_999, 100))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
     }
 }

@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.GlobalExceptionHandler;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
@@ -103,13 +104,14 @@ class AdminReservationControllerTest {
     @DisplayName("GET /api/v1/admin/reservations returns 200 with PageResponse for ADMIN")
     void searchReturns200() throws Exception {
         PageResponse<ReservationResponse> page = new PageResponse<>(List.of(checkedOutResponse), 0, 20, 1L, 1);
-        when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt()))
+        when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt(), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/reservations")
                         .param("status", "CHECKED_OUT")
                         .param("page", "0")
-                        .param("size", "20"))
+                        .param("size", "20")
+                        .param("sortDir", "asc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(1L))
                 .andExpect(jsonPath("$.content[0].status").value("CHECKED_OUT"))
@@ -167,5 +169,31 @@ class AdminReservationControllerTest {
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.status").value("RETURNED"))
                 .andExpect(jsonPath("$.returnedAt").isNotEmpty());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reservations/{id}/return returns 404 when reservation not found")
+    void returnItemReturns404WhenNotFound() throws Exception {
+        when(reservationService.returnReservation(999L))
+                .thenThrow(new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: 999"));
+
+        mockMvc.perform(post("/api/v1/admin/reservations/999/return"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESERVATION_NOT_FOUND"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reservations/{id}/return returns 409 when invalid transition")
+    void returnItemReturns409WhenInvalidTransition() throws Exception {
+        when(reservationService.returnReservation(1L))
+                .thenThrow(new InvalidStateTransitionException(
+                        "INVALID_RESERVATION_STATUS_TRANSITION",
+                        "Cannot return reservation in status CANCELLED; expected CHECKED_OUT or OVERDUE"));
+
+        mockMvc.perform(post("/api/v1/admin/reservations/1/return"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_RESERVATION_STATUS_TRANSITION"));
     }
 }

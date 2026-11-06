@@ -20,13 +20,15 @@ import {
   IconCheck,
   IconPlus,
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import {
   cancelReservation,
   fetchAssetSummary,
   fetchMyReservations,
   fetchMyReservationSummary,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type Reservation,
   type ReservationStatus,
@@ -102,13 +104,10 @@ function statusLabel(status: ReservationStatus): string {
 }
 
 export default function MyReservationsPage() {
-  const [pageData, setPageData] = useState<PageResponse<Reservation>>({
-    content: [],
-    page: 0,
-    size: 10,
-    totalElements: 0,
-    totalPages: 0,
-  })
+  // Bug fixed (#122): pageData initialized as null (not empty object) and reset to null
+  // on tab/page transitions so PagedTable displays the loading spinner while fetching,
+  // avoiding false "No reservations found" flashes and stale tab data.
+  const [pageData, setPageData] = useState<PageResponse<Reservation> | null>(null)
   const [pageNumber, setPageNumber] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -132,7 +131,10 @@ export default function MyReservationsPage() {
   })
 
   // Cache for resolved asset names to enrich the table rows.
+  // assetCacheRef mirrors assetCache so the fetch effect can skip already-cached IDs
+  // without adding assetCache to the effect dependency array.
   const [assetCache, setAssetCache] = useState<Record<number, AssetSummary>>({})
+  const assetCacheRef = useRef<Record<number, AssetSummary>>({})
 
   // Increment this counter to re-fetch the current reservations page and summary.
   const [reloadToken, setReloadToken] = useState(0)
@@ -161,6 +163,7 @@ export default function MyReservationsPage() {
   // Fetch paginated reservations with server-side status filtering.
   useEffect(() => {
     let ignore = false
+    let steppingBack = false
     const statusFilter: ReservationStatus[] | undefined =
       filterTab === 'active'
         ? ['CONFIRMED', 'CHECKED_OUT', 'OVERDUE']
@@ -171,13 +174,24 @@ export default function MyReservationsPage() {
     fetchMyReservations(pageNumber, 10, statusFilter)
       .then(async (response) => {
         if (ignore) return
+        // Bug fixed: cancelling the last item on page > 1 returned an empty page and hid the pagination controls.
+        // Fix: step back to the last non-empty page automatically when totalPages shrinks below pageNumber + 1.
+        if (response.content.length === 0 && response.totalPages > 0 && pageNumber >= response.totalPages) {
+          steppingBack = true
+          setPageNumber(response.totalPages - 1)
+          return
+        }
+        setError(null)
         setPageData(response)
 
         const neededAssetIds = [
           ...new Set(
             response.content
               .flatMap((r) => [r.assetId, r.originalAssetId])
-              .filter((id): id is number => id !== null && id !== undefined),
+              .filter(
+                (id): id is number =>
+                  id !== null && id !== undefined && !assetCacheRef.current[id],
+              ),
           ),
         ]
 
@@ -191,6 +205,7 @@ export default function MyReservationsPage() {
               if (item) newEntries[item.id] = item
             }
             if (Object.keys(newEntries).length > 0) {
+              assetCacheRef.current = { ...assetCacheRef.current, ...newEntries }
               setAssetCache((prev) => ({ ...prev, ...newEntries }))
             }
           }
@@ -200,7 +215,7 @@ export default function MyReservationsPage() {
         if (!ignore) setError(err)
       })
       .finally(() => {
-        if (!ignore) setLoading(false)
+        if (!ignore && !steppingBack) setLoading(false)
       })
 
     return () => {
@@ -211,6 +226,8 @@ export default function MyReservationsPage() {
   function handleTabChange(val: string) {
     setFilterTab(val as 'all' | 'active' | 'past')
     setPageNumber(0)
+    setPageData(null)
+    setError(null)
     setLoading(true)
   }
 
@@ -231,6 +248,7 @@ export default function MyReservationsPage() {
       setCancellingReservation(null)
       setActionNotice(`Reservation #${cancelledId} was successfully cancelled.`)
       // Refresh the current page and summary counters.
+      setError(null)
       setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
@@ -287,9 +305,7 @@ export default function MyReservationsPage() {
     {
       header: 'Status',
       render: (r) => {
-        const isForceCancelled =
-          r.status === 'FORCE_CANCELLED' ||
-          (r.status === 'CANCELLED' && (r.cancelReason?.toLowerCase().includes('incident') || r.cancelReason?.toLowerCase().includes('equipment failure')))
+        const isForceCancelled = r.status === 'FORCE_CANCELLED'
 
         return (
           <div>
@@ -317,17 +333,29 @@ export default function MyReservationsPage() {
     {
       header: 'Actions',
       render: (r) => {
+        // Backend rejects cancellation once startTime is reached (!now.isBefore(startTime)).
         const canCancel = r.status === 'CONFIRMED'
         if (!canCancel) return null
+        const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
         return (
-          <Button
-            size="xs"
-            variant="light"
-            color="red"
-            onClick={() => handleStartCancel(r)}
+          <Tooltip
+            label="Students can only cancel before the reservation start time (Europe/Bucharest)."
+            disabled={!hasStartedInBucharest}
           >
-            Cancel
-          </Button>
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              // Not 'disabled': a disabled button swallows hover events, so the Mantine Tooltip would never show.
+              // data-disabled gives the same look; the click is ignored once the slot has started.
+              data-disabled={hasStartedInBucharest || undefined}
+              onClick={() => {
+                if (!hasStartedInBucharest) handleStartCancel(r)
+              }}
+            >
+              Cancel
+            </Button>
+          </Tooltip>
         )
       },
     },
@@ -458,16 +486,22 @@ export default function MyReservationsPage() {
         columns={columns}
         rowKey={(r) => r.id}
         onPageChange={(newPage) => {
+          // Mantine's Pagination calls onChange even for the current page; without this guard the spinner never clears.
+          if (newPage === pageNumber) return
+          setPageData(null)
+          setError(null)
           setLoading(true)
           setPageNumber(newPage)
         }}
         loading={loading}
         emptyText={
-          filterTab === 'active'
-            ? 'No active bookings. Browse the catalog to book equipment.'
-            : filterTab === 'past'
-              ? 'No past bookings found.'
-              : 'No reservations found.'
+          error
+            ? 'Could not load reservations.'
+            : filterTab === 'active'
+              ? 'No active bookings. Browse the catalog to book equipment.'
+              : filterTab === 'past'
+                ? 'No past bookings found.'
+                : 'No reservations found.'
         }
       />
 
