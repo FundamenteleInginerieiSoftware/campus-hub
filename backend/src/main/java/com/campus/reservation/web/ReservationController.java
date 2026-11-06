@@ -61,7 +61,10 @@ public class ReservationController {
             description = "Retrieves a paginated list of reservations for the authenticated student")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Page of reservations returned"),
-        @ApiResponse(responseCode = "400", description = "Invalid pagination parameters"),
+        @ApiResponse(
+                responseCode = "400",
+                description =
+                        "Validation failed on query parameters (VALIDATION_FAILED, page < 0, size outside 1-100)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
     @GetMapping("/me")

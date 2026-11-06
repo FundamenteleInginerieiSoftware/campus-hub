@@ -90,6 +90,22 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/reservations/me returns 400 when page is negative")
+    void getMyReservationsInvalidPageReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/me").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/me returns 400 when size exceeds max 100")
+    void getMyReservationsInvalidSizeReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/me").param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
     @DisplayName("GET /api/v1/reservations/me/summary returns 200 OK with summary counts")
     void getMySummaryReturns200() throws Exception {
         when(reservationService.getMySummary()).thenReturn(new ReservationSummaryResponse(2L, 5L, 1L));
