@@ -13,6 +13,7 @@ import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
@@ -60,12 +61,15 @@ class ReservationServiceRulesTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private NotificationService notificationService;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
-        reservationService =
-                new ReservationService(reservationRepository, catalogApi, currentUser, auditService, clock);
+        reservationService = new ReservationService(
+                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
     }
 
     private Reservation reservation(long id, LocalDateTime start, LocalDateTime end) {

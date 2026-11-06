@@ -39,9 +39,11 @@ public class AdminReservationController {
 
     @Operation(
             summary = "Search reservations (Admin)",
-            description = "Retrieves a paginated list of reservations filtered by status, user, asset, or date")
+            description =
+                    "Retrieves a paginated list of reservations filtered by status, user, asset, or date, ordered by startTime (asc or desc)")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Page of reservations returned"),
+        @ApiResponse(responseCode = "400", description = "Invalid query parameter (e.g. sortDir)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)")
     })
@@ -52,8 +54,10 @@ public class AdminReservationController {
             @RequestParam(required = false) Long assetId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return ResponseEntity.ok(reservationService.getAdminReservations(status, userId, assetId, date, page, size));
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        return ResponseEntity.ok(
+                reservationService.getAdminReservations(status, userId, assetId, date, page, size, sortDir));
     }
 
     @Operation(
