@@ -93,9 +93,7 @@ public class ReservationController {
                     "Checks whether a specific asset or any asset in a category is available for booking in a time window")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Availability evaluation returned"),
-        @ApiResponse(
-                responseCode = "400",
-                description = "Missing or invalid query parameter (INVALID_PARAMETER, VALIDATION_FAILED)"),
+        @ApiResponse(responseCode = "400", description = "Missing or invalid query parameter (INVALID_PARAMETER)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "404", description = "Asset not found"),
         @ApiResponse(

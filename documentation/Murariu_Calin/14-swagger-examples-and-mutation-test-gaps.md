@@ -19,12 +19,13 @@ When building software for university labs, it is not enough for code to "pass" 
 
 ### 1. Swagger / OpenAPI Annotations & Error Codes
 
-| Component | Annotation | Purpose |
+| Component | Annotation / Class | Purpose |
 |---|---|---|
 | `CreateReservationRequest` | `@Schema(example = "1")` on `assetId`, `@Schema(example = "2026-11-10T14:00:00")` on `startTime`, `@Schema(example = "2026-11-10T16:00:00")` on `endTime` | Provides slot-aligned future weekday times, preventing `SLOT_NOT_ALIGNED` or `BOOKING_IN_PAST` errors on interactive Swagger execution. |
 | `ReservationController.checkAvailability` | `@Parameter(example = "1")` on `assetId`/`categoryId`, `@Parameter(example = "2026-11-10T14:00:00")` on `startTime` and `endTime` | Aligns query parameters with reservation slot boundaries and valid default IDs. |
-| `ReservationController` | `@ApiResponse(responseCode = "400", description = "... VALIDATION_FAILED, MALFORMED_REQUEST")` | Documents RFC 9457 `ProblemDetail` responses for invalid request payloads and query parameters. |
-| `AdminReservationController` & `AdminReassignmentController` | `@ApiResponse(responseCode = "400", description = "... VALIDATION_FAILED ...")` + `@Validated` | Documents query parameter validation on pagination bounds (`page >= 0`, `1 <= size <= 100`). |
+| `ReservationController` | `@ApiResponse(responseCode = "400", description = "... INVALID_PARAMETER, MALFORMED_REQUEST")` | Documents RFC 9457 `ProblemDetail` responses for invalid request payloads and query parameters (availability query params return `INVALID_PARAMETER` on mismatch/missing). |
+| `AdminReservationController` & `AdminReassignmentController` | `@ApiResponse(responseCode = "400", description = "... VALIDATION_FAILED ...")` | Documents query parameter validation on pagination bounds (`page >= 0`, `1 <= size <= 100`). |
+| `ReservationOpenApiCustomizer` | Implements `OpenApiCustomizer` | Dynamically updates request body and query parameter examples to the next upcoming weekday (14:00-16:00) using the shared `Clock`, ensuring Swagger "Try it out" remains valid indefinitely for M1 demos and defense without manual date adjustments. |
 
 ### 2. Integration Test Isolation (`ReassignmentRollbackIT`)
 
@@ -57,9 +58,13 @@ When building software for university labs, it is not enough for code to "pass" 
 | `ReservationService.loadOwnedOrAdmin` & `returnReservation` | Return value replaced with `null` survived when reservation not found. | Added `getByIdNotFound()` and `returnReservationNotFound()` asserting `404 RESERVATION_NOT_FOUND`. |
 | `ReservationService.findBusyAssetIds` | Return value replaced with empty list survived without unit test. | Added `findBusyAssetIdsDelegates()` verifying repository delegation with `ReservationStatus.ACTIVE_STATUSES`. |
 
+
+> [!NOTE]
+> **Admin Search Specification Coverage:** The `ReservationSpecification` dynamic query predicates are thoroughly covered against real PostgreSQL queries in `ReservationAdminSearchTest` (`@DataJpaTest`, PR #172), which verifies status, userId, assetId, date filtering, and ascending/descending order.
+
 ---
 
 ## Verification
 
-- `./gradlew spotlessApply build` — 439 tests passing, Spotless formatting verified, JaCoCo coverage maintained.
-- `./gradlew pitest` — Mutation score improved across `reservation` and `reassignment` packages to >95%.
+- `./gradlew spotlessApply build` — 476 tests passing, Spotless formatting verified, JaCoCo coverage maintained.
+- `./gradlew pitest` — Mutation testing enabled on-demand (#180); surviving mutation gaps closed across `reservation` and `reassignment` packages.
