@@ -20,7 +20,7 @@ import {
   IconCheck,
   IconPlus,
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import {
   cancelReservation,
@@ -131,7 +131,10 @@ export default function MyReservationsPage() {
   })
 
   // Cache for resolved asset names to enrich the table rows.
+  // assetCacheRef mirrors assetCache so the fetch effect can skip already-cached IDs
+  // without adding assetCache to the effect dependency array.
   const [assetCache, setAssetCache] = useState<Record<number, AssetSummary>>({})
+  const assetCacheRef = useRef<Record<number, AssetSummary>>({})
 
   // Increment this counter to re-fetch the current reservations page and summary.
   const [reloadToken, setReloadToken] = useState(0)
@@ -185,7 +188,10 @@ export default function MyReservationsPage() {
           ...new Set(
             response.content
               .flatMap((r) => [r.assetId, r.originalAssetId])
-              .filter((id): id is number => id !== null && id !== undefined),
+              .filter(
+                (id): id is number =>
+                  id !== null && id !== undefined && !assetCacheRef.current[id],
+              ),
           ),
         ]
 
@@ -199,6 +205,7 @@ export default function MyReservationsPage() {
               if (item) newEntries[item.id] = item
             }
             if (Object.keys(newEntries).length > 0) {
+              assetCacheRef.current = { ...assetCacheRef.current, ...newEntries }
               setAssetCache((prev) => ({ ...prev, ...newEntries }))
             }
           }
@@ -326,6 +333,7 @@ export default function MyReservationsPage() {
     {
       header: 'Actions',
       render: (r) => {
+        // Backend rejects cancellation once startTime is reached (!now.isBefore(startTime)).
         const canCancel = r.status === 'CONFIRMED'
         if (!canCancel) return null
         const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
