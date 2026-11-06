@@ -43,11 +43,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -1209,9 +1212,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 301L);
 
-        when(reservationRepository.findAll(
-                        any(org.springframework.data.jpa.domain.Specification.class),
-                        any(org.springframework.data.domain.Pageable.class)))
+        when(reservationRepository.findAll(ArgumentMatchers.<Specification<Reservation>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
 
         PageResponse<ReservationResponse> page = reservationService.getAdminReservations(
@@ -1233,9 +1234,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 301L);
 
-        when(reservationRepository.findAll(
-                        any(org.springframework.data.jpa.domain.Specification.class),
-                        any(org.springframework.data.domain.Pageable.class)))
+        when(reservationRepository.findAll(ArgumentMatchers.<Specification<Reservation>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
 
         PageResponse<ReservationResponse> ascPage =
