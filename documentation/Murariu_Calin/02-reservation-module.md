@@ -154,7 +154,7 @@ Located in `com.campus.reservation.service`. Implements `ReservationApi`.
 6. **Persistence & Audit:** Saves `Reservation` and writes entry to `AuditService`.
 
 #### B. `getMyReservations(ReservationStatus status, int page, int size)`
-Returns `PageResponse<ReservationResponse>` for `currentUser.id()`.
+Returns `PageResponse<ReservationResponse>` for `currentUser.id()`. Both `getMyReservations` and `getAdminReservations` (as well as `ReassignmentService.getLogs`) validate `page >= 0`, `1 <= size <= 100`, and `(long) page * size <= Integer.MAX_VALUE` (throwing `400 INVALID_PARAMETER`, #150) so huge page numbers never overflow Hibernate's `int` first-result offset into a 500 error.
 
 #### C. `getById(Long id)`
 Returns `ReservationResponse` or throws `404 NotFoundException("RESERVATION_NOT_FOUND", ...)` if not owned and not admin.

@@ -1,10 +1,12 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
@@ -84,9 +86,13 @@ public class ReservationService implements ReservationApi {
         }
 
         // 4. Active limit check for students (admins bypass this rule).
-        // Known limitation: Two parallel requests from the same student for two different assets
-        // lock different asset rows, so both could pass the < 2 check concurrently.
+        // Bug fixed (#169): two parallel requests from the same student for two different assets
+        // lock different asset rows, so both could previously pass the < 2 check under READ COMMITTED.
+        // Fix: acquire a transaction-scoped PostgreSQL advisory lock on userId before counting.
+        // Lock order is always asset row -> user advisory lock (nothing locks an asset after the user lock),
+        // so deadlocks cannot occur.
         if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
             if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
@@ -112,6 +118,7 @@ public class ReservationService implements ReservationApi {
      * Retrieves a paginated list of reservations for the current authenticated user filtered by statuses.
      */
     public PageResponse<ReservationResponse> getMyReservations(List<ReservationStatus> statuses, int page, int size) {
+        validatePagination(page, size);
         Long userId = currentUser.id();
         Pageable pageable = PageRequest.of(page, size);
 
@@ -196,10 +203,11 @@ public class ReservationService implements ReservationApi {
         validateSlotRules(start, end, now);
 
         if (assetId != null) {
-            // Verify asset exists in catalog (throws 404 ASSET_NOT_FOUND if unknown)
-            catalogApi.getAsset(assetId);
+            // Bug fixed (#155): getAsset(assetId) already returns the AssetSummary with its status;
+            // checking asset.status() directly avoids a second identical SELECT via catalogApi.isBookable(assetId).
+            AssetSummary asset = catalogApi.getAsset(assetId);
 
-            if (!catalogApi.isBookable(assetId)) {
+            if (asset.status() != AssetStatus.AVAILABLE) {
                 return AvailabilityResponse.forAsset(assetId, start, end, false, "ASSET_NOT_BOOKABLE");
             }
 
@@ -270,8 +278,10 @@ public class ReservationService implements ReservationApi {
     }
 
     private void validateDuration(LocalDateTime start, LocalDateTime end) {
+        // Only the upper limit needs checking: validateSlotAlignment already guarantees that end is after
+        // start and both sit on :00/:30, so a booking can never be shorter than 30 minutes here.
         Duration duration = Duration.between(start, end);
-        if (duration.compareTo(Duration.ofMinutes(30)) < 0 || duration.compareTo(Duration.ofHours(4)) > 0) {
+        if (duration.compareTo(Duration.ofHours(4)) > 0) {
             throw new BusinessRuleException(
                     "INVALID_DURATION", "Reservation duration must be between 30 minutes and 4 hours");
         }
@@ -452,6 +462,7 @@ public class ReservationService implements ReservationApi {
     @Transactional(readOnly = true)
     public PageResponse<ReservationResponse> getAdminReservations(
             ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size) {
+        validatePagination(page, size);
         Specification<Reservation> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (status != null) {
@@ -508,6 +519,19 @@ public class ReservationService implements ReservationApi {
         r.markOverdue();
         auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
         return true;
+    }
+
+    // Bug fixed (#150): prevents integer overflow when Hibernate casts pageable.getOffset() to int.
+    private static void validatePagination(int page, int size) {
+        if (page < 0) {
+            throw new InvalidParameterException("Page index must not be negative");
+        }
+        if (size < 1 || size > 100) {
+            throw new InvalidParameterException("Page size must be between 1 and 100");
+        }
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidParameterException("Page offset exceeds maximum supported value");
+        }
     }
 
     // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET
