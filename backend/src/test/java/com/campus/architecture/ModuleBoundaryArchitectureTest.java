@@ -14,13 +14,15 @@ import com.tngtech.archunit.lang.ArchRule;
  *
  * <p>Rules defined in AGENTS.md §5:
  * <ul>
- *   <li>Only {@code api} packages may be imported across modules. Internal packages ({@code domain},
+ *   <li><b>Rule 1:</b> Only {@code api} packages may be imported across modules. Internal packages ({@code domain},
  *       {@code service}, {@code repository}, {@code web}) are strictly encapsulated inside each module.</li>
- *   <li>{@code catalog} is the core inventory foundation and must not depend on {@code reservation},
- *       {@code incident}, or {@code reassignment}.</li>
- *   <li>{@code reservation} must not depend on {@code incident} or {@code reassignment}.</li>
- *   <li>{@code incident} publishes domain events and must not depend on {@code reassignment}.</li>
- *   <li>No circular dependencies between top-level feature modules.</li>
+ *   <li><b>Rule 2:</b> {@code catalog} is the foundational inventory module and must not depend on
+ *       {@code reservation}, {@code incident}, {@code reassignment}, {@code user}, {@code storage}, or {@code notification}.</li>
+ *   <li><b>Rule 2b:</b> Shared infrastructure packages ({@code common}, {@code storage}, {@code notification})
+ *       must remain decoupled from domain feature modules ({@code catalog}, {@code reservation}, {@code incident}, {@code reassignment}).</li>
+ *   <li><b>Rule 3:</b> {@code reservation} must not depend on {@code incident} or {@code reassignment}.</li>
+ *   <li><b>Rule 4:</b> {@code incident} publishes domain events and must not depend on {@code reassignment}.</li>
+ *   <li><b>Rule 5:</b> Directed acyclic dependency graph between top-level modules (no circular dependencies).</li>
  * </ul>
  */
 @AnalyzeClasses(packages = "com.campus", importOptions = ImportOption.DoNotIncludeTests.class)

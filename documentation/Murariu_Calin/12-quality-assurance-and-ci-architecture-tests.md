@@ -41,24 +41,48 @@ static final ArchRule no_unparameterized_datetime_now = noClasses()
 #### Rule 5: `@Transactional` Placement Boundary (`AGENTS.md` §5)
 ```java
 @ArchTest
-static final ArchRule controllers_must_not_be_transactional = noClasses()
+static final ArchRule controller_classes_must_not_be_transactional = noClasses()
         .that()
         .areAnnotatedWith(RestController.class)
         .should()
         .beAnnotatedWith(Transactional.class)
-        .orShould(new ArchCondition<JavaClass>("have @Transactional methods") { ... })
+        .orShould()
+        .beAnnotatedWith(jakarta.transaction.Transactional.class)
         .because("@Transactional belongs on service methods only, never on controllers (AGENTS.md §5)");
 
 @ArchTest
-static final ArchRule repositories_must_not_be_transactional = noClasses()
+static final ArchRule controller_methods_must_not_be_transactional = noMethods()
+        .that()
+        .areDeclaredInClassesThat()
+        .areAnnotatedWith(RestController.class)
+        .should()
+        .beAnnotatedWith(Transactional.class)
+        .orShould()
+        .beAnnotatedWith(jakarta.transaction.Transactional.class)
+        .because("@Transactional belongs on service methods only, never on controllers (AGENTS.md §5)");
+
+@ArchTest
+static final ArchRule repository_classes_must_not_be_transactional = noClasses()
         .that()
         .areAssignableTo(Repository.class)
         .should()
         .beAnnotatedWith(Transactional.class)
-        .orShould(new ArchCondition<JavaClass>("have @Transactional methods") { ... })
+        .orShould()
+        .beAnnotatedWith(jakarta.transaction.Transactional.class)
+        .because("@Transactional belongs on service methods only, never on repositories (AGENTS.md §5)");
+
+@ArchTest
+static final ArchRule repository_methods_must_not_be_transactional = noMethods()
+        .that()
+        .areDeclaredInClassesThat()
+        .areAssignableTo(Repository.class)
+        .should()
+        .beAnnotatedWith(Transactional.class)
+        .orShould()
+        .beAnnotatedWith(jakarta.transaction.Transactional.class)
         .because("@Transactional belongs on service methods only, never on repositories (AGENTS.md §5)");
 ```
-- **Why it matters:** Guarantees that transaction lifecycles begin and end inside `@Service` business methods (also inspects individual repository methods and controller methods, avoiding `noClasses()` condition inversion). Controllers simply orchestrate DTO mapping, and repositories rely on standard Spring Data transaction boundaries.
+- **Why it matters:** Guarantees that transaction lifecycles begin and end inside `@Service` business methods. Inspects both class-level annotations and individual method-level declarations (`noMethods().that().areDeclaredInClassesThat()`), avoiding the `noClasses().should(customCondition)` event inversion trap (#76). Controllers simply orchestrate DTO mapping, and repositories rely on standard Spring Data transaction boundaries.
 
 #### Rule 6: Enum Mapping Safety (`AGENTS.md` §5)
 ```java
@@ -75,12 +99,12 @@ static final ArchRule entities_must_not_use_ordinal_enum_mapping = fields()
 - **Why it matters:** Protects PostgreSQL databases against silent integer-order corruption when enum values change or expand.
 
 #### Rules 7–14: Spring Boot 4 Idioms, One-Origin CORS, `PageResponse<T>`, Lazy JPA Associations, `/api/v1/admin` Prefix, `@Entity`-Free `api` Facades, No Standard Streams & Plain-ID Cross-Module Entity References
-- **`no_legacy_spring_boot_2_or_3_imports`**: Forbids `javax.persistence..`, `javax.validation..`, `com.fasterxml.jackson.databind..` (Jackson 2), and `io.jsonwebtoken..` (`jjwt`).
-- **`controllers_must_not_use_cross_origin`**: Forbids `@CrossOrigin` on controller classes and individual methods (Vite dev proxy and CloudFront prod serve from a single origin).
+- **`no_legacy_spring_boot_2_or_3_imports`**: Forbids `javax.persistence..`, `javax.validation..`, `com.fasterxml.jackson.core..`, `com.fasterxml.jackson.databind..`, `com.fasterxml.jackson.datatype..` (Jackson 2), and `io.jsonwebtoken..` (`jjwt`).
+- **`controller_classes_must_not_use_cross_origin` & `controller_methods_must_not_use_cross_origin`**: Forbids `@CrossOrigin` on controller classes and individual methods (Vite dev proxy and CloudFront prod serve from a single origin).
 - **`controllers_must_not_return_spring_page`**: Ensures paginated endpoints return `PageResponse<T>`, never Spring Data's `Page<T>`.
 - **`entities_must_not_use_one_to_many` & `entities_many_to_one_must_be_lazy`**: Enforces `@ManyToOne(fetch = FetchType.LAZY)` and forbids `@OneToMany` on JPA entities.
 - **`admin_controllers_must_map_under_admin_prefix` & `admin_endpoints_must_map_under_admin_prefix`**: Guarantees every `Admin*Controller` and any admin-mapped method (including in catalog controllers) maps under `/api/v1/admin/**` so `SecurityConfig` enforces `ROLE_ADMIN`.
-- **`api_packages_must_not_expose_entities`**: Ensures no class or interface in `..api..` exposes `@Entity` types in method return types, parameter types, or record/field types, keeping cross-module contracts purely DTO/record-based.
+- **`api_packages_must_not_expose_entities`**: Ensures no class or interface in `..api..` exposes `@Entity` types in method return types or parameter types (records are covered through their accessors), keeping cross-module contracts purely DTO/record-based.
 - **`no_standard_streams`**: Forbids `System.out` and `System.err` in production code, requiring structured SLF4J logging (`@Slf4j`).
 - **`entities_must_not_reference_entities_from_other_modules`**: Enforces that JPA `@Entity` fields never reference `@Entity` types from another module (`AGENTS.md` §5: cross-module references must be plain IDs such as `Long assetId`).
 
