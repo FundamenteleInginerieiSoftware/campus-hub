@@ -167,6 +167,22 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden());
     }
 
+    // #158: a token we signed ourselves but whose "sub" is not a user id (old token format, or a bug
+    // in our own login) must be a normal 401, not a 500 from Long.valueOf.
+    @Test
+    void tokenWithNonNumericSubjectIsRejected() throws Exception {
+        mockMvc.perform(get(PROBE).header("Authorization", bearerWithSubject("abc")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void tokenWithoutSubjectIsRejected() throws Exception {
+        mockMvc.perform(get(PROBE).header("Authorization", bearerWithSubject(null)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
     @Test
     void passwordsAreStoredAsBcryptHashes() {
         String hash = passwordEncoder.encode("password");
@@ -199,6 +215,19 @@ class SecurityConfigTest {
                 .subject(String.valueOf(userId))
                 .claim("roles", List.of(role))
                 .build();
+        return sign(claims);
+    }
+
+    // A correctly signed token with any "sub" (null = no "sub" claim at all).
+    private String bearerWithSubject(String subject) {
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().claim("roles", List.of("STUDENT"));
+        if (subject != null) {
+            claims.subject(subject);
+        }
+        return sign(claims.build());
+    }
+
+    private String sign(JwtClaimsSet claims) {
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         return "Bearer "
                 + jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

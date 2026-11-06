@@ -26,6 +26,16 @@ class AuthRequestsTest {
     }
 
     @Test
+    void trimsEmailAndNameButNotThePassword() {
+        RegisterRequest request = new RegisterRequest(" ana@campus.test ", " password1 ", "  Ana Pop ");
+
+        assertThat(request.email()).isEqualTo("ana@campus.test");
+        assertThat(request.fullName()).isEqualTo("Ana Pop");
+        assertThat(request.password()).isEqualTo(" password1 ");
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
     void rejectsBadEmailShortPasswordAndBlankName() {
         RegisterRequest request = new RegisterRequest("not-an-email", "short", " ");
 

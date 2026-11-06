@@ -40,19 +40,21 @@ public class CategoryService {
         }
 
         Category category = new Category(trimmedName, request.description());
+        Category saved;
         try {
-            Category saved = categoryRepository.saveAndFlush(category);
-            auditService.record(
-                    currentUser.id(),
-                    "CATEGORY_CREATED",
-                    "CATEGORY",
-                    saved.getId(),
-                    "Created category " + saved.getName());
-            return CategoryResponse.from(saved);
+            saved = categoryRepository.saveAndFlush(category);
         } catch (DataIntegrityViolationException ex) {
-            // Concurrent creates can both pass existsByNameIgnoreCase; the DB unique index stops the second with 409.
-            throw nameTaken(trimmedName);
+            // Check if the name was actually taken by a concurrent insert; otherwise rethrow (#167).
+            if (categoryRepository.existsByNameIgnoreCase(trimmedName)) {
+                throw nameTaken(trimmedName);
+            }
+            throw ex;
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate name (#120).
+        auditService.record(
+                currentUser.id(), "CATEGORY_CREATED", "CATEGORY", saved.getId(), "Created category " + saved.getName());
+        return CategoryResponse.from(saved);
     }
 
     @Transactional
@@ -64,19 +66,21 @@ public class CategoryService {
         }
 
         category.update(trimmedName, request.description());
+        Category saved;
         try {
-            Category saved = categoryRepository.saveAndFlush(category);
-            auditService.record(
-                    currentUser.id(),
-                    "CATEGORY_UPDATED",
-                    "CATEGORY",
-                    saved.getId(),
-                    "Updated category " + saved.getName());
-            return CategoryResponse.from(saved);
+            saved = categoryRepository.saveAndFlush(category);
         } catch (DataIntegrityViolationException ex) {
-            // A concurrent create or rename can pass the check above; the DB unique index stops it with 409.
-            throw nameTaken(trimmedName);
+            // Check if the name was actually taken by a concurrent insert/update; otherwise rethrow (#167).
+            if (categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmedName, id)) {
+                throw nameTaken(trimmedName);
+            }
+            throw ex;
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate name (#120).
+        auditService.record(
+                currentUser.id(), "CATEGORY_UPDATED", "CATEGORY", saved.getId(), "Updated category " + saved.getName());
+        return CategoryResponse.from(saved);
     }
 
     @Transactional
@@ -89,11 +93,13 @@ public class CategoryService {
         try {
             categoryRepository.delete(category);
             categoryRepository.flush();
-            auditService.record(
-                    currentUser.id(), "CATEGORY_DELETED", "CATEGORY", id, "Deleted category " + category.getName());
         } catch (DataIntegrityViolationException ex) {
             throw categoryInUse(category.getName());
         }
+
+        // Recorded outside the try-catch so an audit failure is not falsely reported as a category in use (#120).
+        auditService.record(
+                currentUser.id(), "CATEGORY_DELETED", "CATEGORY", id, "Deleted category " + category.getName());
     }
 
     private Category findOrThrow(Long id) {

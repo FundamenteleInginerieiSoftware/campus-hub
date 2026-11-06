@@ -26,6 +26,8 @@ import { useNavigate } from 'react-router'
 import {
   checkAvailability,
   createReservation,
+  nowInBucharest,
+  parseCampusLocalDateTime,
   type AssetSummary,
   type AvailabilityResponse,
   type Reservation,
@@ -71,6 +73,11 @@ function formatDateKey(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function toSlotDate(day: Date, timeStr: string): Date {
+  const [h, m] = timeStr.split(':').map(Number)
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m, 0)
 }
 
 function addMinutesToTimeString(timeStr: string, minutes: number): string {
@@ -154,9 +161,9 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
  */
 export default function CalendarBookingView({ asset, onBack, onSuccess }: Props) {
   const navigate = useNavigate()
-  const [today] = useState(() => new Date())
+  const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
-  const maxBookingDate = useMemo(() => new Date(today.getTime() + 14 * 86400000), [today])
+  const maxBookingDate = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14, today.getHours(), today.getMinutes(), today.getSeconds()), [today])
 
   // Current view's Monday
   const [currentMonday, setCurrentMonday] = useState(() => initialSchedule.monday)
@@ -235,16 +242,26 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   function selectSlot(day: string, time: string) {
     setSelectedDay(day)
     setSelectedStartTime(time)
+    setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
   function handleDurationChange(val: number) {
     setDurationMinutes(val)
+    setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
-  const isPrevWeekDisabled = currentMonday.getTime() <= getMonday(today).getTime()
-  const isNextWeekDisabled = currentMonday.getTime() + 7 * 86400000 > maxBookingDate.getTime()
+  const isPrevWeekDisabled = currentMonday.getTime() <= initialSchedule.monday.getTime()
+  const isNextWeekDisabled =
+    new Date(
+      currentMonday.getFullYear(),
+      currentMonday.getMonth(),
+      currentMonday.getDate() + 7,
+      8,
+      0,
+      0,
+    ) > maxBookingDate
 
   function handlePrevWeek() {
     if (isPrevWeekDisabled) return
@@ -252,16 +269,22 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     prevMon.setDate(prevMon.getDate() - 7)
     setCurrentMonday(prevMon)
 
-    // Shift selectedDay back by 7 days so it stays in the displayed week
-    const currSel = new Date(selectedDay)
+    // Shift selectedDay back by 7 days in local time so it stays in the displayed week
+    const currSel = parseCampusLocalDateTime(selectedDay)
     const prevSel = new Date(currSel)
     prevSel.setDate(currSel.getDate() - 7)
 
-    const isPast = prevSel < new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const targetDay = !isPast ? prevSel : today
+    const firstValidDay = parseCampusLocalDateTime(initialSchedule.day)
+    const targetDay = prevSel >= firstValidDay ? prevSel : firstValidDay
     const targetKey = formatDateKey(targetDay)
-    const targetTime =
-      targetKey === formatDateKey(today) ? findFirstValidSlotForDay(today, today) : selectedStartTime
+    let targetTime = selectedStartTime
+    if (targetKey === formatDateKey(today)) {
+      const currentTotalMins = today.getHours() * 60 + today.getMinutes()
+      const [selH, selM] = selectedStartTime.split(':').map(Number)
+      if (selH * 60 + selM <= currentTotalMins) {
+        targetTime = findFirstValidSlotForDay(today, today)
+      }
+    }
     selectSlot(targetKey, targetTime)
   }
 
@@ -271,20 +294,26 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     nextMon.setDate(nextMon.getDate() + 7)
     setCurrentMonday(nextMon)
 
-    // Shift selectedDay forward by 7 days so it stays in the displayed week
-    const currSel = new Date(selectedDay)
+    // Shift selectedDay forward by 7 days in local time and clamp against the 14-day horizon
+    const currSel = parseCampusLocalDateTime(selectedDay)
     const nextSel = new Date(currSel)
     nextSel.setDate(currSel.getDate() + 7)
 
-    const targetDay = nextSel <= maxBookingDate ? nextSel : nextMon
-    selectSlot(formatDateKey(targetDay), selectedStartTime)
+    const targetDay = toSlotDate(nextSel, '08:00') <= maxBookingDate ? nextSel : nextMon
+    const targetTime =
+      toSlotDate(targetDay, selectedStartTime) <= maxBookingDate ? selectedStartTime : '08:00'
+    selectSlot(formatDateKey(targetDay), targetTime)
   }
 
+  // Bug fixed: clicking "Today" on a weekend or after 19:30 previously selected 09:00 on today,
+  // which immediately failed availability with OUTSIDE_OPENING_HOURS or BOOKING_IN_PAST.
+  // Fix: recompute the schedule from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
   function handleToday() {
-    setCurrentMonday(getMonday(today))
-    const todayKey = formatDateKey(today)
-    const validSlot = findFirstValidSlotForDay(today, today)
-    selectSlot(todayKey, validSlot)
+    const freshToday = nowInBucharest()
+    const schedule = getInitialSchedule(freshToday)
+    setToday(freshToday)
+    setCurrentMonday(schedule.monday)
+    selectSlot(schedule.day, schedule.time)
   }
 
   async function handleConfirmBooking() {
@@ -456,7 +485,9 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 const dayKey = formatDateKey(d)
                 const isSelectedDay = dayKey === selectedDay
                 const isPast = d < new Date(today.getFullYear(), today.getMonth(), today.getDate())
-                const isOutOfHorizon = d > maxBookingDate
+                // Bug fixed: comparing midnight d > maxBookingDate enabled slots on day +14 after today's current time of day.
+                // Fix: check the day's first slot (08:00) for the header and the exact slot timestamp for each 30-min cell.
+                const isOutOfHorizon = toSlotDate(d, '08:00') > maxBookingDate
                 const isToday = formatDateKey(d) === formatDateKey(today)
 
                 return (
@@ -484,6 +515,9 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                           if (selH * 60 + selM <= currentTotalMins) {
                             newTime = findFirstValidSlotForDay(d, today)
                           }
+                        }
+                        if (toSlotDate(d, newTime) > maxBookingDate) {
+                          newTime = '08:00'
                         }
                         selectSlot(dayKey, newTime)
                       }
@@ -533,7 +567,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                       const stepTotalMins = stepH * 60 + stepM
                       const isPastTimeToday = isToday && stepTotalMins <= currentTotalMins
                       const isPastSlot = isPastDay || isPastTimeToday
-                      const isOutOfHorizon = d > maxBookingDate
+                      const isOutOfHorizon = toSlotDate(d, stepTime) > maxBookingDate
                       const isCellDisabled = isPastSlot || isOutOfHorizon
                       const isSelectedSlot = dayKey === selectedDay && stepTime === selectedStartTime
 

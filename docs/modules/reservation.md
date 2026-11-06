@@ -45,7 +45,7 @@ ReservationService (@Service, implements ReservationApi)
   ├── 2. CatalogApi.lockForBooking (Pessimistic row lock on asset FIRST)
   ├── 3. CatalogApi.isBookable (Operational status check: AVAILABLE)
   ├── 4. ReservationRepository.existsOverlap (Interval collision check)
-  ├── 5. User Quota Verification (countByUserIdAndStatusIn < 2; bypassed by admins)
+  ├── 5. ReservationRepository.lockUserQuota + User Quota Verification (pg_advisory_xact_lock(userId), count < 2; bypassed by admins)
   ├── 6. ReservationRepository.save (Persist entity)
   └── 7. AuditService.record (CREATE_RESERVATION)
        │
