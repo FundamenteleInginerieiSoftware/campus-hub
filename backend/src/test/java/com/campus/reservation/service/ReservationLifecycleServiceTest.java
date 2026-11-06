@@ -431,4 +431,46 @@ class ReservationLifecycleServiceTest {
         verify(catalogApi).getAsset(ASSET_ID);
         verify(catalogApi).findAvailableByModel("Tek-100", ASSET_ID);
     }
+
+    @Test
+    @DisplayName("Preventive cascade catches RuntimeException during moveToAsset and skips to return false")
+    void preventiveMoveSkipsWhenMoveToAssetThrowsRuntimeException() {
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        Reservation overdueRes = new Reservation(
+                102L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 1, 12, 0));
+        ReflectionTestUtils.setField(overdueRes, "id", 22L);
+
+        Reservation threatened = new Reservation(
+                103L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 1, 15, 0));
+        ReflectionTestUtils.setField(threatened, "id", 33L);
+
+        AssetSummary overdueAsset = new AssetSummary(ASSET_ID, "Scope 1", "Tek-100", 1L, 1L, AssetStatus.AVAILABLE);
+        AssetSummary sub = new AssetSummary(SUB_ASSET_ID, "Scope 2", "Tek-100", 1L, 1L, AssetStatus.AVAILABLE);
+
+        when(reservationRepository.findConfirmedBeforeCutoff(any())).thenReturn(List.of());
+        when(reservationRepository.findCheckedOutPastEnd(any())).thenReturn(List.of());
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
+        when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now)).thenReturn(List.of(threatened));
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(overdueAsset);
+        when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
+        when(reservationService.isAssetFree(eq(SUB_ASSET_ID), any(), any(), eq(33L)))
+                .thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(SUB_ASSET_ID), any()))
+                .thenThrow(new RuntimeException("Concurrent conflict"));
+
+        LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
+
+        assertThat(summary.preventivelyReassignedCount()).isZero();
+        assertThat(summary.preventivelyReassignedReservationIds()).isEmpty();
+        verify(notificationService, never()).notifyUser(anyLong(), any(), any());
+    }
 }
