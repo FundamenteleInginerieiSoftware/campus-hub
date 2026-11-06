@@ -41,28 +41,31 @@ The `reassignment` module provides automated disaster recovery for lab bookings 
 LocalAssetDamagedListener (@TransactionalEventListener, AFTER_COMMIT, @Async)
        │
        ▼
-ReassignmentService (@Transactional, REQUIRES_NEW)
+ReassignmentService (orchestrator)
   ├── 1. CatalogApi.getAsset(brokenAssetId)
   ├── 2. ReservationApi.findUpcomingActiveByAsset(brokenAssetId, now)
   └── 3. For each reservation (sorted chronologically):
-           ├── For each SubstituteStrategy (ordered):
-           │     ├── strategy.findSubstitute(r, damaged)
-           │     └── IF substitute found:
-           │           ├── ReservationApi.moveToAsset(r.id(), substitute.id(), reason)
-           │           └── ReassignmentLogRepository.save(REASSIGNED)
-           │
-           └── IF no substitute across all strategies:
-                 ├── ReservationApi.forceCancel(r.id(), reason)
-                 └── ReassignmentLogRepository.save(FORCE_CANCELLED)
+           └── ReassignmentBookingProcessor (@Transactional, REQUIRES_NEW)
+                 ├── For each SubstituteStrategy (ordered):
+                 │     ├── strategy.findSubstitute(r, damaged)
+                 │     └── IF substitute found:
+                 │           ├── ReservationApi.moveToAsset(r.id(), substitute.id(), reason)
+                 │           └── ReassignmentLogRepository.save(REASSIGNED)
+                 │
+                 └── IF no substitute across all strategies:
+                       ├── ReservationApi.forceCancel(r.id(), reason)
+                       └── ReassignmentLogRepository.save(FORCE_CANCELLED)
 ```
 
 ---
 
-## 4. Transaction Isolation (`Propagation.REQUIRES_NEW`)
+## 4. Transaction Isolation (`Propagation.REQUIRES_NEW` per booking)
 
-`ReassignmentService.handle(AssetDamagedEvent)` is annotated with `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
-- Reassignment runs inside its own dedicated transaction, independent from the incident reporting transaction.
-- If one booking reassignment encounters an unexpected issue, the incident report itself remains safely committed.
+`ReassignmentService.handle(AssetDamagedEvent)` coordinates the reassignment loop and delegates each individual reservation to `ReassignmentBookingProcessor.processSingleBooking(...)` inside an isolated `Propagation.REQUIRES_NEW` transaction:
+- **Decoupled from Incident:** Reassignment runs asynchronously `AFTER_COMMIT` of the incident report.
+- **Per-Booking Boundary (Bug #112 Fix):** Previously, all bookings in a batch ran within a single transaction. If one reservation had a concurrent conflict (e.g. cancelled by the student in the UI), Hibernate's stale entity caused an optimistic locking failure that rolled back the entire batch after emails were sent. With per-booking transactions, each move and log entry commits independently.
+- **Post-Commit Notifications:** Student emails are only dispatched after that specific booking's transaction has committed successfully.
+- If one booking encounters an unexpected issue, it is skipped cleanly without affecting other bookings or the incident report.
 
 ---
 

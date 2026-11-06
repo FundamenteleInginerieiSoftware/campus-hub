@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.campus.user.api.Role;
 import com.campus.user.domain.User;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,9 @@ class UserRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void findsUserByEmailIgnoringCase() {
@@ -41,5 +45,20 @@ class UserRepositoryTest {
         assertThatThrownBy(() -> userRepository.saveAndFlush(
                         new User("ANA@campus.test", "{bcrypt}hash", "Ana Two", Role.STUDENT, NOW)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void storesCreatedAtInWholeSecondsSoTheSavedAndReloadedUserAgree() {
+        // A real clock gives nanoseconds; PostgreSQL TIMESTAMP keeps only microseconds (#134).
+        LocalDateTime withNanos = LocalDateTime.of(2026, 11, 4, 22, 0, 5, 123_456_789);
+        User saved = userRepository.saveAndFlush(
+                new User("nano@campus.test", "{bcrypt}hash", "Nano", Role.STUDENT, withNanos));
+        // clear() drops the cached entity, so findById really reads the row from the database.
+        entityManager.clear();
+
+        User reloaded = userRepository.findById(saved.getId()).orElseThrow();
+
+        assertThat(saved.getCreatedAt()).isEqualTo(LocalDateTime.of(2026, 11, 4, 22, 0, 5));
+        assertThat(reloaded.getCreatedAt()).isEqualTo(saved.getCreatedAt());
     }
 }

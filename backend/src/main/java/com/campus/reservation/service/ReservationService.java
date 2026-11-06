@@ -1,10 +1,13 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
@@ -25,6 +28,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -63,7 +67,7 @@ public class ReservationService implements ReservationApi {
     @Transactional
     public ReservationResponse createReservation(CreateReservationRequest req) {
         Long userId = currentUser.id();
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
 
         validateReservationRequest(req, now);
 
@@ -82,9 +86,13 @@ public class ReservationService implements ReservationApi {
         }
 
         // 4. Active limit check for students (admins bypass this rule).
-        // Known limitation: Two parallel requests from the same student for two different assets
-        // lock different asset rows, so both could pass the < 2 check concurrently.
+        // Bug fixed (#169): two parallel requests from the same student for two different assets
+        // lock different asset rows, so both could previously pass the < 2 check under READ COMMITTED.
+        // Fix: acquire a transaction-scoped PostgreSQL advisory lock on userId before counting.
+        // Lock order is always asset row -> user advisory lock (nothing locks an asset after the user lock),
+        // so deadlocks cannot occur.
         if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
             if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
@@ -110,6 +118,7 @@ public class ReservationService implements ReservationApi {
      * Retrieves a paginated list of reservations for the current authenticated user filtered by statuses.
      */
     public PageResponse<ReservationResponse> getMyReservations(List<ReservationStatus> statuses, int page, int size) {
+        validatePagination(page, size);
         Long userId = currentUser.id();
         Pageable pageable = PageRequest.of(page, size);
 
@@ -156,7 +165,7 @@ public class ReservationService implements ReservationApi {
     @Transactional
     public ReservationResponse cancelReservation(Long id) {
         Reservation r = loadOwnedOrAdmin(id);
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
 
         if (!currentUser.isAdmin() && !now.isBefore(r.getStartTime())) {
             throw new ConflictException(
@@ -190,14 +199,15 @@ public class ReservationService implements ReservationApi {
             throw new BusinessRuleException("CONFLICTING_PARAMETERS", "Provide either assetId or categoryId, not both");
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         validateSlotRules(start, end, now);
 
         if (assetId != null) {
-            // Verify asset exists in catalog (throws 404 ASSET_NOT_FOUND if unknown)
-            catalogApi.getAsset(assetId);
+            // Bug fixed (#155): getAsset(assetId) already returns the AssetSummary with its status;
+            // checking asset.status() directly avoids a second identical SELECT via catalogApi.isBookable(assetId).
+            AssetSummary asset = catalogApi.getAsset(assetId);
 
-            if (!catalogApi.isBookable(assetId)) {
+            if (asset.status() != AssetStatus.AVAILABLE) {
                 return AvailabilityResponse.forAsset(assetId, start, end, false, "ASSET_NOT_BOOKABLE");
             }
 
@@ -268,8 +278,10 @@ public class ReservationService implements ReservationApi {
     }
 
     private void validateDuration(LocalDateTime start, LocalDateTime end) {
+        // Only the upper limit needs checking: validateSlotAlignment already guarantees that end is after
+        // start and both sit on :00/:30, so a booking can never be shorter than 30 minutes here.
         Duration duration = Duration.between(start, end);
-        if (duration.compareTo(Duration.ofMinutes(30)) < 0 || duration.compareTo(Duration.ofHours(4)) > 0) {
+        if (duration.compareTo(Duration.ofHours(4)) > 0) {
             throw new BusinessRuleException(
                     "INVALID_DURATION", "Reservation duration must be between 30 minutes and 4 hours");
         }
@@ -352,7 +364,7 @@ public class ReservationService implements ReservationApi {
             return false;
         }
 
-        r.forceCancel(LocalDateTime.now(clock), reason);
+        r.forceCancel(now(), reason);
         auditService.record(null, "FORCE_CANCEL_RESERVATION", "Reservation", r.getId(), reason);
         return true;
     }
@@ -360,7 +372,7 @@ public class ReservationService implements ReservationApi {
     @Override
     public Optional<ReservationSummary> findCurrentCheckout(Long assetId) {
         return reservationRepository
-                .findFirstByAssetIdAndStatusIn(
+                .findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
                         assetId, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE))
                 .map(r -> new ReservationSummary(
                         r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
@@ -378,7 +390,7 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
         LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
 
@@ -388,7 +400,39 @@ public class ReservationService implements ReservationApi {
                     "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
         }
 
+        // Fast fail if not in CONFIRMED state before acquiring row locks
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Cannot check out reservation in status " + reservation.getStatus() + "; expected CONFIRMED");
+        }
+
+        // Lock the asset row first to serialize simultaneous desk check-outs on the same physical equipment
+        catalogApi.lockForBooking(reservation.getAssetId());
+
+        // Bug fixed (#113): these checks must run BEFORE reservation.checkOut(now).
+        // If checkOut() ran first, Hibernate auto-flush would write status=CHECKED_OUT to the DB
+        // before findCurrentCheckout runs; with ORDER BY startTime DESC, the query would return
+        // *this* reservation instead of an earlier OVERDUE one, masking the conflict.
+
+        // 1. Check that asset is bookable (operational). Throws 409 ASSET_NOT_BOOKABLE if marked
+        // under maintenance or retired between booking and check-out.
+        if (!catalogApi.isBookable(reservation.getAssetId())) {
+            throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset is not available for check-out");
+        }
+
+        // 2. Prevent check-out when the asset is still held by another reservation (CHECKED_OUT or OVERDUE).
+        // Prevents double check-outs when an earlier student hasn't returned equipment yet.
+        Optional<ReservationSummary> currentHolder = findCurrentCheckout(reservation.getAssetId());
+        if (currentHolder.isPresent() && !currentHolder.get().id().equals(reservation.getId())) {
+            throw new ConflictException(
+                    "RESERVATION_CONFLICT",
+                    "Asset is currently checked out or overdue under reservation #"
+                            + currentHolder.get().id());
+        }
+
         reservation.checkOut(now);
+
         auditService.record(
                 currentUser.id(), "CHECK_OUT_RESERVATION", "Reservation", reservation.getId(), "Checked out at " + now);
         return ReservationResponse.from(reservation);
@@ -403,7 +447,7 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         reservation.returnItem(now);
         auditService.record(
                 currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at " + now);
@@ -418,6 +462,7 @@ public class ReservationService implements ReservationApi {
     @Transactional(readOnly = true)
     public PageResponse<ReservationResponse> getAdminReservations(
             ReservationStatus status, Long userId, Long assetId, LocalDate date, int page, int size) {
+        validatePagination(page, size);
         Specification<Reservation> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (status != null) {
@@ -474,5 +519,26 @@ public class ReservationService implements ReservationApi {
         r.markOverdue();
         auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
         return true;
+    }
+
+    // Bug fixed (#150): prevents integer overflow when Hibernate casts pageable.getOffset() to int.
+    private static void validatePagination(int page, int size) {
+        if (page < 0) {
+            throw new InvalidParameterException("Page index must not be negative");
+        }
+        if (size < 1 || size > 100) {
+            throw new InvalidParameterException("Page size must be between 1 and 100");
+        }
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidParameterException("Page offset exceeds maximum supported value");
+        }
+    }
+
+    // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET
+    // return consistent values without subsecond drift between API responses and PostgreSQL storage.
+    // Note: because boundary comparisons (e.g. past check) use this truncated now, a booking starting at
+    // 10:00:00 requested at 10:00:00.9 is accepted within the same second rather than being flagged as BOOKING_IN_PAST.
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 }

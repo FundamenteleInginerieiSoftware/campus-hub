@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,8 +41,10 @@ class ReservationSeeder implements CommandLineRunner {
             return;
         }
 
-        List<Long> assetIds =
-                jdbcTemplate.query("select id from assets order by id asc limit 2", (rs, rowNum) -> rs.getLong("id"));
+        // Bug fixed (#155): only seed sample reservations onto operational (AVAILABLE) assets.
+        List<Long> assetIds = jdbcTemplate.query(
+                "select id from assets where status = 'AVAILABLE' order by id asc limit 1",
+                (rs, rowNum) -> rs.getLong("id"));
 
         if (!userApi.exists(STUDENT_1_ID) || !userApi.exists(STUDENT_2_ID) || assetIds.isEmpty()) {
             log.info("Skipping reservation seeding: dev users or assets not yet seeded");
@@ -55,7 +58,7 @@ class ReservationSeeder implements CommandLineRunner {
             nextWeekday = nextWeekday.plusDays(1);
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 
         // One reservation for student1 (id 1) and one for student2 (id 2) so student1 stays below
         // the 2-active-bookings limit for the Swagger prototype demo.

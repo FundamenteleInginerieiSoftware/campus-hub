@@ -3,6 +3,7 @@ package com.campus.catalog.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -133,6 +135,41 @@ class AssetServiceTest {
 
         assertEquals("SERIAL_NUMBER_TAKEN", ex.getCode());
         verify(assetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createRejectsDuplicateSerialOnConcurrentRace() {
+        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        when(assetRepository.saveAndFlush(any(Asset.class)))
+                .thenThrow(new DataIntegrityViolationException("unique index constraint"));
+
+        ConflictException ex = assertThrows(
+                ConflictException.class,
+                () -> assetService.create(
+                        new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", "ds1za-001", null, 1L, 2L)));
+
+        assertEquals("SERIAL_NUMBER_TAKEN", ex.getCode());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createDoesNotCatchAuditFailureAsDuplicateSerial() {
+        Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        when(assetRepository.saveAndFlush(any(Asset.class))).thenReturn(asset);
+        when(currentUser.id()).thenReturn(3L);
+        doThrow(new DataIntegrityViolationException("actor_id FK failure"))
+                .when(auditService)
+                .record(any(), any(), any(), any(), any());
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> assetService.create(
+                        new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", "ds1za-001", null, 1L, 2L)));
     }
 
     @Test
@@ -242,6 +279,11 @@ class AssetServiceTest {
         InvalidParameterException oversizedPage = assertThrows(
                 InvalidParameterException.class, () -> assetService.search(null, null, null, null, 0, 101, "name,asc"));
         assertEquals("INVALID_PARAMETER", oversizedPage.getCode());
+
+        InvalidParameterException hugeOffset = assertThrows(
+                InvalidParameterException.class,
+                () -> assetService.search(null, null, null, null, 999_999_999, 100, "name,asc"));
+        assertEquals("INVALID_PARAMETER", hugeOffset.getCode());
 
         InvalidParameterException unknownSort = assertThrows(
                 InvalidParameterException.class,
