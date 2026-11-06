@@ -14,13 +14,15 @@ import com.tngtech.archunit.lang.ArchRule;
  *
  * <p>Rules defined in AGENTS.md §5:
  * <ul>
- *   <li>Only {@code api} packages may be imported across modules. Internal packages ({@code domain},
+ *   <li><b>Rule 1:</b> Only {@code api} packages may be imported across modules. Internal packages ({@code domain},
  *       {@code service}, {@code repository}, {@code web}) are strictly encapsulated inside each module.</li>
- *   <li>{@code catalog} is the core inventory foundation and must not depend on {@code reservation},
- *       {@code incident}, or {@code reassignment}.</li>
- *   <li>{@code reservation} must not depend on {@code incident} or {@code reassignment}.</li>
- *   <li>{@code incident} publishes domain events and must not depend on {@code reassignment}.</li>
- *   <li>No circular dependencies between top-level feature modules.</li>
+ *   <li><b>Rule 2:</b> {@code catalog} is the foundational inventory module and must not depend on
+ *       {@code reservation}, {@code incident}, {@code reassignment}, {@code user}, {@code storage}, or {@code notification}.</li>
+ *   <li><b>Rule 2b:</b> Shared infrastructure packages ({@code common}, {@code storage}, {@code notification})
+ *       must remain decoupled from domain feature modules ({@code catalog}, {@code reservation}, {@code incident}, {@code reassignment}).</li>
+ *   <li><b>Rule 3:</b> {@code reservation} must not depend on {@code incident} or {@code reassignment}.</li>
+ *   <li><b>Rule 4:</b> {@code incident} publishes domain events and must not depend on {@code reassignment}.</li>
+ *   <li><b>Rule 5:</b> Directed acyclic dependency graph between top-level modules (no circular dependencies).</li>
  * </ul>
  */
 @AnalyzeClasses(packages = "com.campus", importOptions = ImportOption.DoNotIncludeTests.class)
@@ -56,16 +58,37 @@ class ModuleBoundaryArchitectureTest {
         }
     }
 
-    // Rule 2: Catalog is the core asset foundation. It must not depend on reservations, incidents or reassignment.
+    // Rule 2: Catalog is the core asset foundation. It must not depend on other feature modules.
     @ArchTest
     static final ArchRule catalog_does_not_depend_on_other_feature_modules = noClasses()
             .that()
             .resideInAPackage("com.campus.catalog..")
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage("com.campus.reservation..", "com.campus.incident..", "com.campus.reassignment..")
+            .resideInAnyPackage(
+                    "com.campus.reservation..",
+                    "com.campus.incident..",
+                    "com.campus.reassignment..",
+                    "com.campus.user..",
+                    "com.campus.storage..",
+                    "com.campus.notification..")
             .because(
-                    "Catalog is the foundational inventory module and must not know about bookings, incidents or reassignment");
+                    "Catalog is the foundational inventory module and must not know about bookings, incidents, reassignment, users, storage or notifications");
+
+    // Rule 2b: Shared infrastructure modules (common, storage, notification) must not depend on domain feature modules.
+    @ArchTest
+    static final ArchRule shared_modules_do_not_depend_on_feature_modules = noClasses()
+            .that()
+            .resideInAnyPackage("com.campus.common..", "com.campus.storage..", "com.campus.notification..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                    "com.campus.catalog..",
+                    "com.campus.reservation..",
+                    "com.campus.incident..",
+                    "com.campus.reassignment..")
+            .because(
+                    "Shared infrastructure packages (common, storage, notification) must remain decoupled from domain feature modules");
 
     // Rule 3: Reservation manages bookings independently. It must not depend on incidents or reassignment.
     @ArchTest
