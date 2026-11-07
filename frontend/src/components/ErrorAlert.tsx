@@ -16,8 +16,9 @@ export default function ErrorAlert({ error }: { error: unknown }) {
       {errorMessage(error)}
       {fieldErrors.length > 0 && (
         <List size="sm" mt="xs">
-          {fieldErrors.map((fieldError) => (
-            <List.Item key={fieldError.field}>
+          {/* One entry per broken rule, so a field can appear twice: the index keeps the keys unique. */}
+          {fieldErrors.map((fieldError, index) => (
+            <List.Item key={`${fieldError.field}-${index}`}>
               {fieldError.field}: {fieldError.message}
             </List.Item>
           ))}
