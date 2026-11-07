@@ -61,4 +61,21 @@ public class User {
         // Fix: keep whole seconds, the same format as every time in the API (#123 did this for reservations).
         this.createdAt = createdAt.truncatedTo(ChronoUnit.SECONDS);
     }
+
+    // ---- user admin (Stefania, user.admin) ----------------------------------------------------
+    // Only AdminUserService calls these, after its checks (not yourself, never the last admin).
+
+    /** Blocks the account: SecurityConfig rejects its token on the next request (401), login fails. */
+    public void disable() {
+        this.enabled = false;
+    }
+
+    public void enable() {
+        this.enabled = true;
+    }
+
+    /** The new role is used from the next request: SecurityConfig reads the role from this row, not the token. */
+    public void changeRole(Role newRole) {
+        this.role = newRole;
+    }
 }
