@@ -9,6 +9,11 @@ const MESSAGES: Record<string, string> = {
   VALIDATION_FAILED: 'Some fields are not valid. Please check them and try again.',
   EMAIL_TAKEN: 'An account with this email already exists.',
 
+  // User admin error codes (api-contract §5, Stefania)
+  USER_NOT_FOUND: 'User was not found.',
+  CANNOT_MODIFY_SELF: 'You cannot disable your own account or remove your own admin role.',
+  LAST_ADMIN_REQUIRED: 'At least one enabled admin must remain.',
+
   // Reservation error codes (api-contract §5, Calin)
   ASSET_NOT_FOUND: 'The requested equipment was not found.',
   NO_ASSETS_AVAILABLE: 'No free equipment of this type remains in the selected time window.',

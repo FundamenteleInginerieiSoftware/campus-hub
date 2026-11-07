@@ -206,6 +206,20 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
 
+### User admin endpoints (Stefania)
+
+All under `/api/v1/admin/users`, admin only (401 without a token, 403 for a student). `AdminUserResponse`: `{"id","email","fullName","role","enabled","createdAt"}`, never the password hash.
+
+| Method & path | Access | Request | Response | Errors |
+|---|---|---|---|---|
+| `GET /api/v1/admin/users?q=&role=&enabled=&page=0&size=20` | admin | – | `200` + `PageResponse<AdminUserResponse>`, newest first (ties by id). `q` matches part of the email or full name, case-insensitive, max 100 chars (`%` and `_` are literal); `role` `STUDENT`/`ADMIN` and `enabled` `true`/`false` are optional. `page` ≥ 0, `size` 1–100 | 400 `INVALID_PARAMETER`, 401, 403 |
+| `GET /api/v1/admin/users/{id}` | admin | – | `200` + `AdminUserResponse` | 400 `INVALID_PARAMETER`, 401, 403, 404 `USER_NOT_FOUND` |
+| `POST /api/v1/admin/users/{id}/disable` | admin | – | `200` + `AdminUserResponse` with `enabled: false`. The user's login fails and an existing token gets 401 on the next request. Twice → unchanged | 401, 403, 404 `USER_NOT_FOUND`, 409 `CANNOT_MODIFY_SELF` (yourself), 409 `LAST_ADMIN_REQUIRED` |
+| `POST /api/v1/admin/users/{id}/enable` | admin | – | `200` + `AdminUserResponse` with `enabled: true`. Twice → unchanged | 401, 403, 404 `USER_NOT_FOUND` |
+| `PUT /api/v1/admin/users/{id}/role` | admin | `{"role": "ADMIN"}` | `200` + `AdminUserResponse`. The new role counts from the user's next request (no new login). Same role → unchanged | 400 `VALIDATION_FAILED` (no role), 400 `MALFORMED_REQUEST` (unknown role), 401, 403, 404 `USER_NOT_FOUND`, 409 `CANNOT_MODIFY_SELF` (demoting yourself), 409 `LAST_ADMIN_REQUIRED` |
+
+Rules (decisions.md, "User admin"): an admin can't disable or demote themselves; at least one enabled admin always remains (the enabled admins are locked in id order before the check, so two admins acting on each other at the same moment can't both succeed). Every real change is written to the audit log: `USER_DISABLED`, `USER_ENABLED`, `USER_ROLE_CHANGED` (`entityType` `USER`).
+
 ### Incident endpoints (Stefania)
 
 | Method & path | Access | Request | Response | Errors |
