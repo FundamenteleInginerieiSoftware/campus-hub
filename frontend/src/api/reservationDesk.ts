@@ -14,10 +14,11 @@ export type DeskSearch = {
 
 /**
  * Searches all students' reservations (GET /api/v1/admin/reservations).
- * The backend takes one status at a time and sorts by start time, newest first.
+ * The backend takes one status at a time. The desk always asks for start time ascending
+ * (sortDir=asc, Calin's #172), so the earliest booking is first across all pages.
  */
 export function searchReservations({ status, date, page = 0, size = 20 }: DeskSearch) {
-  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const params = new URLSearchParams({ page: String(page), size: String(size), sortDir: 'asc' })
   if (status) params.set('status', status)
   if (date) params.set('date', date)
   return apiFetch<PageResponse<Reservation>>(`/api/v1/admin/reservations?${params.toString()}`)
