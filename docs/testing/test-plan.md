@@ -16,7 +16,7 @@ As a multi-tenant university lab management system where equipment is reserved a
 2. **Transaction Isolation & Fault Tolerance:** Automatic reassignment runs in isolated per-booking transactions (`REQUIRES_NEW`) after the incident report is successfully committed, preventing rollback cascades across bookings or back to the incident.
 3. **Module Encapsulation:** Modules (`catalog`, `reservation`, `incident`, `reassignment`, `user`) communicate strictly via public `api` packages and Spring Application Events, enforced via ArchUnit.
 4. **Deterministic Time Handling:** All business logic depending on time operates via a shared `Clock` bean, guaranteeing reproducible test execution independent of execution time and timezone discrepancies.
-5. **Mutation Resilience (PIT):** Tests must assert real behavioral outcomes, not just execute lines. We measure and enforce high mutation scores (>85%) to prevent vacuous tests.
+5. **Mutation Resilience (PIT):** Tests must assert real behavioral outcomes, not just execute lines. We measure and enforce a **100% mutation score target** on service packages to prevent vacuous tests.
 6. **Quality Gates & Targets:** Every pull request must pass spotless formatting, ArchUnit architecture rules, and complete test execution (unit + integration), targeting ~ 70% line coverage on service packages (enforcement gate planned for W10).
 
 ---
@@ -58,16 +58,19 @@ We employ a 5-tier testing hierarchy that balances execution speed, isolation, m
      - `DemoFlowIT`: Runs the entire 10-step M1 demo journey through the HTTP API with `@TestMethodOrder(MethodOrderer.OrderAnnotation.class)`, isolating data with dynamic run prefixes and cleanly tearing down test records in `@AfterAll`.
      - `IncidentFlowIT`: Executes the incident reporting, admin triage (start repair, resolve, reject), and asset release flow against real PostgreSQL tables and real JWT authentication.
 
-### Tier 3: Mutation Testing (PIT / Arcmutate)
+### Tier 3: Mutation Testing (PIT / Arcmutate — On-Demand Local Only)
 - **Framework:** PIT Mutation Testing via Arcmutate Gradle plugin (integrated in PR #180).
 - **Rationale:** Line and branch coverage only measure whether code was reached; they cannot prove that assertions would fail if business logic broke. PIT introduces synthetic bytecode faults (mutants) and verifies that test suites detect and kill them.
 - **Active Mutator Group:** `STRONGER` (Conditionals Boundary, Invert Negatives, Return Values, Math Mutator, Void Method Calls, Argument Propagation).
-- **Execution:**
+- **Target:** **100% mutation score** on critical service packages (`com.campus.*.service.*`), with 100% already verified on `reservation.service` and `reassignment.service`. Reports generated at `backend/build/reports/pitest/index.html`.
+- **CI Policy (Strictly Local / On-Demand):**
+  > [!IMPORTANT]
+  > **PIT does NOT run in GitHub Actions CI (`.github/workflows/ci.yml`).**
+  > Mutation testing compiles and executes test suites against hundreds of synthetic bytecode variants. Running PIT in CI would increase build times from ~2 minutes to 15–20+ minutes, severely throttling team review velocity. PIT is executed locally on-demand by developers before submitting PRs:
   ```bash
   cd backend
   ./gradlew pitest
   ```
-- **Target:** Mutation score > 85% on service packages, with 100% mutation coverage achieved on `com.campus.reservation.service.*` and `com.campus.reassignment.service.*`. Reports generated at `backend/build/reports/pitest/index.html`.
 
 ### Tier 4: Architectural Tests (ArchUnit)
 - **Framework:** ArchUnit 1.5.1 (`com.campus.architecture.ModuleBoundaryArchitectureTest` and `CodingConventionsArchitectureTest`).
@@ -147,11 +150,12 @@ Every Pull Request must satisfy the following automated gates before merge:
    - `com.campus.reservation.service.*` and `com.campus.reassignment.service.*` currently achieve **100% line and branch coverage**.
    - Reports generated at `backend/build/reports/jacoco/test/html/index.html`.
 
-4. **Mutation Resilience (PIT):**
+4. **Mutation Resilience (PIT — Local On-Demand Gate):**
    ```bash
-   ./gradlew pitest
+   cd backend && ./gradlew pitest
    ```
-   Ensures that tests actually kill synthetic bytecode mutations, maintaining a mutation score > 85%.
+   - **Target:** **100% mutation score** on service packages.
+   - **CI Note:** Excluded from GitHub Actions CI to guarantee fast CI feedback (<2 minutes). Executed locally on-demand before opening PRs on business logic.
 
 5. **Frontend Quality Check:**
    ```bash
