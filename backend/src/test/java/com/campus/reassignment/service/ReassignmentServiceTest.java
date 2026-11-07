@@ -1,6 +1,7 @@
 package com.campus.reassignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -42,6 +43,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -420,5 +423,38 @@ class ReassignmentServiceTest {
         assertThatThrownBy(() -> reassignmentService.getLogs(999_999_999, 100))
                 .isInstanceOf(InvalidParameterException.class)
                 .hasMessageContaining("Page offset exceeds maximum supported value");
+    }
+
+    @Test
+    @DisplayName("getLogs validates boundary conditions for page and size")
+    void getLogsBoundaryValidation() {
+        // Negative page
+        assertThatThrownBy(() -> reassignmentService.getLogs(-1, 10))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page index must not be negative");
+
+        // Size < 1 (0)
+        assertThatThrownBy(() -> reassignmentService.getLogs(0, 0))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page size must be between 1 and 100");
+
+        // Size > 100 (101)
+        assertThatThrownBy(() -> reassignmentService.getLogs(0, 101))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page size must be between 1 and 100");
+
+        // Overflow: (long) page * size > Integer.MAX_VALUE
+        long half = ((long) Integer.MAX_VALUE / 2) + 1;
+        assertThatThrownBy(() -> reassignmentService.getLogs((int) half, 2))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
+
+        // Valid boundaries: size = 1, size = 100, page * size == Integer.MAX_VALUE
+        when(reassignmentLogRepository.findAllByOrderByCreatedAtDesc(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        assertThatCode(() -> reassignmentService.getLogs(0, 1)).doesNotThrowAnyException();
+        assertThatCode(() -> reassignmentService.getLogs(0, 100)).doesNotThrowAnyException();
+        assertThatCode(() -> reassignmentService.getLogs(Integer.MAX_VALUE, 1)).doesNotThrowAnyException();
     }
 }
