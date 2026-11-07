@@ -81,4 +81,47 @@ class AdminBootstrapTest {
                 .hasMessageContaining("ADMIN_PASSWORD");
         verify(userRepository, never()).save(any());
     }
+
+    // The next three tests pin the edges of "8 characters to 72 bytes" (AdminBootstrap.run). Without
+    // them, PIT showed that "< 8" could become "<= 8" and "> 72" could become ">= 72" unnoticed.
+
+    @Test
+    void acceptsAPasswordOfExactly8Characters() {
+        when(userRepository.existsByEmailIgnoreCase("boss@campus.test")).thenReturn(false);
+
+        bootstrap("boss@campus.test", "12345678").run();
+
+        verify(userRepository).save(saved.capture());
+        assertThat(passwordEncoder.matches("12345678", saved.getValue().getPasswordHash()))
+                .as("8 characters is the minimum and is allowed; see AdminBootstrap.run")
+                .isTrue();
+    }
+
+    @Test
+    void acceptsAPasswordOfExactly72Bytes() {
+        // "ă" is 2 bytes in UTF-8: 36 characters = 72 bytes, the most BCrypt reads.
+        String password = "ă".repeat(36);
+        when(userRepository.existsByEmailIgnoreCase("boss@campus.test")).thenReturn(false);
+
+        bootstrap("boss@campus.test", password).run();
+
+        verify(userRepository).save(saved.capture());
+        assertThat(passwordEncoder.matches(password, saved.getValue().getPasswordHash()))
+                .as("72 bytes is the maximum and is allowed; see AdminBootstrap.run")
+                .isTrue();
+    }
+
+    @Test
+    void refusesAPasswordOver72BytesEvenWithFewCharacters() {
+        // 37 characters, far below 72, but 73 bytes: the limit counts bytes, because BCrypt
+        // would silently ignore everything after byte 72.
+        String password = "a" + "ă".repeat(36);
+        when(userRepository.existsByEmailIgnoreCase("boss@campus.test")).thenReturn(false);
+
+        assertThatThrownBy(() -> bootstrap("boss@campus.test", password).run())
+                .as("73 bytes is over the BCrypt limit and stops the start; see AdminBootstrap.run")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ADMIN_PASSWORD");
+        verify(userRepository, never()).save(any());
+    }
 }

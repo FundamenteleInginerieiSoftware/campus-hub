@@ -1,0 +1,96 @@
+sequenceDiagram
+    autonumber
+    actor User as Student
+    participant Ctrl as ReservationController (Calin)
+    participant Res as ReservationService (Calin)
+    participant Sec as CurrentUser (Stefania)
+    participant Clk as Clock (Calin)
+    participant Cat as CatalogApi (Liviu)
+    participant Repo as ReservationRepository (Calin)
+    participant Audit as AuditService (Liviu)
+    participant DB as PostgreSQL 18
+
+    User->>Ctrl: POST /api/v1/reservations (assetId, startTime, endTime)
+    activate Ctrl
+    Ctrl->>Res: createReservation(request)
+    activate Res
+
+    Note over Res: @Transactional method begins
+
+    Res->>Sec: currentUser.id()
+    Sec-->>Res: userId
+
+    Res->>Clk: LocalDateTime.now(clock)
+    Clk-->>Res: current Bucharest time
+
+    Note over Res: Validate slot invariants:<br/>- 08:00 to 20:00 opening hours<br/>- :00 or :30 alignment<br/>- 30 min to 4 hour duration<br/>- within 14 days, future time
+
+    Note over Res: 1. Pessimistic Row Locking to prevent double bookings
+    Res->>Cat: lockForBooking(assetId)
+    activate Cat
+    Cat->>DB: SELECT * FROM assets WHERE id = :id FOR UPDATE
+    Note over DB: Acquires row-level FOR UPDATE lock.<br/>Concurrent bookings on same asset wait here.
+    DB-->>Cat: Asset
+    Cat-->>Res: void
+    deactivate Cat
+
+    Note over Res: 2. Operational Status Check
+    Res->>Cat: isBookable(assetId)
+    activate Cat
+    Cat-->>Res: boolean isBookable
+    deactivate Cat
+    alt Asset not operational
+        Res-->>Ctrl: 409 Conflict (ASSET_NOT_BOOKABLE)
+    end
+
+    Note over Res: 3. Temporal Overlap Collision Check
+    Res->>Repo: existsOverlap(assetId, start, end, ACTIVE_STATUSES, -1)
+    activate Repo
+    Repo->>DB: SELECT * FROM reservations WHERE asset_id = :id<br/>AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')<br/>AND start_time < :end AND end_time > :start
+    DB-->>Repo: overlapping rows
+    Repo-->>Res: boolean exists
+    deactivate Repo
+
+    alt Overlap exists
+        Res-->>Ctrl: 409 Conflict (RESERVATION_CONFLICT)
+    end
+
+    alt Not admin (!currentUser.isAdmin())
+        Note over Res: 4. Student Active Quota Advisory Lock
+        Res->>Repo: lockUserQuota(userId)
+        activate Repo
+        Repo->>DB: SELECT pg_advisory_xact_lock(1, CAST(:userId AS integer))
+        DB-->>Repo: count
+        Repo-->>Res: 1
+        deactivate Repo
+
+        Res->>Repo: countByUserIdAndStatusIn(userId, ACTIVE_STATUSES)
+        activate Repo
+        Repo->>DB: SELECT COUNT(*) FROM reservations WHERE user_id = :id<br/>AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')
+        DB-->>Repo: count
+        Repo-->>Res: count
+        deactivate Repo
+
+        alt count >= 2
+            Res-->>Ctrl: 409 Conflict (RESERVATION_LIMIT_REACHED)
+        end
+    end
+
+    Res->>Repo: save(Reservation[status=CONFIRMED, assetId, userId, start, end])
+    activate Repo
+    Repo->>DB: INSERT INTO reservations (...)
+    DB-->>Repo: persisted row
+    Repo-->>Res: Reservation
+    deactivate Repo
+
+    Res->>Audit: record(userId, "CREATE_RESERVATION", "Reservation", saved.id, "Asset " + assetId)
+    activate Audit
+    Audit-->>Res: void
+    deactivate Audit
+
+    Note over Res,DB: Transaction commits, releasing PostgreSQL row and advisory locks
+
+    Res-->>Ctrl: ReservationResponse
+    deactivate Res
+    Ctrl-->>User: 201 Created (ReservationResponse JSON)
+    deactivate Ctrl

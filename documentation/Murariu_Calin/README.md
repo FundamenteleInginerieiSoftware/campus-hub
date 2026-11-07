@@ -33,6 +33,7 @@ Each document is structured in two parts:
 | 12 | [`12-quality-assurance-and-ci-architecture-tests.md`](./12-quality-assurance-and-ci-architecture-tests.md) | Quality Assurance & CI Architecture Rules | Automated ArchUnit quality gates, shared Clock enforcement, transactional boundaries, seeder/listener test expansion |
 | 13 | [`13-frontend-caching-and-cancel-guards.md`](./13-frontend-caching-and-cancel-guards.md) | Frontend Asset Cache & Cancel Guards | `fetchedAssetIdsRef` deduplication, pre-start cancellation guard, stale booking error reset |
 | 14 | [`14-swagger-examples-and-mutation-test-gaps.md`](./14-swagger-examples-and-mutation-test-gaps.md) | Swagger Examples & Mutation Test Gaps | Slot-aligned Swagger examples, `ReassignmentRollbackIT` DB isolation, PIT survivor elimination in reservation/reassignment |
+| 15 | [`15-test-plan-pit-mutation-and-reassignment-architecture.md`](./15-test-plan-pit-mutation-and-reassignment-architecture.md) | Test Plan, PIT Mutation Testing & Reassignment Architecture | Formalized SQA test plan, testing pyramid, 100% PIT mutation coverage, `REQUIRES_NEW` reassignment engine |
 
 ---
 

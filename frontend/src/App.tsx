@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
+import RegisterPage from './pages/RegisterPage.tsx'
 import ReservationsDeskPage from './pages/ReservationsDeskPage.tsx'
 
 // All pages of the app. Each owner replaces their <PlaceholderPage> with the real page component.
@@ -14,6 +15,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
 
       <Route
         element={
@@ -39,6 +41,7 @@ export default function App() {
 
         {/* Admin only */}
         <Route path="admin" element={<RequireAdmin />}>
+          <Route index element={<Navigate to="reservations" replace />} />
           <Route path="reservations" element={<ReservationsDeskPage />} />
           <Route
             path="incidents"

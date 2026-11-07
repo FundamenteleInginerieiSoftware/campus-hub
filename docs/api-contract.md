@@ -27,15 +27,28 @@ Status: **draft (2026-10-21)**. Sections 1–4 are Matei's; the error format (§
 
 ## 2. Security rules
 
-Checked top to bottom in `SecurityConfig`; the **first match wins**.
+Checked top to bottom in `SecurityConfig`; the **first match wins**. "Refused" says what a caller gets when the rule says no: **401** = no token or a rejected token, **403** = valid token but not allowed. Every refusal is a `ProblemDetail` (§4) with the `code` shown.
 
-| # | Path | Access |
-|---|---|---|
-| 1 | `/api/v1/auth/**` (ping, register, login) | public |
-| 2 | `/actuator/health/**`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`, `/error` | public |
-| 3 | `/api/v1/admin/**` | role `ADMIN` |
-| 4 | `/api/v1/**` | any logged-in user (`STUDENT` or `ADMIN`) |
-| 5 | anything else | denied |
+| # | Path | Access | Refused |
+|---|---|---|---|
+| 1 | `/api/v1/auth/**` (ping, register, login) | public; the `Authorization` header is **not read** here, so an old or broken token never blocks login (#116) | – |
+| 2 | `/actuator/health/**`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html` | public (health check, Swagger UI) | – |
+| 3 | `/error` | public: Spring forwards failures here; protecting it would turn a 404 into a 401 | – |
+| 4 | `/api/v1/admin/**` | role `ADMIN`. Must stay above rule 5, or rule 5 would let students in | `401 UNAUTHORIZED` · student: `403 FORBIDDEN` |
+| 5 | `/api/v1/**` | any logged-in, active user (`STUDENT` or `ADMIN`) | `401 UNAUTHORIZED` |
+| 6 | `/api/**`, `/actuator/**` (other API versions, every actuator endpoint except health) | denied, even for an admin. Must stay above rule 7 | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
+| 7 | `GET /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
+| 8 | anything else (e.g. `POST /something-else`) | denied: a path nobody listed fails closed | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
+
+Checks that run **before** the rules above (the token checks only when a token is sent, on every path except `/api/v1/auth/**`):
+
+| Check | Result |
+|---|---|
+| Firewall: the URL contains `;`, `..` or an encoded `/` (e.g. `/api/v1/auth/ping;x=1`) | `400 REQUEST_REJECTED` (#118) |
+| Token signature wrong, token expired or not a JWT | `401 UNAUTHORIZED` |
+| Token `sub` missing or not a number | `401 UNAUTHORIZED` (#158; was a 500) |
+| Token valid, but the account is disabled or deleted | `401 UNAUTHORIZED` on the next request: the account is looked up on every request (`UserApi.findActiveRole`, #117) |
+| Role | read from the **database** on every request, not from the token's `roles` claim, so a role change counts at once (#117) |
 
 - The API is **stateless**: no session, no cookies, every request carries `Authorization: Bearer <token>`. CSRF protection is off for that reason.
 - Frontend and API share one origin (Vite proxy in dev, CloudFront in prod), so **no CORS**.
@@ -52,7 +65,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**.
 | `GET /api/v1/auth/ping` | public | – | `200 {"message":"pong"}` |
 | `POST /api/v1/auth/register` | public | `{"email","password","fullName"}` | `201` + `UserResponse`. Always creates a **`STUDENT`**; admins can never self-register |
 | `POST /api/v1/auth/login` | public | `{"email","password"}` | `200` + `LoginResponse` |
-| `GET /api/v1/users/me` | logged in | – | `200` + `UserResponse` of the token's user (`401 UNAUTHORIZED` without a token, `404 USER_NOT_FOUND` if the account no longer exists) |
+| `GET /api/v1/users/me` | logged in | – | `200` + `UserResponse` of the token's user (`401 UNAUTHORIZED` without a token, or if the account was disabled or deleted: the token check runs before the controller since #128) |
 
 ```json
 // LoginResponse
@@ -193,15 +206,33 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
 
+### User admin endpoints (Stefania)
+
+All under `/api/v1/admin/users`, admin only (401 without a token, 403 for a student). `AdminUserResponse`: `{"id","email","fullName","role","enabled","createdAt"}`, never the password hash.
+
+| Method & path | Access | Request | Response | Errors |
+|---|---|---|---|---|
+| `GET /api/v1/admin/users?q=&role=&enabled=&page=0&size=20` | admin | – | `200` + `PageResponse<AdminUserResponse>`, newest first (ties by id). `q` matches part of the email or full name, case-insensitive, max 100 chars (`%` and `_` are literal); `role` `STUDENT`/`ADMIN` and `enabled` `true`/`false` are optional. `page` ≥ 0, `size` 1–100 | 400 `INVALID_PARAMETER`, 401, 403 |
+| `GET /api/v1/admin/users/{id}` | admin | – | `200` + `AdminUserResponse` | 400 `INVALID_PARAMETER`, 401, 403, 404 `USER_NOT_FOUND` |
+| `POST /api/v1/admin/users/{id}/disable` | admin | – | `200` + `AdminUserResponse` with `enabled: false`. The user's login fails and an existing token gets 401 on the next request. Twice → unchanged | 401, 403, 404 `USER_NOT_FOUND`, 409 `CANNOT_MODIFY_SELF` (yourself), 409 `LAST_ADMIN_REQUIRED` |
+| `POST /api/v1/admin/users/{id}/enable` | admin | – | `200` + `AdminUserResponse` with `enabled: true`. Twice → unchanged | 401, 403, 404 `USER_NOT_FOUND` |
+| `PUT /api/v1/admin/users/{id}/role` | admin | `{"role": "ADMIN"}` | `200` + `AdminUserResponse`. The new role counts from the user's next request (no new login). Same role → unchanged | 400 `VALIDATION_FAILED` (no role), 400 `MALFORMED_REQUEST` (unknown role), 401, 403, 404 `USER_NOT_FOUND`, 409 `CANNOT_MODIFY_SELF` (demoting yourself), 409 `LAST_ADMIN_REQUIRED` |
+
+Rules (decisions.md, "User admin"): an admin can't disable or demote themselves; at least one enabled admin always remains (the enabled admins are locked in id order before the check, so two admins acting on each other at the same moment can't both succeed). Every real change is written to the audit log: `USER_DISABLED`, `USER_ENABLED`, `USER_ROLE_CHANGED` (`entityType` `USER`).
+
 ### Incident endpoints (Stefania)
 
 | Method & path | Access | Request | Response | Errors |
 |---|---|---|---|---|
 | `POST /api/v1/incidents` | logged in | `{"assetId","description","severity"}` | `201` + `IncidentResponse`. The asset becomes `UNDER_MAINTENANCE` | 400 `VALIDATION_FAILED`, 401, 404 `ASSET_NOT_FOUND`, 409 `ASSET_RETIRED` |
-| `GET /api/v1/admin/incidents?status=OPEN&page=0&size=20` | admin | – | `200` + `PageResponse<IncidentResponse>`, newest first; `status` is optional | 400 `INVALID_PARAMETER`, 401, 403 |
-| `POST /api/v1/admin/incidents/{id}/resolve` | admin | optional `{"resolutionNotes"}` (max 2000 chars); no body is fine | `200` + `IncidentResponse`. Resolving twice returns it unchanged. The asset is `AVAILABLE` again once no other `OPEN`/`IN_REPAIR` incident is left on it | 400 `VALIDATION_FAILED`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `REJECTED`) |
+| `GET /api/v1/incidents/me?page=0&size=20` | logged in | – | `200` + `PageResponse<IncidentResponse>`: only the incidents I reported, newest first (ties by id). `page` ≥ 0, `size` 1–100 | 400 `INVALID_PARAMETER` (bad `page`/`size`, or `page × size` too big), 401 |
+| `GET /api/v1/incidents/{id}` | reporter or admin | – | `200` + `IncidentResponse` | 400 `INVALID_PARAMETER`, 401, 404 `INCIDENT_NOT_FOUND` (also when it is someone else's incident, so ids are not revealed) |
+| `GET /api/v1/admin/incidents?status=OPEN&page=0&size=20` | admin | – | `200` + `PageResponse<IncidentResponse>`, newest first (ties by id); `status` is optional. `page` ≥ 0, `size` 1–100 | 400 `INVALID_PARAMETER` (unknown `status`, bad `page`/`size`), 401, 403 |
+| `POST /api/v1/admin/incidents/{id}/resolve` | admin | optional `{"resolutionNotes"}` (max 2000 chars); no body is fine | `200` + `IncidentResponse`. Resolving twice returns it unchanged. The asset is `AVAILABLE` again once no other `OPEN`/`IN_REPAIR` incident is left on it; a `RETIRED` asset stays `RETIRED` | 400 `INVALID_PARAMETER`, 400 `VALIDATION_FAILED`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `REJECTED`) |
+| `POST /api/v1/admin/incidents/{id}/start-repair` | admin | – | `200` + `IncidentResponse` with `IN_REPAIR`. Starting twice returns it unchanged. The asset stays `UNDER_MAINTENANCE` | 400 `INVALID_PARAMETER`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `RESOLVED` or `REJECTED`) |
+| `POST /api/v1/admin/incidents/{id}/reject` | admin | optional `{"resolutionNotes"}` (why it was rejected, max 2000 chars); no body is fine | `200` + `IncidentResponse` with `REJECTED`. Rejecting twice returns it unchanged. Same asset rule as resolve; bookings the engine already moved stay moved | 400 `INVALID_PARAMETER`, 400 `VALIDATION_FAILED`, 401, 403, 404 `INCIDENT_NOT_FOUND`, 409 `INVALID_INCIDENT_STATUS_TRANSITION` (from `RESOLVED`) |
 
-`description`: required, not blank, max 2000 chars. `severity`: `LOW` · `MEDIUM` · `HIGH` · `CRITICAL`. `status`: `OPEN` · `IN_REPAIR` · `RESOLVED` · `REJECTED`. The reporter comes from the token, never from the body. The photo comes later as a separate multipart upload.
+`description`: required, not blank, max 2000 chars. `severity`: `LOW` · `MEDIUM` · `HIGH` · `CRITICAL`. `status`: `OPEN` → `IN_REPAIR` (start-repair) → `RESOLVED`; `OPEN` or `IN_REPAIR` → `REJECTED`. `RESOLVED` and `REJECTED` are final; `resolvedAt`, `resolvedById` and `resolutionNotes` tell who closed the incident, when and why (for both). The reporter comes from the token, never from the body. The photo comes later as a separate multipart upload.
 
 ```json
 // IncidentResponse
