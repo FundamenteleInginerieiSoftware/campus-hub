@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`) and the security chapter of the final report (`31-security-chapter.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) and the UML component and deployment diagrams (`32-component-deployment-diagrams.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -15,6 +15,7 @@ campus-hub/
 ├── docs/  decisions.md  api-contract.md  plan-w4-w6.md  whats-left.md
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
 │   ├── diagrams/  aws-architecture.drawio  aws-architecture.png  jwt-auth-sequence.mmd
+│   │             component  deployment-local  deployment-aws  (.puml + .png), README.md   (32-component-deployment-diagrams.md)
 │   ├── report/  security.md                                (31-security-chapter.md)
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/  README.md  NN-topic.md   (my notes)
@@ -172,6 +173,14 @@ campus-hub/
 | `docs/report/security.md` | My chapter of the final report: who could attack the app and how we stop them, how login and the login pass work, who may open what, where passwords are kept, the AWS protections (planned), the tests that prove it and what is still weak. |
 | `docs/diagrams/jwt-auth-sequence.mmd` | A step-by-step picture of one login and one request, including every way a request can be refused. GitHub draws it from the text. |
 
+### `docs/diagrams/`: UML diagrams (doc `32-component-deployment-diagrams.md`)
+| File | What it does |
+|---|---|
+| `docs/diagrams/component.puml` + `.png` | The map of the program's parts (modules), the "front door" each one offers, and which part uses which. Also shows the Observer and Strategy patterns. |
+| `docs/diagrams/deployment-local.puml` + `.png` | How the app runs on our laptops (browser, Vite, Spring Boot, PostgreSQL) and in GitHub's automatic check. |
+| `docs/diagrams/deployment-aws.puml` + `.png` | How the app will run on AWS (planned, weeks 7–9): CloudFront, one server with Docker, the database, photos, e-mails, passwords. |
+| `docs/diagrams/README.md` | The list of all diagrams in the folder, one line each. |
+
 ### Frontend: Reservations desk (`26-reservations-desk-page.md`)
 | File | What it does |
 |---|---|
@@ -277,6 +286,14 @@ campus-hub/
 |---|---|
 | `security.md` | 9 sections: STRIDE threat table (threat → example → mitigation → code/test), authentication (BCrypt, 72-byte rule, HS256 claims, 8 h, stateless, why the OAuth2 resource server and not `jjwt`, account check per request #117), embedded sequence diagram, RBAC table derived from `SecurityConfig` + tests (8 rules, first match wins, 404 not 403 for others' data), security errors as ProblemDetail, secrets per profile, planned AWS controls (ADR-002/003/005, marked planned), test list + bug table, limitations. Every claim checked against `main` `99d0261`. Details in `31-security-chapter.md` |
 | `jwt-auth-sequence.mmd` | Mermaid `sequenceDiagram`, same style as `reassignment-sequence.mmd`: login (`/auth/**` ignores the header, BCrypt, HS256 signing, `INVALID_CREDENTIALS`), then a request through the filter chain → `JwtDecoder` → `activeUserFromToken` → `UserApi.findActiveRole` → URL rules → controller/service → `CurrentUser` → ownership check. Branches: no/invalid/expired token 401, disabled/deleted user or bad `sub` 401, student on admin path 403, someone else's reservation 404. Parsed without errors by `mermaid.parse()` |
+
+### `docs/diagrams/` (UML)
+| File | Key points |
+|---|---|
+| `component.puml` | PlantUML component diagram. Modules = `<<module>>` components, `api` facades = provided interfaces (lollipops), dashed arrows = required interfaces, one per real cross-module import (grep in doc 32). `AssetDamagedEvent` `<<event>>` (Observer), Strategy note on reassignment, legend with the ArchUnit rules. `common.error`/`paging`, `CurrentUser`, `Clock` listed in the legend instead of drawn |
+| `deployment-local.puml` | PlantUML deployment diagram: laptop `<<device>>` with browser → Vite :5173 (proxy `/api`) → Spring Boot :8080 (`dev`, `LocalStorageService` → `uploads/`, `LoggingNotificationService`) → PostgreSQL 18 :5432 (`campus`, `campus_test`); GitHub Actions `ci` job + `postgres:18` service container |
+| `deployment-aws.puml` | Planned prod: CloudFront :443 → EC2 `t3.small` :8080 → Docker → container (`app.jar`, `prod`) → RDS :5432; S3/SES over HTTPS with the instance role; SSM (secrets + Run Command), ECR pull, CloudWatch Logs; deploy from GitHub Actions (OIDC). Same pieces as `aws-architecture.drawio` |
+| Render | `java -jar plantuml-1.2026.9.jar -tpng docs/diagrams/<file>.puml` from the repo root (Graphviz needed); details in `32-component-deployment-diagrams.md` |
 
 ### Frontend: Reservations desk
 | File | Key points |
