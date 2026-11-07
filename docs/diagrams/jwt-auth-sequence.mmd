@@ -1,0 +1,70 @@
+sequenceDiagram
+    autonumber
+    actor U as Student / Admin
+    participant FE as React app (client.ts, Stefania)
+    participant SC as Security filter chain (SecurityConfig, Matei)
+    participant Auth as AuthController + AuthService (Matei)
+    participant Dec as JwtDecoder (HS256)
+    participant Conv as activeUserFromToken (SecurityConfig)
+    participant UA as UserApi.findActiveRole (UserService)
+    participant Svc as Controller + Service (e.g. ReservationService, Calin)
+    participant CU as CurrentUser (Stefania)
+    participant Err as SecurityErrorHandler (Matei)
+    participant DB as PostgreSQL
+
+    Note over U,DB: 1. Login (public path, an old token in the header is ignored here)
+    U->>FE: email + password
+    FE->>SC: POST /api/v1/auth/login
+    SC->>Auth: permitAll on /api/v1/auth/**
+    Auth->>DB: findByEmailIgnoreCase(email.trim())
+    DB-->>Auth: user row (BCrypt hash, enabled flag)
+    alt unknown email, disabled account or wrong password
+        Auth-->>FE: 401 INVALID_CREDENTIALS (same answer for all three)
+    else credentials OK
+        Auth->>Auth: sign JWT HS256 (sub = user id, email, roles, iat, exp = now + 8 h)
+        Auth-->>FE: 200 accessToken, expiresIn 28800, user
+        FE->>FE: keep the token in localStorage
+    end
+
+    Note over U,DB: 2. Any later request, e.g. GET /api/v1/reservations/42
+    U->>FE: open a page
+    FE->>SC: request with header Authorization Bearer token
+    alt no token
+        SC->>Err: AuthenticationException
+        Err-->>FE: 401 UNAUTHORIZED (ProblemDetail)
+    else token present
+        SC->>Dec: check signature and expiry
+        alt bad signature, expired or malformed
+            Dec-->>SC: invalid token
+            SC->>Err: AuthenticationException
+            Err-->>FE: 401 UNAUTHORIZED
+        else valid token
+            Dec-->>Conv: Jwt
+            Conv->>UA: findActiveRole(sub)
+            UA->>DB: findById(sub)
+            alt sub not a number, user deleted or disabled
+                Conv-->>SC: InvalidBearerTokenException
+                SC->>Err: AuthenticationException
+                Err-->>FE: 401 UNAUTHORIZED
+            else active user
+                UA-->>Conv: role from the database (not from the token)
+                Conv-->>SC: authenticated, ROLE_STUDENT or ROLE_ADMIN
+                SC->>SC: URL rules, first match wins
+                alt /api/v1/admin/** without ROLE_ADMIN
+                    SC->>Err: AccessDeniedException
+                    Err-->>FE: 403 FORBIDDEN
+                else allowed
+                    SC->>Svc: request reaches the controller
+                    Svc->>CU: id() and isAdmin()
+                    CU-->>Svc: user id from sub, admin flag from the authorities
+                    Svc->>DB: findById(42)
+                    alt missing, or another user's and caller is not admin
+                        Svc-->>FE: 404 RESERVATION_NOT_FOUND (same answer for both)
+                    else owner or admin
+                        Svc-->>FE: 200 JSON (response record, never the entity)
+                    end
+                end
+            end
+        end
+    end
+    Note over FE: On a 401 for a request that carried a token, the client deletes the token and opens the login page

@@ -20,6 +20,9 @@ spring:
       pool:
         core-size: 2        # small: only a few listeners (reassignment, notifications) run in the background
 
+springdoc:
+  default-produces-media-type: application/json   # Swagger showed "*/*" for every response; all of ours are JSON
+
 management:
   endpoints:
     web:
