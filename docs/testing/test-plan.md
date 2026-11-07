@@ -16,7 +16,7 @@ As a multi-tenant university lab management system where equipment is reserved a
 2. **Transaction Isolation & Fault Tolerance:** Automatic reassignment runs in isolated per-booking transactions (`REQUIRES_NEW`) after the incident report is successfully committed, preventing rollback cascades across bookings or back to the incident.
 3. **Module Encapsulation:** Modules (`catalog`, `reservation`, `incident`, `reassignment`, `user`) communicate strictly via public `api` packages and Spring Application Events, enforced via ArchUnit.
 4. **Deterministic Time Handling:** All business logic depending on time operates via a shared `Clock` bean, guaranteeing reproducible test execution independent of execution time and timezone discrepancies.
-5. **Mutation Resilience (PIT):** Tests must assert real behavioral outcomes, not just execute lines. We measure and enforce a **100% mutation score target** on service packages to prevent vacuous tests.
+5. **Mutation Resilience (PIT):** Tests must assert real behavioral outcomes, not just execute lines. Mutation testing is available on demand to evaluate whether test assertions catch real faults. Developers use PIT to identify surviving mutants in service packages without enforcing a rigid global mutation threshold.
 6. **Quality Gates & Targets:** Every pull request must pass spotless formatting, ArchUnit architecture rules, and complete test execution (unit + integration), targeting ~ 70% line coverage on service packages (enforcement gate planned for W10).
 
 ---
@@ -31,7 +31,7 @@ We employ a 5-tier testing hierarchy that balances execution speed, isolation, m
      /------\
     /  Arch  \      Tier 4: ArchUnit Monolith Architecture Rules
    /----------\
-  /  Mutation  \    Tier 3: PIT Mutation Testing (Arcmutate)
+  /  Mutation  \    Tier 3: PIT Mutation Testing (info.solidsoft.pitest)
  /--------------\
 /  Integration   \  Tier 2: @SpringBootTest, @WebMvcTest & @DataJpaTest (PostgreSQL 18)
 /----------------\
@@ -56,17 +56,21 @@ We employ a 5-tier testing hierarchy that balances execution speed, isolation, m
      - `ReassignmentRollbackIT`: Verifies that failures during notification or reassignment do not roll back the original incident report, and vice-versa, adhering to `REQUIRES_NEW` boundaries.
      - `SecurityPassIT`: Audits all HTTP endpoints for IDOR protections (404 on other students' data) and verifies that `/api/v1/admin/**` rejects unauthenticated or student tokens with 401/403 `ProblemDetail`.
      - `DemoFlowIT`: Runs the entire 10-step M1 demo journey through the HTTP API with `@TestMethodOrder(MethodOrderer.OrderAnnotation.class)`, isolating data with dynamic run prefixes and cleanly tearing down test records in `@AfterAll`.
-     - `IncidentFlowIT`: Executes the incident reporting, admin triage (start repair, resolve, reject), and asset release flow against real PostgreSQL tables and real JWT authentication.
+     - `IncidentFlowIT` (#108, open): Executes the incident reporting, admin triage (start repair, resolve, reject), and asset release flow against real PostgreSQL tables and real JWT authentication.
 
-### Tier 3: Mutation Testing (PIT / Arcmutate — On-Demand Local Only)
-- **Framework:** PIT Mutation Testing via Arcmutate Gradle plugin (integrated in PR #180).
+### Tier 3: Mutation Testing (PIT — On-Demand Local Only)
+- **Framework:** PIT Mutation Testing via the `info.solidsoft.pitest` Gradle plugin 1.19.0 (with PIT 1.30.1 and `pitest-junit5-plugin` 1.2.3, integrated in PR #180).
 - **Rationale:** Line and branch coverage only measure whether code was reached; they cannot prove that assertions would fail if business logic broke. PIT introduces synthetic bytecode faults (mutants) and verifies that test suites detect and kill them.
-- **Active Mutator Group:** `STRONGER` (Conditionals Boundary, Invert Negatives, Return Values, Math Mutator, Void Method Calls, Argument Propagation).
-- **Target:** **100% mutation score** on critical service packages (`com.campus.*.service.*`), with 100% already verified on `reservation.service` and `reassignment.service`. Reports generated at `backend/build/reports/pitest/index.html`.
+- **Active Mutator Group:** `DEFAULTS` (Conditionals Boundary, Increments, Invert Negatives, Math, Negate Conditionals, Return Values, Void Method Calls). `build.gradle` defines no custom mutators, so PIT runs its standard default group.
+- **Mutation Targets & Measurement:**
+  PIT is executed on-demand and does not enforce a rigid failure threshold (the team decision is the ~70% JaCoCo line coverage gate in W10; there is no global 100% mutation target).
+  - Baseline run (#180, on commit `99d0261`): achieved **87% overall** mutation coverage, and **92%** across reservation and reassignment.
+  - Following #191 (measured on commit `3ead439`, 5 Nov 2026), **100% mutation score** was achieved on `com.campus.reservation.service.*` and `com.campus.reassignment.service.*` as our area's individual result.
+  - Reports generated at `backend/build/reports/pitest/index.html`.
 - **CI Policy (Strictly Local / On-Demand):**
   > [!IMPORTANT]
   > **PIT does NOT run in GitHub Actions CI (`.github/workflows/ci.yml`).**
-  > Mutation testing compiles and executes test suites against hundreds of synthetic bytecode variants. Running PIT in CI would increase build times from ~2 minutes to 15–20+ minutes, severely throttling team review velocity. PIT is executed locally on-demand by developers before submitting PRs:
+  > Mutation testing compiles and executes test suites against hundreds of synthetic bytecode variants. Running PIT in CI would unnecessarily inflate CI runtimes. A local PIT run takes about **3 minutes** (PostgreSQL running, matching `build`). To keep execution lean and fast, `build.gradle` configures `excludedTestClasses` to skip slow `*IT` integration suites, ArchUnit tests (`com.campus.architecture.*`), and context-only startup tests. Developers run PIT locally on-demand when checking business rules:
   ```bash
   cd backend
   ./gradlew pitest
@@ -75,10 +79,10 @@ We employ a 5-tier testing hierarchy that balances execution speed, isolation, m
 ### Tier 4: Architectural Tests (ArchUnit)
 - **Framework:** ArchUnit 1.5.1 (`com.campus.architecture.ModuleBoundaryArchitectureTest` and `CodingConventionsArchitectureTest`).
 - **Enforced Constraints:**
-  - **Modular Monolith Encapsulation:** Non-`api` packages (`domain`, `repository`, `service`, `web`) cannot be accessed from outside their owning module.
+  - **Modular Monolith Encapsulation:** Non-`api` packages (`domain`, `repository`, `service`, `web`) cannot be accessed from outside their owning module (`ModuleBoundaryArchitectureTest`).
   - **Dependency Hierarchy:** `catalog` and `reservation` must never depend on `incident` or `reassignment`.
-  - **Layering:** Controllers may only depend on service/api interfaces; domain entities may not depend on web controllers.
-  - **Coding Conventions:** Entities must not use Lombok `@Data` or `@ToString`; controllers must not expose `@Entity` objects; only method-level `@Transactional` and `@CrossOrigin` are permitted; Spring Boot 4 / Jakarta imports enforced (no `javax.*` or legacy Boot 2/3 annotations).
+  - **Entity Exposure Guard:** Controllers must not return or accept JPA `@Entity` types (`controllers_must_not_expose_entities`); public API facade methods must not expose JPA `@Entity` classes in parameters or return types (`api_packages_must_not_expose_entities`).
+  - **Coding Conventions:** Entities must not define `equals`, `hashCode`, or `toString` (forbidden hand-written or via Lombok `@Data`, `@EqualsAndHashCode`, `@ToString`); `@CrossOrigin` is **forbidden** on controller classes and methods (dev proxy and CloudFront handle origin); `@Transactional` is **forbidden** on controller classes/methods and repository interfaces/methods (permitted on service methods only); constructor injection is enforced (no `@Autowired` on fields); Spring Boot 4 / Jakarta imports enforced (no `javax.*` or legacy Boot 2/3 annotations).
 
 ### Tier 5: Frontend Quality & Manual E2E Verification
 - **Automated Frontend Verification:** `npm run lint` and `npm run build` executed in CI to verify TypeScript types, React component signatures, and CSS styling.
@@ -94,7 +98,7 @@ Special emphasis is placed on concurrency and distributed failure modes:
 |---|---|---|---|
 | `ReservationConcurrencyIT` | Verify pessimistic row locking on equipment during booking | 2 concurrent threads synchronized with `CountDownLatch` executing `bookReservation()` | Exactly 1 transaction commits (HTTP 201); 1 transaction fails with 409 `RESERVATION_CONFLICT` |
 | `ReassignmentRollbackIT` | Verify transaction autonomy of the auto-reassignment engine | Throw simulated exception during reassignment processing | Incident report remains committed in `incident_reports`; asset stays `UNDER_MAINTENANCE` |
-| `ReservationServiceRulesTest` | Validate advisory locks on user active booking quotas | Concurrent booking requests by the same student exceeding quota limit | Exactly 2 active bookings permitted; concurrent 3rd request rejected with 409 `RESERVATION_LIMIT_REACHED` |
+| `ReservationConcurrencyIT.sameStudentTwoDifferentAssetsCannotBypassActiveQuotaLimit` | Validate advisory locks on user active booking quotas | Concurrent booking requests by the same student exceeding quota limit | Exactly 2 active bookings permitted; concurrent 3rd request rejected with 409 `RESERVATION_LIMIT_REACHED` |
 | `AssetOptimisticLockIT` *(planned, Liviu W7–W8)* | Prevent stale asset edits | Concurrent updates on the same `Asset` entity with `@Version` | Spring Data JPA throws `OptimisticLockingFailureException` (HTTP 409 `STALE_VERSION`) |
 
 ---
@@ -147,14 +151,14 @@ Every Pull Request must satisfy the following automated gates before merge:
    ./gradlew test jacocoTestReport
    ```
    - **Line Coverage Target:** ~ 70% on `*.service.*` packages (target before M1; formal `jacocoTestCoverageVerification` build gate planned for W10).
-   - `com.campus.reservation.service.*` and `com.campus.reassignment.service.*` currently achieve **100% line and branch coverage**.
+   - `com.campus.reservation.service.*` and `com.campus.reassignment.service.*` achieved **100% line and branch coverage** (measured on commit `3ead439`, 5 Nov 2026).
    - Reports generated at `backend/build/reports/jacoco/test/html/index.html`.
 
-4. **Mutation Resilience (PIT — Local On-Demand Gate):**
+4. **Mutation Resilience (PIT — Local On-Demand):**
    ```bash
    cd backend && ./gradlew pitest
    ```
-   - **Target:** **100% mutation score** on service packages.
+   - **Target:** On-demand quality tool to find and eliminate surviving mutants in critical business rules before W10. (Team policy: ~70% JaCoCo line coverage gate in W10; no mandatory global mutation threshold).
    - **CI Note:** Excluded from GitHub Actions CI to guarantee fast CI feedback (<2 minutes). Executed locally on-demand before opening PRs on business logic.
 
 5. **Frontend Quality Check:**
@@ -182,7 +186,7 @@ To maintain parity between local developer laptops and GitHub Actions CI:
 
 - **Class Names:**
   - Unit tests: `<ClassName>Test.java` (e.g., `ReservationServiceTest`, `SameModelStrategyTest`)
-  - Integration tests: `<ClassName>IT.java` (e.g., `ReservationConcurrencyIT`, `ReassignmentRollbackIT`, `DemoFlowIT`, `IncidentFlowIT`)
+  - Integration tests: `<ClassName>IT.java` (e.g., `ReservationConcurrencyIT`, `ReassignmentRollbackIT`, `DemoFlowIT`, `IncidentFlowIT` [#108, open])
   - Architecture tests: `*ArchitectureTest.java` (e.g., `CodingConventionsArchitectureTest`, `ModuleBoundaryArchitectureTest`)
 - **Method Names:** Follow the Given-When-Then or descriptive action format:
   - `rejectsOverlappingReservation()`

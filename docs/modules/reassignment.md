@@ -9,7 +9,7 @@
 
 The `reassignment` module provides automated disaster recovery and continuity for laboratory equipment bookings. When an asset becomes damaged, enters maintenance, or is permanently retired, the engine automatically:
 1. Detects the event without coupling the reporting module to the booking tables.
-2. Identifies all upcoming confirmed and checked-out reservations affected by the unavailable asset.
+2. Identifies all upcoming confirmed reservations affected by the unavailable asset (via `ReservationRepository`'s `findUpcomingConfirmedByAsset`, matching `status = CONFIRMED and endTime > :from`; in-use `CHECKED_OUT` bookings are not moved).
 3. Evaluates pluggable substitution strategies to find operational, free substitute assets.
 4. Moves reservations to substitute units or force-cancels them if no substitutes exist.
 5. Writes an immutable audit trail to PostgreSQL (`reassignment_log`).
@@ -32,10 +32,10 @@ The module employs the **Observer Pattern** (via Spring Application Events) to d
   }
   ```
   The listener only executes *after* the triggering transaction has successfully committed to PostgreSQL. If the incident report or asset update rolls back, no reassignment occurs, preventing ghost reassignments.
-- **Asynchronous Execution (`@Async`):** Reassignment processing runs in a background thread, ensuring that student HTTP responses remain sub-second (<100ms) even if dozens of upcoming bookings must be processed.
+- **Asynchronous Execution (`@Async`):** Reassignment processing runs in a background thread, ensuring that student HTTP incident reporting requests remain fast and responsive even if dozens of upcoming bookings must be processed.
 - **Infrastructure Abstraction:** Switched via `app.messaging.sqs.enabled`:
   - `false` (default / Dev / CI): In-memory Spring Application Events.
-  - `true` (AWS Prod): SQS message bridge managed by Matei Necula.
+  - `true` (AWS Prod): SQS message bridge managed by Matei Necula (planned stretch goal; only `messaging/package-info.java` exists today).
 
 #### 🔄 Retirement Triggering Architecture (Planned W7 Integration)
 When an admin retires equipment (`POST /api/v1/admin/assets/{id}/retire`), the asset is permanently decommissioned. Future bookings must not remain orphaned on a retired asset.
@@ -65,8 +65,11 @@ The substitution algorithm is encapsulated using the **Strategy Pattern**, allow
 #### Strategy Contract
 ```java
 public interface SubstituteStrategy {
-    List<AssetSummary> findCandidates(ReservationSummary booking, AssetSummary damaged);
-    String getStrategyName();
+    String name();
+    List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged);
+    default Optional<AssetSummary> findSubstitute(ReservationSummary reservation, AssetSummary damaged) {
+        return findCandidates(reservation, damaged).stream().findFirst();
+    }
 }
 ```
 
@@ -81,7 +84,7 @@ public interface SubstituteStrategy {
    - Applies the same locality preference (same room first, then deterministic `id ASC`).
 
 #### Cross-Strategy Candidate Deduplication
-To prevent redundant catalog and availability queries, `ReassignmentBookingProcessor` maintains an `attemptedCandidateIds` set per booking. Any asset evaluated and determined busy in `SameModelStrategy` is automatically skipped in `SameCategoryStrategy`.
+Strategies filter candidate assets with `reservationApi.isAssetFree`, returning only currently free units. However, under concurrency, a candidate might be booked between discovery and the move attempt, causing a `SubstituteNoLongerFreeException`. To prevent trying the same candidate again under subsequent strategies, `ReassignmentBookingProcessor` maintains an `attemptedCandidateIds` set per booking. If an asset candidate was already attempted and failed during `SameModelStrategy`, it is skipped if it also appears as a candidate in `SameCategoryStrategy` (#149).
 
 ---
 
@@ -93,7 +96,7 @@ sequenceDiagram
     actor Reporter as Student or Admin
     participant Inc as Incident / Catalog Service
     participant Pub as ApplicationEventPublisher
-    participant List as ReassignmentEventListener
+    participant List as LocalAssetDamagedListener
     participant Engine as ReassignmentService
     participant Cat as CatalogApi
     participant Res as ReservationApi
@@ -101,7 +104,7 @@ sequenceDiagram
     participant Log as ReassignmentLogRepository
     participant Notif as NotificationService
 
-    Reporter->>Inc: Report incident / Retire asset
+    Reporter->>Inc: Report incident / Retire asset (retire planned W7)
     activate Inc
     Inc->>Cat: markUnderMaintenance(assetId)
     Inc->>Pub: publishEvent(AssetDamagedEvent / AssetRetiredEvent)
@@ -116,26 +119,28 @@ sequenceDiagram
     activate Engine
     Engine->>Cat: getAsset(assetId)
     Cat-->>Engine: AssetSummary
-    Engine->>Res: findUpcomingActiveByAsset(assetId, now)
+    Engine->>Res: findUpcomingActiveByAsset(assetId, now) [CONFIRMED only]
     Res-->>Engine: List<ReservationSummary> (sorted chronologically)
 
     loop For each booking (chronological)
-        Note over Engine: ReassignmentBookingProcessor [@Transactional REQUIRES_NEW]
+        Note over Engine: Candidate discovery runs outside transaction
         Engine->>Strat: findCandidates(booking, damaged)
         activate Strat
         Strat-->>Engine: List<AssetSummary> (SameModel -> SameCategory)
         deactivate Strat
 
         alt Available substitute found
+            Note over Engine: Fresh REQUIRES_NEW tx per move attempt (TransactionTemplate)
             Engine->>Res: moveToAsset(bookingId, substituteId, reason)
             Engine->>Log: save(ReassignmentLog[outcome=REASSIGNED, strategy=...])
             Note over Engine: Booking transaction commits independently
-            Engine->>Notif: send(studentId, "Reservation Reassigned", details)
+            Engine->>Notif: notifyUser(userId, subject, body) [via sendNotificationSafely, after commit]
         else No substitute available across all strategies
+            Note over Engine: Fresh REQUIRES_NEW tx for force-cancellation (TransactionTemplate)
             Engine->>Res: forceCancel(bookingId, reason)
             Engine->>Log: save(ReassignmentLog[outcome=FORCE_CANCELLED, reason=...])
             Note over Engine: Booking transaction commits independently
-            Engine->>Notif: send(studentId, "Reservation Cancelled", details)
+            Engine->>Notif: notifyUser(userId, subject, body) [via sendNotificationSafely, after commit]
         end
     end
     deactivate Engine
@@ -143,12 +148,14 @@ sequenceDiagram
 
 ---
 
-## 4. Transaction Isolation (`Propagation.REQUIRES_NEW` per booking)
+## 4. Transaction Isolation (`TransactionTemplate` with `PROPAGATION_REQUIRES_NEW` per booking)
 
-`ReassignmentService.handle(...)` coordinates the loop, delegating each reservation to `ReassignmentBookingProcessor.processSingleBooking(...)` inside an isolated `Propagation.REQUIRES_NEW` transaction:
-- **Decoupled from Trigger:** Reassignment runs asynchronously `AFTER_COMMIT` of the incident or retirement request.
+`ReassignmentService.handle(...)` coordinates the loop, delegating each reservation to `ReassignmentBookingProcessor.processSingleBooking(...)` using programmatic `TransactionTemplate` with `PROPAGATION_REQUIRES_NEW`:
+- **Decoupled from Trigger:** Reassignment runs asynchronously `AFTER_COMMIT` of the incident or retirement request (`LocalAssetDamagedListener`).
+- **Why programmatic `TransactionTemplate` instead of `@Transactional`?**
+  In `#149`, candidate discovery runs outside any write transaction so that `lockForBooking` inside `moveToAsset` is the very first touch of the `Asset` row in the persistence context (avoiding stale L1 Hibernate snapshots). Each candidate move attempt (or final force-cancellation) executes in its own isolated `REQUIRES_NEW` transaction via `TransactionTemplate`. If `moveToAsset` throws `SubstituteNoLongerFreeException`, that transaction rolls back cleanly, and the processor immediately tries the next candidate in a brand-new persistence context.
 - **Per-Booking Boundary:** If one booking encounters an unexpected issue or concurrent lock contention, only that single booking fails. All preceding and subsequent reassignments commit successfully.
-- **Post-Commit Notifications:** Student notification emails/logs are only dispatched *after* the individual booking transaction has committed to PostgreSQL.
+- **Post-Commit Notifications:** Student notification alerts are only dispatched via `notificationService.notifyUser(...)` wrapped in `sendNotificationSafely` from `ReassignmentService` *after* the individual booking transaction has committed to PostgreSQL.
 
 ---
 
