@@ -54,8 +54,9 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 | 2026-10-06 | Modular monolith: modules talk only through their `api` package or events | ✅ | Enforced by Calin's ArchUnit rules (freeze mode from W4, strict after M1) |
 | 2026-10-06 | Asset status is operational only: `AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED` | ✅ | "Free at a time" is computed from reservations |
 | 2026-10-06 | Assets are never hard-deleted, only retired | ✅ | |
-| – | A reassigned reservation stays `CONFIRMED` (+ `original_asset_id`, `reassignment_log`) instead of a new status | 🟡 | Recommended in the plan; confirm |
-| – | Time types: `LocalDateTime` = campus local time (Europe/Bucharest) for reservation slots, `Instant` for audit/event timestamps | 🟡 | Superseded for table columns on 2026-10-21 (row above). `Instant` stays only in event payloads (`AssetDamagedEvent.occurredAt`): confirm |
+| 2026-11-07 | A reassigned reservation stays `CONFIRMED` (+ `original_asset_id`, `reassignment_log`) instead of a new status | ✅ | Implemented by Calin; moves are audited in `reassignment_log` and flagged in the UI |
+| 2026-11-07 | Retired asset future bookings: automatically reassigned using Calin's engine (Strategy pattern), with fallback to force-cancel | ✅ | Handled via `AssetRetiredEvent` in W7; `reassignment_log.incident_id` becomes nullable via migration |
+| 2026-10-21 | Time types: `LocalDateTime` = campus local time (Europe/Bucharest) for reservation slots, `Instant` for audit/event timestamps | 🟡 | Superseded for table columns on 2026-10-21 (row above). `Instant` stays only in event payloads (`AssetDamagedEvent.occurredAt`): confirm |
 
 ## 5. Business rules (numbers)
 
