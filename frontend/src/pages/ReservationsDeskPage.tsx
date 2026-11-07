@@ -107,12 +107,10 @@ export default function ReservationsDeskPage() {
           return
         }
 
-        // The backend sorts newest first; at the desk the earliest booking comes first.
-        // Known limit: we only sort the 20 rows of this page. With more than 20 bookings the earliest ones
-        // are on the last page, not the first. Once Calin's sortDir parameter (#172) is on main, the server
-        // can sort ascending across all pages and this line goes away.
-        const sorted = [...response.content].sort((a, b) => a.startTime.localeCompare(b.startTime))
-        setPageData({ ...response, content: sorted })
+        // Bug fixed (#166): the backend sorted newest first across pages and we re-sorted only the 20 rows on
+        // screen, so early bookings landed on the last page. Fix: ask the backend for ascending order
+        // (sortDir=asc, Calin's #172, sent by searchReservations) and show the rows as they come.
+        setPageData(response)
         setLoadError(null)
 
         // Asset names come from Liviu's public GET /api/v1/assets/{id}, one call per asset on the page.
@@ -121,7 +119,7 @@ export default function ReservationsDeskPage() {
         // even the ones we already had. Fix: only fetch ids not asked for yet. A failed one is removed from
         // the set, so the next load tries it again. The names are kept even if the user has moved on
         // meanwhile: they are already marked as asked for, so no later load would fetch them.
-        const ids = [...new Set(sorted.map((r) => r.assetId))].filter((id) => !requestedAssetIds.current.has(id))
+        const ids = [...new Set(response.content.map((r) => r.assetId))].filter((id) => !requestedAssetIds.current.has(id))
         ids.forEach((id) => requestedAssetIds.current.add(id))
         const found = await Promise.all(
           ids.map((id) =>

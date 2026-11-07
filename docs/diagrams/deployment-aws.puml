@@ -1,0 +1,133 @@
+@startuml deployment-aws
+' UML deployment diagram of the PLANNED production setup on AWS (not deployed yet).
+' Sources: docs/adr/002, 003, 005, Dockerfile, backend/src/main/resources/application-prod.yml,
+' backend/src/main/java/com/campus/config/AwsConfig.java,
+' documentation/Necula_Matei/23-s3-ses-adapters.md and 29-s3-ses-hardening.md.
+' Same picture as docs/diagrams/aws-architecture.drawio, in UML notation.
+' Render from the repo root: java -jar plantuml.jar -tpng docs/diagrams/deployment-aws.puml
+
+title Campus Equipment & Incident Hub: UML deployment diagram\nproduction on AWS, <b>PLANNED (W7–W9), not deployed yet</b>
+
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam nodesep 45
+skinparam ranksep 65
+skinparam ArrowColor #3B5B8C
+skinparam node {
+  BackgroundColor #F2F6FC
+  BorderColor #3B5B8C
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #3B5B8C
+}
+skinparam database {
+  BackgroundColor #FFFFFF
+  BorderColor #3B5B8C
+}
+skinparam rectangle {
+  BackgroundColor #FCFCFD
+  BorderColor #8899AA
+}
+skinparam legend {
+  BackgroundColor #FFFFFF
+  BorderColor #8899AA
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B560
+}
+
+node "Student / admin device" as client <<device>> {
+  node "Web browser" as browser <<executionEnvironment>> {
+    artifact "React SPA\n(index.html + JS bundle)" as spa
+  }
+}
+
+node "GitHub Actions runner" as gha <<device>> {
+  artifact "deploy.yml\n(planned, W8)" as deploy
+}
+
+rectangle "AWS account mateinpunct" as aws {
+
+  node "Amazon CloudFront\n(*.cloudfront.net, free HTTPS;\nno caching for /api/*)" as cf <<cdn>>
+
+  rectangle "Region eu-central-1 (Frankfurt)" as region {
+
+    rectangle "VPC (no NAT gateway)" as vpc {
+
+      rectangle "Public subnet\nSG: :8080 only from the CloudFront\norigin-facing prefix list; no SSH" as pub {
+        node "EC2 t3.small\nAmazon Linux 2023, Elastic IP" as ec2 <<device>> {
+          node "Docker Engine" as docker <<executionEnvironment>> {
+            node "Container campus-hub:<commit SHA>\nJRE 25 (temurin alpine), user app\nSPRING_PROFILES_ACTIVE=prod, :8080" as ctr <<container>> {
+              artifact "app.jar\n(Spring Boot API +\nReact build in static/)" as jar
+            }
+          }
+          artifact "env file (chmod 600)\nfilled from /campus/*" as envfile
+          artifact "IAM instance role\n(temporary credentials,\nno AWS keys on the server)" as role <<IAM role>>
+          node "SSM Agent" as agent <<executionEnvironment>>
+        }
+      }
+
+      rectangle "Private DB subnets (2 AZs)\nSG: :5432 only from the EC2 SG" as priv {
+        node "Amazon RDS\nPostgreSQL 18, db.t4g.micro\nsingle-AZ, encrypted, not public" as rds <<executionEnvironment>> {
+          database "campus\n(tables by Flyway)" as db
+        }
+      }
+    }
+
+    node "Amazon S3\nprivate photos bucket\n(PHOTO_BUCKET)" as s3 <<service>>
+    node "Amazon SES\n(sandbox, MAIL_FROM)" as ses <<service>>
+    node "SSM Parameter Store\n/campus/* SecureString\n+ Run Command" as ssm <<service>>
+    node "Amazon ECR\nimages tagged by commit SHA" as ecr <<service>>
+    node "CloudWatch Logs\n(7 days)" as cw <<service>>
+  }
+}
+
+' ---- user traffic ----
+browser -down-> cf : HTTPS :443
+cf -down-> ctr : HTTP :8080\n(origin = Elastic IP)
+jar -down-> db : JDBC :5432\n(DB_URL, DB_USERNAME, DB_PASSWORD)
+
+' ---- the app calls AWS APIs with the instance role (AWS SDK v2, AwsConfig) ----
+jar -down-> s3 : HTTPS :443\nPut/Get/DeleteObject
+jar -down-> ses : HTTPS :443\nSendEmail (SES v2)
+docker -down-> cw : HTTPS :443\ncontainer logs
+
+' ---- deploy (planned, ADR-002 / ADR-003) ----
+deploy -down-> ecr : 1. docker push\n(HTTPS, OIDC role)
+deploy -down-> ssm : 2. Run Command\n(HTTPS, OIDC role)
+ssm -down-> agent : deploy script
+agent -down-> envfile : writes secrets\n(GetParameters)
+docker -down-> ecr : docker pull\n(HTTPS :443)
+docker ..> envfile : docker run --env-file
+
+' ---- layout only ----
+client -[hidden]right- gha
+priv -[hidden]down- s3
+priv -[hidden]down- ecr
+
+legend right
+  <b>Instance role permissions</b> (ADR-002):
+  s3:PutObject/GetObject/DeleteObject on bucket/*,
+  s3:ListBucket on the bucket (missing photo = 404),
+  ses:SendEmail, ssm:GetParameters on /campus/*,
+  ECR pull, CloudWatch Logs write.
+  The SDK finds the role by itself (AwsConfig),
+  10 s per attempt / 20 s per call timeouts.
+
+  <b>Prod environment variables</b> (application-prod.yml):
+  DB_URL, DB_USERNAME, DB_PASSWORD, JWT_SECRET,
+  AWS_REGION=eu-central-1, PHOTO_BUCKET, MAIL_FROM;
+  optional ADMIN_EMAIL / ADMIN_PASSWORD (first admin),
+  SQS_QUEUE_URL (stretch goal, not drawn).
+  Secrets live in SSM (ADR-003), never in Git or the image.
+  Shell access: SSM Session Manager (no SSH port).
+
+  <b>Notation</b>: <<device>> = machine, <<executionEnvironment>> /
+  <<container>> = software that runs other software, artifact = deployed file,
+  arrow = communication path (protocol :port).
+endlegend
+
+@enduml
