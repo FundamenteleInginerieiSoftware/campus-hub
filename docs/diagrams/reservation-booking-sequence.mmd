@@ -23,18 +23,7 @@ sequenceDiagram
 
     Note over Res: Validate slot invariants:<br/>- 08:00 to 20:00 opening hours<br/>- :00 or :30 alignment<br/>- 30 min to 4 hour duration<br/>- within 14 days, future time
 
-    Res->>Repo: countActiveByUserId(studentId)
-    activate Repo
-    Repo->>DB: SELECT COUNT(*) WHERE user_id = :id AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')
-    DB-->>Repo: count
-    Repo-->>Res: count
-    deactivate Repo
-
-    alt count >= 2
-        Res-->>Ctrl: 409 Conflict (ACTIVE_RESERVATIONS_LIMIT_EXCEEDED)
-    end
-
-    Note over Res: Pessimistic Row Locking to prevent double bookings
+    Note over Res: 1. Pessimistic Row Locking to prevent double bookings
     Res->>Cat: lockForBooking(assetId)
     activate Cat
     Cat->>DB: SELECT * FROM assets WHERE id = :id FOR UPDATE
@@ -43,7 +32,17 @@ sequenceDiagram
     Cat-->>Res: void
     deactivate Cat
 
-    Res->>Repo: hasOverlappingReservations(assetId, start, end)
+    Note over Res: 2. Operational Status Check
+    Res->>Cat: isBookable(assetId)
+    activate Cat
+    Cat-->>Res: boolean isBookable
+    deactivate Cat
+    alt Asset not operational
+        Res-->>Ctrl: 409 Conflict (ASSET_NOT_BOOKABLE)
+    end
+
+    Note over Res: 3. Temporal Overlap Collision Check
+    Res->>Repo: existsOverlap(assetId, start, end, ACTIVE_STATUSES, -1)
     activate Repo
     Repo->>DB: SELECT * FROM reservations WHERE asset_id = :id<br/>AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')<br/>AND start_time < :end AND end_time > :start
     DB-->>Repo: overlapping rows
@@ -51,7 +50,25 @@ sequenceDiagram
     deactivate Repo
 
     alt Overlap exists
-        Res-->>Ctrl: 409 Conflict (RESERVATION_OVERLAP)
+        Res-->>Ctrl: 409 Conflict (RESERVATION_CONFLICT)
+    end
+
+    Note over Res: 4. Student Active Quota Advisory Lock
+    Res->>Repo: lockUserQuota(studentId)
+    activate Repo
+    Repo->>DB: SELECT pg_advisory_xact_lock(:studentId)
+    Repo-->>Res: void
+    deactivate Repo
+
+    Res->>Repo: countByUserIdAndStatusIn(studentId, ACTIVE_STATUSES)
+    activate Repo
+    Repo->>DB: SELECT COUNT(*) WHERE user_id = :id AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')
+    DB-->>Repo: count
+    Repo-->>Res: count
+    deactivate Repo
+
+    alt count >= 2
+        Res-->>Ctrl: 409 Conflict (RESERVATION_LIMIT_REACHED)
     end
 
     Res->>Repo: save(Reservation[status=CONFIRMED, assetId, studentId, start, end])
