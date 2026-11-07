@@ -1,6 +1,7 @@
 package com.campus.reservation.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -39,6 +40,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class ReservationServiceTest {
@@ -85,6 +89,13 @@ class ReservationServiceTest {
     void setUp() {
         reservationService = new ReservationService(
                 reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -700,6 +711,65 @@ class ReservationServiceTest {
                         eq(USER_ID),
                         eq("Reservation Cancelled by Administrator"),
                         eq("Your reservation #1 has been cancelled by an administrator."));
+    }
+
+    @Test
+    @DisplayName(
+            "cancelReservation by admin defers notification until transaction commits via TransactionSynchronization")
+    void cancelReservationAdminWithActiveTransactionDefersNotification() {
+        when(currentUser.id()).thenReturn(999L);
+        when(currentUser.isAdmin()).thenReturn(true);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            ReservationResponse response = reservationService.cancelReservation(1L);
+            assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+
+            // Notification must not be dispatched before transaction commit
+            verify(notificationService, never()).notifyUser(anyLong(), any(), any());
+
+            // Simulate transaction commit
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            verify(notificationService)
+                    .notifyUser(
+                            eq(USER_ID),
+                            eq("Reservation Cancelled by Administrator"),
+                            eq("Your reservation #1 has been cancelled by an administrator."));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("cancelReservation by admin catches and logs notification exceptions without failing")
+    void cancelReservationAdminCatchesNotificationException() {
+        when(currentUser.id()).thenReturn(999L);
+        when(currentUser.isAdmin()).thenReturn(true);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        doThrow(new RuntimeException("Notification service failure"))
+                .when(notificationService)
+                .notifyUser(anyLong(), any(), any());
+
+        ReservationResponse response = reservationService.cancelReservation(1L);
+        assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
     }
 
     @Test
@@ -1406,5 +1476,68 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 999_999_999, 100))
                 .isInstanceOf(InvalidParameterException.class)
                 .hasMessageContaining("Page offset exceeds maximum supported value");
+    }
+
+    @Test
+    @DisplayName(
+            "validatePagination boundary values: rejects negative page, size outside 1..100, and accepts valid boundaries")
+    void validatePaginationBoundaries() {
+        // Negative page
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, -1, 10))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page index must not be negative");
+
+        // Size < 1 (0)
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 0, 0))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page size must be between 1 and 100");
+
+        // Size > 100 (101)
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 0, 101))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page size must be between 1 and 100");
+
+        // Overflow: (long) page * size > Integer.MAX_VALUE
+        long half = ((long) Integer.MAX_VALUE / 2) + 1;
+        assertThatThrownBy(() -> reservationService.getMyReservations((List<ReservationStatus>) null, (int) half, 2))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
+
+        // Valid boundaries: size = 1, size = 100, page * size == Integer.MAX_VALUE
+        when(reservationRepository.findByUserIdOrderByStartTimeAsc(anyLong(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(reservationRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        assertThatCode(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 0, 1))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> reservationService.getMyReservations((List<ReservationStatus>) null, 0, 100))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> reservationService.getMyReservations((List<ReservationStatus>) null, Integer.MAX_VALUE, 1))
+                .doesNotThrowAnyException();
+
+        // Also test admin search pagination boundaries
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, -1, 10))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page index must not be negative");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 0, 0))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page size must be between 1 and 100");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 0, 101))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page size must be between 1 and 100");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, (int) half, 2))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
+
+        assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, 0, 1))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, 0, 100))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, Integer.MAX_VALUE, 1))
+                .doesNotThrowAnyException();
     }
 }
