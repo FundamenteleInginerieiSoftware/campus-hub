@@ -2,21 +2,23 @@ sequenceDiagram
     autonumber
     actor User as Student
     participant Ctrl as ReservationController (Calin)
-    participant Sec as CurrentUser (Stefania)
     participant Res as ReservationService (Calin)
+    participant Sec as CurrentUser (Stefania)
     participant Clk as Clock (Calin)
     participant Cat as CatalogApi (Liviu)
     participant Repo as ReservationRepository (Calin)
+    participant Audit as AuditService (Liviu)
     participant DB as PostgreSQL 18
 
     User->>Ctrl: POST /api/v1/reservations (assetId, startTime, endTime)
     activate Ctrl
-    Ctrl->>Sec: currentUser.id()
-    Sec-->>Ctrl: studentId
-    Ctrl->>Res: createReservation(studentId, request)
+    Ctrl->>Res: createReservation(request)
     activate Res
 
     Note over Res: @Transactional method begins
+
+    Res->>Sec: currentUser.id()
+    Sec-->>Res: userId
 
     Res->>Clk: LocalDateTime.now(clock)
     Clk-->>Res: current Bucharest time
@@ -27,7 +29,7 @@ sequenceDiagram
     Res->>Cat: lockForBooking(assetId)
     activate Cat
     Cat->>DB: SELECT * FROM assets WHERE id = :id FOR UPDATE
-    Note over DB: Acquires exclusive RowExclusiveLock.<br/>Concurrent bookings on same asset wait here.
+    Note over DB: Acquires row-level FOR UPDATE lock.<br/>Concurrent bookings on same asset wait here.
     DB-->>Cat: Asset
     Cat-->>Res: void
     deactivate Cat
@@ -53,32 +55,40 @@ sequenceDiagram
         Res-->>Ctrl: 409 Conflict (RESERVATION_CONFLICT)
     end
 
-    Note over Res: 4. Student Active Quota Advisory Lock
-    Res->>Repo: lockUserQuota(studentId)
-    activate Repo
-    Repo->>DB: SELECT pg_advisory_xact_lock(:studentId)
-    Repo-->>Res: void
-    deactivate Repo
+    alt Not admin (!currentUser.isAdmin())
+        Note over Res: 4. Student Active Quota Advisory Lock
+        Res->>Repo: lockUserQuota(userId)
+        activate Repo
+        Repo->>DB: SELECT pg_advisory_xact_lock(1, CAST(:userId AS integer))
+        DB-->>Repo: count
+        Repo-->>Res: 1
+        deactivate Repo
 
-    Res->>Repo: countByUserIdAndStatusIn(studentId, ACTIVE_STATUSES)
-    activate Repo
-    Repo->>DB: SELECT COUNT(*) WHERE user_id = :id AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')
-    DB-->>Repo: count
-    Repo-->>Res: count
-    deactivate Repo
+        Res->>Repo: countByUserIdAndStatusIn(userId, ACTIVE_STATUSES)
+        activate Repo
+        Repo->>DB: SELECT COUNT(*) FROM reservations WHERE user_id = :id<br/>AND status IN ('CONFIRMED', 'CHECKED_OUT', 'OVERDUE')
+        DB-->>Repo: count
+        Repo-->>Res: count
+        deactivate Repo
 
-    alt count >= 2
-        Res-->>Ctrl: 409 Conflict (RESERVATION_LIMIT_REACHED)
+        alt count >= 2
+            Res-->>Ctrl: 409 Conflict (RESERVATION_LIMIT_REACHED)
+        end
     end
 
-    Res->>Repo: save(Reservation[status=CONFIRMED, assetId, studentId, start, end])
+    Res->>Repo: save(Reservation[status=CONFIRMED, assetId, userId, start, end])
     activate Repo
     Repo->>DB: INSERT INTO reservations (...)
     DB-->>Repo: persisted row
     Repo-->>Res: Reservation
     deactivate Repo
 
-    Note over Res,DB: Transaction commits, releasing PostgreSQL row lock
+    Res->>Audit: record(userId, "CREATE_RESERVATION", "Reservation", saved.id, "Asset " + assetId)
+    activate Audit
+    Audit-->>Res: void
+    deactivate Audit
+
+    Note over Res,DB: Transaction commits, releasing PostgreSQL row and advisory locks
 
     Res-->>Ctrl: ReservationResponse
     deactivate Res
