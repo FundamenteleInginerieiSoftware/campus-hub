@@ -2,6 +2,9 @@ import { Navigate, Route, Routes } from 'react-router'
 import RequireAdmin from './auth/RequireAdmin.tsx'
 import RequireAuth from './auth/RequireAuth.tsx'
 import AppLayout from './layout/AppLayout.tsx'
+import AdminInventoryPage from './pages/AdminInventoryPage.tsx'
+import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
+import CatalogPage from './pages/CatalogPage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
@@ -25,10 +28,8 @@ export default function App() {
         <Route index element={<Navigate to="/catalog" replace />} />
 
         {/* Student and admin */}
-        <Route
-          path="catalog"
-          element={<PlaceholderPage title="Equipment" description="Browse lab equipment and book a slot." owner="Liviu" />}
-        />
+        <Route path="catalog" element={<CatalogPage />} />
+        <Route path="catalog/:id" element={<AssetDetailsPage />} />
         <Route path="reservations" element={<MyReservationsPage />} />
         <Route
           path="incidents"
@@ -56,16 +57,7 @@ export default function App() {
               />
             }
           />
-          <Route
-            path="inventory"
-            element={
-              <PlaceholderPage
-                title="Inventory"
-                description="Add, edit and retire equipment, categories and labs."
-                owner="Liviu"
-              />
-            }
-          />
+          <Route path="inventory" element={<AdminInventoryPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

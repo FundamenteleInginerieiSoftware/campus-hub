@@ -25,6 +25,18 @@ const MESSAGES: Record<string, string> = {
   CANCELLATION_NOT_ALLOWED: 'Reservations can only be cancelled before their start time.',
   CHECKOUT_WINDOW_CLOSED: 'Pick-up window is closed (allowed from 15 min before start to 30 min after start).',
   INVALID_RESERVATION_STATUS_TRANSITION: 'This reservation cannot be transitioned to the requested status.',
+
+  // Catalog error codes (api-contract §5, Liviu)
+  CATEGORY_NOT_FOUND: 'The selected category was not found.',
+  LAB_ROOM_NOT_FOUND: 'The selected lab room was not found.',
+  SERIAL_NUMBER_TAKEN: 'An asset with this serial number already exists.',
+  CATEGORY_NAME_TAKEN: 'A category with this name already exists.',
+  LAB_ROOM_CODE_TAKEN: 'A lab room with this code already exists.',
+  CATEGORY_IN_USE: 'Cannot delete this category because equipment is currently assigned to it.',
+  LAB_ROOM_IN_USE: 'Cannot delete this lab room because equipment is currently located in it.',
+  ASSET_RETIRED: 'This asset has been retired and can no longer be modified or booked.',
+  INVALID_ASSET_STATUS_TRANSITION: 'This equipment cannot transition to the requested status.',
+  STALE_VERSION: 'This item was modified by another user. Please refresh and try again.',
 }
 
 export function errorMessage(error: unknown): string {
