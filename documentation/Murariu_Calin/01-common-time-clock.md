@@ -84,3 +84,15 @@ We used Spring Boot's lightweight `ApplicationContextRunner` to verify configura
 | **Liviu Nedelcu** | `catalog` / `audit` | Injects `Clock` in `AuditService` to record exact timestamps for audit entries. |
 | **Călin Murariu** | `reservation` / `reassignment` | Injects `Clock` in `ReservationService` to validate opening hours, past bookings, and in `ReassignmentService` to query upcoming reservations from `now`. |
 | **Ștefania Vișan** | `incident` | Injects `Clock` to record incident report submission times and calculate SLA thresholds. |
+
+---
+
+### Frontend Campus Clock Alignment (`#170`)
+
+To ensure the React frontend evaluates booking windows (`CalendarBookingView.tsx`) and student cancellation cutoffs (`MyReservationsPage.tsx`) against the exact same `Europe/Bucharest` wall-clock time as the backend `Clock` bean — even when a student's browser OS is set to UTC or another time zone — `frontend/src/api/reservations.ts` provides:
+
+1. **`nowInBucharest(): Date`** — Uses `Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest', ... }).formatToParts(new Date())` to construct a `Date` whose local `getFullYear()`, `getMonth()`, `getDate()`, `getHours()`, `getMinutes()`, and `getSeconds()` match current Bucharest campus time.
+2. **`parseCampusLocalDateTime(isoString: string): Date`** — Splits ISO-8601 local timestamps (`"YYYY-MM-DDTHH:mm:ss"` or `"YYYY-MM-DD"`) into numeric components rather than calling `new Date("YYYY-MM-DD")` (which ECMAScript parses as UTC midnight, causing day shifts in negative UTC offsets).
+
+3. **One date parser, one "today":** the calendar uses parseCampusLocalDateTime for day keys too (no second parser), the 14-day horizon is built as 
+ew Date(y, m, d + 14, h, min, s) from the Bucharest "today" (DST-safe, same as backend plusDays(14)), and the **Today** button recomputes getInitialSchedule(nowInBucharest()) so weekends and after 19:30 jump to the next valid slot (#151). The Cancel button uses data-disabled instead of disabled so its Tooltip still shows.

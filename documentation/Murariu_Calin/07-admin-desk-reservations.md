@@ -26,7 +26,8 @@ The lab administrator can query all campus reservations using dynamic filters:
 - Filter by reservation status (`CONFIRMED`, `CHECKED_OUT`, `RETURNED`, `OVERDUE`, `CANCELLED`).
 - Filter by specific student (`userId`) or equipment item (`assetId`).
 - Filter by specific date (e.g. today's schedule for desk dispatch).
-- Full pagination (`page`, `size`) sorted chronologically by slot start time.
+- Full pagination (`page`, `size`) sorted chronologically by slot start time (`sortDir=desc` by default for audit overview, or `sortDir=asc` for daily desk dispatch, with secondary tie-breaker sort on `id`, `#168`).
+- **Administrator Cancellation & Student Notification (`#168`):** When an administrator cancels another student's confirmed reservation via `POST /api/v1/reservations/{id}/cancel`, the system records `"Cancelled by administrator"` (instead of `"Cancelled by user"`) in both `Reservation.cancelReason` and `audit_logs`, and schedules an after-commit email notification (`TransactionSynchronization.afterCommit()`) so the student is informed before arriving at the laboratory.
 
 ---
 

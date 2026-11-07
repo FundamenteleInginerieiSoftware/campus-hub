@@ -4,6 +4,7 @@ plugins {
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.diffplug.spotless' version '8.10.4'
+    id 'info.solidsoft.pitest' version '1.19.0' // mutation testing, on demand: ./gradlew pitest
 }
 
 group = 'com.campus'
@@ -76,4 +77,55 @@ tasks.named('jacocoTestReport') {
         xml.required = true
         html.required = true
     }
+}
+
+// Mutation testing (PIT), on demand only: ./gradlew pitest (about 3 min; PostgreSQL must run, like for build).
+// Not part of "build" or CI: it reruns the tests once for every small change it makes.
+// PIT changes our compiled code one small thing at a time (a "mutant": < becomes <=, a return value
+// becomes null, a method call is removed) and reruns the tests that cover that line. If no test fails,
+// the mutant "survived": that line could break and our tests wouldn't notice.
+// Report: build/reports/pitest/index.html (mutations.xml for scripts).
+pitest {
+    pitestVersion = '1.30.1' // 1.30.x bundles ASM 9.11, which reads Java 25 class files
+    junit5PluginVersion = '1.2.3'
+    // The plugin would add its own JUnit launcher, older than Boot 4's JUnit 6, and then find no tests.
+    // We already declare junit-platform-launcher above, so the BOM's matching version is used.
+    addJUnitPlatformLauncher = false
+    targetClasses = ['com.campus.*']
+    // Code where a mutant means nothing: the main class, dev seed data and pure bean wiring.
+    excludedClasses = [
+        'com.campus.CampusHubApplication',
+        'com.campus.*Seeder',
+        'com.campus.config.AsyncConfig',
+        'com.campus.config.AwsConfig',
+        'com.campus.config.OpenApiConfig',
+    ]
+    // SecurityConfig's @Bean methods run once, when Spring starts. PIT runs many mutants in one JVM and
+    // Spring reuses the context it already started, so these mutants always "survive" even though a
+    // broken bean would stop the app. The lambdas inside them run on every request and stay mutated.
+    excludedMethods = [
+        'apiChain',
+        'requestRejectedHandler',
+        'passwordEncoder',
+        'jwtEncoder',
+        'jwtDecoder',
+        'secretKey',
+        'ignoreTokenOnAuthPaths',
+        'activeUserFromToken',
+    ]
+    // Unit tests, the @WebMvcTest/@DataJpaTest slices and the MockMvc tests of config/ (the only tests
+    // of SecurityConfig and SpaConfig). Left out: *IT (threads, rollbacks, full flows: slow), ArchUnit
+    // rules (they read classes, never run them) and tests that only check that the app starts.
+    excludedTestClasses = [
+        'com.campus.*IT',
+        'com.campus.architecture.*',
+        'com.campus.CampusHubApplicationTests',
+        'com.campus.config.AsyncConfigTest',
+        'com.campus.config.ProdProfileStartupTest',
+    ]
+    threads = Runtime.runtime.availableProcessors()
+    outputFormats = ['HTML', 'XML']
+    timestampedReports = false
+    // Same "test" profile and campus_test database as the test task.
+    jvmArgs = ['-Dspring.profiles.active=test']
 }

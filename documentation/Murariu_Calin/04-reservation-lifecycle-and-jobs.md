@@ -44,3 +44,13 @@ Desk check-out and return operations live in `AdminReservationController` (docum
   - For each threatened booking, `tryPreventiveMove` iterates the sorted candidate list and calls `reservationService.moveToAsset(...)` (which acquires a pessimistic row lock via `catalogApi.lockForBooking` and returns `boolean` indicating whether the reservation changed). Only when `moved == true` is the affected student notified.
 - **Dev Seeder Alignment (`ReservationSeeder`, #155):**
   - Seeds sample reservations exclusively onto operational (`AVAILABLE`) assets (`limit 1`), ensuring seeded bookings are valid for check-out and demonstrations out-of-the-box once `CatalogSeeder` is present.
+
+---
+
+### 3. Database Indexes & OpenAPI Metadata (#156)
+
+- **Flyway Migration `V2026_11_05_0145__reservation_add_sweep_and_reassignment_indexes.sql`:**
+  - `idx_reservations_status_start` on `reservations(status, start_time)`: speeds up scheduled sweeps (`findConfirmedBeforeCutoff` and `findUpcomingConfirmedByAsset`) by replacing sequential scans with index scans.
+  - `idx_reassignment_log_created_at` on `reassignment_log(created_at)`: speeds up `GET /api/v1/admin/reassignments` pagination (PostgreSQL B-tree indexes are bidirectional, so explicit `DESC` is omitted).
+- **OpenAPI Documentation:** Complete `@Operation` and `@ApiResponses` metadata added to `AdminReservationLifecycleController` and `AdminReassignmentController`.
+
