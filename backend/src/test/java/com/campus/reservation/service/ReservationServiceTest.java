@@ -40,6 +40,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,13 @@ class ReservationServiceTest {
     void setUp() {
         reservationService = new ReservationService(
                 reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -1520,6 +1528,10 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, 0, 101))
                 .isInstanceOf(InvalidParameterException.class)
                 .hasMessageContaining("Page size must be between 1 and 100");
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(null, null, null, null, (int) half, 2))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("Page offset exceeds maximum supported value");
 
         assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, 0, 1))
                 .doesNotThrowAnyException();
