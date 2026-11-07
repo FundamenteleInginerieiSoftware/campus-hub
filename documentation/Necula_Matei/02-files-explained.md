@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`) and the Swagger check (`30-swagger-check.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`) and the security chapter of the final report (`31-security-chapter.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -14,7 +14,8 @@ campus-hub/
 │   └── workflows/ci.yml
 ├── docs/  decisions.md  api-contract.md  plan-w4-w6.md  whats-left.md
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
-│   ├── diagrams/  aws-architecture.drawio  aws-architecture.png
+│   ├── diagrams/  aws-architecture.drawio  aws-architecture.png  jwt-auth-sequence.mmd
+│   ├── report/  security.md                                (31-security-chapter.md)
 │   └── prototype/  campus-hub-prototype.html                (10-prototype-mockup.md)
 ├── documentation/Necula_Matei/  README.md  NN-topic.md   (my notes)
 ├── frontend/src/  pages/ReservationsDeskPage.tsx  api/reservationDesk.ts   (26-reservations-desk-page.md)
@@ -165,6 +166,12 @@ campus-hub/
 | `docs/diagrams/aws-architecture.drawio` + `.png` | The picture of how the app will run on AWS: one server, a database, HTTPS in front. |
 | `docs/adr/001`–`005` | Five short "why we chose this" notes: work locally, one server instead of many parts, where passwords live, how the incident event travels, why the AWS account stays on the free plan. |
 
+### `docs/`: security chapter of the final report (`31-security-chapter.md`)
+| File | What it does |
+|---|---|
+| `docs/report/security.md` | My chapter of the final report: who could attack the app and how we stop them, how login and the login pass work, who may open what, where passwords are kept, the AWS protections (planned), the tests that prove it and what is still weak. |
+| `docs/diagrams/jwt-auth-sequence.mmd` | A step-by-step picture of one login and one request, including every way a request can be refused. GitHub draws it from the text. |
+
 ### Frontend: Reservations desk (`26-reservations-desk-page.md`)
 | File | What it does |
 |---|---|
@@ -264,6 +271,12 @@ campus-hub/
 |---|---|
 | `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
 | ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
+
+### `docs/report/` and the JWT diagram
+| File | Key points |
+|---|---|
+| `security.md` | 9 sections: STRIDE threat table (threat → example → mitigation → code/test), authentication (BCrypt, 72-byte rule, HS256 claims, 8 h, stateless, why the OAuth2 resource server and not `jjwt`, account check per request #117), embedded sequence diagram, RBAC table derived from `SecurityConfig` + tests (8 rules, first match wins, 404 not 403 for others' data), security errors as ProblemDetail, secrets per profile, planned AWS controls (ADR-002/003/005, marked planned), test list + bug table, limitations. Every claim checked against `main` `99d0261`. Details in `31-security-chapter.md` |
+| `jwt-auth-sequence.mmd` | Mermaid `sequenceDiagram`, same style as `reassignment-sequence.mmd`: login (`/auth/**` ignores the header, BCrypt, HS256 signing, `INVALID_CREDENTIALS`), then a request through the filter chain → `JwtDecoder` → `activeUserFromToken` → `UserApi.findActiveRole` → URL rules → controller/service → `CurrentUser` → ownership check. Branches: no/invalid/expired token 401, disabled/deleted user or bad `sub` 401, student on admin path 403, someone else's reservation 404. Parsed without errors by `mermaid.parse()` |
 
 ### Frontend: Reservations desk
 | File | Key points |
