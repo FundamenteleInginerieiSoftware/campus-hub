@@ -129,8 +129,19 @@ Optional<Asset> findByIdForUpdate(@Param("id") Long id);
 5. Thread B unblocks, re-reads the row, executes its overlap query, now sees Thread A's newly committed reservation, and immediately throws `ConflictException("RESERVATION_OVERLAP")`.
 6. Verified by multi-threaded integration test `ReservationConcurrencyIT` with 10 concurrent threads racing for the identical asset.
 
-### Active Quota Lock Race
-The same race condition applies to the "maximum 2 active reservations" quota. A single student opening two browser tabs could simultaneously book two assets, bypassing the quota. We prevent this by querying the student's active reservations with an exclusive lock on the student record or locking the student's reservation rows during creation.
+### Active Quota Lock Race & PostgreSQL Advisory Locking
+The same race condition applies to the "maximum 2 active reservations" quota. A single student opening two browser tabs could simultaneously book two different assets. Because each thread acquires a pessimistic lock on a *different* asset row in the `assets` table, both threads would concurrently read `countByUserIdAndStatusIn < 2` under PostgreSQL's default `READ COMMITTED` isolation level and both would succeed (violating the quota limit).
+
+We solved this (PR #169) without touching Matei's `users` table or risking phantom reads on empty reservation sets:
+1. Before querying active counts, the transaction acquires a transaction-scoped PostgreSQL advisory lock on the student ID:
+   ```sql
+   -- ReservationRepository.lockUserQuota
+   SELECT pg_advisory_xact_lock(:userId);
+   ```
+2. **Deadlock-Free Lock Hierarchy:** The lock acquisition order is strictly enforced:
+   $$\text{Physical Asset Row Lock } (\texttt{SELECT FOR UPDATE}) \longrightarrow \text{Student Quota Advisory Lock } (\texttt{pg\_advisory\_xact\_lock})$$
+   Because no code path ever acquires an asset lock *after* acquiring a user advisory lock, cyclic wait conditions (deadlocks) are mathematically impossible.
+3. The advisory lock automatically releases when the transaction commits or rolls back.
 
 ---
 
@@ -211,7 +222,7 @@ As SQA Test Lead, I designed the comprehensive test plan (`docs/testing/test-pla
 
 ### Static Architecture Rules (ArchUnit)
 
-Automated architectural tests (`com.campus.architecture.ArchRulesTest`) enforce structural integrity on every build:
+Automated architectural tests (`ModuleBoundaryArchitectureTest` and `CodingConventionsArchitectureTest`) enforce structural integrity on every build:
 - **No Package Cycles:** Slice analysis ensures zero cyclic dependencies across all packages.
 - **Strict Module Encapsulation:** Modules (`reservation`, `incident`, `catalog`, `user`, `reassignment`) communicate exclusively through their public `.api` facades and records; importing non-api internal packages (`domain`, `repository`, `service`, `web`) is strictly forbidden and fails the build.
 - **Shared Clock Enforcement:** Forbids calling `LocalDateTime.now()` or `Instant.now()` directly; all date-time logic must inject `Clock` (configured to `Europe/Bucharest`).
