@@ -9,4 +9,5 @@ Text sources live next to their exported PNGs. PlantUML (`.puml`) and Mermaid (`
 | `deployment-aws.puml` + `.png` | UML deployment diagram of the planned AWS production setup (CloudFront, EC2 + Docker, RDS, S3, SES, SSM, ECR) | Matei |
 | `aws-architecture.drawio` + `.png` | The same AWS setup with AWS icons (ADR-002) | Matei |
 | `reservation-lifecycle.mmd` | State diagram of a reservation (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, ...) | Calin |
+| `reservation-booking-sequence.mmd` | Sequence diagram: booking flow with pessimistic row lock, quota check, and overlap validation | Calin |
 | `reassignment-sequence.mmd` | Sequence diagram: incident report → `AssetDamagedEvent` → reassignment engine | Calin |
