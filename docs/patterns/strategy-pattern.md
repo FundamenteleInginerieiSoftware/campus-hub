@@ -3,7 +3,7 @@
 **Author:** Călin Murariu (Member 3: Reservations & Reassignment)  
 **Base Package:** `com.campus.reassignment`  
 **Pattern Classification:** Gang of Four (GoF) Behavioral Pattern — Strategy  
-**State of Code:** `main` at `84058f7` (7 Nov 2026)  
+**State of Code:** `main` (November 2026)  
 
 ---
 
@@ -51,6 +51,7 @@ classDiagram
         -ReservationApi reservationApi
         +name() String
         +findCandidates(...) List~AssetSummary~
+        +findSubstitute(...) Optional~AssetSummary~
     }
 
     class SameCategoryStrategy {
@@ -64,22 +65,24 @@ classDiagram
         -CatalogApi catalogApi
         -ReservationApi reservationApi
         -NotificationService notificationService
-        -ReassignmentBookingProcessor processor
-        -List~SubstituteStrategy~ strategies
-        +reassignDamagedAsset(assetId)
+        -ReassignmentBookingProcessor bookingProcessor
+        -ReassignmentLogRepository reassignmentLogRepository
+        -Clock clock
+        +handle(AssetDamagedEvent event)
     }
 
     class ReassignmentBookingProcessor {
         -ReservationApi reservationApi
-        -ReassignmentLogRepository logRepo
-        -TransactionTemplate requiresNewTx
+        -ReassignmentLogRepository reassignmentLogRepository
         -List~SubstituteStrategy~ strategies
-        +processSingleBooking(booking, damaged)
+        -Clock clock
+        -TransactionTemplate requiresNewTx
+        +processSingleBooking(AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) Optional~ReassignmentExecutionResult~
     }
 
     SubstituteStrategy <|.. SameModelStrategy : implements (@Order 1)
     SubstituteStrategy <|.. SameCategoryStrategy : implements (@Order 2)
-    ReassignmentService --> ReassignmentBookingProcessor : delegates
+    ReassignmentService --> ReassignmentBookingProcessor : delegates per booking
     ReassignmentBookingProcessor --> SubstituteStrategy : evaluates pipeline
 ```
 
@@ -99,7 +102,7 @@ import java.util.Optional;
 public interface SubstituteStrategy {
 
     /**
-     * Unique identifier for logging and metrics (e.g. SAME_MODEL, SAME_CATEGORY).
+     * Unique identifier for logging and metrics (e.g. "SameModelStrategy", "SameCategoryStrategy").
      */
     String name();
 
@@ -118,44 +121,142 @@ public interface SubstituteStrategy {
 ```
 
 ### Concrete Strategy 1: `SameModelStrategy` (`@Order(1)`)
+Package-private component implementing identical model matching:
+```java
+@Component
+@Order(1)
+@RequiredArgsConstructor
+class SameModelStrategy implements SubstituteStrategy {
+
+    private final CatalogApi catalogApi;
+    private final ReservationApi reservationApi;
+
+    @Override
+    public String name() {
+        return "SameModelStrategy";
+    }
+
+    @Override
+    public Optional<AssetSummary> findSubstitute(ReservationSummary reservation, AssetSummary damaged) {
+        return findCandidates(reservation, damaged).stream().findFirst();
+    }
+
+    @Override
+    public List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged) {
+        List<AssetSummary> candidates = catalogApi.findAvailableByModel(damaged.model(), damaged.id());
+
+        return candidates.stream()
+                .filter(candidate -> candidate.status() == AssetStatus.AVAILABLE)
+                .sorted(Comparator.comparing((AssetSummary a) -> Objects.equals(a.labRoomId(), damaged.labRoomId()))
+                        .reversed()
+                        .thenComparing(AssetSummary::id))
+                .filter(candidate -> reservationApi.isAssetFree(
+                        candidate.id(), reservation.start(), reservation.end(), reservation.id()))
+                .toList();
+    }
+}
+```
 - **Intent:** Find identical hardware so students experience zero discrepancy in laboratory assignments, manuals, or interfaces.
 - **Criteria:**
-  1. `asset.model.equalsIgnoreCase(damaged.model())`
-  2. `asset.status == AssetStatus.AVAILABLE`
-  3. `reservationApi.isAssetFree(candidateId, start, end, bookingId) == true`
+  1. `catalogApi.findAvailableByModel(damaged.model(), damaged.id())`
+  2. `candidate.status() == AssetStatus.AVAILABLE`
+  3. `reservationApi.isAssetFree(candidate.id(), reservation.start(), reservation.end(), reservation.id()) == true`
 - **Locality Preference & Deterministic Tie-Breaking:**
-  - Candidates located in the **same laboratory room** (`labRoomId == damaged.labRoomId()`) are ranked first so students do not have to move to another building.
-  - Secondary sort by `asset.id ASC` ensures deterministic behavior across repeated executions.
+  - Candidates located in the **same laboratory room** (`labRoomId == damaged.labRoomId()`) are ranked first so students do not have to move to another room.
+  - Secondary sort by `candidate.id ASC` ensures deterministic behavior across repeated executions.
 
 ### Concrete Strategy 2: `SameCategoryStrategy` (`@Order(2)`)
+Package-private component implementing category fallback:
+```java
+@Component
+@Order(2)
+@RequiredArgsConstructor
+class SameCategoryStrategy implements SubstituteStrategy {
+
+    private final CatalogApi catalogApi;
+    private final ReservationApi reservationApi;
+
+    @Override
+    public String name() {
+        return "SameCategoryStrategy";
+    }
+
+    @Override
+    public Optional<AssetSummary> findSubstitute(ReservationSummary reservation, AssetSummary damaged) {
+        return findCandidates(reservation, damaged).stream().findFirst();
+    }
+
+    @Override
+    public List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged) {
+        List<AssetSummary> candidates = catalogApi.findAvailableByCategory(damaged.categoryId(), damaged.id());
+
+        return candidates.stream()
+                .filter(candidate -> candidate.status() == AssetStatus.AVAILABLE)
+                .sorted(Comparator.comparing((AssetSummary a) -> Objects.equals(a.labRoomId(), damaged.labRoomId()))
+                        .reversed()
+                        .thenComparing(AssetSummary::id))
+                .filter(candidate -> reservationApi.isAssetFree(
+                        candidate.id(), reservation.start(), reservation.end(), reservation.id()))
+                .toList();
+    }
+}
+```
 - **Intent:** Fallback when identical models are unavailable or fully booked. Finds functional equivalents in the same broader category (e.g., another digital oscilloscope model).
-- **Criteria:**
-  1. `asset.categoryId.equals(damaged.categoryId())`
-  2. `asset.status == AssetStatus.AVAILABLE`
-  3. `reservationApi.isAssetFree(candidateId, start, end, bookingId) == true`
-- **Ranking:** Same laboratory room first, then deterministic `asset.id ASC`.
+- **Ranking:** Same laboratory room preference first, then deterministic `candidate.id ASC`.
 
 ---
 
 ## 4. Spring Framework Integration (`@Order` Pipeline)
 
-Spring Framework provides native support for the Strategy pattern by auto-wiring all beans that implement `SubstituteStrategy` into an ordered list:
+Spring Framework provides native support for the Strategy pattern by auto-wiring all beans that implement `SubstituteStrategy` into an ordered list.
+
+`ReassignmentBookingProcessor` declares an explicit constructor configuring its isolated `REQUIRES_NEW` transaction boundary:
 
 ```java
-@Component
-@Order(1)
-public class SameModelStrategy implements SubstituteStrategy { ... }
+@Slf4j
+@Service
+class ReassignmentBookingProcessor {
 
-@Component
-@Order(2)
-public class SameCategoryStrategy implements SubstituteStrategy { ... }
+    private final ReservationApi reservationApi;
+    private final ReassignmentLogRepository reassignmentLogRepository;
+    private final List<SubstituteStrategy> strategies;
+    private final Clock clock;
+    private final TransactionTemplate requiresNewTx;
 
+    @Autowired
+    ReassignmentBookingProcessor(
+            ReservationApi reservationApi,
+            ReassignmentLogRepository reassignmentLogRepository,
+            List<SubstituteStrategy> strategies,
+            Clock clock,
+            PlatformTransactionManager transactionManager) {
+        this.reservationApi = reservationApi;
+        this.reassignmentLogRepository = reassignmentLogRepository;
+        this.strategies = strategies;
+        this.clock = clock;
+        TransactionTemplate tt = new TransactionTemplate(transactionManager);
+        tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.requiresNewTx = tt;
+    }
+    ...
+}
+```
+
+Meanwhile, `ReassignmentService` acts as the event-driven orchestrator:
+```java
+@Slf4j
 @Service
 @RequiredArgsConstructor
-public class ReassignmentBookingProcessor {
-    // Spring automatically discovers and orders all strategy beans:
-    private final List<SubstituteStrategy> strategies;
-    ...
+public class ReassignmentService {
+
+    private final CatalogApi catalogApi;
+    private final ReservationApi reservationApi;
+    private final NotificationService notificationService;
+    private final ReassignmentBookingProcessor bookingProcessor;
+    private final ReassignmentLogRepository reassignmentLogRepository;
+    private final Clock clock;
+
+    public void handle(AssetDamagedEvent event) { ... }
 }
 ```
 
@@ -185,61 +286,95 @@ sequenceDiagram
     Engine->>Res: moveToAsset(bookingId, 102)
     Res-->>Engine: throws SubstituteNoLongerFreeException<br/>(Another student just booked 102)
 
-    Note over Engine: Catch exception, add 102 to attemptedAssetIds
+    Note over Engine: Catch exception, add 102 to attemptedCandidateIds
     Note over Engine: Retry next candidate from S1: Candidate 103
     Engine->>Res: moveToAsset(bookingId, 103)
     Res-->>Engine: SUCCESS (Moved to 103)
 ```
 
 ### Deduplication Across Strategy Passes:
-If all candidates from `SameModelStrategy` fail (or throw `SubstituteNoLongerFreeException`), the engine moves to `SameCategoryStrategy`. Since candidates of the same model also belong to the same category, `ReassignmentBookingProcessor` passes `attemptedAssetIds` to skip candidates that were already attempted, avoiding redundant database locks and duplicate attempts.
+If all candidates from `SameModelStrategy` fail (or throw `SubstituteNoLongerFreeException`), the engine moves to `SameCategoryStrategy`. Since candidates of the same model also belong to the same category, `ReassignmentBookingProcessor` keeps a `Set<Long> attemptedCandidateIds = new HashSet<>()` and skips candidates that were already attempted, avoiding redundant database locks and duplicate attempts.
 
-### Fallback to Force-Cancellation:
-If all strategies exhaust their candidates without finding a free substitute, the engine executes graceful fallback:
+### Isolated Transaction Execution & Fallback:
+Inside `ReassignmentBookingProcessor.processSingleBooking`:
 ```java
-reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
-reassignmentLogRepository.save(new ReassignmentLog(
-        event.incidentId(),
-        booking.id(),
-        damaged.id(),
-        null,
-        ReassignmentOutcome.FORCE_CANCELLED,
-        null,
-        now));
-notificationService.notifyUser(booking.userId(), "Reservation Cancelled", "Reservation cancelled due to damaged asset.");
+// Fallback when no strategy finds a free substitute:
+return inRequiresNewTransaction(() -> {
+    boolean cancelled =
+            reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+
+    if (cancelled) {
+        ReassignmentLog logEntry = new ReassignmentLog(
+                event.incidentId(),
+                booking.id(),
+                event.assetId(),
+                null,
+                ReassignmentOutcome.FORCE_CANCELLED,
+                null,
+                LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
+        reassignmentLogRepository.save(logEntry);
+
+        return Optional.of(new ReassignmentExecutionResult(ReassignmentOutcome.FORCE_CANCELLED, null));
+    }
+
+    return Optional.empty();
+});
+```
+
+Notifications are dispatched **after** successful transaction commit by `ReassignmentService`:
+```java
+if (resultOpt.isPresent()) {
+    ReassignmentBookingProcessor.ReassignmentExecutionResult result = resultOpt.get();
+    if (result.outcome() == ReassignmentOutcome.REASSIGNED) {
+        sendNotificationSafely(
+                booking.userId(),
+                "Reservation Reassigned",
+                "Your reservation #" + booking.id() + " has been reassigned to asset "
+                        + result.substituteAssetName() + " due to equipment maintenance.");
+    } else {
+        sendNotificationSafely(
+                booking.userId(),
+                "Reservation Cancelled",
+                "Your reservation #" + booking.id()
+                        + " has been cancelled due to equipment failure (incident #"
+                        + event.incidentId() + ") and no available substitutes.");
+    }
+}
 ```
 
 ---
 
 ## 6. How to Add a New Strategy in 5 Steps
 
-To introduce a new substitution strategy (e.g. `SameRoomAnyCategoryStrategy` to keep students in the same room regardless of category):
+To introduce a new substitution strategy (for instance, a tier-based substitute or cross-lab equipment strategy):
 
 1. Create a class under `com.campus.reassignment.service`:
    ```java
    @Component
    @Order(3) // Runs after SameModel (1) and SameCategory (2)
    @RequiredArgsConstructor
-   public class SameRoomAnyCategoryStrategy implements SubstituteStrategy {
+   class CrossLabSameModelStrategy implements SubstituteStrategy {
        private final CatalogApi catalogApi;
        private final ReservationApi reservationApi;
 
        @Override
        public String name() {
-           return "SAME_ROOM_ANY_CATEGORY";
+           return "CrossLabSameModelStrategy";
        }
 
        @Override
        public List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged) {
-           return catalogApi.findAvailableByLabRoom(damaged.labRoomId()).stream()
-                   .filter(asset -> reservationApi.isAssetFree(asset.id(), reservation.startTime(), reservation.endTime(), reservation.id()))
+           return catalogApi.findAvailableByModel(damaged.model(), damaged.id()).stream()
+                   .filter(asset -> asset.status() == AssetStatus.AVAILABLE)
+                   .filter(asset -> reservationApi.isAssetFree(
+                           asset.id(), reservation.start(), reservation.end(), reservation.id()))
                    .sorted(Comparator.comparing(AssetSummary::id))
                    .toList();
        }
    }
    ```
 2. Annotate with `@Component` and desired `@Order`.
-3. Spring auto-registers it into the strategy pipeline.
+3. Spring auto-registers it into the strategy pipeline in `ReassignmentBookingProcessor`.
 4. Existing tests pass; add targeted unit tests verifying `findCandidates`.
 5. No other classes in the monolith need modification.
 
@@ -254,7 +389,7 @@ To introduce a new substitution strategy (e.g. `SameRoomAnyCategoryStrategy` to 
 ### Q2: "How does the engine handle multiple available substitutes of the same model?"
 > **Answer:**  
 > `SameModelStrategy` applies a deterministic two-tier ranking:
-> 1. **Locality Preference:** Assets located in the same lab room as the damaged asset (`labRoomId == damaged.labRoomId()`) are sorted first, avoiding unnecessary student travel between rooms or buildings.
+> 1. **Locality Preference:** Assets located in the same lab room as the damaged asset (`Objects.equals(a.labRoomId(), damaged.labRoomId())`) are sorted first, avoiding unnecessary student travel between rooms or buildings.
 > 2. **Deterministic Tie-Breaking:** If multiple units are in the same room, candidates are sorted by `id ASC`. This guarantees reproducible, predictable reassignments during testing, audits, and demos.
 
 ### Q3: "What guarantees that a failure on one booking does not roll back the entire reassignment?"
