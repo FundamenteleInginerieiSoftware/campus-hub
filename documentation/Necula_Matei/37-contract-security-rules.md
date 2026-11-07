@@ -26,7 +26,7 @@
 |---|---|
 | `docs/api-contract.md` §2 | Rules table: 5 → 8 rows (`/error`, `denyAll` for `/api/**` + `/actuator/**`, public `GET /**` for the SPA, `denyAll` fallback); new "Refused" column (status + `code`); new table of the checks that run before the rules |
 | `docs/diagrams/aws-architecture.drawio` | Edge `e-ssm-ec2` (SSM → EC2) replaced by `e-ec2-ssm` (EC2 → SSM), label "reads secrets /campus/* + deploy command" |
-| `docs/diagrams/aws-architecture.png` | **Not changed: must be re-exported by hand** (see below) |
+| `docs/diagrams/aws-architecture.png` | Exported again from the `.drawio` file, so the picture shows the new arrow too (see below) |
 
 ### The 8 rules (first match wins)
 
@@ -63,4 +63,4 @@ The rows match the RBAC table of the security chapter (`docs/report/security.md`
 
 Only `source`/`target`, the exit/entry points (swapped) and the label position (`x="0.3"` → `x="-0.3"`, so the label stays where it was) changed. The XML was checked with a parser.
 
-**PNG:** draw.io is not installed here and has no headless export, so `aws-architecture.png` still shows the old arrow. **To do by hand:** open the `.drawio` in draw.io (desktop or app.diagrams.net) → File → Export as → PNG (same settings as before), overwrite `docs/diagrams/aws-architecture.png`, commit it to this branch.
+**PNG:** draw.io is not installed on my laptop, so I exported the picture with diagrams.net in a headless browser: the page loads the `.drawio` file in embed mode, and the PNG comes back from its `export` message (scale 2, white background, 10 px border, the same size as before). It now shows the EC2 → Systems Manager arrow. To change the diagram later: open the `.drawio` in draw.io or app.diagrams.net → File → Export as → PNG, overwrite `docs/diagrams/aws-architecture.png`.
