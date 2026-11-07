@@ -32,6 +32,11 @@ class SameModelStrategy implements SubstituteStrategy {
 
     @Override
     public Optional<AssetSummary> findSubstitute(ReservationSummary reservation, AssetSummary damaged) {
+        return findCandidates(reservation, damaged).stream().findFirst();
+    }
+
+    @Override
+    public List<AssetSummary> findCandidates(ReservationSummary reservation, AssetSummary damaged) {
         List<AssetSummary> candidates = catalogApi.findAvailableByModel(damaged.model(), damaged.id());
 
         return candidates.stream()
@@ -41,6 +46,6 @@ class SameModelStrategy implements SubstituteStrategy {
                         .thenComparing(AssetSummary::id))
                 .filter(candidate -> reservationApi.isAssetFree(
                         candidate.id(), reservation.start(), reservation.end(), reservation.id()))
-                .findFirst();
+                .toList();
     }
 }
