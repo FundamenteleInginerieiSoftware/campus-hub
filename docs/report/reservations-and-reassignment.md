@@ -66,17 +66,19 @@ stateDiagram-v2
     
     CONFIRMED --> CHECKED_OUT: Admin check-out (-15m to +30m window)
     CONFIRMED --> CANCELLED: Student cancels (before startTime)
-    CONFIRMED --> CANCELLED: Admin force-cancels (reason recorded)
+    CONFIRMED --> CANCELLED: Admin cancels (reason recorded)
+    CONFIRMED --> FORCE_CANCELLED: Engine force-cancels (no substitute available)
     CONFIRMED --> NO_SHOW: Automated job (past startTime + 30m without check-out)
     
-    CHECKED_OUT --> COMPLETED: Admin marks returned
+    CHECKED_OUT --> RETURNED: Admin marks returned
     CHECKED_OUT --> OVERDUE: Automated job (past endTime without return)
     
-    OVERDUE --> COMPLETED: Admin marks returned (late return audit)
+    OVERDUE --> RETURNED: Admin marks returned (late return audit)
     
     CANCELLED --> [*]
+    FORCE_CANCELLED --> [*]
     NO_SHOW --> [*]
-    COMPLETED --> [*]
+    RETURNED --> [*]
 ```
 
 ### State Transitions & Guard Conditions
