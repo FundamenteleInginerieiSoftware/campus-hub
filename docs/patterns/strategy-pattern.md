@@ -63,6 +63,7 @@ classDiagram
     class ReassignmentService {
         -CatalogApi catalogApi
         -ReservationApi reservationApi
+        -NotificationService notificationService
         -ReassignmentBookingProcessor processor
         -List~SubstituteStrategy~ strategies
         +reassignDamagedAsset(assetId)
@@ -71,7 +72,6 @@ classDiagram
     class ReassignmentBookingProcessor {
         -ReservationApi reservationApi
         -ReassignmentLogRepository logRepo
-        -NotificationService notificationService
         -TransactionTemplate requiresNewTx
         -List~SubstituteStrategy~ strategies
         +processSingleBooking(booking, damaged)
@@ -197,9 +197,16 @@ If all candidates from `SameModelStrategy` fail (or throw `SubstituteNoLongerFre
 ### Fallback to Force-Cancellation:
 If all strategies exhaust their candidates without finding a free substitute, the engine executes graceful fallback:
 ```java
-reservationApi.forceCancel(booking.id(), "NO_SUBSTITUTE_AVAILABLE");
-reassignmentLogRepository.save(new ReassignmentLog(..., Outcome.CANCELLED, null, "NO_SUBSTITUTE_AVAILABLE"));
-notificationService.send(booking.userId(), "Reservation cancelled: no substitute available.");
+reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+reassignmentLogRepository.save(new ReassignmentLog(
+        event.incidentId(),
+        booking.id(),
+        damaged.id(),
+        null,
+        ReassignmentOutcome.FORCE_CANCELLED,
+        null,
+        now));
+notificationService.notifyUser(booking.userId(), "Reservation Cancelled", "Reservation cancelled due to damaged asset.");
 ```
 
 ---
