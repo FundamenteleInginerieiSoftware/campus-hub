@@ -1,6 +1,6 @@
 # Reservations, Auto-Reassignment & Quality Assurance (Călin Murariu)
 
-**Author:** Călin Murariu (Member 3: reservations, reassignment engine, SQA test lead) · **State of the code:** `main` at `84058f7` (7 Nov 2026)  
+**Author:** Călin Murariu (Member 3: reservations, reassignment engine, SQA test lead) · **State of the code:** `main` (November 2026)  
 **Scope:** Equipment booking lifecycle, mathematical overlap prevention, pessimistic concurrency control, automated no-show/overdue jobs, autonomous reassignment engine (GoF Strategy & Observer patterns with `REQUIRES_NEW` transaction isolation), ArchUnit architecture guardrails, and PIT mutation testing lead report.
 
 Everything below was verified directly against the production code and tests on `main`.
@@ -22,7 +22,7 @@ The reservation and reassignment engine forms the core operational hub of the un
 | **Slot Alignment** | `:00` or `:30` minute marks only | Standardizes time slices into discrete 30-minute intervals, simplifying scheduling and eliminating jagged overlaps. | `validateTimeSlot` (`getMinute() % 30 == 0`, `getSecond() == 0`, `getNano() == 0`) |
 | **Duration Bounds** | Minimum 30 min, maximum 4 hours | Prevents trivial zero-minute reservations and stops a single student from monopolizing equipment for an entire day. | `validateTimeSlot` (duration check) |
 | **Advance Horizon** | Up to 14 days in advance | Balances planning flexibility with freshness; prevents speculative bookings months ahead. | `validateTimeSlot` (`start <= now.plusDays(14)`) |
-| **Active Quota Limit** | Maximum 2 active reservations per student | Active statuses (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`). Prevents resource hoarding. | `ReservationService.createReservation` (`countActiveByUserId < 2`) |
+| **Active Quota Limit** | Maximum 2 active reservations per student | Active statuses (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`). Prevents resource hoarding. Admins bypass this limit. | `ReservationService.createReservation` (`countByUserIdAndStatusIn < 2`) |
 | **Past Booking Rejection** | `startTime >= now` | Bookings cannot be created retroactively. | `validateTimeSlot` |
 | **Active Statuses** | `CONFIRMED`, `CHECKED_OUT`, `OVERDUE` | Defined in `ReservationStatus.ACTIVE_STATUSES`; treated as occupying the asset. | `ReservationStatus` enum |
 | **IDOR Defense** | 404, not 403, for non-owned bookings | Prevents enumeration attacks where students guess other users' reservation IDs. | `ReservationService.loadOwnedOrAdmin` |
@@ -90,10 +90,9 @@ stateDiagram-v2
    - Guarded by `BusinessRuleException(CHECKOUT_WINDOW_CLOSED)`.
 
 2. **Autonomous Background Lifecycle Jobs (`ReservationLifecycleService`):**
-   - `@Scheduled(cron = "0 */5 * * * *")` runs every 5 minutes in production:
-     - **No-Show Expiration (`markNoShows`):** Finds all `CONFIRMED` reservations where `startTime + 30 minutes < now(clock)`. Transitions them to `NO_SHOW`, emits an audit record, and frees the asset for immediate on-demand use.
-     - **Overdue Detection (`markOverdue`):** Finds all `CHECKED_OUT` reservations where `endTime < now(clock)`. Transitions them to `OVERDUE` and alerts lab staff via `AuditService`.
-     - **Preventive Cascade Move (`tryPreventiveMove`):** If an asset is flagged for upcoming maintenance, checks future bookings and proactively moves them before students arrive.
+   - `runLifecycleSweep()` runs autonomously via `@Scheduled(fixedDelayString = "${app.reservation.lifecycle-sweep-ms:300000}", initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")` (default 5 minutes in production, also callable on demand by admins via `POST /api/v1/admin/reservations/lifecycle-sweep`):
+     - **No-Show Expiration:** Identifies `CONFIRMED` reservations where `startTime + 30 minutes < now(clock)`. Transitions them to `NO_SHOW`, emits an audit record, and frees the asset for immediate on-demand use.
+     - **Overdue Detection & Preventive Cascade:** Identifies `CHECKED_OUT` reservations where `endTime < now(clock)`, marks them `OVERDUE`, alerts lab staff via `AuditService`, and proactively looks up the next student's imminent reservation on the unreturned asset (starting within 60 minutes) to move it to a free substitute before they arrive at the lab.
 
 ---
 
@@ -122,12 +121,12 @@ Optional<Asset> findByIdForUpdate(@Param("id") Long id);
 ```
 
 #### How it works under PostgreSQL:
-1. Thread A executes `SELECT ... FOR UPDATE` on `assets WHERE id = 1`. PostgreSQL acquires an exclusive row-level write lock (`RowExclusiveLock`).
-2. Thread B arrives and attempts `SELECT ... FOR UPDATE` on `assets WHERE id = 1`. Thread B is forced to block and wait.
-3. Thread A queries existing reservations for overlaps, sees 0 overlaps, executes `INSERT INTO reservations`, and commits.
+1. Thread A executes `SELECT ... FOR UPDATE` on `assets WHERE id = 1`. PostgreSQL acquires an exclusive row-level `FOR UPDATE` lock (which sets a `RowShareLock` at the table level, not `RowExclusiveLock`).
+2. Thread B arrives and attempts `SELECT ... FOR UPDATE` on `assets WHERE id = 1`. Thread B is forced to block and wait at the database level.
+3. Thread A queries existing reservations for overlaps, sees 0 overlaps, executes `INSERT INTO reservations`, records an audit event, and commits.
 4. On commit, Thread A's row lock is released.
-5. Thread B unblocks, re-reads the row, executes its overlap query, now sees Thread A's newly committed reservation, and immediately throws `ConflictException("RESERVATION_OVERLAP")`.
-6. Verified by multi-threaded integration test `ReservationConcurrencyIT` with 10 concurrent threads racing for the identical asset.
+5. Thread B unblocks, re-reads the row, executes its overlap query, now sees Thread A's newly committed reservation, and immediately throws `ConflictException("RESERVATION_CONFLICT")`.
+6. Verified by multi-threaded integration test `ReservationConcurrencyIT` (`twoThreadsBookSameSlotExactlyOneWins`) where two threads race simultaneously for the identical asset and slot.
 
 ### Active Quota Lock Race & PostgreSQL Advisory Locking
 The same race condition applies to the "maximum 2 active reservations" quota. A single student opening two browser tabs could simultaneously book two different assets. Because each thread acquires a pessimistic lock on a *different* asset row in the `assets` table, both threads would concurrently read `countByUserIdAndStatusIn < 2` under PostgreSQL's default `READ COMMITTED` isolation level and both would succeed (violating the quota limit).
@@ -136,12 +135,14 @@ We solved this (PR #169) without touching Matei's `users` table or risking phant
 1. Before querying active counts, the transaction acquires a transaction-scoped PostgreSQL advisory lock on the student ID:
    ```sql
    -- ReservationRepository.lockUserQuota
-   SELECT pg_advisory_xact_lock(:userId);
+   SELECT count(*) FROM (SELECT pg_advisory_xact_lock(1, CAST(:userId AS integer))) AS quota_lock;
    ```
-2. **Deadlock-Free Lock Hierarchy:** The lock acquisition order is strictly enforced:
+   Key 1 represents the reservation quota namespace, and key 2 is the student `userId`.
+2. **Admin Quota Bypass:** Administrators bypass the active limit rule, and therefore skip acquiring the advisory lock entirely (`if (!currentUser.isAdmin())`).
+3. **Deadlock-Free Lock Hierarchy:** The lock acquisition order is strictly enforced:
    $$\text{Physical Asset Row Lock } (\texttt{SELECT FOR UPDATE}) \longrightarrow \text{Student Quota Advisory Lock } (\texttt{pg\_advisory\_xact\_lock})$$
    Because no code path ever acquires an asset lock *after* acquiring a user advisory lock, cyclic wait conditions (deadlocks) are mathematically impossible.
-3. The advisory lock automatically releases when the transaction commits or rolls back.
+4. The advisory lock automatically releases when the transaction commits or rolls back.
 
 ---
 
@@ -152,25 +153,26 @@ When an incident report flags an asset as damaged (`AssetDamagedEvent`), future 
 ```mermaid
 flowchart TD
     A["AssetDamagedEvent<br/>(Incident Module)"] -->|@TransactionalEventListener<br/>phase = AFTER_COMMIT| B["LocalAssetDamagedListener"]
-    B --> C["ReassignmentService.reassignDamagedAsset"]
+    B --> C["ReassignmentService.handle(AssetDamagedEvent)"]
     C --> D["Query Upcoming Bookings:<br/>findUpcomingActiveByAsset(assetId, now)"]
     D --> E["Iterate Bookings (Ascending Start Time)"]
-    E --> F["ReassignmentBookingProcessor.processSingleBooking<br/>(@Transactional Propagation.REQUIRES_NEW)"]
+    E --> F["ReassignmentBookingProcessor.processSingleBooking<br/>(TransactionTemplate REQUIRES_NEW)"]
     
     F --> G{"Strategy Chain<br/>(@Order)"}
-    G -->|Order 1| H["SameModelStrategy<br/>(Same model, same room, AVAILABLE, free)"]
-    G -->|Order 2| I["SameCategoryStrategy<br/>(Same category, AVAILABLE, free)"]
+    G -->|Order 1| H["SameModelStrategy<br/>(Same model, same room preferred, AVAILABLE, free)"]
+    G -->|Order 2| I["SameCategoryStrategy<br/>(Same category, same room preferred, AVAILABLE, free)"]
     
     H -->|Found Candidate| J["reservationApi.moveToAsset(bookingId, candidateId)"]
     I -->|Found Candidate| J
     
-    J -->|Success| K["Write REASSIGNED Audit Log & Notify Student"]
-    J -->|SubstituteNoLongerFreeException<br/>(Concurrency Conflict)| L["Add to attemptedAssetIds & Retry Next Candidate"]
-    L --> G
+    J -->|Success| K["Insert REASSIGNED Log & Return to ReassignmentService (notifies student)"]
+    J -->|SubstituteNoLongerFreeException<br/>(Concurrency Conflict)| L["Add to attemptedCandidateIds & Try Next Candidate of Same Strategy"]
+    L -->|Next candidate in same strategy| J
+    L -->|Candidates exhausted| I
     
     H -->|No Candidates Free| I
-    I -->|No Candidates Free| M["reservationApi.forceCancel(bookingId, NO_SUBSTITUTE_AVAILABLE)"]
-    M --> N["Write CANCELLED Audit Log & Notify Student"]
+    I -->|No Candidates Free| M["reservationApi.forceCancel(bookingId, 'Equipment failure, incident #' + incidentId)"]
+    M --> N["Insert FORCE_CANCELLED Log & Return to ReassignmentService (notifies student)"]
 ```
 
 ### Architectural Highlights
@@ -182,21 +184,22 @@ flowchart TD
 
 2. **Strategy Pattern Hierarchy:**
    - Spring injects a `List<SubstituteStrategy>` sorted by `@Order`:
-     - **`SameModelStrategy` (`@Order(1)`):** Finds assets with the exact same hardware model (`asset.model = damaged.model`) in the same laboratory room, verifying `status = AVAILABLE` and `isAssetFree(candidateId, start, end)`.
-     - **`SameCategoryStrategy` (`@Order(2)`):** If no identical model is free, falls back to any operational asset within the same category (`asset.categoryId = damaged.categoryId`).
+     - **`SameModelStrategy` (`@Order(1)`):** Finds assets with the exact same hardware model (`catalogApi.findAvailableByModel`), sorted with same lab room preferred (`Objects.equals(a.labRoomId(), damaged.labRoomId())`) then lowest ID, verifying `status == AVAILABLE` and `isAssetFree(candidateId, start, end)`. Same lab room is a ranking preference, not an excluding requirement.
+     - **`SameCategoryStrategy` (`@Order(2)`):** If no identical model is free, falls back to operational assets within the same broader category (`catalogApi.findAvailableByCategory`), with the same room preference and lowest ID ordering.
    - Open-Closed Principle (OCP): New strategies (e.g., cross-lab or upgrade strategies) can be introduced simply by creating a new `@Component` with an appropriate `@Order` annotation without modifying the engine.
 
 3. **Per-Booking Transaction Isolation (`REQUIRES_NEW`):**
    - `ReassignmentBookingProcessor` executes inside an independent `TransactionTemplate` configured with `Propagation.REQUIRES_NEW`.
-   - If an outage affects 10 upcoming bookings, each booking is processed and committed independently. If booking #4 fails or hits a deadlock, bookings #1, #2, #3, and #5–#10 are still processed successfully.
+   - If an outage affects 10 upcoming bookings, each booking is processed and committed independently. If booking #4 fails or hits an optimistic lock conflict, bookings #1, #2, #3, and #5–#10 are still processed successfully.
 
 4. **Concurrency Race & Candidate Deduplication:**
    - If another user reserves Candidate A in the split second between strategy inspection and `moveToAsset`, `ReservationService.moveToAsset` throws `SubstituteNoLongerFreeException`.
-   - The processor catches this exception, appends Candidate A's ID to `attemptedAssetIds`, and loops to Candidate B.
-   - Candidate IDs attempted under `SameModelStrategy` are passed forward into `SameCategoryStrategy`, preventing duplicate checks.
+   - The processor catches this exception, appends Candidate A's ID to its internal `attemptedCandidateIds` set, and continues to try the remaining free candidates of the same strategy.
+   - `attemptedCandidateIds` is maintained within the processor; any candidate already attempted is skipped if returned by a subsequent strategy, preventing redundant database locks.
 
-5. **Exhaustion Fallback:**
-   - If all candidate substitutes across all strategies are unavailable or booked, the processor automatically force-cancels the booking (`status = CANCELLED`, `cancelReason = NO_SUBSTITUTE_AVAILABLE`), records the incident in `reassignment_log`, and notifies the student.
+5. **Exhaustion Fallback & User Notifications:**
+   - If all candidate substitutes across all strategies are unavailable or booked, the processor automatically force-cancels the booking (`status = FORCE_CANCELLED`, reason `"Equipment failure, incident #" + event.incidentId()`), records the incident in `reassignment_log`, and returns the execution result.
+   - User notifications (`Reservation Reassigned` or `Reservation Cancelled`) are dispatched post-commit by `ReassignmentService.notifyUser`, ensuring students are alerted only after database changes have successfully committed.
 
 ---
 
@@ -238,7 +241,7 @@ In PR #201, all surviving mutants across `reservation` and `reassignment` were e
 ```
 ================================================================================
 Package: com.campus.reservation.service
-- ReservationService:           231/231 lines (100%), 143/143 mutants (100% killed)
+- ReservationService:           231/231 lines (100%), 142/142 mutants (100% killed)
 - ReservationLifecycleService:  103/103 lines (100%),  25/25  mutants (100% killed)
 
 Package: com.campus.reassignment.service
@@ -247,25 +250,25 @@ Package: com.campus.reassignment.service
 - SameModelStrategy:             12/12  lines (100%),   9/9   mutants (100% killed)
 - SameCategoryStrategy:          12/12  lines (100%),   9/9   mutants (100% killed)
 - SubstituteStrategy:             1/1   lines (100%),   1/1   mutants (100% killed)
-- SubstituteCandidate:            3/3   lines (100%),   1/1   mutants (100% killed)
 ================================================================================
-TOTAL MUTATION COVERAGE IN CALIN'S SERVICES: 100% (0 SURVIVING MUTANTS)
+TOTAL MUTATION COVERAGE IN CALIN'S SERVICES: 100% (212/212 KILLED, 0 SURVIVORS)
 ```
 
 #### Mutation Survivors Killed:
 1. **Relational Boundary Operators:** Tested edge conditions for pagination (`page < 0`, `size < 1`, `size > 100`, `page * size > Integer.MAX_VALUE`, `size = 1`, `size = 100`).
-2. **Post-Commit Notification Hooks:** Tested `TransactionSynchronizationManager` post-commit dispatch and error suppression in forced admin cancellation.
-3. **Reassignment Concurrency Retries:** Tested candidate contention loops (`SubstituteNoLongerFreeException`), cross-strategy candidate deduplication, and force-cancel fallbacks.
+2. **Post-Commit Notification Hooks:** Tested `TransactionSynchronizationManager` post-commit dispatch (`cancelReservationAdminWithActiveTransactionDefersNotification`) and error suppression (`cancelReservationAdminCatchesNotificationException`) in administrative cancellation.
+3. **Reassignment Concurrency Retries:** Tested candidate contention loops (`SubstituteNoLongerFreeException`), cross-strategy candidate deduplication via `attemptedCandidateIds`, and force-cancel fallbacks.
 4. **Strategy Interface Default Methods:** Tested candidate list mapping in `SubstituteStrategy`.
 
 ---
 
 ## 6. Frontend Booking Calendar & Experience
 
-The frontend implementation (`frontend/src/pages/BookingPage.tsx` and `MyReservationsPage.tsx`) provides students with a Google Calendar-style week view:
-- **Interactive 30-Minute Grid:** Visualizes occupied vs free intervals across the 08:00–20:00 schedule.
-- **Client-Side Asset Caching (`fetchedAssetIdsRef`):** Eliminates duplicate network requests when rendering multi-asset timelines.
-- **Pre-Start Cancellation Guard:** Disables cancellation buttons and displays explanatory badges once the reservation start time has arrived, preventing students from canceling reservations while equipment is in use.
+The frontend implementation (`frontend/src/pages/MyReservationsPage.tsx`, `ReservationsDeskPage.tsx`, and `CalendarBookingView.tsx`) provides students and administrators with intuitive scheduling:
+- **Interactive Calendar View (`CalendarBookingView.tsx`):** Renders week and day timelines visualizing occupied slots vs available intervals across the 08:00–20:00 window.
+- **My Reservations Management (`MyReservationsPage.tsx`):** Displays student reservations with status badges (`CONFIRMED`, `CHECKED_OUT`, `REASSIGNED`, etc.), allowing students to cancel upcoming bookings before their start time.
+- **Administrative Desk (`ReservationsDeskPage.tsx`):** Enables lab staff to filter reservations, check out equipment, mark equipment returned, or force-cancel bookings.
+- **Pre-Start Cancellation Guard:** Disables cancellation buttons and displays explanatory tooltips once the reservation start time has arrived, preventing students from canceling while equipment is in use.
 - **Dynamic Slot-Aligned Swagger Examples (`ReservationOpenApiCustomizer`):** Configured OpenAPI customizers so that Swagger "Try it out" always defaults to the next upcoming valid weekday (14:00–16:00), allowing one-click interactive testing without validation errors.
 
 ---
@@ -282,7 +285,7 @@ The frontend implementation (`frontend/src/pages/BookingPage.tsx` and `MyReserva
 
 ### Q3: "What happens if a substitute asset is reserved by someone else between strategy selection and moving the booking?"
 > **Answer:**  
-> This concurrency race is explicitly handled. In `ReservationService.moveToAsset`, the target substitute asset is locked and re-checked for overlaps. If another student claimed it in the interim, it throws `SubstituteNoLongerFreeException`. `ReassignmentBookingProcessor` catches this exception, marks the conflicting candidate ID as attempted in `attemptedAssetIds`, and retries the strategy chain to find the next available candidate.
+> This concurrency race is explicitly handled. In `ReservationService.moveToAsset`, the target substitute asset is locked and re-checked for overlaps. If another student claimed it in the interim, it throws `SubstituteNoLongerFreeException`. `ReassignmentBookingProcessor` catches this exception, marks the conflicting candidate ID as attempted in its `attemptedCandidateIds` set, and continues trying remaining candidates of the same strategy before falling back to subsequent strategies.
 
 ### Q4: "Why does `ReassignmentBookingProcessor` use `Propagation.REQUIRES_NEW`?"
 > **Answer:**  
