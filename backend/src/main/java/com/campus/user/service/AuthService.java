@@ -51,7 +51,7 @@ public class AuthService {
     /** Creates a STUDENT account. Throws 409 EMAIL_TAKEN if the email is already used, whatever the letter case. */
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmailIgnoreCase(request.email().trim())) {
+        if (userRepository.existsByEmailIgnoreCase(request.email())) {
             throw emailTaken();
         }
         // Only the BCrypt hash is stored, never the password itself.
@@ -88,8 +88,9 @@ public class AuthService {
         return new LoginResponse(createToken(user), tokenLifetime.toSeconds(), UserResponse.from(user));
     }
 
-    // The claims are part of the contract: Stefania's CurrentUser reads "sub", SecurityConfig turns
-    // "roles" into ROLE_..., and the decoder rejects the token once "exp" has passed.
+    // The claims are part of the contract: Stefania's CurrentUser reads "sub", and the decoder rejects
+    // the token once "exp" has passed. Since #117 SecurityConfig takes the role from the database on
+    // every request, not from "roles"; the claim stays because docs/api-contract.md section 3 lists it.
     private String createToken(User user) {
         Instant now = clock.instant();
         JwtClaimsSet claims = JwtClaimsSet.builder()

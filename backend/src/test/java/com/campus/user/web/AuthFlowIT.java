@@ -16,7 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The whole app on the campus_test database: register, log in, then use the token. Proves that the
- * token login signs is the one SecurityConfig accepts, and that its "roles" claim is read.
+ * token login signs is the one SecurityConfig accepts, and that the role checked on each request
+ * (read from the database since #117) lets the user in.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -65,6 +66,18 @@ class AuthFlowIT {
                         .content("{\"email\": \"stale@campus.test\", \"password\": \"secret123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    // #165: a phone keyboard or a copy-paste often adds a space around the email.
+    @Test
+    void registerTrimsSpacesAroundTheEmail() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(" Spaced@Campus.test ")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("spaced@campus.test"));
+
+        login("spaced@campus.test");
     }
 
     @Test

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,6 +81,59 @@ class CategoryServiceTest {
 
         assertEquals("CATEGORY_NAME_TAKEN", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createRejectsDuplicateNameOnConcurrentRace() {
+        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false, true);
+        when(categoryRepository.saveAndFlush(any(Category.class)))
+                .thenThrow(new DataIntegrityViolationException("unique index constraint"));
+
+        ConflictException ex = assertThrows(
+                ConflictException.class, () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
+
+        assertEquals("CATEGORY_NAME_TAKEN", ex.getCode());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createRethrowsDataIntegrityViolationWhenNameNotTaken() {
+        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
+        when(categoryRepository.saveAndFlush(any(Category.class)))
+                .thenThrow(new DataIntegrityViolationException("other constraint"));
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createDoesNotCatchAuditFailureAsDuplicateName() {
+        Category saved = new Category("Oscilloscopes", "Desc");
+        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
+        when(categoryRepository.saveAndFlush(any(Category.class))).thenReturn(saved);
+        when(currentUser.id()).thenReturn(3L);
+        doThrow(new DataIntegrityViolationException("actor_id FK failure"))
+                .when(auditService)
+                .record(any(), any(), any(), any(), any());
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
+    }
+
+    @Test
+    void deleteDoesNotCatchAuditFailureAsCategoryInUse() {
+        Category existing = new Category("Oscilloscopes", "Desc");
+        when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
+        when(assetRepository.existsByCategoryId(5L)).thenReturn(false);
+        when(currentUser.id()).thenReturn(3L);
+        doThrow(new DataIntegrityViolationException("actor_id FK failure"))
+                .when(auditService)
+                .record(any(), any(), any(), any(), any());
+
+        assertThrows(DataIntegrityViolationException.class, () -> categoryService.delete(5L));
     }
 
     @Test

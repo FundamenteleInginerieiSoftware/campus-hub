@@ -45,7 +45,7 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 | Date | Decision | Status | Notes |
 |---|---|---|---|
 | 2026-10-23 | **AWS: one EC2 instance (Docker) behind CloudFront + RDS PostgreSQL 18**; no ECS, ALB or NAT gateway | ✅ | [ADR-002](adr/002-single-ec2-behind-cloudfront.md), diagram `docs/diagrams/aws-architecture.drawio`. Replaces ECS Fargate + ALB from the plan PDFs. ~$35/month at most, paid by the credits |
-| 2026-10-23 | In prod, the Spring Boot app also serves the React build (one Docker image, one origin) | 🟡 | ADR-002. Stefania: please confirm. Dev is unchanged (Vite proxy); Matei's Dockerfile runs `npm ci && npm run build` and copies `frontend/dist` into the image |
+| 2026-10-23 | In prod, the Spring Boot app also serves the React build (one Docker image, one origin) | ✅ | ADR-002, confirmed by Stefania on 2026-11-04 (issue #105). Dev is unchanged (Vite proxy); Matei's Dockerfile runs `npm ci && npm run build` and copies `frontend/dist` into the image |
 | 2026-10-23 | Prod secrets in **SSM Parameter Store** `SecureString` (`/campus/*`), not Secrets Manager | ✅ | [ADR-003](adr/003-ssm-parameter-store-for-secrets.md). Free; no rotation (documented limitation) |
 | 2026-10-23 | **Local-first:** everyone works locally; AWS only for deploys (W7–W9) and the demo, all through Terraform | ✅ | [ADR-001](adr/001-local-first.md) |
 | 2026-10-23 | AWS account stays on the **Free plan** ($100 credits until 17 Mar 2027), no AWS Organizations / Identity Center; budget alerts $5 / $20 / $40 | ✅ | [ADR-005](adr/005-aws-account-free-plan.md). Only Matei has AWS access |
@@ -54,7 +54,8 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 | 2026-10-06 | Modular monolith: modules talk only through their `api` package or events | ✅ | Enforced by Calin's ArchUnit rules (freeze mode from W4, strict after M1) |
 | 2026-10-06 | Asset status is operational only: `AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED` | ✅ | "Free at a time" is computed from reservations |
 | 2026-10-06 | Assets are never hard-deleted, only retired | ✅ | |
-| – | A reassigned reservation stays `CONFIRMED` (+ `original_asset_id`, `reassignment_log`) instead of a new status | 🟡 | Recommended in the plan; confirm |
+| 2026-11-07 | A reassigned reservation stays `CONFIRMED` (+ `original_asset_id`, `reassignment_log`) instead of a new status | ✅ | Implemented by Calin; moves are audited in `reassignment_log` and flagged in the UI |
+| – | Retired asset future bookings: automatically reassigned using Calin's engine (Strategy pattern), with fallback to force-cancel | 🟡 | Proposed for W7. Liviu: AssetService would publish AssetRetiredEvent, and a migration will make reassignment_log.incident_id nullable. Liviu + team to confirm |
 | – | Time types: `LocalDateTime` = campus local time (Europe/Bucharest) for reservation slots, `Instant` for audit/event timestamps | 🟡 | Superseded for table columns on 2026-10-21 (row above). `Instant` stays only in event payloads (`AssetDamagedEvent.occurredAt`): confirm |
 
 ## 5. Business rules (numbers)

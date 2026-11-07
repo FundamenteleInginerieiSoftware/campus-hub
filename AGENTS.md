@@ -193,6 +193,13 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 **Tests:** service unit tests with Mockito (no Spring context) · `@DataJpaTest` for custom queries (runs against the local `campus_test` database, not an embedded one) · `@WebMvcTest` + `@WithMockUser(roles = "ADMIN")` for status codes and security · a few `@SpringBootTest` for critical flows · fixed `Clock` in tests · `@MockitoBean` · target ~70% line coverage on `service/` · every bug fix gets a test first · names `XxxServiceTest`, `XxxControllerIT`, methods like `rejectsOverlappingReservation()`.
 
+**Tests that explain themselves** (the professor may break something at the defense; a red test must say what broke and where: `docs/testing/defense-playbook.md`):
+- One business rule per test, named after the rule. Every assertion gets a message with the rule and the class/method that owns it: `.as("overlap: 14-16 must block 15-17; see ReservationService.createReservation")`. On a wrong HTTP status, put the response body (ProblemDetail `code`) in the message.
+- Dates relative to a fixed `Clock`, never a hard-coded calendar day (#94).
+- **Coverage is not the goal: don't write tests just to reach 100% JaCoCo.** ~70% on `service/` (gate from W10). To find missing tests, use mutation testing: `./gradlew pitest` breaks the code on purpose and lists every break no test caught (survived mutants). Before W10 each owner adds tests for the survivors in their module that are real rules (skip logging/`toString` noise).
+- `DemoFlowIT` (Matei, root test package) runs the whole demo through the HTTP API; its failure message names the step, the owner and the class to open. If you change an endpoint it uses, keep it green.
+- When a test fails, read its message first, then `git diff`. Don't "fix" a test to make it pass unless the rule itself changed (team decision).
+
 ---
 
 ## 6. Documentation rules
@@ -216,26 +223,27 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 7. Status (update when milestones land)
 
-**As of 2026-11-04 late evening (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
+**As of 2026-11-05 (W5).** **What is left for each member, until the defense: `docs/whats-left.md`** (start there when proposing the next step). Detailed W4–W6 plan: `docs/plan-w4-w6.md`.
 - **On `main`:**
   - Gradle skeleton (Boot 4.1.1, Java 25, Spotless, JaCoCo, Flyway).
-  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**.
+  - Security: JWT HS256, `/api/v1/admin/**` admin-only, 401/403 as `ProblemDetail`, **register + login** (#54), `GET /api/v1/users/me` (#82), Swagger **Authorize**. Old tokens ignored on `/api/v1/auth/**` (#126); firewall-rejected URLs answer `ProblemDetail` JSON (#127); disabled or deleted users lose access at once, the account is checked on every request with a token (`UserApi.findActiveRole`, #128).
   - Dev accounts `student1`/`student2`/`admin@campus.test` with password `password`, created by `UserSeeder` (#55; ids 1, 2, 3).
-  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64).
+  - `common.error` + `GlobalExceptionHandler`, `PageResponse`, Audit/Storage/Notification interfaces + dev versions (Liviu #22). MVC errors keep their `code` (#52). Real `AuditService` writing `audit_logs` (Liviu #64). Query-parameter validation errors → 400 `VALIDATION_FAILED` (Liviu #110).
   - `Clock` bean (Calin #27). `CurrentUser` bean (Stefania #74).
   - `UserApi` (real). First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, `prod` profile only (`AdminBootstrap`, #88).
   - **Catalog** entities + real `CatalogApi` with `lockForBooking` (Liviu #24); admin CRUD for categories, lab rooms and assets, asset details, retire (Liviu #66); admin actor from `CurrentUser` (#89); asset search, filters and paging `GET /api/v1/assets` (#92).
   - **Local disk storage** with type, size and path-traversal checks; `BadRequestException` (400) and `PayloadTooLargeException` (413) in `common.error` (Liviu #90).
   - **Docker image** (`Dockerfile` at the repo root): builds the React app and serves it from Spring Boot, one origin (ADR-002), non-root, health check (Matei #114).
-  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87); booking-rule boundary tests (#98); two-thread row-lock test, exactly one booking wins (#97).
+  - **Reservations:** booking + overlap check + row lock, my reservations, cancel, real `ReservationApi`, seeder (Calin #34–#36); availability (#78); admin search, check-out, return (#80); check-out/return windows + scheduled no-show and overdue jobs (#60); `GET /reservations/me` with several `status` values + `GET /reservations/me/summary` (#87); booking-rule boundary tests (#98); two-thread row-lock test, exactly one booking wins (#97); timestamps in whole seconds (#130); no check-out of an overdue or non-bookable asset (#131); My reservations loader fix (#133).
   - **Incidents:** report → asset `UNDER_MAINTENANCE` + `AssetDamagedEvent` (Stefania #40).
-  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37). Retired assets excluded, ties broken the same way every time (#99). `GET /api/v1/admin/reassignments` (paged log, #96). "Moved" / "force-cancelled" badges in My reservations (#100).
+  - **Reassignment engine** v1: same-model, then same-category substitute, else force-cancel; `reassignment_log` (Calin #37). Retired assets excluded, ties broken the same way every time (#99). `GET /api/v1/admin/reassignments` (paged log, #96). One transaction per booking, so one failed move no longer rolls back the others (#132). "Moved" / "force-cancelled" badges in My reservations (#100).
   - **ArchUnit rules** for module boundaries and coding conventions (Calin #76), plus shared `Clock`, `@Transactional` placement and no ORDINAL enums (#102). Team test plan `docs/testing/test-plan.md`, reservation diagrams, Strategy doc (#101).
   - **Frontend** (`frontend/`, Stefania #84–#86): Vite + React + TypeScript + Mantine scaffold, API client (token in `localStorage`, 401 → back to login), login page, layout, role-based routes, shared components; lint + build run in `ci`. Calin's My reservations page + calendar booking view (#87).
 - **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`.
-- **Open PRs:** Stefania #107 (register page, approved), #108 (incident triage: changes requested, race when releasing the asset + retired assets) and #111 (ADR-002 ✅, approved); Liviu #110 (query-parameter validation → 400, approved); Matei #126–#129 (old token on `/auth/**`, firewall JSON, disabled users lose access at once, S3 + SES adapters: approved, merged one by one) and #135 (`users.created_at` in whole seconds); Calin #130 (timestamps in whole seconds, approved), #131 (overdue check-out), #132 (reassignment one transaction per booking), #133 (My reservations loader), all three changes requested; Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
+- **Open PRs:** Matei #129 (S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds), #138 (admin reservations desk page), #139 (security pass tests): all need re-approval after merging main. Calin #141 (OVERDUE bookings block the asset until returned, closes #113; approved before his last push, needs re-approval). Stefania #107 (register page, approved), #108 (incident triage: changes requested, race when releasing the asset + retired assets), #111 (ADR-002 ✅, approved), #142 (keep the token when the backend is down on startup, needs review). Calin's drafts #58, #59, #61 (simulator, waitlist, recommender), parked: off-plan, not before M1.
+- **Open issue #140:** project assistant design questions, waiting for the team's answers.
 - **Missing for M1 (15 Nov):** `CatalogSeeder`, catalog / asset details / admin inventory pages (Liviu), booking on asset details (Calin), register page (Stefania, #107). Details per member: `docs/whats-left.md`.
-- **Next for Matei:** merge #126–#129 and #135, then Terraform parts 1 + 2 (W5) and push the image to ECR (W6).
+- **Next for Matei:** merge #129, #135, #138, #139 once re-approved, then Terraform parts 1 + 2 (W5) and push the image to ECR (W6).
 - **Prototype demo:** a Swagger run on a fresh database: login → admin creates assets → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. **All of it is on `main`** (checked locally on 31 Oct with all these PRs combined). `POST /incidents` also needs `severity` (e.g. `HIGH`).
 - Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval from any teammate, stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
 
@@ -256,8 +264,8 @@ Dates are approximate (W1 = week of 5 Oct 2026); real dates go in `docs/decision
 | W7 | Business logic | EC2 + CloudFront first deploy (ADR-002) | Retire flow; audit log endpoint + page | **Reassignment engine v1** + tests | My incidents, incident details, admin incident queue |
 | W8 | Business logic | `deploy.yml`, `S3StorageService` | Tests; help Calin with substitute queries | Reassignment log endpoint + notifications; overdue/no-show jobs; concurrency test | Reassignment log view; UI polish |
 | W9 | **M2 feature complete** `v0.2.0` | SES, secrets, **admin reservations desk page**; SQS only if ahead | Polish + docs | Full incident → reassignment flow local + AWS | Integration of all screens; prod build |
-| W10 | **Feature freeze**: tests & bugs only | Alarms, budget, load + security smoke tests | Coverage >= 70% | Integration tests; test plan | Manual E2E checklist, UI polish |
-| W11 | Docs & demo | Deployment + component diagrams, security/AWS chapters, runbook | Final class/ER/state diagrams, module docs | State/sequence diagrams, Strategy doc, **test report** | User manual, Observer doc, demo script, 2 rehearsals |
+| W10 | **Feature freeze**: tests & bugs only; everyone: tests for PIT survivors in their module | Alarms, budget, load + security smoke tests | Coverage >= 70% | Integration tests; test plan | Manual E2E checklist, UI polish |
+| W11 | Docs & demo | Deployment + component diagrams, security/AWS chapters, runbook | Final class/ER/state diagrams, module docs | State/sequence diagrams, Strategy doc, **test report** | User manual, Observer doc, demo script, 2 rehearsals, **break-it drill** (`docs/testing/defense-playbook.md` §6) |
 | W12 | Buffer + defense `v1.0.0` | Keep AWS up for demo, then tear down | Q&A prep | Q&A prep | Q&A prep |
 
 **M1:** locally, a student registers, logs in, browses, books (conflicts rejected), sees "my reservations"; an admin adds assets; CI green; Swagger complete. **M2:** everything works locally and on AWS, including incident with photo -> automatic reassignment -> notification. **After feature freeze: no new features.**
@@ -309,7 +317,7 @@ freeze() { git grep -ohE 'CREATE TABLE (users|categories|lab_rooms|assets|reserv
 **Agreed cross-module contracts** (may be extended; never break existing signatures without telling consumers):
 ```java
 // user.api (Matei)
-interface UserApi { UserSummary getById(Long id); boolean exists(Long id); }
+interface UserApi { UserSummary getById(Long id); boolean exists(Long id); Optional<Role> findActiveRole(Long id); }  // findActiveRole: empty if deleted or disabled
 record UserSummary(Long id, String email, String fullName, Role role) {}
 // common.security (Stefania): a bean that reads the JWT of the current request. Inject it; mock it in service unit tests
 @Component class CurrentUser { Long id(); boolean isAdmin(); }   // id() = "sub" claim, isAdmin() = has ROLE_ADMIN
@@ -364,6 +372,9 @@ The backend commands work once the Gradle skeleton is on `main`.
 | Format code | `cd backend && ./gradlew spotlessApply` |
 | One test class | `cd backend && ./gradlew test --tests AssetServiceTest` |
 | Coverage report | after `build`: `backend/build/reports/jacoco/test/html/index.html` |
+| Mutation testing (on demand, not in `build`) | `cd backend && ./gradlew pitest` → `backend/build/reports/pitest/index.html` (survived mutants = breaks no test caught) |
+| Run every test again (Gradle skips unchanged ones) | `cd backend && ./gradlew test --rerun` |
+| Something is broken: what changed? | `git status` · `git diff` · `git diff <last tag>` · `git bisect` (steps in `docs/testing/defense-playbook.md` §1) |
 | Reset local DB | stop the app, then in pgAdmin (or `psql`): `DROP DATABASE campus WITH (FORCE); CREATE DATABASE campus OWNER campus;` |
 | Look at the data | pgAdmin (or IntelliJ's Database tool): `localhost:5432`, database `campus`, user `campus` / `campus` |
 | Health | <http://localhost:8080/actuator/health> |

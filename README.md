@@ -4,6 +4,73 @@ University project for **Fundamentele Ingineriei Software (FIS)**.
 Students reserve shared lab equipment by time slot and report broken equipment with a photo.
 When an asset is reported damaged, an **auto-reassignment engine** moves its upcoming bookings to a substitute (or cancels them) and notifies the students.
 
+## ▶ Quick start: run it, open it, test it
+
+Needs JDK 25, PostgreSQL 18 with the `campus` user and databases, and Node.js 24 (first time? sections 1 and 1.1).
+
+**1. Start PostgreSQL and check it answers**
+
+```bash
+sudo service postgresql start      # Linux/WSL, after every reboot (Windows/macOS: it starts by itself)
+pg_isready -h localhost            # → "localhost:5432 - accepting connections"
+```
+
+**2. Start the backend** (terminal 1, http://localhost:8080)
+
+```bash
+cd backend
+./gradlew bootRun                  # Windows: gradlew.bat bootRun. Wait for "Started CampusHubApplication"
+```
+
+**3. Start the frontend** (terminal 2, http://localhost:5173)
+
+```bash
+cd frontend
+npm ci                             # first time, or after package.json changed
+npm run dev                        # sends every /api call on to :8080, so start the backend first
+```
+
+**4. Open it**
+
+| Address | What it is | You should see |
+|---|---|---|
+| <http://localhost:5173> | **The app** (React) | The login page. Log in with an account below |
+| <http://localhost:8080/swagger-ui.html> | **Swagger**: try every API endpoint by hand | All endpoints. Log in with `POST /api/v1/auth/login`, copy `accessToken`, click **Authorize**, paste it |
+| <http://localhost:8080/actuator/health> | Is the backend up? | `{"status":"UP"}` |
+| <http://localhost:8080/api/v1/auth/ping> | Does security let public calls through? | A short JSON message |
+| pgAdmin → `localhost:5432`, database `campus`, user `campus` / `campus` | The data itself | The tables (`users`, `assets`, `reservations`, …) |
+
+**Dev accounts** (password `password` for all): `student1@campus.test`, `student2@campus.test`, `admin@campus.test`. On an empty database the app also creates demo equipment (categories, lab rooms, several assets of the same model) and a few bookings.
+
+**What works in the browser today:** login, **My reservations** with the booking calendar (students), the **Reservations desk** for pickups and returns (admin, `/admin/reservations`). The catalog, incident and inventory pages are still placeholders (open PRs); use Swagger for those.
+
+**5. Run the tests**
+
+| Command (in `backend/`, PostgreSQL running) | What it checks |
+|---|---|
+| `./gradlew build` | Everything: all tests + format check + coverage. Must end in `BUILD SUCCESSFUL` |
+| `./gradlew test --tests DemoFlowIT` | **The whole demo in one test**: register → login → book → double-book 409 → report damage → the booking moves to a twin asset. A failure names the step, its owner and the class to open |
+| `./gradlew test --tests AssetServiceTest` | One test class |
+| `./gradlew test --rerun` | Runs every test again (Gradle skips unchanged ones otherwise) |
+| `./gradlew pitest` | Mutation testing, on demand (~3 min): breaks the code on purpose and lists what no test caught. Report: `backend/build/reports/pitest/index.html` |
+| `cd frontend && npm run lint && npm run build` | Frontend lint + type check + production build |
+
+Reports after `build`: tests in `backend/build/reports/tests/test/index.html`, coverage in `backend/build/reports/jacoco/test/html/index.html`. How to read a red test and what to do at the defense: [`docs/testing/defense-playbook.md`](docs/testing/defense-playbook.md).
+
+**If something doesn't start**
+
+| Problem | Fix |
+|---|---|
+| `Connection to localhost:5432 refused` | PostgreSQL isn't running: step 1 |
+| `password authentication failed for user "campus"` | The user/databases were never created: section 1.1 |
+| Flyway error (`checksum mismatch`, `Detected applied migration not resolved locally`) after switching branches | Reset the local database (section 2) |
+| `Port 8080 was already in use` | Another backend is still running: stop it (IntelliJ ■ or `Ctrl+C`) |
+| The app at :5173 shows errors or "network error" on every page | The backend isn't running, or not on :8080 |
+
+---
+
+## What it is built with
+
 | | |
 |---|---|
 | Backend | Java 25, Spring Boot 4.1, Gradle (wrapper), Spring Security (JWT), JPA + Flyway |
@@ -11,7 +78,7 @@ When an asset is reported damaged, an **auto-reassignment engine** moves its upc
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (4 Nov 2026, week 5):** on `main`: the backend skeleton, the shared error handling, paging, audit log and `Clock`, security with **register/login (JWT), `/users/me`, dev test accounts and `CurrentUser`**, the **catalog** with admin CRUD and retire, **reservations** (booking with overlap check, my reservations, cancel, availability, admin check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine**, **ArchUnit** architecture rules and the **Docker image** for AWS. **The whole prototype demo runs on `main`** (admins create the assets in Swagger; there is no catalog seed data yet). The **frontend** has started: scaffold, login, layout and routes, My reservations and the booking calendar (`cd frontend && npm ci && npm run dev`). **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), run the app (section 2) and do your practice PR (section 3).
+> **Status (7 Nov 2026, week 5):** on `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine**, ArchUnit rules, the Docker image and the S3/SES adapters for AWS. **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, My reservations + booking calendar, admin Reservations desk; catalog, incident and inventory pages are in review. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
 
 ---
 
@@ -180,7 +247,7 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 4 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
+What is on `main` and what is still in review, per member. **As of 5 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
 
 ### Matei Necula: cloud, security & auth
 
@@ -205,12 +272,15 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
 | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136 |
 | Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
 | No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
-| Personal docs 01-19 | #14 + each PR above |
+| Old tokens ignored on the public `/api/v1/auth/**` endpoints | #126 |
+| Firewall-rejected URLs answer ProblemDetail JSON | #127 |
+| Disabled or deleted users lose access at once (`UserApi.findActiveRole`, checked on every request with a token) | #128 |
+| Personal docs 01-22 + README index of them | #14 + each PR above, #137 |
 
-**In review:** #126–#129 (old token on `/auth/**`, firewall JSON, disabled users lose access at once, S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds).
+**In review:** #129 (S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds), #138 (admin reservations desk page), #139 (security pass tests); all need re-approval after merging main.
 
 **Next:** Terraform parts 1 + 2 (W5); push the image to ECR + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
 
@@ -229,10 +299,7 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Catalog admin actor via `CurrentUser` | #89 |
 | Local disk storage with security checks (type, size, path traversal) | #90 |
 | Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
-
-| In review | PRs |
-|---|---|
-| Query-parameter validation errors → 400 `VALIDATION_FAILED` (closes #103) | #110 |
+| Query-parameter validation errors → 400 `VALIDATION_FAILED` | #110 |
 
 **Next:** `CatalogSeeder`, catalog / asset details / admin inventory pages (W6, for M1); retire flow with Calin (W7). Full list: `docs/whats-left.md` §5.
 
@@ -260,6 +327,14 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | Reservation diagrams, team test plan, Strategy pattern doc | #101 |
 | More unit + web slice tests, 3 new ArchUnit rules (shared `Clock`, `@Transactional` placement, no ORDINAL enums) | #102 |
 | Review follow-ups: badge check, test cleanup, coverage worded as a target | #109 |
+| Timestamps in whole seconds (reservations, reassignment log) | #130 |
+| No check-out of an overdue or non-bookable asset | #131 |
+| Reassignment: one transaction per booking, one failed move no longer rolls back the rest | #132 |
+| My reservations: loader and error reset on every fetch | #133 |
+
+| In review | PRs |
+|---|---|
+| OVERDUE bookings block the asset until returned (closes #113; needs re-approval) | #141 |
 
 | Parked (draft, after M1) | PRs |
 |---|---|
@@ -282,7 +357,9 @@ What is on `main` and what is still in review, per member. **As of 4 Nov 2026**;
 | In review | PRs |
 |---|---|
 | Register page (approved) | #107 |
-| Incident start-repair, reject, my incidents, incident details (approved) | #108 |
+| Incident start-repair, reject, my incidents, incident details (changes requested) | #108 |
+| ADR-002 ✅ in `docs/decisions.md` (approved) | #111 |
+| Keep the token when the backend is down on startup (closes #124) | #142 |
 
 **Next:** merge #111 (ADR-002 ✅) and #107 (register page); fix #108; photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
 
