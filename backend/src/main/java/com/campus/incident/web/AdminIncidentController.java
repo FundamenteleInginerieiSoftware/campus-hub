@@ -5,11 +5,9 @@ import com.campus.common.security.CurrentUser;
 import com.campus.incident.domain.IncidentReport.IncidentStatus;
 import com.campus.incident.service.IncidentService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,12 +29,23 @@ public class AdminIncidentController {
         this.currentUser = currentUser;
     }
 
+    // page and size are plain numbers (not a Spring Pageable), so Swagger shows them as normal fields
+    // and the order is always newest first: the client cannot sort by a column that does not exist.
     @GetMapping
-    @Operation(summary = "List all incidents with pagination, optionally filtered by status")
+    @Operation(summary = "List all incidents, newest first, optionally filtered by status")
     public PageResponse<IncidentResponse> getAllIncidents(
             @RequestParam(value = "status", required = false) IncidentStatus status,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return incidentService.getAllIncidents(status, pageable);
+            @Parameter(description = "Page index, from 0") @RequestParam(value = "page", defaultValue = "0") int page,
+            @Parameter(description = "Page size, 1 to 100") @RequestParam(value = "size", defaultValue = "20")
+                    int size) {
+        return incidentService.getAllIncidents(status, page, size);
+    }
+
+    // No body: starting a repair only changes the status.
+    @PostMapping("/{id}/start-repair")
+    @Operation(summary = "Start the repair of an OPEN incident (OPEN to IN_REPAIR); the asset stays UNDER_MAINTENANCE")
+    public IncidentResponse startRepair(@PathVariable("id") Long id) {
+        return incidentService.startRepair(id);
     }
 
     // The body is optional: resolutionNotes may be left out, so an empty request is valid too.
@@ -48,5 +57,16 @@ public class AdminIncidentController {
             @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
         String notes = request != null ? request.resolutionNotes() : null;
         return incidentService.resolveIncident(id, notes, currentUser.id());
+    }
+
+    // Same optional body as resolve: resolutionNotes says why the report was rejected.
+    @PostMapping("/{id}/reject")
+    @Operation(
+            summary = "Reject an incident report (OPEN or IN_REPAIR), e.g. the item works; the asset is available "
+                    + "again once no other incident on it is still open")
+    public IncidentResponse rejectIncident(
+            @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
+        String notes = request != null ? request.resolutionNotes() : null;
+        return incidentService.rejectIncident(id, notes, currentUser.id());
     }
 }

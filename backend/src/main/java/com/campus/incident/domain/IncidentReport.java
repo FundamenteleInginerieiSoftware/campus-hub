@@ -81,6 +81,30 @@ public class IncidentReport {
         this.createdAt = createdAt;
     }
 
+    /** OPEN to IN_REPAIR: an admin has picked the item up for repair. The asset stays UNDER_MAINTENANCE. */
+    public void startRepair() {
+        if (this.status != IncidentStatus.OPEN) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_INCIDENT_STATUS_TRANSITION", "Repair cannot start from status: " + this.status);
+        }
+        this.status = IncidentStatus.IN_REPAIR;
+    }
+
+    /**
+     * OPEN or IN_REPAIR to REJECTED: the report was wrong (the item works). Like resolve, it fills the
+     * resolved* fields, so they always tell who closed the incident, when and why.
+     */
+    public void reject(Long adminId, String resolutionNotes, LocalDateTime rejectedAt) {
+        if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_INCIDENT_STATUS_TRANSITION", "Incident cannot be rejected from status: " + this.status);
+        }
+        this.status = IncidentStatus.REJECTED;
+        this.resolvedById = adminId;
+        this.resolutionNotes = resolutionNotes;
+        this.resolvedAt = rejectedAt;
+    }
+
     public void resolve(Long adminId, String resolutionNotes, LocalDateTime resolvedAt) {
         if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
             throw new InvalidStateTransitionException(

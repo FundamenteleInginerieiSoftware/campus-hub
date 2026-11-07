@@ -1,6 +1,8 @@
 package com.campus.incident.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
@@ -15,16 +17,26 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional
 public class IncidentService {
 
     /** Incidents that still keep their asset out of use. */
     private static final List<IncidentStatus> ACTIVE_STATUSES = List.of(IncidentStatus.OPEN, IncidentStatus.IN_REPAIR);
+
+    /** Same limit as the other lists in the app (catalog, reservations, reassignment log). */
+    static final int MAX_PAGE_SIZE = 100;
+
+    /**
+     * Newest first. createdAt only has whole seconds, so two incidents reported in the same second
+     * would come back in a random order; the id (always growing) breaks the tie.
+     */
+    private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     private final IncidentReportRepository incidentReportRepository;
     private final CatalogApi catalogApi;
@@ -43,19 +55,23 @@ public class IncidentService {
     }
 
     /**
-     * Saves the report and takes the asset out of use in the same transaction. getAsset throws 404
-     * ASSET_NOT_FOUND for an unknown id, markUnderMaintenance throws 409 ASSET_RETIRED for a retired asset.
-     * Calin's reassignment engine reacts to the event after the commit, when the asset is already
+     * Takes the asset out of use, saves the report and announces it, all in one transaction.
+     *
+     * <p>Bug fixed (#164): markUnderMaintenance runs FIRST. It locks the asset row (SELECT ... FOR UPDATE)
+     * and throws 404 ASSET_NOT_FOUND / 409 ASSET_RETIRED, so a report for a missing or retired asset saves
+     * nothing, and a report always waits for a resolve or reject running on the same asset (and the other
+     * way round) instead of racing with it.
+     *
+     * <p>Calin's reassignment engine reacts to the event after the commit, when the asset is already
      * UNDER_MAINTENANCE, so it can never be picked as its own substitute.
      */
+    @Transactional
     public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId) {
-        catalogApi.getAsset(request.assetId());
+        catalogApi.markUnderMaintenance(request.assetId());
 
         IncidentReport report = new IncidentReport(
                 request.assetId(), null, reporterId, request.description(), request.severity(), null, now());
         IncidentReport saved = incidentReportRepository.save(report);
-
-        catalogApi.markUnderMaintenance(saved.getAssetId());
 
         eventPublisher.publishEvent(
                 new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, clock.instant()));
@@ -64,14 +80,28 @@ public class IncidentService {
     }
 
     /**
+     * OPEN to IN_REPAIR. Starting twice returns the incident unchanged. The asset stays UNDER_MAINTENANCE,
+     * so nothing changes in the catalog. From RESOLVED or REJECTED: 409 INVALID_INCIDENT_STATUS_TRANSITION.
+     */
+    @Transactional
+    public IncidentResponse startRepair(Long incidentId) {
+        IncidentReport report = findOrThrow(incidentId);
+
+        if (report.getStatus() == IncidentStatus.IN_REPAIR) {
+            return toResponse(report);
+        }
+
+        report.startRepair();
+        return toResponse(incidentReportRepository.save(report));
+    }
+
+    /**
      * Resolves an OPEN or IN_REPAIR incident. Resolving twice returns the incident unchanged. The asset
      * becomes AVAILABLE again only when no other OPEN or IN_REPAIR incident is left on it.
      */
+    @Transactional
     public IncidentResponse resolveIncident(Long incidentId, String resolutionNotes, Long adminId) {
-        IncidentReport report = incidentReportRepository
-                .findById(incidentId)
-                .orElseThrow(() -> new NotFoundException(
-                        "INCIDENT_NOT_FOUND", "Incident report not found with id: " + incidentId));
+        IncidentReport report = findOrThrow(incidentId);
 
         if (report.getStatus() == IncidentStatus.RESOLVED) {
             return toResponse(report);
@@ -79,23 +109,109 @@ public class IncidentService {
 
         report.resolve(adminId, resolutionNotes, now());
         IncidentReport updated = incidentReportRepository.save(report);
-
-        if (incidentReportRepository
-                .findByAssetIdAndStatusIn(updated.getAssetId(), ACTIVE_STATUSES)
-                .isEmpty()) {
-            catalogApi.markAvailable(updated.getAssetId());
-        }
+        releaseAssetIfNoActiveIncident(updated.getAssetId());
 
         return toResponse(updated);
     }
 
+    /**
+     * Rejects an OPEN or IN_REPAIR incident (the report was wrong). Rejecting twice returns it unchanged.
+     * Same asset rule as resolve. Bookings the engine already moved stay where they are.
+     */
+    @Transactional
+    public IncidentResponse rejectIncident(Long incidentId, String resolutionNotes, Long adminId) {
+        IncidentReport report = findOrThrow(incidentId);
+
+        if (report.getStatus() == IncidentStatus.REJECTED) {
+            return toResponse(report);
+        }
+
+        report.reject(adminId, resolutionNotes, now());
+        IncidentReport updated = incidentReportRepository.save(report);
+        releaseAssetIfNoActiveIncident(updated.getAssetId());
+
+        return toResponse(updated);
+    }
+
+    /** Admin queue, newest first, optionally only one status. */
     @Transactional(readOnly = true)
-    public PageResponse<IncidentResponse> getAllIncidents(IncidentStatus status, Pageable pageable) {
-        Page<IncidentReport> page = (status != null)
+    public PageResponse<IncidentResponse> getAllIncidents(IncidentStatus status, int page, int size) {
+        Pageable pageable = pageRequest(page, size);
+        Page<IncidentReport> result = (status != null)
                 ? incidentReportRepository.findByStatus(status, pageable)
                 : incidentReportRepository.findAll(pageable);
 
-        return PageResponse.from(page, this::toResponse);
+        return PageResponse.from(result, this::toResponse);
+    }
+
+    /** The incidents this user reported (My incidents page), newest first. */
+    @Transactional(readOnly = true)
+    public PageResponse<IncidentResponse> getMyIncidents(Long reporterId, int page, int size) {
+        Page<IncidentReport> result = incidentReportRepository.findByReportedById(reporterId, pageRequest(page, size));
+        return PageResponse.from(result, this::toResponse);
+    }
+
+    /**
+     * One incident, for its reporter or an admin. Anyone else gets the same 404 as for a missing id, so
+     * nobody can find out which incident ids exist.
+     */
+    @Transactional(readOnly = true)
+    public IncidentResponse getIncident(Long incidentId, Long requesterId, boolean requesterIsAdmin) {
+        IncidentReport report = findOrThrow(incidentId);
+
+        if (!requesterIsAdmin && !report.getReportedById().equals(requesterId)) {
+            throw notFound(incidentId);
+        }
+        return toResponse(report);
+    }
+
+    /**
+     * Bug fixed (#146, #164): page and size come straight from the URL. A huge page made the offset
+     * (page * size) bigger than an int, which Hibernate cannot use, so the client got a 500. Now a bad
+     * value is a 400 INVALID_PARAMETER, like in the catalog and reservation lists.
+     */
+    static Pageable pageRequest(int page, int size) {
+        if (page < 0) {
+            throw new InvalidParameterException("Page index must not be negative");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new InvalidParameterException("Page size must be between 1 and " + MAX_PAGE_SIZE);
+        }
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidParameterException("Page offset exceeds maximum supported value");
+        }
+        return PageRequest.of(page, size, NEWEST_FIRST);
+    }
+
+    private IncidentReport findOrThrow(Long incidentId) {
+        return incidentReportRepository.findById(incidentId).orElseThrow(() -> notFound(incidentId));
+    }
+
+    private static NotFoundException notFound(Long incidentId) {
+        return new NotFoundException("INCIDENT_NOT_FOUND", "Incident report not found with id: " + incidentId);
+    }
+
+    /**
+     * After resolve or reject: the asset is usable again only if no other incident still keeps it out of use.
+     *
+     * <p>Bug fixed (#108 review, race): the asset row is locked BEFORE asking "is any incident still
+     * active?". reportIncident takes the same lock first, so a report and a resolve on the same asset run
+     * one after the other. Before, both could check at the same moment and leave an asset AVAILABLE with an
+     * OPEN incident, or UNDER_MAINTENANCE with none.
+     *
+     * <p>Bug fixed (#146): an asset retired while its incident was open stays RETIRED. markAvailable throws
+     * 409 ASSET_RETIRED for it, which rolled back the resolve, so the incident could never be closed. Only an
+     * asset that is still UNDER_MAINTENANCE goes back to AVAILABLE.
+     */
+    private void releaseAssetIfNoActiveIncident(Long assetId) {
+        catalogApi.lockForBooking(assetId);
+
+        if (incidentReportRepository.existsByAssetIdAndStatusIn(assetId, ACTIVE_STATUSES)) {
+            return;
+        }
+        if (catalogApi.getAsset(assetId).status() == AssetStatus.UNDER_MAINTENANCE) {
+            catalogApi.markAvailable(assetId);
+        }
     }
 
     // Whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET return the same value.
