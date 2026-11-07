@@ -2,7 +2,7 @@
 
 **Author:** Murariu Călin (Member 3 - Reservations & Reassignment, SQA Test Lead)  
 **Pull Requests:** [#199](https://github.com/FundamenteleInginerieiSoftware/campus-hub/pull/199), [#201](https://github.com/FundamenteleInginerieiSoftware/campus-hub/pull/201)  
-**Related Issues:** [#188](https://github.com/FundamenteleInginerieiSoftware/campus-hub/issues/188), [#198](https://github.com/FundamenteleInginerieiSoftware/campus-hub/issues/198)  
+**Related Issues:** [#188](https://github.com/FundamenteleInginerieiSoftware/campus-hub/issues/188) (Follow-up of #180, #181, #184)  
 
 ---
 
@@ -33,7 +33,7 @@ The project testing architecture is organized into distinct, non-overlapping ver
 | **Repository Tests** | Custom queries, pessimistic locking, JPA Specifications | `@DataJpaTest`, `@AutoConfigureTestDatabase(replace = NONE)` | Local PostgreSQL test database (`campus_test`), transactional rollback per test |
 | **Slice / Controller Tests** | HTTP status codes, security filters, RFC 9457 ProblemDetail payloads | `@WebMvcTest`, `@MockitoBean`, `@WithMockUser` | Mock MVC, security filter chain enabled, fast web slice |
 | **Integration / Flow Tests** | Cross-module transaction boundaries, event listeners, async triggers | `@SpringBootTest(webEnvironment = RANDOM_PORT)` | Full application context, real PostgreSQL container/database |
-| **Architecture Quality Gates** | Package layering, circular dependency prevention, Clock usage | ArchUnit (`ArchRulesTest`) | Static bytecode analysis, zero runtime overhead |
+| **Architecture Quality Gates** | Package layering, circular dependency prevention, Clock usage | ArchUnit (`ModuleBoundaryArchitectureTest`, `CodingConventionsArchitectureTest`) | Static bytecode analysis, zero runtime overhead |
 | **Mutation Testing Gates** | Verification quality, assertion depth, boundary correctness | PIT Mutation Testing (`gradle pitest`) | Bytecode mutation analysis across domain and service classes |
 
 ---
@@ -121,4 +121,4 @@ flowchart TD
 
 - `./gradlew spotlessApply build` — 510+ tests pass, zero Spotless violations, build time < 25s.
 - `./gradlew pitest` — 100% mutation coverage across `reservation` and `reassignment` service classes with 0 surviving mutants.
-- `ArchRulesTest` — 100% architecture rule compliance (no circular dependencies, explicit package encapsulation).
+- ArchUnit (`ModuleBoundaryArchitectureTest`, `CodingConventionsArchitectureTest`) — 100% architecture rule compliance (no circular dependencies, explicit package encapsulation).
