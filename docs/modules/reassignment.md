@@ -9,7 +9,7 @@
 
 The `reassignment` module provides automated disaster recovery and continuity for laboratory equipment bookings. When an asset becomes damaged, enters maintenance, or is permanently retired, the engine automatically:
 1. Detects the event without coupling the reporting module to the booking tables.
-2. Identifies all upcoming confirmed reservations affected by the unavailable asset (via `ReservationRepository`'s `findUpcomingConfirmedByAsset`, matching `status = CONFIRMED and endTime > :from`; in-use `CHECKED_OUT` bookings are not moved).
+2. Identifies all upcoming confirmed reservations affected by the unavailable asset (via `ReservationApi.findUpcomingActiveByAsset`, which executes the repository's `findUpcomingConfirmedByAsset` query matching `status = CONFIRMED and endTime > :from`; in-use `CHECKED_OUT` bookings are not moved).
 3. Evaluates pluggable substitution strategies to find operational, free substitute assets.
 4. Moves reservations to substitute units or force-cancels them if no substitutes exist.
 5. Writes an immutable audit trail to PostgreSQL (`reassignment_log`).

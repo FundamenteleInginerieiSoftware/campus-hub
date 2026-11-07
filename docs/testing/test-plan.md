@@ -53,7 +53,7 @@ We employ a 5-tier testing hierarchy that balances execution speed, isolation, m
   2. **`@DataJpaTest`**: Validates SQL queries, Spring Data Specifications, and custom overlap JPQL queries (`r.startTime < :end AND r.endTime > :start`).
   3. **`@SpringBootTest` Integration Suites (`*IT.java`)**:
      - `ReservationConcurrencyIT`: Uses multithreaded workers (`ExecutorService` + `CountDownLatch`) to fire simultaneous reservation requests for the same slot, proving pessimistic locking (`PESSIMISTIC_WRITE`) permits exactly 1 booking and rejects the other with 409 `RESERVATION_CONFLICT`.
-     - `ReassignmentRollbackIT`: Verifies that failures during notification or reassignment do not roll back the original incident report, and vice-versa, adhering to `REQUIRES_NEW` boundaries.
+     - `ReassignmentRollbackIT`: Verifies transaction boundaries (#112/#149), proving that if a candidate substitute is raced concurrently the engine falls back to the next candidate, and that a single booking's failure does not roll back preceding or succeeding reassignments.
      - `SecurityPassIT`: Audits all HTTP endpoints for IDOR protections (404 on other students' data) and verifies that `/api/v1/admin/**` rejects unauthenticated or student tokens with 401/403 `ProblemDetail`.
      - `DemoFlowIT`: Runs the entire 10-step M1 demo journey through the HTTP API with `@TestMethodOrder(MethodOrderer.OrderAnnotation.class)`, isolating data with dynamic run prefixes and cleanly tearing down test records in `@AfterAll`.
      - `IncidentFlowIT` (#108, open): Executes the incident reporting, admin triage (start repair, resolve, reject), and asset release flow against real PostgreSQL tables and real JWT authentication.
@@ -65,7 +65,7 @@ We employ a 5-tier testing hierarchy that balances execution speed, isolation, m
 - **Mutation Targets & Measurement:**
   PIT is executed on-demand and does not enforce a rigid failure threshold (the team decision is the ~70% JaCoCo line coverage gate in W10; there is no global 100% mutation target).
   - Baseline run (#180, on commit `99d0261`): achieved **87% overall** mutation coverage, and **92%** across reservation and reassignment.
-  - Following #191 (measured on commit `3ead439`, 5 Nov 2026), **100% mutation score** was achieved on `com.campus.reservation.service.*` and `com.campus.reassignment.service.*` as our area's individual result.
+  - Following #191 (measured on commit `3ead439`, 5 Nov 2026), PIT mutation scores reached **97.6% (164/168)** on `com.campus.reservation.service.*` and **91.3% (42/46)** on `com.campus.reassignment.service.*` as our area's individual results.
   - Reports generated at `backend/build/reports/pitest/index.html`.
 - **CI Policy (Strictly Local / On-Demand):**
   > [!IMPORTANT]
@@ -97,7 +97,7 @@ Special emphasis is placed on concurrency and distributed failure modes:
 | Test Class | Objective | Technique | Expected Outcome |
 |---|---|---|---|
 | `ReservationConcurrencyIT` | Verify pessimistic row locking on equipment during booking | 2 concurrent threads synchronized with `CountDownLatch` executing `bookReservation()` | Exactly 1 transaction commits (HTTP 201); 1 transaction fails with 409 `RESERVATION_CONFLICT` |
-| `ReassignmentRollbackIT` | Verify transaction autonomy of the auto-reassignment engine | Throw simulated exception during reassignment processing | Incident report remains committed in `incident_reports`; asset stays `UNDER_MAINTENANCE` |
+| `ReassignmentRollbackIT` | Verify transaction autonomy and candidate fallback (#112/#149) | Simulate concurrent substitute contention and booking failure | Raced candidate falls back to next substitute; single booking failure is isolated while others commit |
 | `ReservationConcurrencyIT.sameStudentTwoDifferentAssetsCannotBypassActiveQuotaLimit` | Validate advisory locks on user active booking quotas | Concurrent booking requests by the same student exceeding quota limit | Exactly 2 active bookings permitted; concurrent 3rd request rejected with 409 `RESERVATION_LIMIT_REACHED` |
 | `AssetOptimisticLockIT` *(planned, Liviu W7–W8)* | Prevent stale asset edits | Concurrent updates on the same `Asset` entity with `@Version` | Spring Data JPA throws `OptimisticLockingFailureException` (HTTP 409 `STALE_VERSION`) |
 
@@ -151,7 +151,7 @@ Every Pull Request must satisfy the following automated gates before merge:
    ./gradlew test jacocoTestReport
    ```
    - **Line Coverage Target:** ~ 70% on `*.service.*` packages (target before M1; formal `jacocoTestCoverageVerification` build gate planned for W10).
-   - `com.campus.reservation.service.*` and `com.campus.reassignment.service.*` achieved **100% line and branch coverage** (measured on commit `3ead439`, 5 Nov 2026).
+   - `com.campus.reservation.service.*` achieved **98.0% line** (346/353) and **97.3% branch** (179/184) coverage, while `com.campus.reassignment.service.*` achieved **97.5% line** (115/118) and **89.3% branch** (25/28) coverage (measured on commit `3ead439`, 5 Nov 2026).
    - Reports generated at `backend/build/reports/jacoco/test/html/index.html`.
 
 4. **Mutation Resilience (PIT — Local On-Demand):**
@@ -159,7 +159,7 @@ Every Pull Request must satisfy the following automated gates before merge:
    cd backend && ./gradlew pitest
    ```
    - **Target:** On-demand quality tool to find and eliminate surviving mutants in critical business rules before W10. (Team policy: ~70% JaCoCo line coverage gate in W10; no mandatory global mutation threshold).
-   - **CI Note:** Excluded from GitHub Actions CI to guarantee fast CI feedback (<2 minutes). Executed locally on-demand before opening PRs on business logic.
+   - **CI Note:** Excluded from GitHub Actions CI to guarantee fast CI feedback. Executed locally on-demand before opening PRs on business logic.
 
 5. **Frontend Quality Check:**
    ```bash
