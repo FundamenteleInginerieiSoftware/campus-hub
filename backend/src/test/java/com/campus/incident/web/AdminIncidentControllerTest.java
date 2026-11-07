@@ -146,7 +146,8 @@ class AdminIncidentControllerTest {
     @WithMockUser(roles = "ADMIN")
     @DisplayName("POST start-repair returns 200 with status IN_REPAIR")
     void startRepairReturns200() throws Exception {
-        when(incidentService.startRepair(100L)).thenReturn(withStatus(IncidentStatus.IN_REPAIR, null));
+        when(currentUser.id()).thenReturn(99L);
+        when(incidentService.startRepair(100L, 99L)).thenReturn(withStatus(IncidentStatus.IN_REPAIR, null));
 
         mockMvc.perform(post("/api/v1/admin/incidents/100/start-repair"))
                 .andExpect(status().isOk())
@@ -157,7 +158,8 @@ class AdminIncidentControllerTest {
     @WithMockUser(roles = "ADMIN")
     @DisplayName("POST start-repair returns 409 INVALID_INCIDENT_STATUS_TRANSITION from RESOLVED")
     void startRepairFromResolvedReturns409() throws Exception {
-        when(incidentService.startRepair(100L))
+        when(currentUser.id()).thenReturn(99L);
+        when(incidentService.startRepair(100L, 99L))
                 .thenThrow(new InvalidStateTransitionException(
                         "INVALID_INCIDENT_STATUS_TRANSITION", "Repair cannot start from status: RESOLVED"));
 
@@ -170,7 +172,8 @@ class AdminIncidentControllerTest {
     @WithMockUser(roles = "ADMIN")
     @DisplayName("POST start-repair returns 404 INCIDENT_NOT_FOUND for a missing incident")
     void startRepairMissingReturns404() throws Exception {
-        when(incidentService.startRepair(404L))
+        when(currentUser.id()).thenReturn(99L);
+        when(incidentService.startRepair(404L, 99L))
                 .thenThrow(new NotFoundException("INCIDENT_NOT_FOUND", "Incident report not found with id: 404"));
 
         mockMvc.perform(post("/api/v1/admin/incidents/404/start-repair"))
