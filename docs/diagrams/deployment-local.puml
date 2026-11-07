@@ -1,0 +1,107 @@
+@startuml deployment-local
+' UML deployment diagram: how the app runs on a developer laptop and in CI.
+' Sources: frontend/vite.config.ts, backend/src/main/resources/application*.yml,
+' backend/src/test/resources/application-test.yml, .github/workflows/ci.yml, README §1.
+' Render from the repo root: java -jar plantuml.jar -tpng docs/diagrams/deployment-local.puml
+
+title Campus Equipment & Incident Hub: UML deployment diagram\nlocal development and CI (as used today)
+
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam nodesep 50
+skinparam ranksep 60
+skinparam ArrowColor #3B5B8C
+skinparam node {
+  BackgroundColor #F2F6FC
+  BorderColor #3B5B8C
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #3B5B8C
+}
+skinparam database {
+  BackgroundColor #FFFFFF
+  BorderColor #3B5B8C
+}
+skinparam folder {
+  BackgroundColor #FFFFFF
+  BorderColor #3B5B8C
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B560
+}
+
+node "Developer laptop\n(Windows, macOS or WSL2 Linux)" as laptop <<device>> {
+
+  node "Web browser" as browser <<executionEnvironment>> {
+    artifact "React SPA\n(JS bundle served by Vite)" as spa
+  }
+
+  node "Node.js 24\nVite dev server :5173" as vite <<executionEnvironment>> {
+    artifact "frontend/src/**\n(npm run dev)" as fesrc
+  }
+
+  node "JVM: Java 25\nSpring Boot :8080\nprofile dev (default)" as jvm <<executionEnvironment>> {
+    artifact "campus-hub backend\n(./gradlew bootRun)" as boot
+    component "LocalStorageService" as lss
+    component "LoggingNotificationService\n(e-mails only logged)" as lns
+    component "UserSeeder, ReservationSeeder\n(@Profile dev)" as seed
+  }
+
+  node "JVM: Gradle test run\nprofile test" as gtest <<executionEnvironment>> {
+    artifact "JUnit tests\n(./gradlew build)" as tests
+  }
+
+  folder "backend/uploads/\n(incident photos)" as uploads
+
+  node "PostgreSQL 18 server :5432" as pg <<executionEnvironment>> {
+    database "campus\n(dev data, Flyway)" as dbdev
+    database "campus_test\n(tests only)" as dbtest
+  }
+
+  node "pgAdmin / IntelliJ\nDatabase tool" as pgadmin <<executionEnvironment>>
+}
+
+browser -down-> vite : HTTP :5173\n(pages + /api/** calls)
+vite -down-> jvm : HTTP :8080\nproxy /api -> localhost:8080
+jvm -down-> dbdev : JDBC :5432\nuser campus
+lss -down-> uploads : file I/O
+boot -[hidden]down- lss
+boot -[hidden]down- lns
+boot -[hidden]down- seed
+pgadmin .up.> pg : SQL :5432
+tests -down-> dbtest : JDBC :5432
+
+note right of vite
+  One origin for the browser:
+  Vite forwards every /api call
+  to Spring, so no CORS settings
+  (frontend/vite.config.ts, ADR-002).
+end note
+
+node "GitHub Actions runner\n(ubuntu-latest)" as runner <<device>> {
+  node "Job ci\n(required check on main)" as job <<executionEnvironment>> {
+    artifact "./gradlew build\n(tests, Spotless, JaCoCo)" as gbuild
+    artifact "npm ci, lint, build\n(frontend/)" as npmbuild
+  }
+  node "Service container\npostgres:18 :5432" as svc <<container>> {
+    database "campus_test" as cidb
+  }
+}
+
+gbuild -down-> cidb : JDBC :5432\n(SPRING_DATASOURCE_URL)
+
+node "GitHub\n(campus-hub repo)" as github <<device>>
+github -down-> runner : on pull_request\nand push to main
+
+laptop -[hidden]right- github
+
+note bottom of runner
+  .github/workflows/ci.yml: Java 25 (Temurin), Node 24.
+  The JaCoCo report is uploaded as a build artifact.
+  No AWS access from CI yet (deploy.yml is planned, W8).
+end note
+
+@enduml

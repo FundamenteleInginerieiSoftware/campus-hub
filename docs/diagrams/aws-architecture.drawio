@@ -105,8 +105,8 @@
             <mxPoint as="offset" x="38" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="e-ssm-ec2" value="secrets +&lt;br&gt;deploy command" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeColor=#E7157B;exitX=0.5;exitY=0;entryX=0.9;entryY=1;" edge="1" parent="1" source="ssm" target="ec2">
-          <mxGeometry x="0.3" relative="1" as="geometry">
+        <mxCell id="e-ec2-ssm" value="reads secrets&lt;br&gt;/campus/* +&lt;br&gt;deploy command" style="edgeStyle=none;html=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=default;strokeColor=#E7157B;exitX=0.9;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ec2" target="ssm">
+          <mxGeometry x="-0.3" relative="1" as="geometry">
             <mxPoint as="offset" x="-62" />
           </mxGeometry>
         </mxCell>

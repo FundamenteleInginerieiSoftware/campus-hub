@@ -16,7 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The whole app on the campus_test database: register, log in, then use the token. Proves that the
- * token login signs is the one SecurityConfig accepts, and that its "roles" claim is read.
+ * token login signs is the one SecurityConfig accepts, and that the role checked on each request
+ * (read from the database since #117) lets the user in.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
