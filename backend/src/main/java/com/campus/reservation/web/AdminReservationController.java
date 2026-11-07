@@ -43,7 +43,10 @@ public class AdminReservationController {
                     "Retrieves a paginated list of reservations filtered by status, user, asset, or date, ordered by startTime (asc or desc)")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Page of reservations returned"),
-        @ApiResponse(responseCode = "400", description = "Invalid query parameter (e.g. sortDir)"),
+        @ApiResponse(
+                responseCode = "400",
+                description =
+                        "Validation failed on query parameters (VALIDATION_FAILED on page/size, INVALID_PARAMETER on sortDir)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)")
     })
