@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.audit.AuditService;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
@@ -63,6 +64,9 @@ class IncidentServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private AuditService auditService;
+
     private Clock clock;
     private IncidentService incidentService;
     private final Long adminId = 99L;
@@ -72,7 +76,8 @@ class IncidentServiceTest {
     void setUp() {
         // 123 ms on purpose: the service must cut the time to whole seconds.
         clock = Clock.fixed(Instant.parse("2026-10-25T12:00:00.123Z"), ZoneId.of("UTC"));
-        incidentService = new IncidentService(incidentReportRepository, catalogApi, eventPublisher, clock);
+        incidentService =
+                new IncidentService(incidentReportRepository, catalogApi, eventPublisher, auditService, clock);
     }
 
     private LocalDateTime nowInSeconds() {
@@ -197,7 +202,7 @@ class IncidentServiceTest {
             givenIncident(incident(1L, IncidentStatus.OPEN));
             givenSaveReturnsItsArgument();
 
-            IncidentResponse response = incidentService.startRepair(1L);
+            IncidentResponse response = incidentService.startRepair(1L, adminId);
 
             assertThat(response.status()).isEqualTo(IncidentStatus.IN_REPAIR);
             assertThat(response.resolvedAt()).isNull();
@@ -208,10 +213,11 @@ class IncidentServiceTest {
         void returnsItUnchanged_whenAlreadyInRepair() {
             givenIncident(incident(1L, IncidentStatus.IN_REPAIR));
 
-            IncidentResponse response = incidentService.startRepair(1L);
+            IncidentResponse response = incidentService.startRepair(1L, adminId);
 
             assertThat(response.status()).isEqualTo(IncidentStatus.IN_REPAIR);
             verify(incidentReportRepository, never()).save(any());
+            verifyNoInteractions(auditService);
         }
 
         @ParameterizedTest(name = "from {0}")
@@ -219,19 +225,20 @@ class IncidentServiceTest {
         void fails_fromAClosedIncident(IncidentStatus closed) {
             givenIncident(incident(1L, closed));
 
-            assertThatThrownBy(() -> incidentService.startRepair(1L))
+            assertThatThrownBy(() -> incidentService.startRepair(1L, adminId))
                     .isInstanceOf(InvalidStateTransitionException.class)
                     .hasMessageContaining("Repair cannot start from status: " + closed)
                     .extracting("code")
                     .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
             verify(incidentReportRepository, never()).save(any());
+            verifyNoInteractions(auditService);
         }
 
         @Test
         void fails_whenTheIncidentDoesNotExist() {
             when(incidentReportRepository.findById(404L)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> incidentService.startRepair(404L))
+            assertThatThrownBy(() -> incidentService.startRepair(404L, adminId))
                     .isInstanceOf(NotFoundException.class)
                     .extracting("code")
                     .isEqualTo("INCIDENT_NOT_FOUND");
@@ -330,6 +337,7 @@ class IncidentServiceTest {
             assertThat(response.status()).isEqualTo(IncidentStatus.RESOLVED);
             verify(incidentReportRepository, never()).save(any());
             verifyNoInteractions(catalogApi);
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -342,6 +350,7 @@ class IncidentServiceTest {
                     .extracting("code")
                     .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
             verifyNoInteractions(catalogApi);
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -417,6 +426,7 @@ class IncidentServiceTest {
             assertThat(response.status()).isEqualTo(IncidentStatus.REJECTED);
             verify(incidentReportRepository, never()).save(any());
             verifyNoInteractions(catalogApi);
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -429,6 +439,7 @@ class IncidentServiceTest {
                     .extracting("code")
                     .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
             verifyNoInteractions(catalogApi);
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -559,6 +570,77 @@ class IncidentServiceTest {
                     .isInstanceOf(NotFoundException.class)
                     .extracting("code")
                     .isEqualTo("INCIDENT_NOT_FOUND");
+        }
+    }
+
+    // ---- audit log (#159) --------------------------------------------------------------------
+
+    @Nested
+    class AuditLog {
+
+        @Test
+        void report_isAudited_withTheReporterAndSeverity() {
+            when(incidentReportRepository.save(any(IncidentReport.class))).thenAnswer(invocation -> {
+                IncidentReport report = invocation.getArgument(0);
+                ReflectionTestUtils.setField(report, "id", 100L);
+                return report;
+            });
+
+            incidentService.reportIncident(
+                    new CreateIncidentRequest(ASSET_ID, "Display cracked", IncidentSeverity.HIGH), reporterId);
+
+            verify(auditService).record(reporterId, "INCIDENT_REPORTED", "INCIDENT", 100L, "Asset 10: HIGH");
+        }
+
+        @Test
+        void startRepair_isAudited_withTheAdmin() {
+            givenIncident(incident(1L, IncidentStatus.OPEN));
+            givenSaveReturnsItsArgument();
+
+            incidentService.startRepair(1L, adminId);
+
+            verify(auditService).record(adminId, "INCIDENT_REPAIR_STARTED", "INCIDENT", 1L, "Asset 10");
+        }
+
+        @Test
+        void resolve_isAudited_withTheNotes_afterTheAssetIsReleased() {
+            givenIncident(incident(1L, IncidentStatus.IN_REPAIR));
+            givenSaveReturnsItsArgument();
+            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+                    .thenReturn(false);
+            when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.UNDER_MAINTENANCE));
+
+            incidentService.resolveIncident(1L, "Replaced display panel", adminId);
+
+            InOrder order = inOrder(catalogApi, auditService);
+            order.verify(catalogApi).markAvailable(ASSET_ID);
+            order.verify(auditService)
+                    .record(adminId, "INCIDENT_RESOLVED", "INCIDENT", 1L, "Asset 10: Replaced display panel");
+        }
+
+        @Test
+        void reject_isAudited_withoutNotes() {
+            givenIncident(incident(1L, IncidentStatus.OPEN));
+            givenSaveReturnsItsArgument();
+            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+                    .thenReturn(true);
+
+            incidentService.rejectIncident(1L, "  ", adminId);
+
+            verify(auditService).record(adminId, "INCIDENT_REJECTED", "INCIDENT", 1L, "Asset 10");
+        }
+
+        // A failed report (retired asset) must leave no audit entry either.
+        @Test
+        void aRefusedReport_isNotAudited() {
+            doThrow(new InvalidStateTransitionException("ASSET_RETIRED", "Asset is retired"))
+                    .when(catalogApi)
+                    .markUnderMaintenance(ASSET_ID);
+
+            assertThatThrownBy(() -> incidentService.reportIncident(
+                            new CreateIncidentRequest(ASSET_ID, "Broken", IncidentSeverity.LOW), reporterId))
+                    .isInstanceOf(InvalidStateTransitionException.class);
+            verifyNoInteractions(auditService);
         }
     }
 }

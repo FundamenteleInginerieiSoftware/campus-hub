@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,6 +90,27 @@ class IncidentFlowIT {
         assertThat(((Number) JsonPath.read(body(resolved), "$.resolvedById")).longValue())
                 .isEqualTo(userId(admin));
         assertThat(assetStatus()).isEqualTo("AVAILABLE");
+    }
+
+    // #159: every step lands in Liviu's audit log, with who did it; repeating a step adds nothing.
+    @Test
+    void everyStepIsAudited_once_withWhoDidIt() throws Exception {
+        long incidentId = report(studentA, "Screen cracked");
+        postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/start-repair", null);
+        postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/resolve", "{\"resolutionNotes\":\"New panel\"}");
+        postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/resolve", null); // twice: no new entry
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT action, actor_id, details FROM audit_logs WHERE entity_type = 'INCIDENT' AND entity_id = ?"
+                        + " ORDER BY id",
+                incidentId);
+
+        assertThat(rows)
+                .extracting(row -> row.get("action"))
+                .containsExactly("INCIDENT_REPORTED", "INCIDENT_REPAIR_STARTED", "INCIDENT_RESOLVED");
+        assertThat(((Number) rows.get(0).get("actor_id")).longValue()).isEqualTo(userId(studentA));
+        assertThat(((Number) rows.get(2).get("actor_id")).longValue()).isEqualTo(userId(admin));
+        assertThat(rows.get(2).get("details")).isEqualTo("Asset " + assetId + ": New panel");
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.campus.incident.service;
 
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.audit.AuditService;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
@@ -41,16 +42,19 @@ public class IncidentService {
     private final IncidentReportRepository incidentReportRepository;
     private final CatalogApi catalogApi;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditService auditService;
     private final Clock clock;
 
     public IncidentService(
             IncidentReportRepository incidentReportRepository,
             CatalogApi catalogApi,
             ApplicationEventPublisher eventPublisher,
+            AuditService auditService,
             Clock clock) {
         this.incidentReportRepository = incidentReportRepository;
         this.catalogApi = catalogApi;
         this.eventPublisher = eventPublisher;
+        this.auditService = auditService;
         this.clock = clock;
     }
 
@@ -72,6 +76,7 @@ public class IncidentService {
         IncidentReport report = new IncidentReport(
                 request.assetId(), null, reporterId, request.description(), request.severity(), null, now());
         IncidentReport saved = incidentReportRepository.save(report);
+        audit(reporterId, "INCIDENT_REPORTED", saved, saved.getSeverity().name());
 
         eventPublisher.publishEvent(
                 new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, clock.instant()));
@@ -84,7 +89,7 @@ public class IncidentService {
      * so nothing changes in the catalog. From RESOLVED or REJECTED: 409 INVALID_INCIDENT_STATUS_TRANSITION.
      */
     @Transactional
-    public IncidentResponse startRepair(Long incidentId) {
+    public IncidentResponse startRepair(Long incidentId, Long adminId) {
         IncidentReport report = findOrThrow(incidentId);
 
         if (report.getStatus() == IncidentStatus.IN_REPAIR) {
@@ -92,7 +97,9 @@ public class IncidentService {
         }
 
         report.startRepair();
-        return toResponse(incidentReportRepository.save(report));
+        IncidentReport updated = incidentReportRepository.save(report);
+        audit(adminId, "INCIDENT_REPAIR_STARTED", updated, null);
+        return toResponse(updated);
     }
 
     /**
@@ -110,6 +117,7 @@ public class IncidentService {
         report.resolve(adminId, resolutionNotes, now());
         IncidentReport updated = incidentReportRepository.save(report);
         releaseAssetIfNoActiveIncident(updated.getAssetId());
+        audit(adminId, "INCIDENT_RESOLVED", updated, resolutionNotes);
 
         return toResponse(updated);
     }
@@ -129,6 +137,7 @@ public class IncidentService {
         report.reject(adminId, resolutionNotes, now());
         IncidentReport updated = incidentReportRepository.save(report);
         releaseAssetIfNoActiveIncident(updated.getAssetId());
+        audit(adminId, "INCIDENT_REJECTED", updated, resolutionNotes);
 
         return toResponse(updated);
     }
@@ -212,6 +221,17 @@ public class IncidentService {
         if (catalogApi.getAsset(assetId).status() == AssetStatus.UNDER_MAINTENANCE) {
             catalogApi.markAvailable(assetId);
         }
+    }
+
+    /**
+     * Bug fixed (#159): report, start-repair, resolve and reject were not in Liviu's audit log, so the
+     * admin audit page could not show who closed an incident. Same transaction as the change (REQUIRED):
+     * if the change rolls back, so does its audit entry. A repeated action that changes nothing
+     * (resolve twice) returns before this and writes nothing.
+     */
+    private void audit(Long actorId, String action, IncidentReport report, String note) {
+        String details = "Asset " + report.getAssetId() + (note == null || note.isBlank() ? "" : ": " + note);
+        auditService.record(actorId, action, "INCIDENT", report.getId(), details);
     }
 
     // Whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET return the same value.

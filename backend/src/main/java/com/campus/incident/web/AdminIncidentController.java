@@ -6,6 +6,8 @@ import com.campus.incident.domain.IncidentReport.IncidentStatus;
 import com.campus.incident.service.IncidentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+// 401 (and 403 under /admin) are added to every endpoint by OpenApiConfig (#184); only the
+// incident-specific errors are listed here. The codes are the ones in api-contract §5 (#189).
 @RestController
 @RequestMapping("/api/v1/admin/incidents")
 @Tag(name = "Admin Incidents", description = "Endpoints for managing and resolving incidents")
@@ -33,6 +37,12 @@ public class AdminIncidentController {
     // and the order is always newest first: the client cannot sort by a column that does not exist.
     @GetMapping
     @Operation(summary = "List all incidents, newest first, optionally filtered by status")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Page of incidents"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "INVALID_PARAMETER: unknown status, page < 0, size outside 1-100, page * size too big")
+    })
     public PageResponse<IncidentResponse> getAllIncidents(
             @RequestParam(value = "status", required = false) IncidentStatus status,
             @Parameter(description = "Page index, from 0") @RequestParam(value = "page", defaultValue = "0") int page,
@@ -44,8 +54,14 @@ public class AdminIncidentController {
     // No body: starting a repair only changes the status.
     @PostMapping("/{id}/start-repair")
     @Operation(summary = "Start the repair of an OPEN incident (OPEN to IN_REPAIR); the asset stays UNDER_MAINTENANCE")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Now IN_REPAIR (already IN_REPAIR: returned unchanged)"),
+        @ApiResponse(responseCode = "400", description = "INVALID_PARAMETER: the id is not a number"),
+        @ApiResponse(responseCode = "404", description = "INCIDENT_NOT_FOUND"),
+        @ApiResponse(responseCode = "409", description = "INVALID_INCIDENT_STATUS_TRANSITION: RESOLVED or REJECTED")
+    })
     public IncidentResponse startRepair(@PathVariable("id") Long id) {
-        return incidentService.startRepair(id);
+        return incidentService.startRepair(id, currentUser.id());
     }
 
     // The body is optional: resolutionNotes may be left out, so an empty request is valid too.
@@ -53,6 +69,15 @@ public class AdminIncidentController {
     @Operation(
             summary = "Resolve an incident report (OPEN or IN_REPAIR); the asset is available again once no "
                     + "other incident on it is still open")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Now RESOLVED (already RESOLVED: returned unchanged)"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "VALIDATION_FAILED (resolutionNotes over 2000 chars), MALFORMED_REQUEST or "
+                        + "INVALID_PARAMETER (id not a number)"),
+        @ApiResponse(responseCode = "404", description = "INCIDENT_NOT_FOUND"),
+        @ApiResponse(responseCode = "409", description = "INVALID_INCIDENT_STATUS_TRANSITION: from REJECTED")
+    })
     public IncidentResponse resolveIncident(
             @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
         String notes = request != null ? request.resolutionNotes() : null;
@@ -64,6 +89,15 @@ public class AdminIncidentController {
     @Operation(
             summary = "Reject an incident report (OPEN or IN_REPAIR), e.g. the item works; the asset is available "
                     + "again once no other incident on it is still open")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Now REJECTED (already REJECTED: returned unchanged)"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "VALIDATION_FAILED (resolutionNotes over 2000 chars), MALFORMED_REQUEST or "
+                        + "INVALID_PARAMETER (id not a number)"),
+        @ApiResponse(responseCode = "404", description = "INCIDENT_NOT_FOUND"),
+        @ApiResponse(responseCode = "409", description = "INVALID_INCIDENT_STATUS_TRANSITION: from RESOLVED")
+    })
     public IncidentResponse rejectIncident(
             @PathVariable("id") Long id, @Valid @RequestBody(required = false) ResolveIncidentRequest request) {
         String notes = request != null ? request.resolutionNotes() : null;
