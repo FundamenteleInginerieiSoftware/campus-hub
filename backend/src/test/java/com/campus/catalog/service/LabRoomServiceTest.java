@@ -15,6 +15,7 @@ import com.campus.catalog.web.LabRoomRequest;
 import com.campus.catalog.web.LabRoomResponse;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import java.util.Optional;
@@ -65,6 +66,43 @@ class LabRoomServiceTest {
                 () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B")));
 
         assertEquals("LAB_ROOM_CODE_TAKEN", ex.getCode());
+    }
+
+    @Test
+    void createRejectsDuplicateCodeOnConcurrentRace() {
+        when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false, true);
+        when(labRoomRepository.saveAndFlush(any(LabRoom.class)))
+                .thenThrow(new DataIntegrityViolationException("unique index constraint"));
+
+        ConflictException ex = assertThrows(
+                ConflictException.class,
+                () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B")));
+
+        assertEquals("LAB_ROOM_CODE_TAKEN", ex.getCode());
+    }
+
+    @Test
+    void createRethrowsDataIntegrityViolationWhenCodeNotTaken() {
+        when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false);
+        when(labRoomRepository.saveAndFlush(any(LabRoom.class)))
+                .thenThrow(new DataIntegrityViolationException("other constraint"));
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> labRoomService.create(new LabRoomRequest("b204", "Embedded Lab", "Building B")));
+    }
+
+    @Test
+    void createRejectsCodeWhenLengthExpandsBeyondLimit() {
+        // 20 chars ending with 'ß'; in Locale.ROOT uppercase it expands to 21 chars ("SS") (#167).
+        String expandingCode = "A".repeat(19) + "ß";
+
+        InvalidParameterException ex = assertThrows(
+                InvalidParameterException.class,
+                () -> labRoomService.create(new LabRoomRequest(expandingCode, "Lab", "Building")));
+
+        assertEquals("INVALID_PARAMETER", ex.getCode());
+        verify(labRoomRepository, never()).saveAndFlush(any());
     }
 
     @Test

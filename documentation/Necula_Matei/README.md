@@ -50,7 +50,12 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 22 | `22-token-account-check.md` | Fix: blocked accounts lose access at once | #128 (in review) |
 | 23 | `23-s3-ses-adapters.md` | Photos in S3, e-mails through SES (prod profile) | #129 (in review) |
 | 24 | `24-user-created-at-seconds.md` | Fix: `users.created_at` stored in whole seconds | #135 (in review) |
+| 30 | `30-swagger-check.md` | Swagger check for M1: real security and error format on all 31 endpoints | (in review) |
+| 31 | `31-security-chapter.md` | Security chapter of the final report (`docs/report/security.md`) + JWT sequence diagram | (in review) |
 | 32 | `32-component-deployment-diagrams.md` | UML component diagram + deployment diagrams (laptop/CI and planned AWS) | (in review) |
+| 33 | `33-mutation-testing.md` | Mutation testing (PIT): which rules no test would catch breaking | (in review) |
+| 34 | `34-demo-flow-test.md` | The whole prototype demo as one test that names the broken step and its owner | (in review) |
+| 35 | `35-mutation-gaps-tests.md` | Tests for the 5 gaps mutation testing (PIT) found in my code | (in review) |
 
 Notes 21–24 get their link here once their PR is merged.
 
