@@ -2,6 +2,7 @@ package com.campus.common.audit;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,14 @@ public class DatabaseAuditService implements AuditService {
     @Override
     @Transactional
     public void record(Long actorId, String action, String entityType, Long entityId, String details) {
-        AuditLog entry = new AuditLog(actorId, action, entityType, entityId, details, LocalDateTime.now(clock));
+        // Truncated to seconds so the in-memory timestamp matches PostgreSQL TIMESTAMP precision (#147).
+        AuditLog entry = new AuditLog(
+                actorId,
+                action,
+                entityType,
+                entityId,
+                details,
+                LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
         auditLogRepository.save(entry);
         log.info(
                 "Audit: actorId={}, action={}, entityType={}, entityId={}, details={}",

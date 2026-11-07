@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,8 +20,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class DatabaseAuditServiceTest {
 
     private static final ZoneId CAMPUS_ZONE = ZoneId.of("Europe/Bucharest");
-    private static final Instant FIXED_INSTANT = Instant.parse("2026-10-29T10:00:00Z");
-    private static final LocalDateTime EXPECTED_NOW = LocalDateTime.ofInstant(FIXED_INSTANT, CAMPUS_ZONE);
+    // Sub-second nanos verify that DatabaseAuditService truncates timestamps to whole seconds (#147).
+    private static final Instant FIXED_INSTANT = Instant.parse("2026-10-29T10:00:00.987654321Z");
+    private static final LocalDateTime EXPECTED_NOW =
+            LocalDateTime.ofInstant(FIXED_INSTANT, CAMPUS_ZONE).truncatedTo(ChronoUnit.SECONDS);
 
     @Mock
     private AuditLogRepository auditLogRepository;

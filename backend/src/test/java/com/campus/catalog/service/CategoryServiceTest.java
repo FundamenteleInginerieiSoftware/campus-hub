@@ -85,7 +85,7 @@ class CategoryServiceTest {
 
     @Test
     void createRejectsDuplicateNameOnConcurrentRace() {
-        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
+        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false, true);
         when(categoryRepository.saveAndFlush(any(Category.class)))
                 .thenThrow(new DataIntegrityViolationException("unique index constraint"));
 
@@ -93,6 +93,18 @@ class CategoryServiceTest {
                 ConflictException.class, () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
 
         assertEquals("CATEGORY_NAME_TAKEN", ex.getCode());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createRethrowsDataIntegrityViolationWhenNameNotTaken() {
+        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
+        when(categoryRepository.saveAndFlush(any(Category.class)))
+                .thenThrow(new DataIntegrityViolationException("other constraint"));
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
         verify(auditService, never()).record(any(), any(), any(), any(), any());
     }
 

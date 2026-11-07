@@ -17,4 +17,6 @@
 | 04 | [04-catalog-admin-crud.md](04-catalog-admin-crud.md) | Category, lab room, and asset admin CRUD, asset details, and retire flow (#66, #73, #89) |
 | 05 | [05-local-storage-service.md](05-local-storage-service.md) | Local disk storage with magic-byte, size, and path-traversal security checks (#90) |
 | 06 | [06-catalog-asset-search.md](06-catalog-asset-search.md) | Paginated asset search and filtering with `Specification` and `@EntityGraph` (#92) |
-| 07 | `07-catalog-audit-and-pagination-fixes.md` | Fixes: Page offset bounds, audit error isolation, and error contract (#119, #120, #121) |
+| 07 | [07-catalog-audit-and-pagination-fixes.md](07-catalog-audit-and-pagination-fixes.md) | Fixes: Page offset bounds, audit error isolation, and error contract (#119, #120, #121) |
+| 08 | [08-catalog-optimizations-and-edge-cases.md](08-catalog-optimizations-and-edge-cases.md) | Catalog query optimizations, timestamp seconds, and constraint verification (#147, #160, #167, PR #192) |
+| 09 | `09-dev-catalog-seeder.md` | Development catalog seeder with multi-unit models for automated reassignment demos |

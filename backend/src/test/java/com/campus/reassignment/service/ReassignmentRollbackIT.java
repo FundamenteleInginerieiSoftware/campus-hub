@@ -73,6 +73,7 @@ class ReassignmentRollbackIT {
     private static final Long DAMAGED_ASSET_ID = 501L;
     private static final Long SUB_MODEL_BUSY_ID = 502L;
     private static final Long SUB_CAT_FREE_ID = 503L;
+    private static final Long SUB_MODEL_SECOND_FREE_ID = 504L;
     private static final Long INCIDENT_ID = 888L;
     private static final Long USER_ID = 100L;
 
@@ -122,7 +123,7 @@ class ReassignmentRollbackIT {
             ON CONFLICT (id) DO NOTHING
             """);
 
-        for (long id : List.of(DAMAGED_ASSET_ID, SUB_MODEL_BUSY_ID, SUB_CAT_FREE_ID)) {
+        for (long id : List.of(DAMAGED_ASSET_ID, SUB_MODEL_BUSY_ID, SUB_CAT_FREE_ID, SUB_MODEL_SECOND_FREE_ID)) {
             jdbcTemplate.update(
                     """
                 INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
@@ -138,6 +139,15 @@ class ReassignmentRollbackIT {
     void tearDown() {
         reassignmentLogRepository.deleteAll();
         reservationRepository.deleteAll();
+        jdbcTemplate.update(
+                "DELETE FROM assets WHERE id IN (?, ?, ?, ?)",
+                DAMAGED_ASSET_ID,
+                SUB_MODEL_BUSY_ID,
+                SUB_CAT_FREE_ID,
+                SUB_MODEL_SECOND_FREE_ID);
+        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 500");
+        jdbcTemplate.update("DELETE FROM categories WHERE id = 500");
+        jdbcTemplate.update("DELETE FROM users WHERE id = 100");
     }
 
     @Test
@@ -258,5 +268,46 @@ class ReassignmentRollbackIT {
 
         // Exactly 1 notification was sent (for b1)
         verify(notificationService, times(1)).notifyUser(eq(USER_ID), eq("Reservation Reassigned"), anyString());
+    }
+
+    @Test
+    @DisplayName(
+            "Bug #149 fix: When first same-model candidate becomes unavailable concurrently, tries second same-model candidate in a fresh REQUIRES_NEW transaction")
+    void triesSecondSameModelCandidateWhenFirstRaces() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        Reservation bookingToMove = reservationRepository.saveAndFlush(
+                new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 0)));
+
+        AssetSummary damaged =
+                new AssetSummary(DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+        AssetSummary sub1Raced =
+                new AssetSummary(SUB_MODEL_BUSY_ID, "Sub 1 Raced", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+        AssetSummary sub2SameModelFree = new AssetSummary(
+                SUB_MODEL_SECOND_FREE_ID, "Sub 2 Same Model Free", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damaged);
+        when(catalogApi.findAvailableByModel("SAME_MODEL", DAMAGED_ASSET_ID))
+                .thenReturn(List.of(sub1Raced, sub2SameModelFree));
+        when(catalogApi.isBookable(SUB_MODEL_BUSY_ID)).thenReturn(false);
+        when(catalogApi.isBookable(SUB_MODEL_SECOND_FREE_ID)).thenReturn(true);
+
+        AssetDamagedEvent event =
+                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+
+        reassignmentService.handle(event);
+
+        Reservation updated =
+                reservationRepository.findById(bookingToMove.getId()).orElseThrow();
+        assertThat(updated.getAssetId()).isEqualTo(SUB_MODEL_SECOND_FREE_ID);
+        assertThat(updated.getOriginalAssetId()).isEqualTo(DAMAGED_ASSET_ID);
+        assertThat(updated.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+
+        List<ReassignmentLog> logs = reassignmentLogRepository.findAll();
+        assertThat(logs).hasSize(1);
+        ReassignmentLog entry = logs.get(0);
+        assertThat(entry.getToAssetId()).isEqualTo(SUB_MODEL_SECOND_FREE_ID);
+        assertThat(entry.getStrategy()).isEqualTo("SameModelStrategy");
     }
 }
