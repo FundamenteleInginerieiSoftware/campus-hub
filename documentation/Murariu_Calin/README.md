@@ -31,6 +31,8 @@ Each document is structured in two parts:
 | 10 | [`10-concurrency-pessimistic-locking.md`](./10-concurrency-pessimistic-locking.md) | Multi-Thread Concurrency & Row Locking | Pessimistic `SELECT FOR UPDATE`, `ReservationConcurrencyIT`, preventing double booking |
 | 11 | [`11-strategy-pattern-design.md`](./11-strategy-pattern-design.md) | Strategy Pattern Design & Architecture | GoF Strategy pattern deep dive, Spring `@Order` injection, OCP extensibility, tie-breaking, defense Q&A |
 | 12 | [`12-quality-assurance-and-ci-architecture-tests.md`](./12-quality-assurance-and-ci-architecture-tests.md) | Quality Assurance & CI Architecture Rules | Automated ArchUnit quality gates, shared Clock enforcement, transactional boundaries, seeder/listener test expansion |
+| 13 | [`13-frontend-caching-and-cancel-guards.md`](./13-frontend-caching-and-cancel-guards.md) | Frontend Asset Cache & Cancel Guards | `fetchedAssetIdsRef` deduplication, pre-start cancellation guard, stale booking error reset |
+| 14 | [`14-swagger-examples-and-mutation-test-gaps.md`](./14-swagger-examples-and-mutation-test-gaps.md) | Swagger Examples & Mutation Test Gaps | Slot-aligned Swagger examples, `ReassignmentRollbackIT` DB isolation, PIT survivor elimination in reservation/reassignment |
 
 ---
 

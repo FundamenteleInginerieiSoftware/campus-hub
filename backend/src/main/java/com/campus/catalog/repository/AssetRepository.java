@@ -28,14 +28,22 @@ public interface AssetRepository extends JpaRepository<Asset, Long>, JpaSpecific
     Optional<Asset> findWithDetailsById(Long id);
 
     // Acquires a PostgreSQL "SELECT ... FOR UPDATE" row lock so concurrent booking attempts
-    // wait here until the active transaction finishes.
+    // wait here until the active transaction finishes. Eagerly loads category and labRoom so
+    // mapping to AssetResponse during retire does not trigger N+1 lazy queries (#160).
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"category", "labRoom"})
     @Query("SELECT a FROM Asset a WHERE a.id = :id")
     Optional<Asset> findByIdForUpdate(@Param("id") Long id);
 
     List<Asset> findByModelAndStatusAndIdNot(String model, AssetStatus status, Long excludeId);
 
-    List<Asset> findByCategoryIdAndStatusAndIdNot(Long categoryId, AssetStatus status, Long excludeId);
+    // Explicit JPQL on a.category.id filters directly on the assets.category_id foreign key column
+    // without an unnecessary LEFT OUTER JOIN on the categories table (#160).
+    @Query("SELECT a FROM Asset a WHERE a.category.id = :categoryId AND a.status = :status AND a.id <> :excludeId")
+    List<Asset> findByCategoryIdAndStatusAndIdNot(
+            @Param("categoryId") Long categoryId,
+            @Param("status") AssetStatus status,
+            @Param("excludeId") Long excludeId);
 
     boolean existsBySerialNumberIgnoreCase(String serialNumber);
 

@@ -320,4 +320,29 @@ class ReservationRepositoryTest {
                 reservationRepository.findBusyAssetIds(slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES);
         assertThat(busyIdsAfterReturn).doesNotContain(ASSET_ID);
     }
+
+    @Test
+    @DisplayName("findCheckedOutPastEnd and findUpcomingConfirmedByAsset: return ordered rows for lifecycle sweeps")
+    void lifecycleSweepQueriesReturnMatchingRows() {
+        Reservation checkedOutExpired = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        checkedOutExpired.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
+        Reservation savedExpired = reservationRepository.saveAndFlush(checkedOutExpired);
+
+        List<Reservation> expired = reservationRepository.findCheckedOutPastEnd(LocalDateTime.of(2026, 11, 2, 10, 1));
+        assertThat(expired).extracting(Reservation::getId).containsExactly(savedExpired.getId());
+
+        // Exact endTime is not yet past end (< :now)
+        assertThat(reservationRepository.findCheckedOutPastEnd(LocalDateTime.of(2026, 11, 2, 10, 0)))
+                .isEmpty();
+
+        // existingReservation is CONFIRMED 14:00 - 16:00
+        List<Reservation> upcoming =
+                reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, LocalDateTime.of(2026, 11, 2, 12, 0));
+        assertThat(upcoming).extracting(Reservation::getId).containsExactly(existingReservation.getId());
+    }
 }

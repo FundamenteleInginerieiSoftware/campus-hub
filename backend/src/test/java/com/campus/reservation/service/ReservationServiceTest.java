@@ -23,6 +23,7 @@ import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
@@ -42,11 +43,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -72,12 +76,15 @@ class ReservationServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private NotificationService notificationService;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
-        reservationService =
-                new ReservationService(reservationRepository, catalogApi, currentUser, auditService, clock);
+        reservationService = new ReservationService(
+                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
     }
 
     @Test
@@ -632,6 +639,16 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("getById throws 404 NotFound when reservation does not exist")
+    void getByIdNotFound() {
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.getById(999L))
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+    }
+
+    @Test
     @DisplayName("cancelReservation succeeds for owner before start time")
     void cancelReservationOwnerBeforeStartSucceeds() {
         when(currentUser.id()).thenReturn(USER_ID);
@@ -647,11 +664,14 @@ class ReservationServiceTest {
         ReservationResponse response = reservationService.cancelReservation(1L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
-        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), any());
+        assertThat(response.cancelReason()).isEqualTo("Cancelled by user");
+        verify(auditService)
+                .record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), any(), eq("Cancelled by user"));
+        verify(notificationService, never()).notifyUser(anyLong(), any(), any());
     }
 
     @Test
-    @DisplayName("cancelReservation succeeds for admin even after start time")
+    @DisplayName("cancelReservation succeeds for admin even after start time and notifies student with admin reason")
     void cancelReservationAdminAfterStartSucceeds() {
         when(currentUser.id()).thenReturn(999L);
         when(currentUser.isAdmin()).thenReturn(true);
@@ -661,11 +681,25 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 9, 0), // Start was 09:00 (clock is 10:00)
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
 
         ReservationResponse response = reservationService.cancelReservation(1L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(response.cancelReason()).isEqualTo("Cancelled by administrator");
+        verify(auditService)
+                .record(
+                        eq(999L),
+                        eq("CANCEL_RESERVATION"),
+                        eq("Reservation"),
+                        eq(1L),
+                        eq("Cancelled by administrator"));
+        verify(notificationService)
+                .notifyUser(
+                        eq(USER_ID),
+                        eq("Reservation Cancelled by Administrator"),
+                        eq("Your reservation #1 has been cancelled by an administrator."));
     }
 
     @Test
@@ -778,8 +812,9 @@ class ReservationServiceTest {
                         eq(newAssetId), any(), any(), eq(ReservationStatus.ACTIVE_STATUSES), anyLong()))
                 .thenReturn(false);
 
-        reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
+        boolean moved = reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
 
+        assertThat(moved).isTrue();
         assertThat(r.getAssetId()).isEqualTo(newAssetId);
         assertThat(r.getOriginalAssetId()).isEqualTo(ASSET_ID);
         verify(catalogApi).lockForBooking(newAssetId);
@@ -855,6 +890,7 @@ class ReservationServiceTest {
 
         assertThat(reservationService.markNoShow(10L)).isTrue();
         assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
+        verify(auditService).record(isNull(), eq("AUTO_NO_SHOW"), eq("Reservation"), eq(10L), any());
         assertThat(reservationService.markNoShow(10L)).isFalse();
 
         Reservation checkedOut = new Reservation(
@@ -869,6 +905,7 @@ class ReservationServiceTest {
 
         assertThat(reservationService.markOverdue(11L)).isTrue();
         assertThat(checkedOut.getStatus()).isEqualTo(ReservationStatus.OVERDUE);
+        verify(auditService).record(isNull(), eq("MARK_OVERDUE"), eq("Reservation"), eq(11L), any());
         assertThat(reservationService.markOverdue(11L)).isFalse();
     }
 
@@ -885,8 +922,9 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
 
-        reservationService.forceCancel(1L, "Damaged beyond repair");
+        boolean cancelled = reservationService.forceCancel(1L, "Damaged beyond repair");
 
+        assertThat(cancelled).isTrue();
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.FORCE_CANCELLED);
         verify(auditService).record(isNull(), eq("FORCE_CANCEL_RESERVATION"), eq("Reservation"), any(), any());
     }
@@ -1154,6 +1192,16 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("returnReservation: throws NotFoundException if reservation does not exist")
+    void returnReservationNotFound() {
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.returnReservation(999L))
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+    }
+
+    @Test
     @DisplayName("getAdminReservations: queries repository using specifications and returns PageResponse")
     void getAdminReservationsSuccess() {
         Reservation r = new Reservation(
@@ -1164,9 +1212,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 301L);
 
-        when(reservationRepository.findAll(
-                        any(org.springframework.data.jpa.domain.Specification.class),
-                        any(org.springframework.data.domain.Pageable.class)))
+        when(reservationRepository.findAll(ArgumentMatchers.<Specification<Reservation>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
 
         PageResponse<ReservationResponse> page = reservationService.getAdminReservations(
@@ -1175,6 +1221,30 @@ class ReservationServiceTest {
         assertThat(page.content()).hasSize(1);
         assertThat(page.content().get(0).id()).isEqualTo(301L);
         assertThat(page.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getAdminReservations: supports ascending sortDir and rejects invalid sortDir")
+    void getAdminReservationsSortDirValidation() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 301L);
+
+        when(reservationRepository.findAll(ArgumentMatchers.<Specification<Reservation>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
+
+        PageResponse<ReservationResponse> ascPage =
+                reservationService.getAdminReservations(ReservationStatus.CONFIRMED, null, null, null, 0, 20, "asc");
+        assertThat(ascPage.content()).hasSize(1);
+
+        assertThatThrownBy(() -> reservationService.getAdminReservations(
+                        ReservationStatus.CONFIRMED, null, null, null, 0, 20, "invalid"))
+                .isInstanceOf(InvalidParameterException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
     }
 
     @Test
@@ -1312,6 +1382,18 @@ class ReservationServiceTest {
         assertThat(response.available()).isFalse();
         assertThat(response.availableAssetIds()).isEmpty();
         assertThat(response.conflictReason()).isEqualTo("NO_ASSETS_AVAILABLE");
+    }
+
+    @Test
+    @DisplayName("findBusyAssetIds: delegates to repository with active statuses")
+    void findBusyAssetIdsDelegates() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(10L, 20L));
+
+        List<Long> busy = reservationService.findBusyAssetIds(start, end);
+        assertThat(busy).containsExactly(10L, 20L);
     }
 
     @Test

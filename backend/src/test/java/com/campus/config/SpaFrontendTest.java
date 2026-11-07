@@ -1,5 +1,6 @@
 package com.campus.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -12,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -42,6 +44,20 @@ class SpaFrontendTest {
         mockMvc.perform(get("/admin/incidents"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString(REACT_APP)));
+    }
+
+    // Spring's own static file handling still works after SpaConfig replaced the default "/**" handler.
+    @Test
+    void existingFileIsServedDirectly() throws Exception {
+        MockHttpServletResponse response =
+                mockMvc.perform(get("/index.html")).andReturn().getResponse();
+
+        assertThat(response.getStatus())
+                .as("GET of a file in static/ answers 200; see SpaConfig.IndexHtmlFallback.getResource")
+                .isEqualTo(200);
+        assertThat(response.getContentAsString())
+                .as("GET of a file in static/ returns that file; see SpaConfig.IndexHtmlFallback.getResource")
+                .contains(REACT_APP);
     }
 
     @Test

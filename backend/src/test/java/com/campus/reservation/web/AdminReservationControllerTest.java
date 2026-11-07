@@ -104,17 +104,36 @@ class AdminReservationControllerTest {
     @DisplayName("GET /api/v1/admin/reservations returns 200 with PageResponse for ADMIN")
     void searchReturns200() throws Exception {
         PageResponse<ReservationResponse> page = new PageResponse<>(List.of(checkedOutResponse), 0, 20, 1L, 1);
-        when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt()))
+        when(reservationService.getAdminReservations(any(), any(), any(), any(), anyInt(), anyInt(), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/reservations")
                         .param("status", "CHECKED_OUT")
                         .param("page", "0")
-                        .param("size", "20"))
+                        .param("size", "20")
+                        .param("sortDir", "asc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(1L))
                 .andExpect(jsonPath("$.content[0].status").value("CHECKED_OUT"))
                 .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reservations returns 400 when page is negative")
+    void searchInvalidPageReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reservations").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reservations returns 400 when size exceeds max 100")
+    void searchInvalidSizeReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reservations").param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
     }
 
     @Test
