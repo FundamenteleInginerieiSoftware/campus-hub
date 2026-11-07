@@ -181,6 +181,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0)
 
   // Compute the 5 weekdays for the active week view.
   const weekDays = useMemo(() => {
@@ -237,7 +238,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     return () => {
       cancelled = true
     }
-  }, [asset.id, startIso, endIso])
+  }, [asset.id, startIso, endIso, availabilityRefreshKey])
 
   function selectSlot(day: string, time: string) {
     setSelectedDay(day)
@@ -325,6 +326,10 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
         startTime: startIso,
         endTime: endIso,
       })
+      // Bug fixed (#196 review note): when onSuccess was provided without redirecting to /reservations,
+      // availability state remained stale and showed the slot as still available.
+      // Fix: trigger a fresh availability check so the newly booked slot immediately updates to occupied/busy.
+      setAvailabilityRefreshKey((k) => k + 1)
       if (onSuccess) {
         onSuccess(res)
       } else {
