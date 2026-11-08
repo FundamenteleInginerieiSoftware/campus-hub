@@ -211,4 +211,72 @@ public class ReservationController {
             @PathVariable Long id, @Valid @RequestBody ExtendReservationRequest request) {
         return ResponseEntity.ok(reservationService.extendReservation(id, request));
     }
+
+    @Operation(
+            summary = "Initiate a reservation transfer",
+            description = "Offers an upcoming confirmed reservation to another student")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Transfer offer initiated successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation failed on recipient id"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Reservation not found or recipient user not found"),
+        @ApiResponse(responseCode = "409", description = "Cannot transfer to self, already pending, or quota reached")
+    })
+    @PostMapping("/{id}/transfers")
+    public ResponseEntity<ReservationTransferResponse> initiateTransfer(
+            @PathVariable Long id, @Valid @RequestBody InitiateTransferRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.initiateTransfer(id, request));
+    }
+
+    @Operation(
+            summary = "Get pending transfer offers",
+            description = "Retrieves all incoming pending reservation transfer requests for the student")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "List of pending transfers"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    @GetMapping("/transfers/pending")
+    public ResponseEntity<List<ReservationTransferResponse>> getPendingTransfers() {
+        return ResponseEntity.ok(reservationService.getMyPendingTransfers());
+    }
+
+    @Operation(
+            summary = "Accept reservation transfer",
+            description = "Accepts a pending transfer offer and assumes ownership of the reservation")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transfer accepted and reservation ownership transferred"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Transfer not found"),
+        @ApiResponse(responseCode = "409", description = "Active quota exceeded or reservation expired")
+    })
+    @PostMapping("/transfers/{transferId}/accept")
+    public ResponseEntity<ReservationTransferResponse> acceptTransfer(@PathVariable Long transferId) {
+        return ResponseEntity.ok(reservationService.acceptTransfer(transferId));
+    }
+
+    @Operation(summary = "Reject reservation transfer", description = "Declines an incoming reservation transfer offer")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transfer rejected"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Transfer not found"),
+        @ApiResponse(responseCode = "409", description = "Invalid transfer status transition")
+    })
+    @PostMapping("/transfers/{transferId}/reject")
+    public ResponseEntity<ReservationTransferResponse> rejectTransfer(@PathVariable Long transferId) {
+        return ResponseEntity.ok(reservationService.rejectTransfer(transferId));
+    }
+
+    @Operation(
+            summary = "Cancel reservation transfer offer",
+            description = "Cancels an outgoing reservation transfer offer by the original sender")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transfer cancelled"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Transfer not found"),
+        @ApiResponse(responseCode = "409", description = "Invalid transfer status transition")
+    })
+    @PostMapping("/transfers/{transferId}/cancel")
+    public ResponseEntity<ReservationTransferResponse> cancelTransfer(@PathVariable Long transferId) {
+        return ResponseEntity.ok(reservationService.cancelTransfer(transferId));
+    }
 }

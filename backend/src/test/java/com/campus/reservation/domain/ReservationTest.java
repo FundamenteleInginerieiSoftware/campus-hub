@@ -291,6 +291,17 @@ class ReservationTest {
         assertThatThrownBy(() -> reservation.extendEndTime(null)).isInstanceOf(NullPointerException.class);
     }
 
+    @Test
+    @DisplayName("transferOwnership: changes userId when reservation is in CONFIRMED status")
+    void transferOwnershipValidFromConfirmed() {
+        reservation.transferOwnership(88L);
+        assertThat(reservation.getUserId()).isEqualTo(88L);
+
+        assertThatThrownBy(() -> reservation.transferOwnership(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("newUserId must not be null");
+    }
+
     @ParameterizedTest
     @EnumSource(
             value = ReservationStatus.class,
@@ -300,6 +311,19 @@ class ReservationTest {
         Reservation r = createReservationInStatus(initialStatus);
 
         assertThatThrownBy(() -> r.extendEndTime(end.plusHours(1)))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ReservationStatus.class,
+            names = {"CHECKED_OUT", "RETURNED", "CANCELLED", "FORCE_CANCELLED", "OVERDUE", "NO_SHOW"})
+    @DisplayName("transferOwnership throws InvalidStateTransitionException from non-CONFIRMED statuses")
+    void transferOwnershipInvalidFromOtherStatuses(ReservationStatus initialStatus) {
+        Reservation r = createReservationInStatus(initialStatus);
+
+        assertThatThrownBy(() -> r.transferOwnership(88L))
                 .isInstanceOf(InvalidStateTransitionException.class)
                 .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
     }

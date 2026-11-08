@@ -17,6 +17,7 @@ import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.service.ReservationService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -366,5 +367,53 @@ class ReservationControllerTest {
                         .content(json))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/{id}/transfers returns 201 CREATED")
+    void initiateTransferReturns201() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
+
+        when(reservationService.initiateTransfer(eq(100L), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/reservations/100/transfers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"recipientUserId\": 99}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(500))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/transfers/pending returns 200 OK")
+    void getPendingTransfersReturns200() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
+
+        when(reservationService.getMyPendingTransfers()).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/reservations/transfers/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(500));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/transfers/{id}/accept returns 200 OK")
+    void acceptTransferReturns200() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L,
+                100L,
+                42L,
+                99L,
+                TransferStatus.ACCEPTED,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 15));
+
+        when(reservationService.acceptTransfer(500L)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/reservations/transfers/500/accept"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
 }

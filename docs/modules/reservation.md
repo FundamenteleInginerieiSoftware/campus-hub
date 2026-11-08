@@ -112,6 +112,7 @@ The module supports simultaneous atomic reservation of multiple laboratory equip
 
 ---
 
+
 ## 9. Active Reservation Duration Extension
 
 The module supports atomic duration extensions for active equipment reservations (`CONFIRMED` or `CHECKED_OUT`):
@@ -125,6 +126,17 @@ The module supports atomic duration extensions for active equipment reservations
   - Lab hours: within Mon–Fri 08:00–20:00 and on the same calendar day; max 14 days booking horizon.
 - **Collision Detection & Rollback:** Overlap check on `[currentEndTime, newEndTime]` ignores the current reservation ID. If the subsequent slot is occupied, the request is rejected with `409 EXTENSION_CONFLICT`, leaving the original reservation untouched.
 - **Audit:** Records `EXTEND_RESERVATION` in `AuditService`.
+
+---
+
+## 10. Peer-to-Peer Reservation Transfer Workflow
+
+The module supports peer-to-peer transfer of upcoming confirmed reservations between students:
+- **Initiation:** The owner of a `CONFIRMED` reservation can initiate a transfer to another registered student (`POST /api/v1/reservations/{id}/transfer`). Only one pending transfer is allowed per reservation at a time. Self-transfers and transfers to disabled users are rejected.
+- **Recipient Acceptance:** The recipient can accept (`POST /api/v1/reservations/transfers/{transferId}/accept`). The recipient's quota is locked via advisory lock (`lockUserQuota`) to ensure they do not exceed the 2-active-reservations limit. Upon acceptance, ownership is transferred atomically, and the transfer status transitions to `ACCEPTED`.
+- **Rejection & Cancellation:** The recipient can reject (`POST /api/v1/reservations/transfers/{transferId}/reject`), or the sender can cancel before acceptance (`POST /api/v1/reservations/transfers/{transferId}/cancel`).
+- **Audit & Notification:** Every transfer transition is audited via `AuditService` and both parties receive notifications through `NotificationService`.
+
 
 
 
