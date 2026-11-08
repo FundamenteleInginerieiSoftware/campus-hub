@@ -349,4 +349,22 @@ class ReservationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(1));
     }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/{id}/extend returns 200 OK")
+    void extendReturns200() throws Exception {
+        when(reservationService.extendReservation(eq(1L), any())).thenReturn(sampleResponse);
+
+        String json = """
+                {
+                    "newEndTime": "2026-11-02T17:00:00"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/reservations/1/extend")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
 }

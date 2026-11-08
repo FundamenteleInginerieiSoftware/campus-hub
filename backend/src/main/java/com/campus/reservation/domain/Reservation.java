@@ -138,6 +138,18 @@ public class Reservation {
         this.bundleId = bundleId;
     }
 
+    public void extendEndTime(LocalDateTime newEndTime) {
+        if (this.status != ReservationStatus.CONFIRMED && this.status != ReservationStatus.CHECKED_OUT) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Cannot extend reservation in status " + this.status + "; expected CONFIRMED or CHECKED_OUT");
+        }
+        if (!newEndTime.isAfter(this.endTime)) {
+            throw new IllegalArgumentException("newEndTime must be after current endTime");
+        }
+        this.endTime = Objects.requireNonNull(newEndTime, "newEndTime must not be null");
+    }
+
     private void requireStatus(ReservationStatus expected) {
         if (this.status != expected) {
             throw new InvalidStateTransitionException(

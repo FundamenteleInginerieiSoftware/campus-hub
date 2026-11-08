@@ -95,6 +95,7 @@ cd backend
 
 ---
 
+
 ## 8. Simultaneous Multi-Asset Bundle Reservations
 
 The module supports simultaneous atomic reservation of multiple laboratory equipment items (bundles):
@@ -108,5 +109,22 @@ The module supports simultaneous atomic reservation of multiple laboratory equip
   - All reservations in the bundle share a common `bundle_id` (`UUID`).
   - `GET /api/v1/reservations/bundle/{bundleId}`: inspect all reservations in the kit.
   - `POST /api/v1/reservations/bundle/{bundleId}/cancel`: cancel the entire kit collectively in a single call.
+
+---
+
+## 9. Active Reservation Duration Extension
+
+The module supports atomic duration extensions for active equipment reservations (`CONFIRMED` or `CHECKED_OUT`):
+- **Endpoint:** `POST /api/v1/reservations/{id}/extend` (`ExtendReservationRequest(newEndTime)`).
+- **Concurrency & Pessimistic Locking:** Locks the asset row (`catalogApi.lockForBooking(assetId)`) before running checks to serialize concurrent bookings or extensions.
+- **Operational State Verification:** Validates `catalogApi.isBookable(assetId)`; equipment under maintenance or retired cannot be extended.
+- **Temporal & Boundary Validations:**
+  - Cannot extend expired reservations (`now >= currentEndTime`) or reservations where the 30-minute check-out window has elapsed (`now > startTime + 30m`).
+  - Strict alignment to `:00` or `:30` with zero seconds/nanos.
+  - Duration limit: total duration from `startTime` to `newEndTime` must be between 30 minutes and 4 hours.
+  - Lab hours: within Mon–Fri 08:00–20:00 and on the same calendar day; max 14 days booking horizon.
+- **Collision Detection & Rollback:** Overlap check on `[currentEndTime, newEndTime]` ignores the current reservation ID. If the subsequent slot is occupied, the request is rejected with `409 EXTENSION_CONFLICT`, leaving the original reservation untouched.
+- **Audit:** Records `EXTEND_RESERVATION` in `AuditService`.
+
 
 
