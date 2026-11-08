@@ -46,18 +46,19 @@ class ReservationOpenApiCustomizerTest {
                 .get("/api/v1/reservations/availability")
                 .getGet()
                 .getParameters();
-        assertThat(params.stream()
-                        .filter(p -> p.getName().equals("startTime"))
-                        .findFirst()
-                        .orElseThrow()
-                        .getExample())
-                .isEqualTo(expectedStart);
-        assertThat(params.stream()
-                        .filter(p -> p.getName().equals("endTime"))
-                        .findFirst()
-                        .orElseThrow()
-                        .getExample())
-                .isEqualTo(expectedEnd);
+        Parameter startParam = params.stream()
+                .filter(p -> p.getName().equals("startTime"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(startParam.getExample()).isEqualTo(expectedStart);
+        assertThat(startParam.getSchema().getExample()).isEqualTo(expectedStart);
+
+        Parameter endParam = params.stream()
+                .filter(p -> p.getName().equals("endTime"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(endParam.getExample()).isEqualTo(expectedEnd);
+        assertThat(endParam.getSchema().getExample()).isEqualTo(expectedEnd);
     }
 
     @Test

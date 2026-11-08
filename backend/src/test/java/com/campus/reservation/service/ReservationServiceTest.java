@@ -1713,4 +1713,29 @@ class ReservationServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("cannot have more than 2 active reservations");
     }
+
+    @Test
+    @DisplayName("Bundle: allows exact upper boundary of 5 assets in a single bundle")
+    void createMultiAssetReservation_allowsExactFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.totalAssets()).isEqualTo(5);
+        assertThat(response.reservations()).hasSize(5);
+    }
 }
