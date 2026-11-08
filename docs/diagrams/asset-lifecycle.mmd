@@ -1,0 +1,11 @@
+stateDiagram-v2
+    [*] --> AVAILABLE: Admin creates asset (POST /api/v1/admin/assets)
+
+    AVAILABLE --> UNDER_MAINTENANCE: Student reports incident (CatalogApi.markUnderMaintenance)
+    AVAILABLE --> RETIRED: Admin retires asset (POST /api/v1/admin/assets/{id}/retire)
+
+    UNDER_MAINTENANCE --> UNDER_MAINTENANCE: Additional incident reported while in maintenance (idempotent)
+    UNDER_MAINTENANCE --> AVAILABLE: Admin resolves or rejects last active incident (CatalogApi.markAvailable)
+    UNDER_MAINTENANCE --> RETIRED: Admin retires broken asset (POST /api/v1/admin/assets/{id}/retire)
+
+    RETIRED --> [*]: Terminal state (Asset.markUnderMaintenance / markAvailable / retire throw 409 ASSET_RETIRED)

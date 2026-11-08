@@ -1,6 +1,7 @@
 package com.campus.catalog.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -124,16 +125,50 @@ class CategoryServiceTest {
     }
 
     @Test
-    void deleteDoesNotCatchAuditFailureAsCategoryInUse() {
-        Category existing = new Category("Oscilloscopes", "Desc");
+    void updateModifiesCategoryRecordsAuditAndReturnsResponse() {
+        Category existing = new Category("Old Name", "Old Desc");
         when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
-        when(assetRepository.existsByCategoryId(5L)).thenReturn(false);
+        when(categoryRepository.existsByNameIgnoreCaseAndIdNot("Cameras", 5L)).thenReturn(false);
+        when(categoryRepository.saveAndFlush(existing)).thenReturn(existing);
         when(currentUser.id()).thenReturn(3L);
-        doThrow(new DataIntegrityViolationException("actor_id FK failure"))
-                .when(auditService)
-                .record(any(), any(), any(), any(), any());
 
-        assertThrows(DataIntegrityViolationException.class, () -> categoryService.delete(5L));
+        CategoryResponse response = categoryService.update(5L, new CategoryRequest("  Cameras  ", "Video equipment"));
+
+        assertNotNull(response);
+        assertEquals("Cameras", response.name());
+        assertEquals("Video equipment", response.description());
+        verify(auditService).record(3L, "CATEGORY_UPDATED", "CATEGORY", null, "Updated category Cameras");
+    }
+
+    @Test
+    void updateRejectsDuplicateNameFromAnotherCategory() {
+        Category existing = new Category("Old Name", "Old Desc");
+        when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
+        when(categoryRepository.existsByNameIgnoreCaseAndIdNot("Cameras", 5L)).thenReturn(true);
+
+        ConflictException ex = assertThrows(
+                ConflictException.class, () -> categoryService.update(5L, new CategoryRequest("Cameras", "Video")));
+
+        assertEquals("CATEGORY_NAME_TAKEN", ex.getCode());
+        verify(categoryRepository, never()).saveAndFlush(any());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateHandlesConcurrentRaceAndRethrowsOtherConstraintViolations() {
+        Category existing = new Category("Old Name", "Old Desc");
+        when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
+        when(categoryRepository.existsByNameIgnoreCaseAndIdNot("Cameras", 5L)).thenReturn(false, true, false, false);
+        when(categoryRepository.saveAndFlush(existing))
+                .thenThrow(new DataIntegrityViolationException("unique constraint"));
+
+        ConflictException raceEx = assertThrows(
+                ConflictException.class, () -> categoryService.update(5L, new CategoryRequest("Cameras", "Video")));
+        assertEquals("CATEGORY_NAME_TAKEN", raceEx.getCode());
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> categoryService.update(5L, new CategoryRequest("Cameras", "Video")));
     }
 
     @Test
@@ -144,6 +179,19 @@ class CategoryServiceTest {
                 NotFoundException.class, () -> categoryService.update(99L, new CategoryRequest("Cameras", "Desc")));
 
         assertEquals("CATEGORY_NOT_FOUND", ex.getCode());
+    }
+
+    @Test
+    void deleteDoesNotCatchAuditFailureAsCategoryInUse() {
+        Category existing = new Category("Oscilloscopes", "Desc");
+        when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
+        when(assetRepository.existsByCategoryId(5L)).thenReturn(false);
+        when(currentUser.id()).thenReturn(3L);
+        doThrow(new DataIntegrityViolationException("actor_id FK failure"))
+                .when(auditService)
+                .record(any(), any(), any(), any(), any());
+
+        assertThrows(DataIntegrityViolationException.class, () -> categoryService.delete(5L));
     }
 
     @Test

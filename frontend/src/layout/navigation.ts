@@ -4,6 +4,7 @@ import {
   IconBox,
   IconCalendarEvent,
   IconClipboardList,
+  IconHistory,
   IconLayoutGrid,
   type Icon,
 } from '@tabler/icons-react'
@@ -32,6 +33,7 @@ const ADMIN_MENU: NavGroup[] = [
       { label: 'Reservations desk', path: '/admin/reservations', icon: IconClipboardList },
       { label: 'Incident queue', path: '/admin/incidents', icon: IconAlertTriangle },
       { label: 'Reassignment log', path: '/admin/reassignments', icon: IconArrowsExchange },
+      { label: 'Audit log', path: '/admin/audit-logs', icon: IconHistory },
     ],
   },
   {

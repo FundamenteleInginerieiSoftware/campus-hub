@@ -17,6 +17,7 @@ import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.service.ReservationService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -290,5 +291,129 @@ class ReservationControllerTest {
                         .param("endTime", "2026-11-02T16:00:00"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MISSING_PARAMETER"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/bundle returns 201 CREATED")
+    void createBundleReturns201() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        MultiAssetReservationResponse response = new MultiAssetReservationResponse(
+                bundleId,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                2,
+                List.of(sampleResponse));
+
+        when(reservationService.createMultiAssetReservation(any())).thenReturn(response);
+
+        String json = """
+                {
+                    "assetIds": [10, 20],
+                    "startTime": "2026-11-02T14:00:00",
+                    "endTime": "2026-11-02T16:00:00"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/reservations/bundle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.bundleId").value(bundleId.toString()))
+                .andExpect(jsonPath("$.totalAssets").value(2));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/bundle/{bundleId} returns 200 OK")
+    void getBundleReturns200() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        MultiAssetReservationResponse response = new MultiAssetReservationResponse(
+                bundleId,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                1,
+                List.of(sampleResponse));
+
+        when(reservationService.getBundle(bundleId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/reservations/bundle/" + bundleId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleId").value(bundleId.toString()));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/bundle/{bundleId}/cancel returns 200 OK")
+    void cancelBundleReturns200() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        when(reservationService.cancelBundle(eq(bundleId), any())).thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/{id}/extend returns 200 OK")
+    void extendReturns200() throws Exception {
+        when(reservationService.extendReservation(eq(1L), any())).thenReturn(sampleResponse);
+
+        String json = """
+                {
+                    "newEndTime": "2026-11-02T17:00:00"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/reservations/1/extend")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/{id}/transfers returns 201 CREATED")
+    void initiateTransferReturns201() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
+
+        when(reservationService.initiateTransfer(eq(100L), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/reservations/100/transfers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"recipientUserId\": 99}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(500))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/transfers/pending returns 200 OK")
+    void getPendingTransfersReturns200() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
+
+        when(reservationService.getMyPendingTransfers()).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/reservations/transfers/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(500));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/transfers/{id}/accept returns 200 OK")
+    void acceptTransferReturns200() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L,
+                100L,
+                42L,
+                99L,
+                TransferStatus.ACCEPTED,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 15));
+
+        when(reservationService.acceptTransfer(500L)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/reservations/transfers/500/accept"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
 }

@@ -149,4 +149,134 @@ public class ReservationController {
     public ResponseEntity<ReservationResponse> cancel(@PathVariable Long id) {
         return ResponseEntity.ok(reservationService.cancelReservation(id));
     }
+
+    @Operation(
+            summary = "Create simultaneous multi-asset reservation bundle",
+            description = "Reserves multiple assets simultaneously in a single atomic transaction; deadlock-free")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Bundle reservations created successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation failed, invalid bundle size, or bad time slot"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Conflict on any asset, asset not bookable, or student quota exceeded")
+    })
+    @PostMapping("/bundle")
+    public ResponseEntity<MultiAssetReservationResponse> createBundle(
+            @Valid @RequestBody CreateMultiAssetReservationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createMultiAssetReservation(request));
+    }
+
+    @Operation(
+            summary = "Get multi-asset reservation bundle",
+            description = "Retrieves all equipment items in a reservation bundle (owner or admin)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Bundle found"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user")
+    })
+    @GetMapping("/bundle/{bundleId}")
+    public ResponseEntity<MultiAssetReservationResponse> getBundle(@PathVariable java.util.UUID bundleId) {
+        return ResponseEntity.ok(reservationService.getBundle(bundleId));
+    }
+
+    @Operation(
+            summary = "Cancel multi-asset reservation bundle",
+            description = "Cancels all active reservations in the bundle (owner or admin)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Bundle reservations cancelled"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user")
+    })
+    @PostMapping("/bundle/{bundleId}/cancel")
+    public ResponseEntity<List<ReservationResponse>> cancelBundle(
+            @PathVariable java.util.UUID bundleId, @RequestParam(required = false) String reason) {
+        return ResponseEntity.ok(reservationService.cancelBundle(bundleId, reason));
+    }
+
+    @Operation(
+            summary = "Extend an active reservation",
+            description = "Extends the end time of a CONFIRMED or CHECKED_OUT reservation atomically")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Reservation successfully extended"),
+        @ApiResponse(responseCode = "400", description = "Invalid time range or alignment"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Reservation not found"),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Extension conflict on subsequent slot, duration exceeded, or invalid status")
+    })
+    @PostMapping("/{id}/extend")
+    public ResponseEntity<ReservationResponse> extend(
+            @PathVariable Long id, @Valid @RequestBody ExtendReservationRequest request) {
+        return ResponseEntity.ok(reservationService.extendReservation(id, request));
+    }
+
+    @Operation(
+            summary = "Initiate a reservation transfer",
+            description = "Offers an upcoming confirmed reservation to another student")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Transfer offer initiated successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation failed on recipient id"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Reservation not found or recipient user not found"),
+        @ApiResponse(responseCode = "409", description = "Cannot transfer to self, already pending, or quota reached")
+    })
+    @PostMapping("/{id}/transfers")
+    public ResponseEntity<ReservationTransferResponse> initiateTransfer(
+            @PathVariable Long id, @Valid @RequestBody InitiateTransferRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.initiateTransfer(id, request));
+    }
+
+    @Operation(
+            summary = "Get pending transfer offers",
+            description = "Retrieves all incoming pending reservation transfer requests for the student")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "List of pending transfers"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    @GetMapping("/transfers/pending")
+    public ResponseEntity<List<ReservationTransferResponse>> getPendingTransfers() {
+        return ResponseEntity.ok(reservationService.getMyPendingTransfers());
+    }
+
+    @Operation(
+            summary = "Accept reservation transfer",
+            description = "Accepts a pending transfer offer and assumes ownership of the reservation")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transfer accepted and reservation ownership transferred"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Transfer not found"),
+        @ApiResponse(responseCode = "409", description = "Active quota exceeded or reservation expired")
+    })
+    @PostMapping("/transfers/{transferId}/accept")
+    public ResponseEntity<ReservationTransferResponse> acceptTransfer(@PathVariable Long transferId) {
+        return ResponseEntity.ok(reservationService.acceptTransfer(transferId));
+    }
+
+    @Operation(summary = "Reject reservation transfer", description = "Declines an incoming reservation transfer offer")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transfer rejected"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Transfer not found"),
+        @ApiResponse(responseCode = "409", description = "Invalid transfer status transition")
+    })
+    @PostMapping("/transfers/{transferId}/reject")
+    public ResponseEntity<ReservationTransferResponse> rejectTransfer(@PathVariable Long transferId) {
+        return ResponseEntity.ok(reservationService.rejectTransfer(transferId));
+    }
+
+    @Operation(
+            summary = "Cancel reservation transfer offer",
+            description = "Cancels an outgoing reservation transfer offer by the original sender")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transfer cancelled"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Transfer not found"),
+        @ApiResponse(responseCode = "409", description = "Invalid transfer status transition")
+    })
+    @PostMapping("/transfers/{transferId}/cancel")
+    public ResponseEntity<ReservationTransferResponse> cancelTransfer(@PathVariable Long transferId) {
+        return ResponseEntity.ok(reservationService.cancelTransfer(transferId));
+    }
 }

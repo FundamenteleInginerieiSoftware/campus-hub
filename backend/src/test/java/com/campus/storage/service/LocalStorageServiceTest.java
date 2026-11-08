@@ -133,6 +133,46 @@ class LocalStorageServiceTest {
     }
 
     @Test
+    void acceptsExactSizeAndMagicByteBoundariesAndRejectsInvalidBoundaries() {
+        // Exact 3-byte JPEG header with declaredSize == 0 (unknown declared length, valid stream)
+        byte[] exact3ByteJpeg = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+        String jpgKey = assertDoesNotThrow(
+                () -> storageService.store(new ByteArrayInputStream(exact3ByteJpeg), 0L, "image/jpeg", "jpg"));
+        assertTrue(jpgKey.endsWith(".jpg"));
+
+        // Exact 8-byte PNG header
+        byte[] exact8BytePng = new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+        String pngKey = assertDoesNotThrow(() -> storageService.store(
+                new ByteArrayInputStream(exact8BytePng), exact8BytePng.length, "image/png", "png"));
+        assertTrue(pngKey.endsWith(".png"));
+
+        // Exact 12-byte WebP header
+        byte[] exact12ByteWebp = new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'};
+        String webpKey = assertDoesNotThrow(() -> storageService.store(
+                new ByteArrayInputStream(exact12ByteWebp), exact12ByteWebp.length, "image/webp", "webp"));
+        assertTrue(webpKey.endsWith(".webp"));
+
+        // Stream and declaredSize of exactly MAX_PHOTO_BYTES (5 MB boundary must be accepted)
+        byte[] exactMaxJpeg = new byte[(int) StorageValidation.MAX_PHOTO_BYTES];
+        System.arraycopy(exact3ByteJpeg, 0, exactMaxJpeg, 0, exact3ByteJpeg.length);
+        String maxKey = assertDoesNotThrow(() -> storageService.store(
+                new ByteArrayInputStream(exactMaxJpeg), StorageValidation.MAX_PHOTO_BYTES, "image/jpeg", "jpg"));
+        assertTrue(maxKey.endsWith(".jpg"));
+
+        // Negative declaredSize (< 0) is rejected
+        BadRequestException negSizeEx = assertThrows(
+                BadRequestException.class,
+                () -> storageService.store(new ByteArrayInputStream(exact3ByteJpeg), -1L, "image/jpeg", "jpg"));
+        assertEquals("INVALID_PHOTO_TYPE", negSizeEx.getCode());
+
+        // Content-Type starting with semicolon at index 0 is rejected
+        BadRequestException semiEx = assertThrows(
+                BadRequestException.class,
+                () -> storageService.store(new ByteArrayInputStream(exact3ByteJpeg), 3L, ";charset=utf-8", "jpg"));
+        assertEquals("INVALID_PHOTO_TYPE", semiEx.getCode());
+    }
+
+    @Test
     void loadThrowsNotFoundForMissingOrTraversalKeys() throws IOException {
         Path outsideSecret = tempDir.resolve("secret.txt");
         Files.writeString(outsideSecret, "do-not-read");

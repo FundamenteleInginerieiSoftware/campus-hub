@@ -268,4 +268,63 @@ class ReservationTest {
                 .isInstanceOf(InvalidStateTransitionException.class)
                 .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
     }
+
+    @Test
+    @DisplayName("extendEndTime: updates endTime when status is CONFIRMED or CHECKED_OUT")
+    void extendEndTime_success() {
+        LocalDateTime newEnd = end.plusHours(1);
+        reservation.extendEndTime(newEnd);
+        assertThat(reservation.getEndTime()).isEqualTo(newEnd);
+
+        Reservation checkedOut = createReservationInStatus(ReservationStatus.CHECKED_OUT);
+        checkedOut.extendEndTime(newEnd);
+        assertThat(checkedOut.getEndTime()).isEqualTo(newEnd);
+
+        assertThatThrownBy(() -> reservation.extendEndTime(end))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("newEndTime must be after current endTime");
+
+        assertThatThrownBy(() -> reservation.extendEndTime(end.minusMinutes(30)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("newEndTime must be after current endTime");
+
+        assertThatThrownBy(() -> reservation.extendEndTime(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("transferOwnership: changes userId when reservation is in CONFIRMED status")
+    void transferOwnershipValidFromConfirmed() {
+        reservation.transferOwnership(88L);
+        assertThat(reservation.getUserId()).isEqualTo(88L);
+
+        assertThatThrownBy(() -> reservation.transferOwnership(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("newUserId must not be null");
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ReservationStatus.class,
+            names = {"RETURNED", "CANCELLED", "FORCE_CANCELLED", "OVERDUE", "NO_SHOW"})
+    @DisplayName("extendEndTime: throws InvalidStateTransitionException from non-CONFIRMED/CHECKED_OUT statuses")
+    void extendEndTime_invalidFromOtherStatuses(ReservationStatus initialStatus) {
+        Reservation r = createReservationInStatus(initialStatus);
+
+        assertThatThrownBy(() -> r.extendEndTime(end.plusHours(1)))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ReservationStatus.class,
+            names = {"CHECKED_OUT", "RETURNED", "CANCELLED", "FORCE_CANCELLED", "OVERDUE", "NO_SHOW"})
+    @DisplayName("transferOwnership throws InvalidStateTransitionException from non-CONFIRMED statuses")
+    void transferOwnershipInvalidFromOtherStatuses(ReservationStatus initialStatus) {
+        Reservation r = createReservationInStatus(initialStatus);
+
+        assertThatThrownBy(() -> r.transferOwnership(88L))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
 }

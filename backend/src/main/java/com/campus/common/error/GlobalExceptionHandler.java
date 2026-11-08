@@ -33,7 +33,6 @@ public class GlobalExceptionHandler {
     private ProblemDetail buildProblem(HttpStatus status, String code, String detail) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setType(URI.create("about:blank"));
-        problem.setTitle(status.getReasonPhrase());
         problem.setProperty("code", code);
         return problem;
     }

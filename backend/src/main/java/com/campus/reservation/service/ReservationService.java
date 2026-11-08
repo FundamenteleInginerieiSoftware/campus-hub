@@ -16,12 +16,26 @@ import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
+import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationHold;
+import com.campus.reservation.domain.ReservationTransfer;
+import com.campus.reservation.domain.TransferStatus;
+import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.repository.ReservationTransferRepository;
 import com.campus.reservation.web.AvailabilityResponse;
+import com.campus.reservation.web.CreateHoldRequest;
+import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.ExtendReservationRequest;
+import com.campus.reservation.web.InitiateTransferRequest;
+import com.campus.reservation.web.MultiAssetReservationResponse;
+import com.campus.reservation.web.ReservationHoldResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
+import com.campus.reservation.web.ReservationTransferResponse;
+import com.campus.user.api.UserApi;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -33,11 +47,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import lombok.RequiredArgsConstructor;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,7 +69,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReservationService implements ReservationApi {
 
@@ -63,6 +78,135 @@ public class ReservationService implements ReservationApi {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final Clock clock;
+    private final ReservationTransferRepository reservationTransferRepository;
+    private final UserApi userApi;
+    private final ReservationHoldRepository reservationHoldRepository;
+
+    @Autowired
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            Optional<ReservationTransferRepository> reservationTransferRepository,
+            Optional<UserApi> userApi,
+            Optional<ReservationHoldRepository> reservationHoldRepository) {
+        this.reservationRepository = reservationRepository;
+        this.catalogApi = catalogApi;
+        this.currentUser = currentUser;
+        this.auditService = auditService;
+        this.notificationService = notificationService;
+        this.clock = clock;
+        this.reservationTransferRepository =
+                reservationTransferRepository != null ? reservationTransferRepository.orElse(null) : null;
+        this.userApi = userApi != null ? userApi.orElse(null) : null;
+        this.reservationHoldRepository =
+                reservationHoldRepository != null ? reservationHoldRepository.orElse(null) : null;
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            ReservationTransferRepository reservationTransferRepository,
+            UserApi userApi,
+            ReservationHoldRepository reservationHoldRepository) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                Optional.ofNullable(reservationTransferRepository),
+                Optional.ofNullable(userApi),
+                Optional.ofNullable(reservationHoldRepository));
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            ReservationTransferRepository reservationTransferRepository,
+            UserApi userApi) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                Optional.ofNullable(reservationTransferRepository),
+                Optional.ofNullable(userApi),
+                Optional.empty());
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            ReservationHoldRepository reservationHoldRepository) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.ofNullable(reservationHoldRepository));
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            Optional<ReservationHoldRepository> reservationHoldRepository) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                Optional.empty(),
+                Optional.empty(),
+                reservationHoldRepository);
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty());
+    }
 
     /**
      * Creates a new reservation adhering to strict locking order and business rule validations.
@@ -91,7 +235,14 @@ public class ReservationService implements ReservationApi {
             throw new ConflictException("RESERVATION_CONFLICT", "Requested slot overlaps with an existing reservation");
         }
 
-        // 4. Active limit check for students (admins bypass this rule).
+        // 4. Overlap check against active holds held by other students
+        if (reservationHoldRepository != null
+                && reservationHoldRepository.existsActiveOverlap(
+                        req.assetId(), req.startTime(), req.endTime(), now, null, userId)) {
+            throw new ConflictException("SLOT_HELD", "This time slot is temporarily held by another student");
+        }
+
+        // 5. Active limit check for students (admins bypass this rule).
         // Bug fixed (#169): two parallel requests from the same student for two different assets
         // lock different asset rows, so both could previously pass the < 2 check under READ COMMITTED.
         // Fix: acquire a transaction-scoped PostgreSQL advisory lock on userId before counting.
@@ -105,12 +256,176 @@ public class ReservationService implements ReservationApi {
             }
         }
 
+        // Auto-confirm active hold owned by the current student if one exists for this slot
+        if (reservationHoldRepository != null) {
+            reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now).stream()
+                    .filter(h -> h.getAssetId().equals(req.assetId())
+                            && h.getStartTime().equals(req.startTime())
+                            && h.getEndTime().equals(req.endTime()))
+                    .findFirst()
+                    .ifPresent(h -> {
+                        h.confirm(now);
+                        reservationHoldRepository.save(h);
+                    });
+        }
+
         Reservation reservation = new Reservation(userId, req.assetId(), req.startTime(), req.endTime(), now);
         Reservation saved = reservationRepository.save(reservation);
 
         auditService.record(userId, "CREATE_RESERVATION", "Reservation", saved.getId(), "Asset " + req.assetId());
 
         return ReservationResponse.from(saved);
+    }
+
+    /**
+     * Simultaneously reserves multiple equipment items in a single atomic transaction.
+     *
+     * <p>Deadlock prevention & concurrency order: Asset rows are sorted in ascending ID order
+     * before acquiring pessimistic row locks. This eliminates any possibility of circular lock waits
+     * between simultaneous multi-asset booking transactions.
+     *
+     * <p>All-or-nothing guarantee: If any equipment item is unavailable (not bookable or overlapping booking),
+     * the entire bundle is rejected with {@code 409} and no reservations are created.
+     */
+    @Transactional
+    public MultiAssetReservationResponse createMultiAssetReservation(CreateMultiAssetReservationRequest req) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        validateSlotRules(req.startTime(), req.endTime(), now);
+
+        if (req.assetIds() == null
+                || req.assetIds().size() < 2
+                || req.assetIds().size() > 5) {
+            throw new BusinessRuleException(
+                    "INVALID_BUNDLE_SIZE", "Multi-asset booking must include between 2 and 5 assets");
+        }
+
+        List<Long> sortedAssetIds = req.assetIds().stream().sorted().toList();
+
+        // 1. Pessimistic lock on all assets in deterministic ID order (deadlock-free)
+        for (Long assetId : sortedAssetIds) {
+            catalogApi.lockForBooking(assetId);
+        }
+
+        // 2. Bookable check on all assets
+        for (Long assetId : sortedAssetIds) {
+            if (!catalogApi.isBookable(assetId)) {
+                throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset " + assetId + " is not available for booking");
+            }
+        }
+
+        // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+            long activeCount =
+                    reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
+            if (activeCount + 1 > 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
+            }
+        }
+
+        // 4. Overlap check on all assets (all-or-nothing atomicity)
+        for (Long assetId : sortedAssetIds) {
+            if (reservationRepository.existsOverlap(
+                    assetId, req.startTime(), req.endTime(), ReservationStatus.ACTIVE_STATUSES, -1L)) {
+                throw new ConflictException(
+                        "RESERVATION_CONFLICT",
+                        "Asset " + assetId + " overlaps with an existing reservation in the requested window");
+            }
+        }
+
+        // 5. Persist all reservations sharing a bundle UUID
+        UUID bundleId = UUID.randomUUID();
+        List<Reservation> savedList = new ArrayList<>();
+        for (Long assetId : sortedAssetIds) {
+            Reservation r = new Reservation(userId, assetId, req.startTime(), req.endTime(), now);
+            r.assignBundle(bundleId);
+            savedList.add(reservationRepository.save(r));
+        }
+
+        auditService.record(
+                userId,
+                "CREATE_BUNDLE_RESERVATION",
+                "ReservationBundle",
+                sortedAssetIds.get(0),
+                "Bundle " + bundleId + " with " + savedList.size() + " assets: " + sortedAssetIds);
+
+        notificationService.notifyUser(
+                userId,
+                "Reservation Bundle Confirmed",
+                "Your reservation bundle #" + bundleId + " with " + savedList.size() + " assets was confirmed.");
+
+        List<ReservationResponse> responses =
+                savedList.stream().map(ReservationResponse::from).toList();
+        return new MultiAssetReservationResponse(bundleId, req.startTime(), req.endTime(), responses.size(), responses);
+    }
+
+    /**
+     * Retrieves all items in a multi-asset reservation bundle (owner or admin).
+     */
+    @Transactional(readOnly = true)
+    public MultiAssetReservationResponse getBundle(UUID bundleId) {
+        Long userId = currentUser.id();
+        List<Reservation> items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        if (items.isEmpty()) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        if (!currentUser.isAdmin() && !items.get(0).getUserId().equals(userId)) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        List<ReservationResponse> responses =
+                items.stream().map(ReservationResponse::from).toList();
+        Reservation first = items.get(0);
+        return new MultiAssetReservationResponse(
+                bundleId, first.getStartTime(), first.getEndTime(), responses.size(), responses);
+    }
+
+    /**
+     * Cancels all active items in a multi-asset reservation bundle (owner or admin).
+     */
+    @Transactional
+    public List<ReservationResponse> cancelBundle(UUID bundleId, String reason) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        List<Reservation> items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        if (items.isEmpty()) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        if (!currentUser.isAdmin() && !items.get(0).getUserId().equals(userId)) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        Reservation first = items.get(0);
+        // Student cancellation is only allowed before start time (#72)
+        if (!currentUser.isAdmin() && !now.isBefore(first.getStartTime())) {
+            throw new ConflictException(
+                    "CANCELLATION_NOT_ALLOWED", "Reservations can only be cancelled before start time");
+        }
+
+        List<ReservationResponse> results = new ArrayList<>();
+        for (Reservation r : items) {
+            if (r.getStatus() == ReservationStatus.CONFIRMED) {
+                if (currentUser.isAdmin()) {
+                    r.cancel(now, reason != null ? reason : "Cancelled by admin");
+                } else {
+                    r.cancel(now, "Cancelled by user");
+                }
+                reservationRepository.save(r);
+                auditService.record(userId, "CANCEL_RESERVATION", "Reservation", r.getId(), "Bundle " + bundleId);
+            }
+            results.add(ReservationResponse.from(r));
+        }
+
+        notificationService.notifyUser(
+                userId, "Reservation Bundle Cancelled", "Your reservation bundle #" + bundleId + " was cancelled.");
+
+        return results;
     }
 
     /**
@@ -190,6 +505,28 @@ public class ReservationService implements ReservationApi {
         r.cancel(now, reason);
         auditService.record(currentUser.id(), "CANCEL_RESERVATION", "Reservation", r.getId(), reason);
 
+        // If there was a pending transfer for this reservation, auto-cancel it to prevent orphaned transfers
+        if (reservationTransferRepository != null) {
+            reservationTransferRepository
+                    .findByReservationIdAndStatus(id, TransferStatus.PENDING)
+                    .ifPresent(transfer -> {
+                        transfer.cancel(now);
+                        reservationTransferRepository.save(transfer);
+                        auditService.record(
+                                currentUser.id(),
+                                "TRANSFER_CANCELLED",
+                                "ReservationTransfer",
+                                transfer.getId(),
+                                "Auto-cancelled due to reservation cancellation");
+                        notificationService.notifyUser(
+                                transfer.getToUserId(),
+                                "Reservation Transfer Cancelled",
+                                "The transfer offer for reservation #"
+                                        + id
+                                        + " was cancelled because the reservation was cancelled.");
+                    });
+        }
+
         if (cancelledByAdminForAnotherUser) {
             Long ownerId = r.getUserId();
             Long reservationId = r.getId();
@@ -215,6 +552,334 @@ public class ReservationService implements ReservationApi {
             }
         }
         return ReservationResponse.from(r);
+    }
+
+    /**
+     *
+     * Extends the duration of an active reservation (CONFIRMED or CHECKED_OUT).
+     *
+     * <p>Concurrency & Atomicity: Locks the asset row first, verifies that the extended slot
+     * [currentEndTime, newEndTime] has no overlapping reservations, and validates operating hours
+     * and duration limits (max 4h total). If unavailable, the reservation remains unchanged.
+     */
+    @Transactional
+    public ReservationResponse extendReservation(Long id, ExtendReservationRequest req) {
+        Reservation reservation = loadOwnedOrAdmin(id);
+        LocalDateTime now = now();
+
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED
+                && reservation.getStatus() != ReservationStatus.CHECKED_OUT) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Only CONFIRMED or CHECKED_OUT reservations can be extended; current status is "
+                            + reservation.getStatus());
+        }
+
+        LocalDateTime newEndTime = req.newEndTime();
+
+        if (!now.isBefore(reservation.getEndTime())) {
+            throw new ConflictException(
+                    "RESERVATION_ALREADY_EXPIRED", "Cannot extend an expired or completed reservation");
+        }
+
+        // A CONFIRMED booking cannot be extended if its 30-minute check-out window has already passed
+        if (reservation.getStatus() == ReservationStatus.CONFIRMED
+                && now.isAfter(reservation.getStartTime().plusMinutes(30))) {
+            throw new ConflictException(
+                    "CHECKOUT_WINDOW_CLOSED", "Reservation cannot be extended because check-out deadline has passed");
+        }
+
+        if (!newEndTime.isAfter(reservation.getEndTime())) {
+            throw new BusinessRuleException("INVALID_TIME_RANGE", "Extended end time must be after current end time");
+        }
+
+        validateExtensionRules(reservation.getStartTime(), newEndTime, now);
+
+        // 1. Lock asset row first to serialize concurrent bookings or extensions on this asset
+        catalogApi.lockForBooking(reservation.getAssetId());
+
+        // Re-verify status under row lock in case of concurrent status transition
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED
+                && reservation.getStatus() != ReservationStatus.CHECKED_OUT) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Reservation status changed concurrently to " + reservation.getStatus());
+        }
+
+        // 2. Operational state check: asset must be bookable (not UNDER_MAINTENANCE or RETIRED)
+        if (!catalogApi.isBookable(reservation.getAssetId())) {
+            throw new ConflictException(
+                    "ASSET_NOT_BOOKABLE",
+                    "Asset " + reservation.getAssetId() + " is under maintenance or retired and cannot be extended");
+        }
+
+        // 3. Overlap check on the extension window [currentEndTime, newEndTime]
+        if (reservationRepository.existsOverlap(
+                reservation.getAssetId(),
+                reservation.getEndTime(),
+                newEndTime,
+                ReservationStatus.ACTIVE_STATUSES,
+                reservation.getId())) {
+            throw new ConflictException(
+                    "EXTENSION_CONFLICT", "Cannot extend reservation: subsequent slot is already booked");
+        }
+
+        reservation.extendEndTime(newEndTime);
+        Reservation saved = reservationRepository.save(reservation);
+
+        auditService.record(
+                currentUser.id(),
+                "EXTEND_RESERVATION",
+                "Reservation",
+                saved.getId(),
+                "Extended to " + newEndTime + " on asset " + saved.getAssetId());
+
+        notificationService.notifyUser(
+                reservation.getUserId(),
+                "Reservation Extended",
+                "Your reservation #"
+                        + saved.getId()
+                        + " on asset "
+                        + saved.getAssetId()
+                        + " has been extended to "
+                        + newEndTime
+                        + ".");
+
+        return ReservationResponse.from(saved);
+    }
+
+    /**
+     * Initiates a transfer request offering a confirmed reservation to another student.
+     */
+    @Transactional
+    public ReservationTransferResponse initiateTransfer(Long reservationId, InitiateTransferRequest req) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        Reservation reservation = loadOwnedOrAdmin(reservationId);
+
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Only CONFIRMED reservations can be transferred; current status is " + reservation.getStatus());
+        }
+
+        if (!now.isBefore(reservation.getStartTime())) {
+            throw new ConflictException(
+                    "TRANSFER_NOT_ALLOWED", "Cannot transfer a reservation that has already started or elapsed");
+        }
+
+        Long recipientId = req.recipientUserId();
+        if (recipientId.equals(userId)) {
+            throw new ConflictException("CANNOT_TRANSFER_TO_SELF", "Cannot transfer a reservation to yourself");
+        }
+
+        // Verify recipient exists and is active
+        if (userApi != null && userApi.findActiveRole(recipientId).isEmpty()) {
+            throw new NotFoundException("USER_NOT_FOUND", "Recipient user not found or inactive: " + recipientId);
+        }
+
+        // Check if a transfer is already pending
+        if (reservationTransferRepository
+                .findByReservationIdAndStatus(reservationId, TransferStatus.PENDING)
+                .isPresent()) {
+            throw new ConflictException(
+                    "TRANSFER_ALREADY_PENDING", "A transfer offer is already pending for this reservation");
+        }
+
+        // Check recipient quota
+        if (reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+            throw new ConflictException(
+                    "RESERVATION_LIMIT_REACHED", "Recipient student already has 2 active reservations");
+        }
+
+        ReservationTransfer transfer = new ReservationTransfer(reservationId, userId, recipientId, now);
+        ReservationTransfer saved = reservationTransferRepository.save(transfer);
+
+        auditService.record(
+                userId,
+                "TRANSFER_INITIATED",
+                "ReservationTransfer",
+                saved.getId(),
+                "Offered reservation #" + reservationId + " to user #" + recipientId);
+
+        notificationService.notifyUser(
+                recipientId,
+                "Reservation Transfer Offer",
+                "User #" + userId + " has offered to transfer reservation #" + reservationId + " to you.");
+
+        return ReservationTransferResponse.from(saved);
+    }
+
+    /**
+     * Retrieves all incoming pending transfer requests for the authenticated student.
+     */
+    @Transactional(readOnly = true)
+    public List<ReservationTransferResponse> getMyPendingTransfers() {
+        Long userId = currentUser.id();
+        return reservationTransferRepository
+                .findByToUserIdAndStatusOrderByRequestedAtDesc(userId, TransferStatus.PENDING)
+                .stream()
+                .map(ReservationTransferResponse::from)
+                .toList();
+    }
+
+    /**
+     * Accepts a pending transfer offer and atomically moves reservation ownership to the recipient.
+     */
+    @Transactional
+    public ReservationTransferResponse acceptTransfer(Long transferId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        ReservationTransfer transfer = reservationTransferRepository
+                .findByIdForUpdate(transferId)
+                .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
+
+        if (!transfer.getToUserId().equals(userId)) {
+            throw new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found");
+        }
+
+        if (transfer.getStatus() != TransferStatus.PENDING) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot accept transfer in status " + transfer.getStatus());
+        }
+
+        // Verify recipient is still active
+        if (userApi != null && userApi.findActiveRole(userId).isEmpty()) {
+            throw new NotFoundException("USER_NOT_FOUND", "Recipient user not found or inactive: " + userId);
+        }
+
+        // Verify sender is still active
+        if (userApi != null && userApi.findActiveRole(transfer.getFromUserId()).isEmpty()) {
+            throw new ConflictException("TRANSFER_NOT_ALLOWED", "Sender account is no longer active");
+        }
+
+        Reservation reservation = reservationRepository
+                .findById(transfer.getReservationId())
+                .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
+
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED || !now.isBefore(reservation.getStartTime())) {
+            throw new ConflictException("TRANSFER_NOT_ALLOWED", "Reservation is no longer valid for transfer");
+        }
+
+        // Ensure reservation owner still matches transfer sender (prevents double transfer or stale ownership)
+        if (!reservation.getUserId().equals(transfer.getFromUserId())) {
+            throw new ConflictException("TRANSFER_NOT_ALLOWED", "Reservation owner no longer matches transfer sender");
+        }
+
+        // Acquire advisory lock on recipient quota (bypassed by admins)
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+            if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
+            }
+        }
+
+        transfer.accept(now);
+        reservation.transferOwnership(userId);
+
+        reservationTransferRepository.save(transfer);
+        reservationRepository.save(reservation);
+
+        auditService.record(
+                userId,
+                "TRANSFER_ACCEPTED",
+                "ReservationTransfer",
+                transfer.getId(),
+                "Ownership of reservation #"
+                        + reservation.getId()
+                        + " transferred from user #"
+                        + transfer.getFromUserId()
+                        + " to #"
+                        + userId);
+
+        notificationService.notifyUser(
+                transfer.getFromUserId(),
+                "Reservation Transfer Accepted",
+                "User #" + userId + " accepted your transfer of reservation #" + reservation.getId() + ".");
+
+        return ReservationTransferResponse.from(transfer);
+    }
+
+    /**
+     * Rejects an incoming pending reservation transfer request.
+     */
+    @Transactional
+    public ReservationTransferResponse rejectTransfer(Long transferId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        ReservationTransfer transfer = reservationTransferRepository
+                .findByIdForUpdate(transferId)
+                .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
+
+        if (!transfer.getToUserId().equals(userId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found");
+        }
+
+        if (transfer.getStatus() != TransferStatus.PENDING) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot reject transfer in status " + transfer.getStatus());
+        }
+
+        transfer.reject(now);
+        ReservationTransfer saved = reservationTransferRepository.save(transfer);
+
+        auditService.record(
+                userId,
+                "TRANSFER_REJECTED",
+                "ReservationTransfer",
+                transfer.getId(),
+                "Rejected by recipient user #" + userId);
+
+        notificationService.notifyUser(
+                transfer.getFromUserId(),
+                "Reservation Transfer Rejected",
+                "User #" + userId + " declined your transfer of reservation #" + transfer.getReservationId() + ".");
+
+        return ReservationTransferResponse.from(saved);
+    }
+
+    /**
+     * Cancels an outgoing pending reservation transfer request by the original sender.
+     */
+    @Transactional
+    public ReservationTransferResponse cancelTransfer(Long transferId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        ReservationTransfer transfer = reservationTransferRepository
+                .findByIdForUpdate(transferId)
+                .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
+
+        if (!transfer.getFromUserId().equals(userId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found");
+        }
+
+        if (transfer.getStatus() != TransferStatus.PENDING) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot cancel transfer in status " + transfer.getStatus());
+        }
+
+        transfer.cancel(now);
+        ReservationTransfer saved = reservationTransferRepository.save(transfer);
+
+        auditService.record(
+                userId,
+                "TRANSFER_CANCELLED",
+                "ReservationTransfer",
+                transfer.getId(),
+                "Cancelled by sender user #" + userId);
+
+        notificationService.notifyUser(
+                transfer.getToUserId(),
+                "Reservation Transfer Cancelled",
+                "User #" + userId + " cancelled the transfer offer for reservation #" + transfer.getReservationId()
+                        + ".");
+
+        return ReservationTransferResponse.from(saved);
     }
 
     /**
@@ -348,6 +1013,13 @@ public class ReservationService implements ReservationApi {
         }
     }
 
+    private void validateExtensionRules(LocalDateTime start, LocalDateTime newEnd, LocalDateTime now) {
+        validateSlotAlignment(start, newEnd);
+        validateDuration(start, newEnd);
+        validateHorizon(newEnd, now);
+        validateOpeningHours(start, newEnd);
+    }
+
     @Override
     public List<ReservationSummary> findUpcomingActiveByAsset(Long assetId, LocalDateTime from) {
         return reservationRepository.findUpcomingConfirmedByAsset(assetId, from).stream()
@@ -359,11 +1031,34 @@ public class ReservationService implements ReservationApi {
     @Override
     public boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
         long ignore = ignoreReservationId == null ? -1L : ignoreReservationId;
-        return !reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
+        boolean reservationOverlap =
+                reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
+        if (reservationOverlap) {
+            return false;
+        }
+        if (reservationHoldRepository != null) {
+            Long currentUserId = null;
+            try {
+                currentUserId = currentUser != null ? currentUser.id() : null;
+            } catch (Exception ignored) {
+            }
+            return !reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, currentUserId);
+        }
+        return true;
     }
 
     public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {
-        return reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES);
+        Set<Long> busy = new LinkedHashSet<>(
+                reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES));
+        if (reservationHoldRepository != null) {
+            Long currentUserId = null;
+            try {
+                currentUserId = currentUser != null ? currentUser.id() : null;
+            } catch (Exception ignored) {
+            }
+            busy.addAll(reservationHoldRepository.findHeldAssetIds(start, end, now(), currentUserId));
+        }
+        return new ArrayList<>(busy);
     }
 
     // Bug fixed: without noRollbackFor, throwing SubstituteNoLongerFreeException through the Spring proxy
@@ -597,5 +1292,200 @@ public class ReservationService implements ReservationApi {
     // 10:00:00 requested at 10:00:00.9 is accepted within the same second rather than being flagged as BOOKING_IN_PAST.
     private LocalDateTime now() {
         return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    }
+
+    /**
+     * Temporarily holds a lab asset time slot for 1 minute.
+     *
+     * <p>Concurrency note: We acquire a pessimistic row lock on the asset in catalog FIRST before
+     * checking overlaps, ensuring simultaneous requests cannot double-hold the same asset slot.
+     */
+    @Transactional
+    public ReservationHoldResponse createHold(CreateHoldRequest req) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        validateSlotRules(req.startTime(), req.endTime(), now);
+
+        if (reservationHoldRepository == null) {
+            throw new IllegalStateException("ReservationHoldRepository is not available");
+        }
+
+        // 1. Lock asset row first (pessimistic lock prevents race conditions on overlapping slots)
+        catalogApi.lockForBooking(req.assetId());
+
+        // 2. Operational bookable check
+        if (!catalogApi.isBookable(req.assetId())) {
+            throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset is not available for booking");
+        }
+
+        // 3. Overlap check against active reservations
+        if (reservationRepository.existsOverlap(
+                req.assetId(), req.startTime(), req.endTime(), ReservationStatus.ACTIVE_STATUSES, -1L)) {
+            throw new ConflictException("RESERVATION_CONFLICT", "Requested slot overlaps with an existing reservation");
+        }
+
+        // 4. Overlap check against active holds from other students
+        if (reservationHoldRepository.existsActiveOverlap(
+                req.assetId(), req.startTime(), req.endTime(), now, null, userId)) {
+            throw new ConflictException("SLOT_HELD", "This time slot is temporarily held by another student");
+        }
+
+        // 5. Anti-hoarding & active limit checks for students
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+
+            // A student can hold at most 1 slot at a time
+            long activeHolds =
+                    reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now);
+            if (activeHolds >= 1) {
+                throw new ConflictException(
+                        "ACTIVE_HOLD_LIMIT_REACHED",
+                        "You already have an active reservation hold. Please confirm or release it before holding another slot.");
+            }
+
+            // Active reservations + active hold must not exceed quota (2)
+            long activeReservations =
+                    reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
+            if (activeReservations >= 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED", "Student cannot exceed active reservation quota (max 2)");
+            }
+        }
+
+        // Temporary hold duration: 1 minute per requirement
+        LocalDateTime expiresAt = now.plusMinutes(1);
+        ReservationHold hold =
+                new ReservationHold(req.assetId(), userId, req.startTime(), req.endTime(), expiresAt, now);
+        ReservationHold saved = reservationHoldRepository.save(hold);
+
+        auditService.record(
+                userId,
+                "HOLD_ACQUIRED",
+                "ReservationHold",
+                saved.getId(),
+                "Held asset #" + req.assetId() + " until " + expiresAt);
+
+        return ReservationHoldResponse.from(saved, now);
+    }
+
+    /**
+     * Confirms an active reservation hold and converts it into a confirmed reservation.
+     */
+    @Transactional
+    public ReservationResponse confirmHold(Long holdId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        if (reservationHoldRepository == null) {
+            throw new IllegalStateException("ReservationHoldRepository is not available");
+        }
+
+        // Lock hold row to prevent concurrent confirmation attempts
+        ReservationHold hold = reservationHoldRepository
+                .findByIdForUpdate(holdId)
+                .orElseThrow(() -> new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found"));
+
+        if (!hold.getUserId().equals(userId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found");
+        }
+
+        // Validates hold status and checks if expired
+        hold.confirm(now);
+
+        // Lock asset row
+        catalogApi.lockForBooking(hold.getAssetId());
+
+        if (!catalogApi.isBookable(hold.getAssetId())) {
+            throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset is not available for booking");
+        }
+
+        if (reservationRepository.existsOverlap(
+                hold.getAssetId(), hold.getStartTime(), hold.getEndTime(), ReservationStatus.ACTIVE_STATUSES, -1L)) {
+            throw new ConflictException("RESERVATION_CONFLICT", "Requested slot overlaps with an existing reservation");
+        }
+
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+            if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
+            }
+        }
+
+        reservationHoldRepository.save(hold);
+
+        Reservation reservation =
+                new Reservation(hold.getUserId(), hold.getAssetId(), hold.getStartTime(), hold.getEndTime(), now);
+        Reservation savedReservation = reservationRepository.save(reservation);
+
+        auditService.record(
+                userId,
+                "CREATE_RESERVATION",
+                "Reservation",
+                savedReservation.getId(),
+                "Confirmed from hold #" + hold.getId());
+
+        notificationService.notifyUser(
+                userId, "Reservation Confirmed", "Your reservation #" + savedReservation.getId() + " is confirmed.");
+
+        return ReservationResponse.from(savedReservation);
+    }
+
+    /**
+     * Releases an active hold early, freeing the slot for other students.
+     */
+    @Transactional
+    public ReservationHoldResponse releaseHold(Long holdId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        if (reservationHoldRepository == null) {
+            throw new IllegalStateException("ReservationHoldRepository is not available");
+        }
+
+        ReservationHold hold = reservationHoldRepository
+                .findByIdForUpdate(holdId)
+                .orElseThrow(() -> new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found"));
+
+        if (!hold.getUserId().equals(userId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found");
+        }
+
+        hold.release(now);
+        ReservationHold saved = reservationHoldRepository.save(hold);
+
+        auditService.record(userId, "HOLD_RELEASED", "ReservationHold", saved.getId(), "Released by user #" + userId);
+
+        return ReservationHoldResponse.from(saved, now);
+    }
+
+    /**
+     * Lists current active unexpired reservation holds for the authenticated user.
+     */
+    public List<ReservationHoldResponse> getMyActiveHolds() {
+        if (reservationHoldRepository == null) {
+            return List.of();
+        }
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+        return reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now).stream()
+                .map(h -> ReservationHoldResponse.from(h, now))
+                .toList();
+    }
+
+    /**
+     * Sweeps expired reservation holds in status ACTIVE where expiresAt <= now.
+     */
+    @Transactional
+    public int sweepExpiredHolds(LocalDateTime now) {
+        if (reservationHoldRepository == null) {
+            return 0;
+        }
+        int count = reservationHoldRepository.expireOldHolds(now);
+        if (count > 0) {
+            log.info("Expired {} abandoned reservation holds", count);
+        }
+        return count;
     }
 }

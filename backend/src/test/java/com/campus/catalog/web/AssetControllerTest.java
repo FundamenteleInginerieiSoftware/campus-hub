@@ -205,6 +205,26 @@ class AssetControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void adminUpdateAssetReturns200() throws Exception {
+        when(assetService.update(eq(7L), any(UpdateAssetRequest.class))).thenReturn(sampleAsset(AssetStatus.AVAILABLE));
+
+        mockMvc.perform(put("/api/v1/admin/assets/7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Rigol DS1054Z no. 1",
+                                  "model": "Rigol DS1054Z",
+                                  "description": "4-channel oscilloscope",
+                                  "categoryId": 2,
+                                  "labRoomId": 1
+                                }"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.name").value("Rigol DS1054Z no. 1"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void updateRetiredAssetReturns409AssetRetired() throws Exception {
         when(assetService.update(eq(7L), any(UpdateAssetRequest.class)))
                 .thenThrow(new InvalidStateTransitionException("ASSET_RETIRED", "Cannot update a retired asset"));

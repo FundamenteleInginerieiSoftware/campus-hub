@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
@@ -29,17 +30,29 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationTransfer;
+import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.repository.ReservationTransferRepository;
 import com.campus.reservation.web.AvailabilityResponse;
+import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.ExtendReservationRequest;
+import com.campus.reservation.web.InitiateTransferRequest;
+import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
+import com.campus.reservation.web.ReservationTransferResponse;
+import com.campus.user.api.Role;
+import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -83,12 +96,25 @@ class ReservationServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private ReservationTransferRepository reservationTransferRepository;
+
+    @Mock
+    private UserApi userApi;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
         reservationService = new ReservationService(
-                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                reservationTransferRepository,
+                userApi);
     }
 
     @AfterEach
@@ -1539,5 +1565,688 @@ class ReservationServiceTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, Integer.MAX_VALUE, 1))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Bundle: creates simultaneous multi-asset reservations locking assets in ascending order")
+    void createMultiAssetReservation_success() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(20L, 10L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 100L + r.getAssetId());
+            return r;
+        });
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.bundleId()).isNotNull();
+        assertThat(response.totalAssets()).isEqualTo(2);
+        assertThat(response.reservations()).hasSize(2);
+
+        // Verify deterministic ascending lock order: 10L locked before 20L (deadlock prevention)
+        InOrder inOrder = inOrder(catalogApi);
+        inOrder.verify(catalogApi).lockForBooking(10L);
+        inOrder.verify(catalogApi).lockForBooking(20L);
+
+        verify(auditService)
+                .record(eq(USER_ID), eq("CREATE_BUNDLE_RESERVATION"), eq("ReservationBundle"), eq(10L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Confirmed"), any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects all reservations if one asset has an overlap conflict")
+    void createMultiAssetReservation_rejectsIfOneAssetOverlaps() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(10L), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.existsOverlap(
+                        eq(20L), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("overlaps with an existing reservation");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if less than 2 assets requested")
+    void createMultiAssetReservation_rejectsIfLessThanTwoAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if more than 5 assets requested")
+    void createMultiAssetReservation_rejectsIfMoreThanFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancels all confirmed reservations in the bundle")
+    void cancelBundle_success() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        Reservation r2 = new Reservation(
+                USER_ID,
+                20L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+        r2.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1, r2));
+
+        List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Cancelled entire kit");
+
+        assertThat(responses).hasSize(2);
+        assertThat(r1.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r2.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(101L), any());
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(102L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Cancelled"), any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects student cancellation after start time")
+    void cancelBundle_rejectsIfAfterStartTime() {
+        UUID bundleId = UUID.randomUUID();
+        // Start is 09:00, while Clock is 10:00
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, "late cancel"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("cancelled before start time");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if student already reached max active reservations limit (2)")
+    void createMultiAssetReservation_rejectsIfQuotaExceeded() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L); // Already at limit of 2
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("cannot have more than 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("Bundle: allows exact upper boundary of 5 assets in a single bundle")
+    void createMultiAssetReservation_allowsExactFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.totalAssets()).isEqualTo(5);
+        assertThat(response.reservations()).hasSize(5);
+    }
+
+    @Test
+    @DisplayName("Extend: successfully extends active reservation when slot is free")
+    void extendReservation_success() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd));
+
+        assertThat(response).isNotNull();
+        assertThat(response.endTime()).isEqualTo(newEnd);
+        verify(catalogApi).lockForBooking(ASSET_ID);
+        verify(auditService).record(eq(USER_ID), eq("EXTEND_RESERVATION"), eq("Reservation"), eq(100L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Extended"), any());
+    }
+
+    @Test
+    @DisplayName("Extend: rejects extension if subsequent slot overlaps with another booking")
+    void extendReservation_rejectsIfSubsequentSlotConflicts() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("subsequent slot is already booked");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd); // Original reservation remains unchanged!
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if asset is under maintenance or retired")
+    void extendReservation_rejectsIfAssetNotBookable() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("under maintenance or retired");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if reservation is already expired")
+    void extendReservation_rejectsIfExpired() {
+        // Clock is 2026-11-02T10:00:00 (Bucharest)
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 8, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 9, 0); // 09:00 is in the past relative to 10:00
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 11, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 7, 30));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot extend an expired or completed reservation");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if CONFIRMED booking passed check-out window")
+    void extendReservation_rejectsIfCheckoutWindowPassed() {
+        // Clock is 2026-11-02T10:00:00 (Bucharest)
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 9, 0); // start + 30m = 09:30, which is < 10:00
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 11, 0); // 11:00 is not yet expired
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 12, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("check-out deadline has passed");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if extension end time exceeds 20:00 opening hours")
+    void extendReservation_rejectsIfOutsideOpeningHours() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 18, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 19, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 20, 30); // 20:30 > 20:00
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("within opening hours");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if extension end time is not aligned to :00 or :30")
+    void extendReservation_rejectsIfSlotNotAligned() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 15, 15); // :15 not aligned
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("aligned to 0 or 30 minutes");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if total duration exceeds 4 hours limit")
+    void extendReservation_rejectsIfDurationExceedsLimit() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 19, 0); // 5 hours total duration
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Reservation duration must be between 30 minutes and 4 hours");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Transfer: initiates transfer offer to recipient student and notifies them")
+    void initiateTransfer_success() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
+            ReservationTransfer t = inv.getArgument(0);
+            ReflectionTestUtils.setField(t, "id", 500L);
+            return t;
+        });
+
+        ReservationTransferResponse response =
+                reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(500L);
+        assertThat(response.status()).isEqualTo(TransferStatus.PENDING);
+        assertThat(response.toUserId()).isEqualTo(99L);
+        verify(notificationService).notifyUser(eq(99L), eq("Reservation Transfer Offer"), any());
+        verify(auditService).record(eq(USER_ID), eq("TRANSFER_INITIATED"), eq("ReservationTransfer"), eq(500L), any());
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects initiate if recipient active quota is reached (boundary == 2)")
+    void initiateTransfer_rejectsIfRecipientQuotaReached() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Recipient student already has 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("Transfer: allows initiate if recipient has exactly 1 active reservation (boundary 1 < 2)")
+    void initiateTransfer_allowsIfRecipientHasOneActiveReservation() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L);
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
+            ReservationTransfer t = inv.getArgument(0);
+            ReflectionTestUtils.setField(t, "id", 501L);
+            return t;
+        });
+
+        ReservationTransferResponse response =
+                reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(501L);
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects transfer to oneself")
+    void initiateTransfer_rejectsSelfTransfer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(USER_ID)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot transfer a reservation to yourself");
+    }
+
+    @Test
+    @DisplayName("Transfer: accepts transfer and atomically changes reservation ownership")
+    void acceptTransfer_success() {
+        Long recipientId = 99L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+
+        ReservationTransferResponse response = reservationService.acceptTransfer(500L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
+        assertThat(r.getUserId()).isEqualTo(recipientId); // Ownership transferred!
+        verify(reservationRepository).save(r);
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Transfer Accepted"), any());
+        verify(auditService)
+                .record(eq(recipientId), eq("TRANSFER_ACCEPTED"), eq("ReservationTransfer"), eq(500L), any());
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects transfer if recipient active quota is exceeded")
+    void acceptTransfer_rejectsIfRecipientQuotaExceeded() {
+        Long recipientId = 99L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        // Recipient already has 2 active bookings
+        when(reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
+
+        assertThat(r.getUserId()).isEqualTo(USER_ID); // Ownership remains with original user!
+        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("cancelReservation: auto-cancels pending transfer and notifies recipient")
+    void cancelReservation_autoCancelsPendingTransferAndNotifiesRecipient() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        ReservationTransfer pendingTransfer =
+                new ReservationTransfer(1L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(pendingTransfer, "id", 500L);
+        when(reservationTransferRepository.findByReservationIdAndStatus(1L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(pendingTransfer));
+
+        ReservationResponse response = reservationService.cancelReservation(1L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(pendingTransfer.getStatus()).isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(pendingTransfer);
+        verify(notificationService)
+                .notifyUser(
+                        eq(99L),
+                        eq("Reservation Transfer Cancelled"),
+                        contains("cancelled because the reservation was cancelled"));
+        verify(auditService)
+                .record(
+                        eq(USER_ID),
+                        eq("TRANSFER_CANCELLED"),
+                        eq("ReservationTransfer"),
+                        eq(500L),
+                        eq("Auto-cancelled due to reservation cancellation"));
+    }
+
+    @Test
+    @DisplayName("Transfer: admin accepting transfer bypasses active quota check")
+    void acceptTransfer_adminBypassesQuota() {
+        Long adminId = 999L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, adminId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(adminId);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.ADMIN));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        ReservationTransferResponse response = reservationService.acceptTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
+        assertThat(r.getUserId()).isEqualTo(adminId);
+        verify(reservationRepository, never()).lockUserQuota(adminId);
+    }
+
+    @Test
+    @DisplayName("Transfer: sender cancels pending transfer and notifies recipient")
+    void cancelTransfer_senderCancelsAndNotifiesRecipient() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransferResponse response = reservationService.cancelTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+        verify(notificationService)
+                .notifyUser(
+                        eq(recipientId),
+                        eq("Reservation Transfer Cancelled"),
+                        contains("cancelled the transfer offer"));
+        verify(auditService)
+                .record(
+                        eq(USER_ID),
+                        eq("TRANSFER_CANCELLED"),
+                        eq("ReservationTransfer"),
+                        eq(500L),
+                        contains("Cancelled by sender"));
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects accept if reservation owner no longer matches transfer sender")
+    void acceptTransfer_rejectsIfReservationOwnerChanged() {
+        Long recipientId = 99L;
+        Reservation r = new Reservation(
+                777L, // Owned by someone else now!
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Reservation owner no longer matches transfer sender");
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects accept if sender account is no longer active")
+    void acceptTransfer_rejectsIfSenderInactive() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty()); // Inactive sender
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Sender account is no longer active");
     }
 }

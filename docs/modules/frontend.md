@@ -65,6 +65,7 @@ Shared files are changed in their own small PR, so everyone notices.
 | `/admin/incidents` | Incident queue | admin | Stefania |
 | `/admin/reassignments` | Reassignment log | admin | Stefania |
 | `/admin/inventory` | Inventory | admin | Liviu |
+| `/admin/audit-logs` | Audit log | admin | Liviu |
 
 > [!NOTE]
 > **Liviu (@NliviuN): Equipment Catalog & Booking View Integration**  

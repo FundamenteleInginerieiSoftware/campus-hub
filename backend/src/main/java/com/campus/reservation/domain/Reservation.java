@@ -66,6 +66,9 @@ public class Reservation {
     @Column(name = "cancel_reason", length = 255)
     private String cancelReason;
 
+    @Column(name = "bundle_id")
+    private java.util.UUID bundleId;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -129,6 +132,27 @@ public class Reservation {
     public void markNoShow() {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.NO_SHOW;
+    }
+
+    public void assignBundle(java.util.UUID bundleId) {
+        this.bundleId = bundleId;
+    }
+
+    public void extendEndTime(LocalDateTime newEndTime) {
+        if (this.status != ReservationStatus.CONFIRMED && this.status != ReservationStatus.CHECKED_OUT) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Cannot extend reservation in status " + this.status + "; expected CONFIRMED or CHECKED_OUT");
+        }
+        if (!newEndTime.isAfter(this.endTime)) {
+            throw new IllegalArgumentException("newEndTime must be after current endTime");
+        }
+        this.endTime = Objects.requireNonNull(newEndTime, "newEndTime must not be null");
+    }
+
+    public void transferOwnership(Long newUserId) {
+        requireStatus(ReservationStatus.CONFIRMED);
+        this.userId = Objects.requireNonNull(newUserId, "newUserId must not be null");
     }
 
     private void requireStatus(ReservationStatus expected) {

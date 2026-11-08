@@ -185,7 +185,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Reservations (Calin)
 
-`RESERVATION_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409 · `MISSING_PARAMETER` 409 · `CONFLICTING_PARAMETERS` 409
+`RESERVATION_NOT_FOUND` 404 · `HOLD_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `SLOT_HELD` 409 · `HOLD_EXPIRED` 409 · `ACTIVE_HOLD_LIMIT_REACHED` 409 · `INVALID_HOLD_STATUS_TRANSITION` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409 · `MISSING_PARAMETER` 409 · `CONFLICTING_PARAMETERS` 409
 
 ### Incidents (Stefania)
 
@@ -202,7 +202,7 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Module | Owner | Base paths |
 |---|---|---|
 | Auth / users | Matei (auth), Stefania (admin) | `/api/v1/auth/**`, `/api/v1/users/me`, `/api/v1/admin/users/**` |
-| Catalog | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-log` |
+| Catalog / Shared | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-logs` |
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
 
@@ -259,6 +259,23 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+
+| `POST /api/v1/reservations/bundle` | Logged in | `CreateMultiAssetReservationRequest` | `201` + `MultiAssetReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 RESERVATION_CONFLICT` (if any asset conflicts), `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_LIMIT_REACHED` |
+| `GET /api/v1/reservations/bundle/{bundleId}` | Owner or Admin | – | `200` + `MultiAssetReservationResponse` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
+| `POST /api/v1/reservations/bundle/{bundleId}/cancel` | Owner or Admin | optional `?reason=...` | `200` + `List<ReservationResponse>` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
+
+| `POST /api/v1/reservations/{id}/extend` | Owner or Admin | `ExtendReservationRequest` | `200` + `ReservationResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `404 RESERVATION_NOT_FOUND`, `409 EXTENSION_CONFLICT`, `409 ASSET_NOT_BOOKABLE`, `409 CHECKOUT_WINDOW_CLOSED`, `409 RESERVATION_ALREADY_EXPIRED`, `409 INVALID_RESERVATION_STATUS_TRANSITION`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `POST /api/v1/reservations/{id}/transfers` | Owner | `InitiateTransferRequest` | `201` + `ReservationTransferResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `404 RESERVATION_NOT_FOUND`, `404 USER_NOT_FOUND`, `409 CANNOT_TRANSFER_TO_SELF`, `409 TRANSFER_ALREADY_PENDING`, `409 RESERVATION_LIMIT_REACHED` |
+| `GET /api/v1/reservations/transfers/pending` | Logged in | – | `200` + `List<ReservationTransferResponse>` | `401 UNAUTHORIZED` |
+| `POST /api/v1/reservations/transfers/{transferId}/accept` | Recipient | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 RESERVATION_LIMIT_REACHED`, `409 TRANSFER_NOT_ALLOWED` |
+| `POST /api/v1/reservations/transfers/{transferId}/reject` | Recipient or Admin | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 INVALID_TRANSFER_STATUS_TRANSITION` |
+| `POST /api/v1/reservations/transfers/{transferId}/cancel` | Sender or Admin | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 INVALID_TRANSFER_STATUS_TRANSITION` |
+| `POST /api/v1/reservations/holds` | Logged in | `CreateHoldRequest` | `201` + `ReservationHoldResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `404 ASSET_NOT_FOUND`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 SLOT_HELD`, `409 ACTIVE_HOLD_LIMIT_REACHED`, `409 RESERVATION_LIMIT_REACHED`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `POST /api/v1/reservations/holds/{id}/confirm` | Owner or Admin | – | `200` + `ReservationResponse` | `404 HOLD_NOT_FOUND`, `409 HOLD_EXPIRED`, `409 INVALID_HOLD_STATUS_TRANSITION`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
+| `POST /api/v1/reservations/holds/{id}/release` | Owner or Admin | – | `200` + `ReservationHoldResponse` | `404 HOLD_NOT_FOUND`, `409 INVALID_HOLD_STATUS_TRANSITION` |
+| `GET /api/v1/reservations/holds/active` | Logged in | – | `200` + `List<ReservationHoldResponse>` | `401 UNAUTHORIZED` |
+
+
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
@@ -271,6 +288,43 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "assetId": 1,
   "startTime": "2026-11-03T10:00:00",
   "endTime": "2026-11-03T12:00:00"
+}
+
+
+// CreateMultiAssetReservationRequest
+{
+  "assetIds": [1, 2, 3],
+  "startTime": "2026-11-03T14:00:00",
+  "endTime": "2026-11-03T16:00:00"
+}
+
+// MultiAssetReservationResponse
+{
+  "bundleId": "b1c2d3e4-f5a6-7890-abcd-ef1234567890",
+  "startTime": "2026-11-03T14:00:00",
+  "endTime": "2026-11-03T16:00:00",
+  "totalAssets": 3,
+  "reservations": [ /* list of ReservationResponse */ ]
+
+// ExtendReservationRequest
+{
+  "newEndTime": "2026-11-03T14:00:00"
+// InitiateTransferRequest
+{
+  "recipientUserId": 2
+}
+
+// ReservationTransferResponse
+{
+  "id": 1,
+  "reservationId": 10,
+  "fromUserId": 1,
+  "toUserId": 2,
+  "status": "PENDING",
+  "requestedAt": "2026-11-09T10:00:00",
+  "respondedAt": null
+
+
 }
 
 // ReservationResponse (returned by booking, check-out, return, cancel)
@@ -403,5 +457,39 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "labRoomName": "Electronics Lab",
   "createdAt": "2026-10-29T12:00:00",
   "updatedAt": "2026-10-29T12:00:00"
+}
+```
+
+---
+
+### Audit log endpoints (Liviu)
+
+All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/admin/audit-logs` (alias: `GET /api/v1/admin/audit-log`) | `ADMIN` | `200` `PageResponse<AuditLogResponse>` | `400 INVALID_PARAMETER`, `401`, `403` |
+
+`GET /api/v1/admin/audit-logs` optional query parameters:
+- `actorId`: ID of the user who performed the action (numeric; `null` for automated system background jobs)
+- `action`: machine-readable action code, e.g. `ASSET_RETIRED`, `USER_DISABLED` (case-insensitive)
+- `entityType`: target domain type, e.g. `ASSET`, `USER`, `INCIDENT`, `RESERVATION` (case-insensitive)
+- `entityId`: ID of the affected entity (numeric)
+- `from`: start timestamp filter (ISO-8601, e.g. `2026-11-01T00:00:00`, inclusive)
+- `to`: end timestamp filter (ISO-8601, e.g. `2026-11-08T23:59:59`, inclusive; rejected if `from > to`)
+- `page`: zero-based page index (default `0`, `>= 0`)
+- `size`: page size (default `20`, `1..100`)
+- `sort`: sort property and direction (default `createdAt,desc`; whitelisted fields: `createdAt`, `id`, `action`, `entityType`, `actorId`, `entityId`, direction `asc` or `desc`; deterministic secondary tie-breaking on `id`)
+
+```json
+// AuditLogResponse
+{
+  "id": 1,
+  "actorId": 3,
+  "action": "ASSET_RETIRED",
+  "entityType": "ASSET",
+  "entityId": 12,
+  "details": "Retired damaged multimeter",
+  "createdAt": "2026-11-08T10:00:00"
 }
 ```

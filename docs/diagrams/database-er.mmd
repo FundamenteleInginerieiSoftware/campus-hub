@@ -1,0 +1,101 @@
+erDiagram
+    users {
+        BIGINT id PK
+        VARCHAR_255 email UK
+        VARCHAR_255 password_hash
+        VARCHAR_100 full_name
+        VARCHAR_32 role
+        BOOLEAN enabled
+        TIMESTAMP created_at
+    }
+
+    categories {
+        BIGINT id PK
+        VARCHAR_100 name UK
+        VARCHAR_500 description
+    }
+
+    lab_rooms {
+        BIGINT id PK
+        VARCHAR_20 code UK
+        VARCHAR_100 name
+        VARCHAR_100 building
+    }
+
+    assets {
+        BIGINT id PK
+        VARCHAR_150 name
+        VARCHAR_150 model
+        VARCHAR_100 serial_number UK
+        TEXT description
+        VARCHAR_32 status
+        BIGINT category_id FK
+        BIGINT lab_room_id FK
+        BIGINT version
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    reservations {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT asset_id FK
+        BIGINT original_asset_id FK
+        TIMESTAMP start_time
+        TIMESTAMP end_time
+        VARCHAR_32 status
+        TIMESTAMP created_at
+        TIMESTAMP checked_out_at
+        TIMESTAMP returned_at
+        TIMESTAMP cancelled_at
+        VARCHAR_255 cancel_reason
+        BIGINT version
+    }
+
+    incident_reports {
+        BIGINT id PK
+        BIGINT asset_id FK
+        BIGINT reservation_id FK
+        BIGINT reported_by_id FK
+        TEXT description
+        VARCHAR_32 severity
+        VARCHAR_32 status
+        VARCHAR_255 photo_key
+        TIMESTAMP created_at
+        TIMESTAMP resolved_at
+        BIGINT resolved_by_id FK
+        TEXT resolution_notes
+        BIGINT version
+    }
+
+    reassignment_log {
+        BIGINT id PK
+        BIGINT incident_id
+        BIGINT reservation_id FK
+        BIGINT from_asset_id FK
+        BIGINT to_asset_id FK
+        VARCHAR_32 outcome
+        VARCHAR_64 strategy
+        TIMESTAMP created_at
+    }
+
+    audit_logs {
+        BIGINT id PK
+        BIGINT actor_id FK
+        VARCHAR_64 action
+        VARCHAR_64 entity_type
+        BIGINT entity_id
+        TEXT details
+        TIMESTAMP created_at
+    }
+
+    categories ||--o{ assets : "category_id"
+    lab_rooms ||--o{ assets : "lab_room_id"
+    users ||--o{ reservations : "user_id"
+    assets ||--o{ reservations : "asset_id / original_asset_id"
+    assets ||--o{ incident_reports : "asset_id"
+    reservations |o--o{ incident_reports : "reservation_id"
+    users ||--o{ incident_reports : "reported_by_id / resolved_by_id"
+    reservations ||--o{ reassignment_log : "reservation_id"
+    assets ||--o{ reassignment_log : "from_asset_id / to_asset_id"
+    users |o--o{ audit_logs : "actor_id"
