@@ -20,14 +20,14 @@ A naive approach would have `IncidentService` call `ReassignmentService` directl
 ```java
 // Anti-pattern: tightly coupled, breaks encapsulation, shared transaction hazard
 @Transactional
-public IncidentResponse reportIncident(ReportIncidentRequest req) {
-    IncidentReport report = incidentRepository.save(new IncidentReport(...));
+public IncidentResponse reportIncident(CreateIncidentRequest req, Long reporterId) {
     catalogApi.markUnderMaintenance(req.assetId());
-    
+    IncidentReport report = incidentReportRepository.save(new IncidentReport(...));
+
     // Direct synchronous coupling!
-    reassignmentService.reassignDamagedAsset(req.assetId()); 
-    
-    return IncidentResponse.from(report);
+    reassignmentService.handle(new AssetDamagedEvent(report.getId(), req.assetId(), reporterId, clock.instant()));
+
+    return toResponse(report);
 }
 ```
 
@@ -69,11 +69,12 @@ classDiagram
         -CatalogApi catalogApi
         -ApplicationEventPublisher eventPublisher
         -AuditService auditService
+        -StorageService storageService
         -Clock clock
         +reportIncident(CreateIncidentRequest request, Long reporterId) IncidentResponse
         +startRepair(Long incidentId, Long adminId) IncidentResponse
-        +resolve(Long incidentId, ResolveIncidentRequest request, Long adminId) IncidentResponse
-        +reject(Long incidentId, RejectIncidentRequest request, Long adminId) IncidentResponse
+        +resolveIncident(Long incidentId, String resolutionNotes, Long adminId) IncidentResponse
+        +rejectIncident(Long incidentId, String resolutionNotes, Long adminId) IncidentResponse
     }
 
     class LocalAssetDamagedListener {
@@ -255,7 +256,7 @@ public class ReassignmentService {
 
     public void handle(AssetDamagedEvent event) {
         AssetSummary damaged = catalogApi.getAsset(event.assetId());
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = now();
         List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now);
 
         List<ReservationSummary> sortedBookings = upcoming.stream()
@@ -276,28 +277,34 @@ public class ReassignmentService {
                                 "Your reservation #" + booking.id() + " has been reassigned to asset "
                                         + result.substituteAssetName() + " due to equipment maintenance.");
                     } else {
+                        // The only other outcome is FORCE_CANCELLED.
                         sendNotificationSafely(
                                 booking.userId(),
                                 "Reservation Cancelled",
                                 "Your reservation #" + booking.id()
                                         + " has been cancelled due to equipment failure (incident #"
-                                        + event.incidentId() + ") and no available substitutes.");
+                                        + event.incidentId() + ").");
                     }
                 }
-            } catch (Exception ex) {
-                log.error("Failed to reassign booking #{} during incident #{}: {}", 
-                        booking.id(), event.incidentId(), ex.getMessage(), ex);
+            } catch (RuntimeException e) {
+                log.warn("Skipping reassignment for booking #{} due to concurrent update or failure", booking.id(), e);
             }
         }
+    }
+
+    // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so timestamps
+    // in logs and responses do not drift with subsecond differences.
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     }
 }
 ```
 
 ---
 
-## 5. Resilience & Extensibility to AWS Cloud (SQS Bridge — Planned Stretch Goal)
+## 5. Resilience & Extensibility to AWS Cloud (SQS Bridge — Planned Stretch Goal, ADR-004)
 
-The Observer pattern provides complete infrastructural agility via Spring's conditional bean registration (`@ConditionalOnProperty`). On `main`, the in-memory event bus is active. The SQS bridge (`SqsIncidentEventPublisher`, `SqsReassignmentListener`, and AWS SQS FIFO queue) is defined as Matei's Week 9 stretch architecture (`docs/whats-left.md` §4):
+The Observer pattern provides complete infrastructural agility via Spring's conditional bean registration (`@ConditionalOnProperty`). On `main`, the in-memory event bus is active. The SQS bridge (`SqsBridge` and `SqsConsumer` in `com.campus.messaging`, using an Amazon SQS standard queue + dead-letter queue) is defined as Matei's stretch architecture (ADR-004, `docs/whats-left.md` §4):
 
 ```mermaid
 flowchart LR
@@ -306,50 +313,52 @@ flowchart LR
     B -->|false (Active on main / Local / CI)| C["LocalAssetDamagedListener<br/>(@TransactionalEventListener)"]
     C --> E["ReassignmentService.handle"]
     
-    B -->|true (Planned AWS Stretch Goal)| D["SqsIncidentEventPublisher<br/>(Amazon SQS Queue)"]
-    D -.->|Async Queue Poller| F["SqsReassignmentListener<br/>(Worker Container)"]
+    B -->|true (Planned AWS Stretch Goal, ADR-004)| D["SqsBridge<br/>(Amazon SQS Standard Queue + DLQ)"]
+    D -.->|Async Poller| F["SqsConsumer<br/>(Worker)"]
     F --> E
 ```
 
 1. **Local & CI Mode (`app.messaging.sqs.enabled=false` — Active on `main`):**
    - Zero external infrastructure required.
-   - Spring Framework handles the in-memory pub-sub bus.
+   - Spring Framework handles the in-memory pub-sub bus via `@TransactionalEventListener(phase = AFTER_COMMIT)`.
    - 100% testable in unit and integration tests without Docker or LocalStack.
-2. **AWS Cloud Production Mode (`app.messaging.sqs.enabled=true` — Planned Stretch):**
-   - If workload increases, an SQS bridge bean captures the same `AssetDamagedEvent` and pushes it to an Amazon SQS FIFO queue.
-   - Reassignment workers process the queue asynchronously across multiple EC2 or container instances.
-   - `IncidentService` and `ReassignmentService` require **zero code changes** to support cloud distribution.
+   - **Crucial operational note:** On `main` today, `app.messaging.sqs.enabled` **must remain `false`**. Flipping it to `true` switches off `LocalAssetDamagedListener` (`havingValue = "false"`), but because `com.campus.messaging` currently contains only `package-info.java`, nothing else would listen and reassignment would silently stop.
+2. **AWS Cloud Production Mode (`app.messaging.sqs.enabled=true` — Planned Stretch, ADR-004):**
+   - Once implemented, `SqsBridge` sends `AssetDamagedEvent` to an Amazon SQS standard queue (+ DLQ) after commit, and `SqsConsumer` hands it to `ReassignmentService.handle`.
+   - Conforms to our single-instance deployment architecture (ADR-002), providing message durability across process restarts.
+   - `IncidentService` and `ReassignmentService` require **zero code changes** to switch between local and cloud transports.
 
 ---
 
 ## 6. How to Add a New Observer in 4 Steps
 
-To listen for `AssetDamagedEvent` in a new feature (e.g. an administrative alert or lab technician dashboard):
+To listen for `AssetDamagedEvent` in a new feature (e.g. an automatic confirmation sent to the student who reported the defect):
 
 1. **Create the listener component:**
    ```java
    @Component
    @RequiredArgsConstructor
-   public class LabTechnicianAlertListener {
+   public class IncidentReporterConfirmationListener {
        private final NotificationService notificationService;
        private final UserApi userApi;
 
        @Async
        @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
        public void on(AssetDamagedEvent event) {
-           // Notify responsible staff dynamically (e.g. active admins or reporter):
-           userApi.findFirstActiveAdminId().ifPresent(adminId ->
+           // Verify reporter exists via UserApi and send acknowledgement:
+           if (event.reportedById() != null && userApi.exists(event.reportedById())) {
                notificationService.notifyUser(
-                       adminId,
-                       "Equipment Damaged Alert",
-                       "Hardware asset #" + event.assetId() + " was damaged in incident #" + event.incidentId())
-           );
+                       event.reportedById(),
+                       "Incident Report Acknowledged",
+                       "Thank you for reporting equipment asset #" + event.assetId()
+                               + ". Incident #" + event.incidentId() + " has been logged and queued for triage.");
+           }
        }
    }
    ```
-2. **Specify transaction phase:** Use `AFTER_COMMIT` to ensure notifications are dispatched only for confirmed incidents.
+2. **Specify transaction phase:** Use `AFTER_COMMIT` to ensure notifications are dispatched only for confirmed, committed incidents.
 3. **Annotate with `@Async`:** Prevents slowing down the original reporter's request.
-4. **Zero modifications to existing modules:** `IncidentService`, `ReassignmentService`, and database tables remain untouched (Open-Closed Principle).
+4. **Zero modifications to existing modules:** `IncidentService`, `ReassignmentService`, `UserApi`, and database tables remain untouched (Open-Closed Principle).
 
 ---
 
@@ -373,8 +382,21 @@ To listen for `AssetDamagedEvent` in a new feature (e.g. an administrative alert
 ### Q3: "Why did you add `@Async` to the event listener?"
 > **Answer:**  
 > Without `@Async`, a Spring `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)` would execute synchronously on the caller's HTTP request thread immediately after transaction commit, blocking the response until all observer work finishes. If 10 student bookings need reassignment and email dispatch, the student who reported the incident would experience a several-second UI delay.  
-> By annotating the listener with `@Async`, Spring hands off the event to the background task executor (`ThreadPoolTaskExecutor` in `AsyncConfig`). The caller's HTTP thread completes immediately and returns `201 Created` with `IncidentResponse`, while all subsequent candidate discovery, rescheduling, and notifications execute completely in the background.
+> By annotating the listener with `@Async`, Spring hands off the event to the background task executor. In dev and prod, Spring Boot auto-configures the task executor pool based on `application.yml` (`spring.task.execution.pool.core-size: 2`, `thread-name-prefix: campus-async-`). In tests, `AsyncConfig` supplies a `SyncTaskExecutor` bean under `@Profile("test")` so `@Async` methods execute synchronously on the test thread, eliminating race conditions and flaky assertions. The caller's HTTP thread completes immediately and returns `201 Created` with `IncidentResponse`, while all subsequent candidate discovery, rescheduling, and notifications execute completely in the background.
 
 ### Q4: "How does the Observer pattern ease the transition from a modular monolith to AWS microservices?"
 > **Answer:**  
-> The Observer pattern decouples the publisher from the delivery mechanism. Because `IncidentService` only publishes an immutable `AssetDamagedEvent` to an abstraction (`ApplicationEventPublisher`), we can swap the in-memory Spring event bus with an AWS SQS / SNS queue publisher simply by toggling `app.messaging.sqs.enabled=true`. The producer code remains 100% unchanged.
+> The Observer pattern decouples the publisher from the delivery mechanism. Because `IncidentService` only publishes an immutable `AssetDamagedEvent` to an abstraction (`ApplicationEventPublisher`), once the SQS bridge (`SqsBridge` and `SqsConsumer`, stretch goal ADR-004) is implemented, toggling `app.messaging.sqs.enabled=true` switches the delivery path to an Amazon SQS queue without modifying a single line of producer code. On `main` today, this toggle remains `false`, ensuring the local `@TransactionalEventListener` processes all events.
+
+### Q5: "Is `ReassignmentService.handle` idempotent? What happens if an event is processed twice?"
+> **Answer:**  
+> Yes, `ReassignmentService.handle` is strictly idempotent (ADR-004). If the same `AssetDamagedEvent` is delivered more than once (e.g. at-least-once SQS delivery or manual trigger replay):
+> 1. `reservationApi.findUpcomingActiveByAsset(event.assetId(), now)` queries for active upcoming bookings on the damaged asset (`CONFIRMED, CHECKED_OUT, OVERDUE`).
+> 2. Bookings that were successfully reassigned during the first run now have their `assetId` updated to the substitute asset ID (with `originalAssetId` referencing the damaged asset). They no longer match `event.assetId()`.
+> 3. Bookings that could not be substituted were transitioned to `CANCELLED`. They are no longer in an active status.
+> 4. Consequently, a second run finds zero matching bookings on the damaged asset and safely performs no operations.
+
+### Q6: "What is the known trade-off of the in-memory Spring event bus, and why is AWS SQS a stretch goal?"
+> **Answer:**  
+> With Spring's in-memory `@TransactionalEventListener(phase = AFTER_COMMIT)`, if the application process crashes in the millisecond window *immediately after* the PostgreSQL transaction commits but *before* the asynchronous worker executes `ReassignmentService.handle`, the in-memory event is lost, leaving upcoming bookings on the damaged asset without automated rescheduling (accepted for local and single-instance monolithic deployment in ADR-004).  
+> The planned AWS SQS stretch goal solves this durability boundary: `SqsBridge` publishes the event payload to an Amazon SQS standard queue backed by durable cloud storage and a Dead-Letter Queue (DLQ), ensuring the event persists across container restarts and survives consumer failures until acknowledged.
