@@ -19,7 +19,9 @@ import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
+import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
 import jakarta.persistence.criteria.Predicate;
@@ -36,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -111,6 +114,145 @@ public class ReservationService implements ReservationApi {
         auditService.record(userId, "CREATE_RESERVATION", "Reservation", saved.getId(), "Asset " + req.assetId());
 
         return ReservationResponse.from(saved);
+    }
+
+    /**
+     * Simultaneously reserves multiple equipment items in a single atomic transaction.
+     *
+     * <p>Deadlock prevention & concurrency order: Asset rows are sorted in ascending ID order
+     * before acquiring pessimistic row locks. This eliminates any possibility of circular lock waits
+     * between simultaneous multi-asset booking transactions.
+     *
+     * <p>All-or-nothing guarantee: If any equipment item is unavailable (not bookable or overlapping booking),
+     * the entire bundle is rejected with {@code 409} and no reservations are created.
+     */
+    @Transactional
+    public MultiAssetReservationResponse createMultiAssetReservation(CreateMultiAssetReservationRequest req) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        validateSlotRules(req.startTime(), req.endTime(), now);
+
+        if (req.assetIds() == null
+                || req.assetIds().size() < 2
+                || req.assetIds().size() > 10) {
+            throw new BusinessRuleException(
+                    "INVALID_BUNDLE_SIZE", "Multi-asset booking must include between 2 and 10 assets");
+        }
+
+        List<Long> sortedAssetIds = req.assetIds().stream().sorted().toList();
+
+        // 1. Pessimistic lock on all assets in deterministic ID order (deadlock-free)
+        for (Long assetId : sortedAssetIds) {
+            catalogApi.lockForBooking(assetId);
+        }
+
+        // 2. Bookable check on all assets
+        for (Long assetId : sortedAssetIds) {
+            if (!catalogApi.isBookable(assetId)) {
+                throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset " + assetId + " is not available for booking");
+            }
+        }
+
+        // 3. User quota check for students
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+            long activeCount =
+                    reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
+            if (activeCount + sortedAssetIds.size() > 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED",
+                        "Student cannot have more than 2 active reservations (requested "
+                                + sortedAssetIds.size()
+                                + " items in bundle)");
+            }
+        }
+
+        // 4. Overlap check on all assets (all-or-nothing atomicity)
+        for (Long assetId : sortedAssetIds) {
+            if (reservationRepository.existsOverlap(
+                    assetId, req.startTime(), req.endTime(), ReservationStatus.ACTIVE_STATUSES, -1L)) {
+                throw new ConflictException(
+                        "RESERVATION_CONFLICT",
+                        "Asset " + assetId + " overlaps with an existing reservation in the requested window");
+            }
+        }
+
+        // 5. Persist all reservations sharing a bundle UUID
+        UUID bundleId = UUID.randomUUID();
+        List<Reservation> savedList = new ArrayList<>();
+        for (Long assetId : sortedAssetIds) {
+            Reservation r = new Reservation(userId, assetId, req.startTime(), req.endTime(), now);
+            r.assignBundle(bundleId);
+            savedList.add(reservationRepository.save(r));
+        }
+
+        auditService.record(
+                userId,
+                "CREATE_BUNDLE_RESERVATION",
+                "ReservationBundle",
+                sortedAssetIds.get(0),
+                "Bundle " + bundleId + " with " + savedList.size() + " assets: " + sortedAssetIds);
+
+        List<ReservationResponse> responses =
+                savedList.stream().map(ReservationResponse::from).toList();
+        return new MultiAssetReservationResponse(bundleId, req.startTime(), req.endTime(), responses.size(), responses);
+    }
+
+    /**
+     * Retrieves all items in a multi-asset reservation bundle (owner or admin).
+     */
+    @Transactional(readOnly = true)
+    public MultiAssetReservationResponse getBundle(UUID bundleId) {
+        Long userId = currentUser.id();
+        List<Reservation> items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        if (items.isEmpty()) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        if (!currentUser.isAdmin() && !items.get(0).getUserId().equals(userId)) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        List<ReservationResponse> responses =
+                items.stream().map(ReservationResponse::from).toList();
+        Reservation first = items.get(0);
+        return new MultiAssetReservationResponse(
+                bundleId, first.getStartTime(), first.getEndTime(), responses.size(), responses);
+    }
+
+    /**
+     * Cancels all active items in a multi-asset reservation bundle (owner or admin).
+     */
+    @Transactional
+    public List<ReservationResponse> cancelBundle(UUID bundleId, String reason) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        List<Reservation> items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        if (items.isEmpty()) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        if (!currentUser.isAdmin() && !items.get(0).getUserId().equals(userId)) {
+            throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
+        }
+
+        List<ReservationResponse> results = new ArrayList<>();
+        for (Reservation r : items) {
+            if (r.getStatus() == ReservationStatus.CONFIRMED) {
+                if (currentUser.isAdmin()) {
+                    r.cancel(now, reason != null ? reason : "Cancelled by admin");
+                } else {
+                    r.cancel(now, "Cancelled by user");
+                }
+                reservationRepository.save(r);
+                auditService.record(userId, "CANCEL_RESERVATION", "Reservation", r.getId(), "Bundle " + bundleId);
+            }
+            results.add(ReservationResponse.from(r));
+        }
+
+        return results;
     }
 
     /**

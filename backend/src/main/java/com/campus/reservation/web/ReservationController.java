@@ -149,4 +149,48 @@ public class ReservationController {
     public ResponseEntity<ReservationResponse> cancel(@PathVariable Long id) {
         return ResponseEntity.ok(reservationService.cancelReservation(id));
     }
+
+    @Operation(
+            summary = "Create simultaneous multi-asset reservation bundle",
+            description = "Reserves multiple assets simultaneously in a single atomic transaction; deadlock-free")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Bundle reservations created successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation failed, invalid bundle size, or bad time slot"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Conflict on any asset, asset not bookable, or student quota exceeded")
+    })
+    @PostMapping("/bundle")
+    public ResponseEntity<MultiAssetReservationResponse> createBundle(
+            @Valid @RequestBody CreateMultiAssetReservationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createMultiAssetReservation(request));
+    }
+
+    @Operation(
+            summary = "Get multi-asset reservation bundle",
+            description = "Retrieves all equipment items in a reservation bundle (owner or admin)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Bundle found"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user")
+    })
+    @GetMapping("/bundle/{bundleId}")
+    public ResponseEntity<MultiAssetReservationResponse> getBundle(@PathVariable java.util.UUID bundleId) {
+        return ResponseEntity.ok(reservationService.getBundle(bundleId));
+    }
+
+    @Operation(
+            summary = "Cancel multi-asset reservation bundle",
+            description = "Cancels all active reservations in the bundle (owner or admin)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Bundle reservations cancelled"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user")
+    })
+    @PostMapping("/bundle/{bundleId}/cancel")
+    public ResponseEntity<List<ReservationResponse>> cancelBundle(
+            @PathVariable java.util.UUID bundleId, @RequestParam(required = false) String reason) {
+        return ResponseEntity.ok(reservationService.cancelBundle(bundleId, reason));
+    }
 }

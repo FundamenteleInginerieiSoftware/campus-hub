@@ -291,4 +291,62 @@ class ReservationControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MISSING_PARAMETER"));
     }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/bundle returns 201 CREATED")
+    void createBundleReturns201() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        MultiAssetReservationResponse response = new MultiAssetReservationResponse(
+                bundleId,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                2,
+                List.of(sampleResponse));
+
+        when(reservationService.createMultiAssetReservation(any())).thenReturn(response);
+
+        String json = """
+                {
+                    "assetIds": [10, 20],
+                    "startTime": "2026-11-02T14:00:00",
+                    "endTime": "2026-11-02T16:00:00"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/reservations/bundle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.bundleId").value(bundleId.toString()))
+                .andExpect(jsonPath("$.totalAssets").value(2));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/bundle/{bundleId} returns 200 OK")
+    void getBundleReturns200() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        MultiAssetReservationResponse response = new MultiAssetReservationResponse(
+                bundleId,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                1,
+                List.of(sampleResponse));
+
+        when(reservationService.getBundle(bundleId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/reservations/bundle/" + bundleId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleId").value(bundleId.toString()));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/bundle/{bundleId}/cancel returns 200 OK")
+    void cancelBundleReturns200() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        when(reservationService.cancelBundle(eq(bundleId), any())).thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1));
+    }
 }

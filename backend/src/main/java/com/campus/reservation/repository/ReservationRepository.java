@@ -110,4 +110,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             @Param("statuses") Collection<ReservationStatus> statuses);
+
+    List<Reservation> findByBundleIdOrderByAssetIdAsc(java.util.UUID bundleId);
 }
