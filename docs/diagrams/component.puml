@@ -127,8 +127,8 @@ note bottom of AssetDamagedEvent
 end note
 
 note right of storage
-  No consumer on main yet
-  (incident photo upload is planned).
+  Used by incident for the photo
+  (POST/GET /incidents/{id}/photo, #210).
   dev: LocalStorageService -> uploads/
   prod: S3StorageService
 end note
