@@ -24,6 +24,7 @@ import {
   IconClockPlus,
   IconPackage,
   IconPlus,
+  IconUser,
   IconUserShare,
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
@@ -47,6 +48,7 @@ import {
   type ReservationTransferResponse,
 } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
+import { useAuth } from '../auth/useAuth.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import PagedTable, { type Column } from '../components/PagedTable.tsx'
@@ -150,6 +152,7 @@ function statusLabel(status: ReservationStatus): string {
 }
 
 export default function MyReservationsPage() {
+  const { user } = useAuth()
   // Bug fixed (#122): pageData initialized as null (not empty object) and reset to null
   // on tab/page transitions so PagedTable displays the loading spinner while fetching,
   // avoiding false "No reservations found" flashes and stale tab data.
@@ -595,6 +598,30 @@ export default function MyReservationsPage() {
         }
       />
 
+      {/* Student Identity Card for Transfers */}
+      <Card withBorder radius="md" p="sm" mb="md" bg="var(--mantine-color-blue-light)">
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Group gap="sm">
+            <ThemeIcon color="blue" size="md" radius="xl" variant="filled">
+              <IconUser size={16} />
+            </ThemeIcon>
+            <div>
+              <Group gap="xs">
+                <Text size="sm" fw={600}>
+                  {user?.fullName ?? 'Student Account'}
+                </Text>
+                <Badge color="blue" size="sm" variant="filled">
+                  Your Student ID: #{user?.id ?? '—'}
+                </Badge>
+              </Group>
+              <Text size="xs" c="dimmed">
+                {user?.email} • Classmates need your Student ID (<b>#{user?.id ?? '—'}</b>) to transfer an upcoming reservation to you.
+              </Text>
+            </div>
+          </Group>
+        </Group>
+      </Card>
+
       {actionNotice && (
         <Alert
           color="green"
@@ -860,10 +887,40 @@ export default function MyReservationsPage() {
                 Slot: {formatSlotDate(transferringReservation.startTime)} ({formatSlotTime(transferringReservation.startTime, transferringReservation.endTime)})
               </Text>
             </div>
+
+            {/* Classmate Quick Pick */}
+            <div>
+              <Text size="xs" fw={500} mb={6}>
+                Quick Pick Classmate:
+              </Text>
+              <Group gap="xs">
+                {user?.id !== 2 && (
+                  <Button
+                    size="xs"
+                    variant={recipientUserId === 2 ? 'filled' : 'light'}
+                    color="violet"
+                    onClick={() => setRecipientUserId(2)}
+                  >
+                    Student Two (ID: #2)
+                  </Button>
+                )}
+                {user?.id !== 1 && (
+                  <Button
+                    size="xs"
+                    variant={recipientUserId === 1 ? 'filled' : 'light'}
+                    color="violet"
+                    onClick={() => setRecipientUserId(1)}
+                  >
+                    Student One (ID: #1)
+                  </Button>
+                )}
+              </Group>
+            </div>
+
             <NumberInput
               label="Recipient Student User ID"
               placeholder="e.g. 2"
-              description="The student will receive an incoming transfer offer to accept."
+              description="Classmates can find their Student ID in the banner at the top of their My Reservations page."
               min={1}
               value={recipientUserId}
               onChange={setRecipientUserId}
