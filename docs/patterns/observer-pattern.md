@@ -65,11 +65,15 @@ classDiagram
     }
 
     class IncidentService {
-        -IncidentReportRepository repository
+        -IncidentReportRepository incidentReportRepository
         -CatalogApi catalogApi
         -ApplicationEventPublisher eventPublisher
+        -AuditService auditService
         -Clock clock
-        +reportIncident(...) IncidentResponse
+        +reportIncident(CreateIncidentRequest request, Long reporterId) IncidentResponse
+        +startRepair(Long incidentId, Long adminId) IncidentResponse
+        +resolve(Long incidentId, ResolveIncidentRequest request, Long adminId) IncidentResponse
+        +reject(Long incidentId, RejectIncidentRequest request, Long adminId) IncidentResponse
     }
 
     class LocalAssetDamagedListener {
@@ -120,19 +124,22 @@ public void on(AssetDamagedEvent event) {
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Reporter as Student / Admin
+    actor Reporter as Student / Admin (Reporter)
     participant Inc as IncidentService (Stefania)
     participant DB as PostgreSQL 18
     participant Spring as EventMulticaster (Spring)
     participant List as LocalAssetDamagedListener (Calin)
     participant Reass as ReassignmentService (Calin)
     participant Proc as ReassignmentBookingProcessor (Calin)
+    actor Affected as Affected Student (Booking Owner)
 
-    Reporter->>Inc: POST /api/v1/incidents (assetId, description)
+    Reporter->>Inc: POST /api/v1/incidents (CreateIncidentRequest, reporterId)
     activate Inc
     Note over Inc: Incident Transaction begins (@Transactional)
-    Inc->>DB: INSERT INTO incident_reports (...)
+    Inc->>DB: SELECT ... FOR UPDATE assets (lock row, check not RETIRED)
     Inc->>DB: UPDATE assets SET status = 'UNDER_MAINTENANCE' WHERE id = :assetId
+    Inc->>DB: INSERT INTO incident_reports (...)
+    Inc->>DB: INSERT INTO audit_logs (INCIDENT_REPORTED)
     Inc->>Spring: publishEvent(AssetDamagedEvent)
     Note over Spring: Registers listener execution for AFTER_COMMIT hook
     Inc->>DB: COMMIT TRANSACTION
@@ -140,21 +147,21 @@ sequenceDiagram
     Inc-->>Reporter: 201 Created (IncidentResponse JSON)
     deactivate Inc
 
-    Note over Spring,List: AFTER_COMMIT phase triggered asynchronously (@Async thread)
+    Note over Spring,List: AFTER_COMMIT phase triggered asynchronously (@Async background thread)
     Spring->>List: on(AssetDamagedEvent)
     activate List
     List->>Reass: handle(event)
     activate Reass
     Note over Reass: Discovers affected upcoming reservations
 
-    loop For each booking
+    loop For each upcoming booking
         Reass->>Proc: processSingleBooking(event, booking, damaged)
         activate Proc
         Note over Proc: Independent transaction (Propagation.REQUIRES_NEW)
         Proc->>DB: Commit booking move or force-cancel
         Proc-->>Reass: ReassignmentExecutionResult
         deactivate Proc
-        Reass->>Reporter: sendNotificationSafely(studentId, subject, body)
+        Reass->>Affected: sendNotificationSafely(booking.userId(), subject, body)
     end
 
     deactivate Reass
@@ -162,10 +169,11 @@ sequenceDiagram
 ```
 
 ### Critical Architectural Guarantees:
-1. **Atomicity of Incident Persistence:** If creating the incident report fails or validation rejects the input, the transaction rolls back, and `LocalAssetDamagedListener` is never triggered.
-2. **Fresh Read Consistency:** Because reassignment runs *after* commit, any database query executed by `ReassignmentService` reads the committed `UNDER_MAINTENANCE` status.
-3. **Zero Rollback Contagion:** Any exception, timeout, or concurrency failure inside reassignment or notification delivery cannot roll back or invalidate the persisted incident report.
-4. **Immediate Client Feedback:** The HTTP response (201 Created) returns to the student in milliseconds without waiting for batch rescheduling.
+1. **Lock-Before-Insert Concurrency Safety:** `catalogApi.markUnderMaintenance` acquires a pessimistic write lock (`SELECT ... FOR UPDATE`) on the asset row *before* inserting into `incident_reports` or publishing the event. This prevents race conditions between simultaneous report and resolve/reject calls on the same asset, rejects missing (`404`) or retired (`409`) assets upfront without persisting bogus incidents, and ensures the asset is already `UNDER_MAINTENANCE` before any observer can wake up.
+2. **Atomicity of Incident Persistence & Audit:** The asset state change, incident record, and audit entry (`INCIDENT_REPORTED`) commit together in a single atomic transaction. If database persistence fails or validation rejects the input, the transaction rolls back, and `LocalAssetDamagedListener` is never triggered.
+3. **Fresh Read Consistency:** Because reassignment runs *after* commit, any database query executed by `ReassignmentService` reads the committed `UNDER_MAINTENANCE` status, ensuring the damaged asset is never selected as its own replacement candidate.
+4. **Zero Rollback Contagion:** Any exception, timeout, or concurrency failure inside reassignment or notification delivery cannot roll back or invalidate the persisted incident report.
+5. **Immediate Client Feedback:** The HTTP response (201 Created) returns to the student in milliseconds without waiting for batch rescheduling.
 
 ---
 
@@ -191,17 +199,23 @@ public record AssetDamagedEvent(
 ### Publisher: `IncidentService` (`com.campus.incident.service`)
 ```java
 @Transactional
-public IncidentResponse reportIncident(ReportIncidentRequest request) {
-    Long reporterId = currentUser.id();
-    ...
+public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId) {
+    // 1. Lock asset row first (SELECT ... FOR UPDATE) and switch to UNDER_MAINTENANCE:
     catalogApi.markUnderMaintenance(request.assetId());
-    IncidentReport saved = incidentRepository.save(incident);
 
-    // Publishes event to decoupled observers:
+    // 2. Persist incident entity:
+    IncidentReport report = new IncidentReport(
+            request.assetId(), null, reporterId, request.description(), request.severity(), null, now());
+    IncidentReport saved = incidentReportRepository.save(report);
+
+    // 3. Record audit trail in the same transaction:
+    audit(reporterId, "INCIDENT_REPORTED", saved, saved.getSeverity().name());
+
+    // 4. Publish domain event to decoupled observers:
     eventPublisher.publishEvent(
             new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, clock.instant()));
 
-    return IncidentResponse.from(saved);
+    return toResponse(saved);
 }
 ```
 
@@ -281,27 +295,27 @@ public class ReassignmentService {
 
 ---
 
-## 5. Resilience & Extensibility to AWS Cloud (SQS Bridge)
+## 5. Resilience & Extensibility to AWS Cloud (SQS Bridge — Planned Stretch Goal)
 
-The Observer pattern provides complete infrastructural agility via Spring's conditional bean registration (`@ConditionalOnProperty`):
+The Observer pattern provides complete infrastructural agility via Spring's conditional bean registration (`@ConditionalOnProperty`). On `main`, the in-memory event bus is active. The SQS bridge (`SqsIncidentEventPublisher`, `SqsReassignmentListener`, and AWS SQS FIFO queue) is defined as Matei's Week 9 stretch architecture (`docs/whats-left.md` §4):
 
 ```mermaid
 flowchart LR
     A["IncidentService<br/>publishEvent(AssetDamagedEvent)"] --> B{"app.messaging.sqs.enabled"}
     
-    B -->|false (Default / Local / CI)| C["LocalAssetDamagedListener<br/>(@TransactionalEventListener)"]
+    B -->|false (Active on main / Local / CI)| C["LocalAssetDamagedListener<br/>(@TransactionalEventListener)"]
     C --> E["ReassignmentService.handle"]
     
-    B -->|true (AWS Production Stretch)| D["SqsIncidentEventPublisher<br/>(Amazon SQS Queue)"]
+    B -->|true (Planned AWS Stretch Goal)| D["SqsIncidentEventPublisher<br/>(Amazon SQS Queue)"]
     D -.->|Async Queue Poller| F["SqsReassignmentListener<br/>(Worker Container)"]
     F --> E
 ```
 
-1. **Local & CI Mode (`app.messaging.sqs.enabled=false`):**
+1. **Local & CI Mode (`app.messaging.sqs.enabled=false` — Active on `main`):**
    - Zero external infrastructure required.
    - Spring Framework handles the in-memory pub-sub bus.
    - 100% testable in unit and integration tests without Docker or LocalStack.
-2. **AWS Cloud Production Mode (`app.messaging.sqs.enabled=true`):**
+2. **AWS Cloud Production Mode (`app.messaging.sqs.enabled=true` — Planned Stretch):**
    - If workload increases, an SQS bridge bean captures the same `AssetDamagedEvent` and pushes it to an Amazon SQS FIFO queue.
    - Reassignment workers process the queue asynchronously across multiple EC2 or container instances.
    - `IncidentService` and `ReassignmentService` require **zero code changes** to support cloud distribution.
@@ -310,7 +324,7 @@ flowchart LR
 
 ## 6. How to Add a New Observer in 4 Steps
 
-To listen for `AssetDamagedEvent` in a new feature (e.g. an administrative SMS alert or lab technician dashboard):
+To listen for `AssetDamagedEvent` in a new feature (e.g. an administrative alert or lab technician dashboard):
 
 1. **Create the listener component:**
    ```java
@@ -318,14 +332,18 @@ To listen for `AssetDamagedEvent` in a new feature (e.g. an administrative SMS a
    @RequiredArgsConstructor
    public class LabTechnicianAlertListener {
        private final NotificationService notificationService;
+       private final UserApi userApi;
 
        @Async
        @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
        public void on(AssetDamagedEvent event) {
-           notificationService.notifyUser(
-                   1L, // Admin/Technician user ID
-                   "Equipment Damaged Alert",
-                   "Hardware asset #" + event.assetId() + " was damaged in incident #" + event.incidentId());
+           // Notify responsible staff dynamically (e.g. active admins or reporter):
+           userApi.findFirstActiveAdminId().ifPresent(adminId ->
+               notificationService.notifyUser(
+                       adminId,
+                       "Equipment Damaged Alert",
+                       "Hardware asset #" + event.assetId() + " was damaged in incident #" + event.incidentId())
+           );
        }
    }
    ```
@@ -354,7 +372,8 @@ To listen for `AssetDamagedEvent` in a new feature (e.g. an administrative SMS a
 
 ### Q3: "Why did you add `@Async` to the event listener?"
 > **Answer:**  
-> By default, Spring's `AFTER_COMMIT` listener runs on the caller's HTTP thread right before closing the connection. If 10 student bookings need reassignment and email dispatch, the student who reported the incident would experience a several-second UI delay. By annotating the listener with `@Async`, the reassignment engine executes in a dedicated background thread pool (`AsyncConfig`), allowing the student's HTTP response (201 Created) to return immediately.
+> Without `@Async`, a Spring `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)` would execute synchronously on the caller's HTTP request thread immediately after transaction commit, blocking the response until all observer work finishes. If 10 student bookings need reassignment and email dispatch, the student who reported the incident would experience a several-second UI delay.  
+> By annotating the listener with `@Async`, Spring hands off the event to the background task executor (`ThreadPoolTaskExecutor` in `AsyncConfig`). The caller's HTTP thread completes immediately and returns `201 Created` with `IncidentResponse`, while all subsequent candidate discovery, rescheduling, and notifications execute completely in the background.
 
 ### Q4: "How does the Observer pattern ease the transition from a modular monolith to AWS microservices?"
 > **Answer:**  
