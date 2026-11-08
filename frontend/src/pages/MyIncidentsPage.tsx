@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Text, Tooltip } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconCheck, IconAlertTriangle, IconPhoto, IconPlus } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
@@ -15,6 +15,7 @@ import {
 import { fetchAssetSummary, type AssetSummary } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
+import IncidentPhotoModal from '../components/IncidentPhotoModal.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import PagedTable, { type Column } from '../components/PagedTable.tsx'
 import ReportIncidentModal from '../components/ReportIncidentModal.tsx'
@@ -35,6 +36,7 @@ export default function MyIncidentsPage() {
   const [error, setError] = useState<unknown>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const [photoOf, setPhotoOf] = useState<number | null>(null)
 
   // Names for the equipment column; the list itself only has the asset id.
   const [assets, setAssets] = useState<Record<number, AssetSummary>>({})
@@ -159,8 +161,10 @@ export default function MyIncidentsPage() {
       header: 'Photo',
       render: (i) =>
         i.photoKey ? (
-          <Tooltip label="Photo attached">
-            <IconPhoto size={18} aria-label="Photo attached" />
+          <Tooltip label="View photo">
+            <ActionIcon variant="subtle" aria-label={`View photo of incident #${i.id}`} onClick={() => setPhotoOf(i.id)}>
+              <IconPhoto size={18} />
+            </ActionIcon>
           </Tooltip>
         ) : null,
     },
@@ -206,6 +210,7 @@ export default function MyIncidentsPage() {
         emptyText="You have not reported any problems yet."
       />
 
+      {photoOf !== null && <IncidentPhotoModal incidentId={photoOf} onClose={() => setPhotoOf(null)} />}
       {formOpened && (
         <ReportIncidentModal onClose={handleCloseForm} onReported={handleReported} initialAssetId={linkedAssetId} />
       )}

@@ -1,4 +1,4 @@
-import { apiFetch } from './client.ts'
+import { apiFetch, apiFetchBlob } from './client.ts'
 import type { AssetSummary } from './reservations.ts'
 import type { PageResponse } from './types.ts'
 
@@ -56,6 +56,39 @@ export function uploadIncidentPhoto(incidentId: number, file: File) {
   const form = new FormData()
   form.append('file', file)
   return apiFetch<Incident>(`/api/v1/incidents/${incidentId}/photo`, { method: 'POST', body: form })
+}
+
+/** The photo as an image file, for the reporter or an admin (GET /api/v1/incidents/{id}/photo). */
+export function fetchIncidentPhoto(incidentId: number) {
+  return apiFetchBlob(`/api/v1/incidents/${incidentId}/photo`)
+}
+
+// ---- admin (Incident queue) ----------------------------------------------------------------
+
+/** Every incident, newest first; status is optional (GET /api/v1/admin/incidents). */
+export function fetchAdminIncidents(status: IncidentStatus | null, page = 0, size = 10) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) {
+    params.set('status', status)
+  }
+  return apiFetch<PageResponse<Incident>>(`/api/v1/admin/incidents?${params.toString()}`)
+}
+
+/** OPEN → IN_REPAIR; the equipment stays out of use (POST /api/v1/admin/incidents/{id}/start-repair). */
+export function startRepair(incidentId: number) {
+  return apiFetch<Incident>(`/api/v1/admin/incidents/${incidentId}/start-repair`, { method: 'POST' })
+}
+
+/**
+ * Closes the incident as RESOLVED (fixed) or REJECTED (not a real problem). Notes are optional; without
+ * them no body is sent. The equipment is AVAILABLE again once no other open incident is left on it.
+ */
+export function closeIncident(incidentId: number, outcome: 'resolve' | 'reject', notes: string) {
+  const trimmed = notes.trim()
+  return apiFetch<Incident>(`/api/v1/admin/incidents/${incidentId}/${outcome}`, {
+    method: 'POST',
+    body: trimmed ? { resolutionNotes: trimmed } : undefined,
+  })
 }
 
 /** Equipment to pick in the report form: name, model or serial number contains the text (Liviu's search). */
