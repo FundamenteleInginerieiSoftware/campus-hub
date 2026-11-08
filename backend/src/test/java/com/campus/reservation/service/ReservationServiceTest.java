@@ -29,9 +29,12 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
+import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationHold;
 import com.campus.reservation.domain.ReservationTransfer;
 import com.campus.reservation.domain.TransferStatus;
+import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.repository.ReservationTransferRepository;
 import com.campus.reservation.web.AvailabilityResponse;
@@ -102,6 +105,9 @@ class ReservationServiceTest {
     @Mock
     private UserApi userApi;
 
+    @Mock
+    private ReservationHoldRepository reservationHoldRepository;
+
     private ReservationService reservationService;
 
     @BeforeEach
@@ -114,7 +120,8 @@ class ReservationServiceTest {
                 notificationService,
                 clock,
                 reservationTransferRepository,
-                userApi);
+                userApi,
+                reservationHoldRepository);
     }
 
     @AfterEach
@@ -883,11 +890,48 @@ class ReservationServiceTest {
 
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isTrue();
+
+        // If hold overlap exists for another user, isAssetFree returns false
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isFalse();
+
+        // When unauthenticated or currentUser throws, currentUserId passes null
+        when(currentUser.id()).thenThrow(new RuntimeException("no auth"));
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
+                .thenReturn(false);
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isTrue();
 
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 5L))
                 .thenReturn(true);
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 5L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isAssetFree works gracefully when reservationHoldRepository is null")
+    void isAssetFreeGracefulWhenHoldRepoNull() {
+        ReservationService serviceWithoutHoldRepo = new ReservationService(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                reservationTransferRepository,
+                userApi,
+                null);
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        assertThat(serviceWithoutHoldRepo.isAssetFree(ASSET_ID, start, end, null))
+                .isTrue();
     }
 
     @Test
@@ -2248,5 +2292,610 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Sender account is no longer active");
+    }
+
+    // ==========================================
+    // Transfer Rejection & Cancellation Tests
+    // ==========================================
+
+    @Test
+    @DisplayName("Transfer: recipient rejects transfer and notifies sender")
+    void rejectTransfer_success() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransferResponse response = reservationService.rejectTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.REJECTED);
+        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.REJECTED);
+        verify(auditService)
+                .record(
+                        eq(recipientId),
+                        eq("TRANSFER_REJECTED"),
+                        eq("ReservationTransfer"),
+                        eq(500L),
+                        contains("Rejected by recipient"));
+        verify(notificationService)
+                .notifyUser(eq(USER_ID), eq("Reservation Transfer Rejected"), contains("declined your transfer"));
+    }
+
+    @Test
+    @DisplayName("Transfer: admin can reject transfer on behalf of recipient")
+    void rejectTransfer_byAdmin_success() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(777L); // Admin user
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransferResponse response = reservationService.rejectTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.REJECTED);
+    }
+
+    @Test
+    @DisplayName("Transfer: non-recipient student throws 404 when rejecting transfer")
+    void rejectTransfer_nonRecipient_throws404() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(888L); // Third-party student
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> reservationService.rejectTransfer(500L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Transfer request not found");
+    }
+
+    @Test
+    @DisplayName("Transfer: reject transfer throws 404 when transfer does not exist")
+    void rejectTransfer_notFound_throws404() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.rejectTransfer(500L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Transfer request not found");
+    }
+
+    @Test
+    @DisplayName("Transfer: reject transfer throws 409 when status is not PENDING")
+    void rejectTransfer_nonPending_throws409() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+        transfer.reject(LocalDateTime.of(2026, 11, 2, 12, 0)); // Already REJECTED
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> reservationService.rejectTransfer(500L))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessageContaining("Cannot reject transfer in status REJECTED");
+    }
+
+    @Test
+    @DisplayName("Transfer: sender cancels outgoing transfer offer")
+    void cancelTransfer_success() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransferResponse response = reservationService.cancelTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.CANCELLED);
+        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.CANCELLED);
+        verify(auditService)
+                .record(
+                        eq(USER_ID),
+                        eq("TRANSFER_CANCELLED"),
+                        eq("ReservationTransfer"),
+                        eq(500L),
+                        contains("Cancelled by sender"));
+    }
+
+    @Test
+    @DisplayName("Transfer: admin can cancel outgoing transfer offer")
+    void cancelTransfer_byAdmin_success() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(777L); // Admin
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransferResponse response = reservationService.cancelTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("Transfer: non-sender student throws 404 when cancelling transfer")
+    void cancelTransfer_nonSender_throws404() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(888L); // Third-party student
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> reservationService.cancelTransfer(500L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Transfer request not found");
+    }
+
+    @Test
+    @DisplayName("Transfer: cancel transfer throws 404 when transfer does not exist")
+    void cancelTransfer_notFound_throws404() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.cancelTransfer(500L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Transfer request not found");
+    }
+
+    @Test
+    @DisplayName("Transfer: cancel transfer throws 409 when status is not PENDING")
+    void cancelTransfer_nonPending_throws409() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+        transfer.cancel(LocalDateTime.of(2026, 11, 2, 12, 0)); // Already CANCELLED
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> reservationService.cancelTransfer(500L))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessageContaining("Cannot cancel transfer in status CANCELLED");
+    }
+
+    @Test
+    @DisplayName("Transfer: getMyPendingTransfers lists transfers directed to current user")
+    void getMyPendingTransfers_returnsList() {
+        Long recipientId = USER_ID;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, 2L, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(reservationTransferRepository.findByToUserIdAndStatusOrderByRequestedAtDesc(
+                        eq(recipientId), eq(TransferStatus.PENDING)))
+                .thenReturn(List.of(transfer));
+
+        List<ReservationTransferResponse> list = reservationService.getMyPendingTransfers();
+
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).id()).isEqualTo(500L);
+    }
+
+    // ==========================================
+    // Multi-Asset Bundle Reservation Tests
+    // ==========================================
+
+    @Test
+    @DisplayName("Bundle: quota boundary - activeCount == 1 allows bundle creation")
+    void createMultiAssetReservation_boundaryQuota_activeCountOneAllows() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L); // Boundary: 1 active reservation (1 + 1 <= 2) -> allowed!
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.totalAssets()).isEqualTo(2);
+        assertThat(response.reservations()).allMatch(r -> r.bundleId() != null);
+    }
+
+    @Test
+    @DisplayName("Bundle: quota boundary - activeCount == 2 rejects bundle creation")
+    void createMultiAssetReservation_boundaryQuota_activeCountTwoRejects() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L); // Boundary: 2 active reservations -> (2 + 1 > 2) rejects!
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("Bundle: validates slot rules on bundle creation")
+    void createMultiAssetReservation_validatesSlotRules() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 20, 30); // 20:30 outside opening hours
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 21, 30);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("within opening hours");
+    }
+
+    @Test
+    @DisplayName("Bundle: getBundle succeeds for owner student")
+    void getBundle_success() {
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, 10L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.assignBundle(bundleId);
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+
+        MultiAssetReservationResponse response = reservationService.getBundle(bundleId);
+
+        assertThat(response).isNotNull();
+        assertThat(response.bundleId()).isEqualTo(bundleId);
+        assertThat(response.totalAssets()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Bundle: getBundle succeeds for admin even if not owner")
+    void getBundle_byAdmin_success() {
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(999L, 10L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.assignBundle(bundleId);
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+
+        MultiAssetReservationResponse response = reservationService.getBundle(bundleId);
+
+        assertThat(response).isNotNull();
+        assertThat(response.bundleId()).isEqualTo(bundleId);
+    }
+
+    @Test
+    @DisplayName("Bundle: getBundle throws 404 for non-owner student")
+    void getBundle_nonOwner_throws404() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r = new Reservation(
+                999L,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+
+        assertThatThrownBy(() -> reservationService.getBundle(bundleId))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation bundle not found");
+    }
+
+    @Test
+    @DisplayName("Bundle: getBundle throws 404 when bundle does not exist")
+    void getBundle_notFound_throws404() {
+        UUID bundleId = UUID.randomUUID();
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> reservationService.getBundle(bundleId))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation bundle not found");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancelBundle succeeds for owner student before start time")
+    void cancelBundle_byStudent_success() {
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, 10L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.assignBundle(bundleId);
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Changed plans");
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).status()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r.getCancelReason()).isEqualTo("Cancelled by user");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancelBundle by admin cancels with custom reason")
+    void cancelBundle_byAdmin_success() {
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(999L, 10L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.assignBundle(bundleId);
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Lab closed for maintenance");
+
+        assertThat(responses).hasSize(1);
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r.getCancelReason()).isEqualTo("Lab closed for maintenance");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancelBundle rejects student cancellation after start time")
+    void cancelBundle_afterStartTime_throwsConflict() {
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 9, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 11, 0);
+        Reservation r = new Reservation(USER_ID, 10L, start, end, LocalDateTime.of(2026, 11, 2, 8, 0));
+        r.assignBundle(bundleId);
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Reservations can only be cancelled before start time");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancelBundle throws 404 for non-owner student")
+    void cancelBundle_nonOwner_throws404() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r = new Reservation(
+                999L,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation bundle not found");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancelBundle throws 404 when bundle does not exist")
+    void cancelBundle_notFound_throws404() {
+        UUID bundleId = UUID.randomUUID();
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation bundle not found");
+    }
+
+    // ==========================================
+    // Create Reservation with Hold & Availability Tests
+    // ==========================================
+
+    @Test
+    @DisplayName("createReservation: rejects if requested slot is temporarily held by another student")
+    void createReservation_rejectsIfSlotHeldByAnotherStudent() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.createReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("temporarily held by another student");
+    }
+
+    @Test
+    @DisplayName("createReservation: auto-confirms active hold owned by current student")
+    void createReservation_autoConfirmsActiveHold() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        ReservationHold hold = new ReservationHold(
+                ASSET_ID,
+                USER_ID,
+                start,
+                end,
+                LocalDateTime.of(2026, 11, 2, 10, 1),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(hold, "id", 77L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
+                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+                .thenReturn(List.of(hold));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 101L);
+            return r;
+        });
+
+        ReservationResponse response = reservationService.createReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(hold.getStatus()).isEqualTo(HoldStatus.CONFIRMED);
+        verify(reservationHoldRepository).save(hold);
+    }
+
+    @Test
+    @DisplayName("createReservation: ignores active hold for different asset or timeslot without confirming it")
+    void createReservation_ignoresDifferentHold() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        ReservationHold differentHold = new ReservationHold(
+                999L, USER_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 1), LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(differentHold, "id", 88L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
+                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+                .thenReturn(List.of(differentHold));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 102L);
+            return r;
+        });
+
+        reservationService.createReservation(req);
+
+        assertThat(differentHold.getStatus()).isEqualTo(HoldStatus.ACTIVE);
+        verify(reservationHoldRepository, never()).save(differentHold);
+    }
+
+    // ==========================================
+    // Extend Reservation Additional Coverage Tests
+    // ==========================================
+
+    @Test
+    @DisplayName("Extend: rejects extension if reservation is not in CONFIRMED or CHECKED_OUT status")
+    void extendReservation_rejectsIfStatusNotConfirmedOrCheckedOut() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 17, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessageContaining("Only CONFIRMED or CHECKED_OUT reservations can be extended");
+    }
+
+    @Test
+    @DisplayName("Extend: rejects extension if new end time exceeds the 14-day booking horizon")
+    void extendReservation_rejectsIfBeyondHorizon() {
+        // Clock is 2026-11-02T10:00 (Bucharest).
+        // 14-day horizon boundary is 2026-11-16T10:00.
+        // Start is at 09:30 on day 14, but newEnd at 10:30 exceeds the 14-day mark.
+        LocalDateTime start = LocalDateTime.of(2026, 11, 16, 9, 30);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 16, 10, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 16, 10, 30);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("cannot be made more than 14 days in advance");
+    }
+
+    @Test
+    @DisplayName("findBusyAssetIds: handles null or unauthenticated currentUser safely")
+    void findBusyAssetIds_safeWhenCurrentUserNull() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(10L));
+        when(reservationHoldRepository.findHeldAssetIds(eq(start), eq(end), any(), isNull()))
+                .thenReturn(List.of(20L));
+
+        when(currentUser.id()).thenThrow(new RuntimeException("Unauthenticated"));
+
+        List<Long> busy = reservationService.findBusyAssetIds(start, end);
+
+        assertThat(busy).containsExactly(10L, 20L);
+    }
+
+    @Test
+    @DisplayName("sweepExpiredHolds delegates to hold repository or returns 0 when null")
+    void sweepExpiredHoldsDelegates() {
+        LocalDateTime now = LocalDateTime.of(2026, 11, 2, 10, 0);
+        when(reservationHoldRepository.expireOldHolds(now)).thenReturn(3);
+        assertThat(reservationService.sweepExpiredHolds(now)).isEqualTo(3);
+
+        ReservationService withoutRepo = new ReservationService(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                reservationTransferRepository,
+                userApi,
+                null);
+        assertThat(withoutRepo.sweepExpiredHolds(now)).isEqualTo(0);
     }
 }

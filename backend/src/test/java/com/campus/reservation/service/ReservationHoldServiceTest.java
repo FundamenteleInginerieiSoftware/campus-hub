@@ -3,6 +3,7 @@ package com.campus.reservation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
+import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
@@ -259,5 +261,193 @@ class ReservationHoldServiceTest {
 
         assertThat(count).isEqualTo(3);
         verify(reservationHoldRepository).expireOldHolds(NOW);
+    }
+
+    @Test
+    @DisplayName("sweepExpiredHolds: returns 0 when no holds were expired")
+    void sweepExpiredHolds_zeroCount() {
+        when(reservationHoldRepository.expireOldHolds(any())).thenReturn(0);
+
+        int count = reservationService.sweepExpiredHolds(NOW);
+
+        assertThat(count).isZero();
+    }
+
+    @Test
+    @DisplayName("createHold: quota boundary - activeReservations == 1 allows hold creation")
+    void createHold_boundaryQuota_oneActiveAllowsHold() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(START), eq(END), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(
+                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+                .thenReturn(0L);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L); // Boundary: 1 active reservation (max quota is 2)
+        when(reservationHoldRepository.save(any(ReservationHold.class))).thenAnswer(inv -> {
+            ReservationHold h = inv.getArgument(0);
+            ReflectionTestUtils.setField(h, "id", 1L);
+            return h;
+        });
+
+        ReservationHoldResponse response = reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END));
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("createHold: quota boundary - activeReservations == 2 rejects hold creation")
+    void createHold_boundaryQuota_twoActiveRejectsHold() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(START), eq(END), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(
+                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+                .thenReturn(0L);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L); // Boundary: 2 active reservations -> limit reached
+
+        assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot exceed active reservation quota");
+    }
+
+    @Test
+    @DisplayName("createHold: validates slot rules - rejects invalid time range or outside opening hours")
+    void createHold_validatesSlotRules() {
+        // Start after end
+        assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, END, START)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("End time must be after start time");
+
+        // Outside opening hours (e.g. 20:30)
+        LocalDateTime lateStart = LocalDateTime.of(2026, 11, 2, 20, 30);
+        LocalDateTime lateEnd = LocalDateTime.of(2026, 11, 2, 21, 30);
+        assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, lateStart, lateEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("within opening hours");
+    }
+
+    @Test
+    @DisplayName("confirmHold: quota boundary - activeCount == 1 allows confirmation")
+    void confirmHold_boundaryQuota_oneActiveAllowsConfirm() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L); // Boundary: 1 active reservation (limit is 2)
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 55L);
+            return r;
+        });
+
+        ReservationResponse response = reservationService.confirmHold(1L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(55L);
+    }
+
+    @Test
+    @DisplayName("confirmHold: quota boundary - activeCount == 2 rejects confirmation")
+    void confirmHold_boundaryQuota_twoActiveRejectsConfirm() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L); // Boundary: 2 active reservations -> limit reached
+
+        assertThatThrownBy(() -> reservationService.confirmHold(1L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("confirmHold: admin bypasses quota check")
+    void confirmHold_adminBypassesQuota() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(true); // Admin bypasses quota
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 55L);
+            return r;
+        });
+
+        ReservationResponse response = reservationService.confirmHold(1L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(55L);
+        verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("releaseHold: admin can release another user's hold")
+    void releaseHold_byAdmin_success() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, 999L, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(true); // Admin can release any user's hold
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(reservationHoldRepository.save(any(ReservationHold.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationHoldResponse response = reservationService.releaseHold(1L);
+
+        assertThat(response.status()).isEqualTo(HoldStatus.RELEASED);
+        verify(auditService).record(eq(USER_ID), eq("HOLD_RELEASED"), eq("ReservationHold"), eq(1L), any());
+    }
+
+    @Test
+    @DisplayName("releaseHold: non-owner student throws 404")
+    void releaseHold_nonOwner_throws404() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, 999L, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+
+        assertThatThrownBy(() -> reservationService.releaseHold(1L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation hold not found");
+    }
+
+    @Test
+    @DisplayName("releaseHold: hold not found throws 404")
+    void releaseHold_notFound_throws404() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.releaseHold(1L))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation hold not found");
     }
 }

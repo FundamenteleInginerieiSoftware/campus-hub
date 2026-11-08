@@ -1482,10 +1482,6 @@ public class ReservationService implements ReservationApi {
         if (reservationHoldRepository == null) {
             return 0;
         }
-        int count = reservationHoldRepository.expireOldHolds(now);
-        if (count > 0) {
-            log.info("Expired {} abandoned reservation holds", count);
-        }
-        return count;
+        return reservationHoldRepository.expireOldHolds(now);
     }
 }

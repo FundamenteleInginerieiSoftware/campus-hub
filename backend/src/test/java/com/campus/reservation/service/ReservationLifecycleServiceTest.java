@@ -473,4 +473,16 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedReservationIds()).isEmpty();
         verify(notificationService, never()).notifyUser(anyLong(), any(), any());
     }
+
+    @Test
+    @DisplayName("sweepExpiredHolds: delegates to reservationService and returns count")
+    void sweepExpiredHolds_delegatesToServiceAndReturnsCount() {
+        LocalDateTime expectedNow = LocalDateTime.now(clock).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        when(reservationService.sweepExpiredHolds(expectedNow)).thenReturn(5);
+
+        int swept = lifecycleService.sweepExpiredHolds();
+
+        assertThat(swept).isEqualTo(5);
+        verify(reservationService).sweepExpiredHolds(expectedNow);
+    }
 }
