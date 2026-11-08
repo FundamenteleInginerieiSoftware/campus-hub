@@ -608,7 +608,8 @@ export default function MyReservationsPage() {
       )}
 
       {/* Incoming Reservation Transfer Offers */}
-      {pendingTransfers.map((t) => (
+      {Array.isArray(pendingTransfers) &&
+        pendingTransfers.map((t) => (
         <Alert
           key={t.id}
           color="blue"
