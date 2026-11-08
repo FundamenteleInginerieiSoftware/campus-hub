@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
@@ -29,14 +30,21 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationTransfer;
+import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.repository.ReservationTransferRepository;
 import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ExtendReservationRequest;
+import com.campus.reservation.web.InitiateTransferRequest;
 import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
+import com.campus.reservation.web.ReservationTransferResponse;
+import com.campus.user.api.Role;
+import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -88,12 +96,25 @@ class ReservationServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private ReservationTransferRepository reservationTransferRepository;
+
+    @Mock
+    private UserApi userApi;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
         reservationService = new ReservationService(
-                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                reservationTransferRepository,
+                userApi);
     }
 
     @AfterEach
@@ -1906,5 +1927,326 @@ class ReservationServiceTest {
                 .hasMessageContaining("Reservation duration must be between 30 minutes and 4 hours");
 
         assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Transfer: initiates transfer offer to recipient student and notifies them")
+    void initiateTransfer_success() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
+            ReservationTransfer t = inv.getArgument(0);
+            ReflectionTestUtils.setField(t, "id", 500L);
+            return t;
+        });
+
+        ReservationTransferResponse response =
+                reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(500L);
+        assertThat(response.status()).isEqualTo(TransferStatus.PENDING);
+        assertThat(response.toUserId()).isEqualTo(99L);
+        verify(notificationService).notifyUser(eq(99L), eq("Reservation Transfer Offer"), any());
+        verify(auditService).record(eq(USER_ID), eq("TRANSFER_INITIATED"), eq("ReservationTransfer"), eq(500L), any());
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects initiate if recipient active quota is reached (boundary == 2)")
+    void initiateTransfer_rejectsIfRecipientQuotaReached() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Recipient student already has 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("Transfer: allows initiate if recipient has exactly 1 active reservation (boundary 1 < 2)")
+    void initiateTransfer_allowsIfRecipientHasOneActiveReservation() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L);
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
+            ReservationTransfer t = inv.getArgument(0);
+            ReflectionTestUtils.setField(t, "id", 501L);
+            return t;
+        });
+
+        ReservationTransferResponse response =
+                reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(501L);
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects transfer to oneself")
+    void initiateTransfer_rejectsSelfTransfer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(USER_ID)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot transfer a reservation to yourself");
+    }
+
+    @Test
+    @DisplayName("Transfer: accepts transfer and atomically changes reservation ownership")
+    void acceptTransfer_success() {
+        Long recipientId = 99L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+
+        ReservationTransferResponse response = reservationService.acceptTransfer(500L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
+        assertThat(r.getUserId()).isEqualTo(recipientId); // Ownership transferred!
+        verify(reservationRepository).save(r);
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Transfer Accepted"), any());
+        verify(auditService)
+                .record(eq(recipientId), eq("TRANSFER_ACCEPTED"), eq("ReservationTransfer"), eq(500L), any());
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects transfer if recipient active quota is exceeded")
+    void acceptTransfer_rejectsIfRecipientQuotaExceeded() {
+        Long recipientId = 99L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        // Recipient already has 2 active bookings
+        when(reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
+
+        assertThat(r.getUserId()).isEqualTo(USER_ID); // Ownership remains with original user!
+        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("cancelReservation: auto-cancels pending transfer and notifies recipient")
+    void cancelReservation_autoCancelsPendingTransferAndNotifiesRecipient() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        ReservationTransfer pendingTransfer =
+                new ReservationTransfer(1L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(pendingTransfer, "id", 500L);
+        when(reservationTransferRepository.findByReservationIdAndStatus(1L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(pendingTransfer));
+
+        ReservationResponse response = reservationService.cancelReservation(1L);
+
+        assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(pendingTransfer.getStatus()).isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(pendingTransfer);
+        verify(notificationService)
+                .notifyUser(
+                        eq(99L),
+                        eq("Reservation Transfer Cancelled"),
+                        contains("cancelled because the reservation was cancelled"));
+        verify(auditService)
+                .record(
+                        eq(USER_ID),
+                        eq("TRANSFER_CANCELLED"),
+                        eq("ReservationTransfer"),
+                        eq(500L),
+                        eq("Auto-cancelled due to reservation cancellation"));
+    }
+
+    @Test
+    @DisplayName("Transfer: admin accepting transfer bypasses active quota check")
+    void acceptTransfer_adminBypassesQuota() {
+        Long adminId = 999L;
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, adminId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(adminId);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.ADMIN));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        ReservationTransferResponse response = reservationService.acceptTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
+        assertThat(r.getUserId()).isEqualTo(adminId);
+        verify(reservationRepository, never()).lockUserQuota(adminId);
+    }
+
+    @Test
+    @DisplayName("Transfer: sender cancels pending transfer and notifies recipient")
+    void cancelTransfer_senderCancelsAndNotifiesRecipient() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransferResponse response = reservationService.cancelTransfer(500L);
+
+        assertThat(response.status()).isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+        verify(notificationService)
+                .notifyUser(
+                        eq(recipientId),
+                        eq("Reservation Transfer Cancelled"),
+                        contains("cancelled the transfer offer"));
+        verify(auditService)
+                .record(
+                        eq(USER_ID),
+                        eq("TRANSFER_CANCELLED"),
+                        eq("ReservationTransfer"),
+                        eq(500L),
+                        contains("Cancelled by sender"));
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects accept if reservation owner no longer matches transfer sender")
+    void acceptTransfer_rejectsIfReservationOwnerChanged() {
+        Long recipientId = 99L;
+        Reservation r = new Reservation(
+                777L, // Owned by someone else now!
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Reservation owner no longer matches transfer sender");
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects accept if sender account is no longer active")
+    void acceptTransfer_rejectsIfSenderInactive() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty()); // Inactive sender
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Sender account is no longer active");
     }
 }

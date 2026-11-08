@@ -263,7 +263,14 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/reservations/bundle` | Logged in | `CreateMultiAssetReservationRequest` | `201` + `MultiAssetReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 RESERVATION_CONFLICT` (if any asset conflicts), `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_LIMIT_REACHED` |
 | `GET /api/v1/reservations/bundle/{bundleId}` | Owner or Admin | – | `200` + `MultiAssetReservationResponse` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
 | `POST /api/v1/reservations/bundle/{bundleId}/cancel` | Owner or Admin | optional `?reason=...` | `200` + `List<ReservationResponse>` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
+
 | `POST /api/v1/reservations/{id}/extend` | Owner or Admin | `ExtendReservationRequest` | `200` + `ReservationResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `404 RESERVATION_NOT_FOUND`, `409 EXTENSION_CONFLICT`, `409 ASSET_NOT_BOOKABLE`, `409 CHECKOUT_WINDOW_CLOSED`, `409 RESERVATION_ALREADY_EXPIRED`, `409 INVALID_RESERVATION_STATUS_TRANSITION`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `POST /api/v1/reservations/{id}/transfers` | Owner | `InitiateTransferRequest` | `201` + `ReservationTransferResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `404 RESERVATION_NOT_FOUND`, `404 USER_NOT_FOUND`, `409 CANNOT_TRANSFER_TO_SELF`, `409 TRANSFER_ALREADY_PENDING`, `409 RESERVATION_LIMIT_REACHED` |
+| `GET /api/v1/reservations/transfers/pending` | Logged in | – | `200` + `List<ReservationTransferResponse>` | `401 UNAUTHORIZED` |
+| `POST /api/v1/reservations/transfers/{transferId}/accept` | Recipient | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 RESERVATION_LIMIT_REACHED`, `409 TRANSFER_NOT_ALLOWED` |
+| `POST /api/v1/reservations/transfers/{transferId}/reject` | Recipient or Admin | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 INVALID_TRANSFER_STATUS_TRANSITION` |
+| `POST /api/v1/reservations/transfers/{transferId}/cancel` | Sender or Admin | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 INVALID_TRANSFER_STATUS_TRANSITION` |
+
 
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
@@ -294,9 +301,25 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "endTime": "2026-11-03T16:00:00",
   "totalAssets": 3,
   "reservations": [ /* list of ReservationResponse */ ]
+
 // ExtendReservationRequest
 {
   "newEndTime": "2026-11-03T14:00:00"
+// InitiateTransferRequest
+{
+  "recipientUserId": 2
+}
+
+// ReservationTransferResponse
+{
+  "id": 1,
+  "reservationId": 10,
+  "fromUserId": 1,
+  "toUserId": 2,
+  "status": "PENDING",
+  "requestedAt": "2026-11-09T10:00:00",
+  "respondedAt": null
+
 
 }
 

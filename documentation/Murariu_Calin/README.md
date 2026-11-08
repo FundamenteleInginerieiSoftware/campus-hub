@@ -36,7 +36,10 @@ Each document is structured in two parts:
 | 15 | [`15-test-plan-pit-mutation-and-reassignment-architecture.md`](./15-test-plan-pit-mutation-and-reassignment-architecture.md) | Test Plan, PIT Mutation Testing & Reassignment Architecture | Formalized SQA test plan, testing pyramid, 100% PIT mutation coverage, `REQUIRES_NEW` reassignment engine |
 
 | 16 | [`16-simultaneous-multi-asset-bundle-reservations.md`](./16-simultaneous-multi-asset-bundle-reservations.md) | Simultaneous Multi-Asset Bundle Reservations | Atomic kit booking (2..5 assets), deadlock prevention via sorted locks, collective cancellation |
+
 | 17 | [`17-active-reservation-extension.md`](./17-active-reservation-extension.md) | Active Reservation Duration Extension | Atomic extension, pessimistic locking, slot alignment, overlap check, zero corruption |
+| 18 | [`18-p2p-reservation-transfer.md`](./18-p2p-reservation-transfer.md) | Peer-to-Peer Reservation Transfer Workflow | Two-way handshake, advisory quota locking, state machine, zero double-booking |
+
 
 
 ---

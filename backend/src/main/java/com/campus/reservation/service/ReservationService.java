@@ -17,14 +17,20 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationTransfer;
+import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.repository.ReservationTransferRepository;
 import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ExtendReservationRequest;
+import com.campus.reservation.web.InitiateTransferRequest;
 import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
+import com.campus.reservation.web.ReservationTransferResponse;
+import com.campus.user.api.UserApi;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -40,8 +46,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -57,7 +63,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReservationService implements ReservationApi {
 
@@ -67,6 +72,66 @@ public class ReservationService implements ReservationApi {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final Clock clock;
+    private final ReservationTransferRepository reservationTransferRepository;
+    private final UserApi userApi;
+
+    @Autowired
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            Optional<ReservationTransferRepository> reservationTransferRepository,
+            Optional<UserApi> userApi) {
+        this.reservationRepository = reservationRepository;
+        this.catalogApi = catalogApi;
+        this.currentUser = currentUser;
+        this.auditService = auditService;
+        this.notificationService = notificationService;
+        this.clock = clock;
+        this.reservationTransferRepository = reservationTransferRepository.orElse(null);
+        this.userApi = userApi.orElse(null);
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            ReservationTransferRepository reservationTransferRepository,
+            UserApi userApi) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                Optional.ofNullable(reservationTransferRepository),
+                Optional.ofNullable(userApi));
+    }
+
+    public ReservationService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock) {
+        this(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                (ReservationTransferRepository) null,
+                (UserApi) null);
+    }
 
     /**
      * Creates a new reservation adhering to strict locking order and business rule validations.
@@ -345,6 +410,28 @@ public class ReservationService implements ReservationApi {
         r.cancel(now, reason);
         auditService.record(currentUser.id(), "CANCEL_RESERVATION", "Reservation", r.getId(), reason);
 
+        // If there was a pending transfer for this reservation, auto-cancel it to prevent orphaned transfers
+        if (reservationTransferRepository != null) {
+            reservationTransferRepository
+                    .findByReservationIdAndStatus(id, TransferStatus.PENDING)
+                    .ifPresent(transfer -> {
+                        transfer.cancel(now);
+                        reservationTransferRepository.save(transfer);
+                        auditService.record(
+                                currentUser.id(),
+                                "TRANSFER_CANCELLED",
+                                "ReservationTransfer",
+                                transfer.getId(),
+                                "Auto-cancelled due to reservation cancellation");
+                        notificationService.notifyUser(
+                                transfer.getToUserId(),
+                                "Reservation Transfer Cancelled",
+                                "The transfer offer for reservation #"
+                                        + id
+                                        + " was cancelled because the reservation was cancelled.");
+                    });
+        }
+
         if (cancelledByAdminForAnotherUser) {
             Long ownerId = r.getUserId();
             Long reservationId = r.getId();
@@ -373,6 +460,7 @@ public class ReservationService implements ReservationApi {
     }
 
     /**
+     *
      * Extends the duration of an active reservation (CONFIRMED or CHECKED_OUT).
      *
      * <p>Concurrency & Atomicity: Locks the asset row first, verifies that the extended slot
@@ -463,6 +551,240 @@ public class ReservationService implements ReservationApi {
                         + ".");
 
         return ReservationResponse.from(saved);
+    }
+
+    /**
+     * Initiates a transfer request offering a confirmed reservation to another student.
+     */
+    @Transactional
+    public ReservationTransferResponse initiateTransfer(Long reservationId, InitiateTransferRequest req) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        Reservation reservation = loadOwnedOrAdmin(reservationId);
+
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Only CONFIRMED reservations can be transferred; current status is " + reservation.getStatus());
+        }
+
+        if (!now.isBefore(reservation.getStartTime())) {
+            throw new ConflictException(
+                    "TRANSFER_NOT_ALLOWED", "Cannot transfer a reservation that has already started or elapsed");
+        }
+
+        Long recipientId = req.recipientUserId();
+        if (recipientId.equals(userId)) {
+            throw new ConflictException("CANNOT_TRANSFER_TO_SELF", "Cannot transfer a reservation to yourself");
+        }
+
+        // Verify recipient exists and is active
+        if (userApi != null && userApi.findActiveRole(recipientId).isEmpty()) {
+            throw new NotFoundException("USER_NOT_FOUND", "Recipient user not found or inactive: " + recipientId);
+        }
+
+        // Check if a transfer is already pending
+        if (reservationTransferRepository
+                .findByReservationIdAndStatus(reservationId, TransferStatus.PENDING)
+                .isPresent()) {
+            throw new ConflictException(
+                    "TRANSFER_ALREADY_PENDING", "A transfer offer is already pending for this reservation");
+        }
+
+        // Check recipient quota
+        if (reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+            throw new ConflictException(
+                    "RESERVATION_LIMIT_REACHED", "Recipient student already has 2 active reservations");
+        }
+
+        ReservationTransfer transfer = new ReservationTransfer(reservationId, userId, recipientId, now);
+        ReservationTransfer saved = reservationTransferRepository.save(transfer);
+
+        auditService.record(
+                userId,
+                "TRANSFER_INITIATED",
+                "ReservationTransfer",
+                saved.getId(),
+                "Offered reservation #" + reservationId + " to user #" + recipientId);
+
+        notificationService.notifyUser(
+                recipientId,
+                "Reservation Transfer Offer",
+                "User #" + userId + " has offered to transfer reservation #" + reservationId + " to you.");
+
+        return ReservationTransferResponse.from(saved);
+    }
+
+    /**
+     * Retrieves all incoming pending transfer requests for the authenticated student.
+     */
+    @Transactional(readOnly = true)
+    public List<ReservationTransferResponse> getMyPendingTransfers() {
+        Long userId = currentUser.id();
+        return reservationTransferRepository
+                .findByToUserIdAndStatusOrderByRequestedAtDesc(userId, TransferStatus.PENDING)
+                .stream()
+                .map(ReservationTransferResponse::from)
+                .toList();
+    }
+
+    /**
+     * Accepts a pending transfer offer and atomically moves reservation ownership to the recipient.
+     */
+    @Transactional
+    public ReservationTransferResponse acceptTransfer(Long transferId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        ReservationTransfer transfer = reservationTransferRepository
+                .findByIdForUpdate(transferId)
+                .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
+
+        if (!transfer.getToUserId().equals(userId)) {
+            throw new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found");
+        }
+
+        if (transfer.getStatus() != TransferStatus.PENDING) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot accept transfer in status " + transfer.getStatus());
+        }
+
+        // Verify recipient is still active
+        if (userApi != null && userApi.findActiveRole(userId).isEmpty()) {
+            throw new NotFoundException("USER_NOT_FOUND", "Recipient user not found or inactive: " + userId);
+        }
+
+        // Verify sender is still active
+        if (userApi != null && userApi.findActiveRole(transfer.getFromUserId()).isEmpty()) {
+            throw new ConflictException("TRANSFER_NOT_ALLOWED", "Sender account is no longer active");
+        }
+
+        Reservation reservation = reservationRepository
+                .findById(transfer.getReservationId())
+                .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
+
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED || !now.isBefore(reservation.getStartTime())) {
+            throw new ConflictException("TRANSFER_NOT_ALLOWED", "Reservation is no longer valid for transfer");
+        }
+
+        // Ensure reservation owner still matches transfer sender (prevents double transfer or stale ownership)
+        if (!reservation.getUserId().equals(transfer.getFromUserId())) {
+            throw new ConflictException("TRANSFER_NOT_ALLOWED", "Reservation owner no longer matches transfer sender");
+        }
+
+        // Acquire advisory lock on recipient quota (bypassed by admins)
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+            if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
+            }
+        }
+
+        transfer.accept(now);
+        reservation.transferOwnership(userId);
+
+        reservationTransferRepository.save(transfer);
+        reservationRepository.save(reservation);
+
+        auditService.record(
+                userId,
+                "TRANSFER_ACCEPTED",
+                "ReservationTransfer",
+                transfer.getId(),
+                "Ownership of reservation #"
+                        + reservation.getId()
+                        + " transferred from user #"
+                        + transfer.getFromUserId()
+                        + " to #"
+                        + userId);
+
+        notificationService.notifyUser(
+                transfer.getFromUserId(),
+                "Reservation Transfer Accepted",
+                "User #" + userId + " accepted your transfer of reservation #" + reservation.getId() + ".");
+
+        return ReservationTransferResponse.from(transfer);
+    }
+
+    /**
+     * Rejects an incoming pending reservation transfer request.
+     */
+    @Transactional
+    public ReservationTransferResponse rejectTransfer(Long transferId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        ReservationTransfer transfer = reservationTransferRepository
+                .findByIdForUpdate(transferId)
+                .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
+
+        if (!transfer.getToUserId().equals(userId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found");
+        }
+
+        if (transfer.getStatus() != TransferStatus.PENDING) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot reject transfer in status " + transfer.getStatus());
+        }
+
+        transfer.reject(now);
+        ReservationTransfer saved = reservationTransferRepository.save(transfer);
+
+        auditService.record(
+                userId,
+                "TRANSFER_REJECTED",
+                "ReservationTransfer",
+                transfer.getId(),
+                "Rejected by recipient user #" + userId);
+
+        notificationService.notifyUser(
+                transfer.getFromUserId(),
+                "Reservation Transfer Rejected",
+                "User #" + userId + " declined your transfer of reservation #" + transfer.getReservationId() + ".");
+
+        return ReservationTransferResponse.from(saved);
+    }
+
+    /**
+     * Cancels an outgoing pending reservation transfer request by the original sender.
+     */
+    @Transactional
+    public ReservationTransferResponse cancelTransfer(Long transferId) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        ReservationTransfer transfer = reservationTransferRepository
+                .findByIdForUpdate(transferId)
+                .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
+
+        if (!transfer.getFromUserId().equals(userId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found");
+        }
+
+        if (transfer.getStatus() != TransferStatus.PENDING) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot cancel transfer in status " + transfer.getStatus());
+        }
+
+        transfer.cancel(now);
+        ReservationTransfer saved = reservationTransferRepository.save(transfer);
+
+        auditService.record(
+                userId,
+                "TRANSFER_CANCELLED",
+                "ReservationTransfer",
+                transfer.getId(),
+                "Cancelled by sender user #" + userId);
+
+        notificationService.notifyUser(
+                transfer.getToUserId(),
+                "Reservation Transfer Cancelled",
+                "User #" + userId + " cancelled the transfer offer for reservation #" + transfer.getReservationId()
+                        + ".");
+
+        return ReservationTransferResponse.from(saved);
     }
 
     /**

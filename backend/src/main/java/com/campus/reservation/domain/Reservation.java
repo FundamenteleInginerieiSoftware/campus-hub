@@ -150,6 +150,11 @@ public class Reservation {
         this.endTime = Objects.requireNonNull(newEndTime, "newEndTime must not be null");
     }
 
+    public void transferOwnership(Long newUserId) {
+        requireStatus(ReservationStatus.CONFIRMED);
+        this.userId = Objects.requireNonNull(newUserId, "newUserId must not be null");
+    }
+
     private void requireStatus(ReservationStatus expected) {
         if (this.status != expected) {
             throw new InvalidStateTransitionException(
