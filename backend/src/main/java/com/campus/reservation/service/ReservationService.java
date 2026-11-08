@@ -21,6 +21,7 @@ import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.ExtendReservationRequest;
 import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
@@ -372,6 +373,99 @@ public class ReservationService implements ReservationApi {
     }
 
     /**
+     * Extends the duration of an active reservation (CONFIRMED or CHECKED_OUT).
+     *
+     * <p>Concurrency & Atomicity: Locks the asset row first, verifies that the extended slot
+     * [currentEndTime, newEndTime] has no overlapping reservations, and validates operating hours
+     * and duration limits (max 4h total). If unavailable, the reservation remains unchanged.
+     */
+    @Transactional
+    public ReservationResponse extendReservation(Long id, ExtendReservationRequest req) {
+        Reservation reservation = loadOwnedOrAdmin(id);
+        LocalDateTime now = now();
+
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED
+                && reservation.getStatus() != ReservationStatus.CHECKED_OUT) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Only CONFIRMED or CHECKED_OUT reservations can be extended; current status is "
+                            + reservation.getStatus());
+        }
+
+        LocalDateTime newEndTime = req.newEndTime();
+
+        if (!now.isBefore(reservation.getEndTime())) {
+            throw new ConflictException(
+                    "RESERVATION_ALREADY_EXPIRED", "Cannot extend an expired or completed reservation");
+        }
+
+        // A CONFIRMED booking cannot be extended if its 30-minute check-out window has already passed
+        if (reservation.getStatus() == ReservationStatus.CONFIRMED
+                && now.isAfter(reservation.getStartTime().plusMinutes(30))) {
+            throw new ConflictException(
+                    "CHECKOUT_WINDOW_CLOSED", "Reservation cannot be extended because check-out deadline has passed");
+        }
+
+        if (!newEndTime.isAfter(reservation.getEndTime())) {
+            throw new BusinessRuleException("INVALID_TIME_RANGE", "Extended end time must be after current end time");
+        }
+
+        validateExtensionRules(reservation.getStartTime(), newEndTime, now);
+
+        // 1. Lock asset row first to serialize concurrent bookings or extensions on this asset
+        catalogApi.lockForBooking(reservation.getAssetId());
+
+        // Re-verify status under row lock in case of concurrent status transition
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED
+                && reservation.getStatus() != ReservationStatus.CHECKED_OUT) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Reservation status changed concurrently to " + reservation.getStatus());
+        }
+
+        // 2. Operational state check: asset must be bookable (not UNDER_MAINTENANCE or RETIRED)
+        if (!catalogApi.isBookable(reservation.getAssetId())) {
+            throw new ConflictException(
+                    "ASSET_NOT_BOOKABLE",
+                    "Asset " + reservation.getAssetId() + " is under maintenance or retired and cannot be extended");
+        }
+
+        // 3. Overlap check on the extension window [currentEndTime, newEndTime]
+        if (reservationRepository.existsOverlap(
+                reservation.getAssetId(),
+                reservation.getEndTime(),
+                newEndTime,
+                ReservationStatus.ACTIVE_STATUSES,
+                reservation.getId())) {
+            throw new ConflictException(
+                    "EXTENSION_CONFLICT", "Cannot extend reservation: subsequent slot is already booked");
+        }
+
+        reservation.extendEndTime(newEndTime);
+        Reservation saved = reservationRepository.save(reservation);
+
+        auditService.record(
+                currentUser.id(),
+                "EXTEND_RESERVATION",
+                "Reservation",
+                saved.getId(),
+                "Extended to " + newEndTime + " on asset " + saved.getAssetId());
+
+        notificationService.notifyUser(
+                reservation.getUserId(),
+                "Reservation Extended",
+                "Your reservation #"
+                        + saved.getId()
+                        + " on asset "
+                        + saved.getAssetId()
+                        + " has been extended to "
+                        + newEndTime
+                        + ".");
+
+        return ReservationResponse.from(saved);
+    }
+
+    /**
      * Evaluates equipment availability for a requested time slot.
      *
      * <p>If {@code assetId} is provided, evaluates whether that specific equipment is bookable and free.
@@ -500,6 +594,13 @@ public class ReservationService implements ReservationApi {
             throw new BusinessRuleException(
                     "OUTSIDE_OPENING_HOURS", "Reservations must be within opening hours (08:00 to 20:00)");
         }
+    }
+
+    private void validateExtensionRules(LocalDateTime start, LocalDateTime newEnd, LocalDateTime now) {
+        validateSlotAlignment(start, newEnd);
+        validateDuration(start, newEnd);
+        validateHorizon(newEnd, now);
+        validateOpeningHours(start, newEnd);
     }
 
     @Override

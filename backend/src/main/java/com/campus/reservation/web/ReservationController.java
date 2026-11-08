@@ -193,4 +193,22 @@ public class ReservationController {
             @PathVariable java.util.UUID bundleId, @RequestParam(required = false) String reason) {
         return ResponseEntity.ok(reservationService.cancelBundle(bundleId, reason));
     }
+
+    @Operation(
+            summary = "Extend an active reservation",
+            description = "Extends the end time of a CONFIRMED or CHECKED_OUT reservation atomically")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Reservation successfully extended"),
+        @ApiResponse(responseCode = "400", description = "Invalid time range or alignment"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Reservation not found"),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Extension conflict on subsequent slot, duration exceeded, or invalid status")
+    })
+    @PostMapping("/{id}/extend")
+    public ResponseEntity<ReservationResponse> extend(
+            @PathVariable Long id, @Valid @RequestBody ExtendReservationRequest request) {
+        return ResponseEntity.ok(reservationService.extendReservation(id, request));
+    }
 }

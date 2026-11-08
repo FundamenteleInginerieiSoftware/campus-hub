@@ -33,6 +33,7 @@ import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
 import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.ExtendReservationRequest;
 import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
@@ -1737,5 +1738,173 @@ class ReservationServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.totalAssets()).isEqualTo(5);
         assertThat(response.reservations()).hasSize(5);
+    }
+
+    @Test
+    @DisplayName("Extend: successfully extends active reservation when slot is free")
+    void extendReservation_success() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd));
+
+        assertThat(response).isNotNull();
+        assertThat(response.endTime()).isEqualTo(newEnd);
+        verify(catalogApi).lockForBooking(ASSET_ID);
+        verify(auditService).record(eq(USER_ID), eq("EXTEND_RESERVATION"), eq("Reservation"), eq(100L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Extended"), any());
+    }
+
+    @Test
+    @DisplayName("Extend: rejects extension if subsequent slot overlaps with another booking")
+    void extendReservation_rejectsIfSubsequentSlotConflicts() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("subsequent slot is already booked");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd); // Original reservation remains unchanged!
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if asset is under maintenance or retired")
+    void extendReservation_rejectsIfAssetNotBookable() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("under maintenance or retired");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if reservation is already expired")
+    void extendReservation_rejectsIfExpired() {
+        // Clock is 2026-11-02T10:00:00 (Bucharest)
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 8, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 9, 0); // 09:00 is in the past relative to 10:00
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 11, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 7, 30));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Cannot extend an expired or completed reservation");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if CONFIRMED booking passed check-out window")
+    void extendReservation_rejectsIfCheckoutWindowPassed() {
+        // Clock is 2026-11-02T10:00:00 (Bucharest)
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 9, 0); // start + 30m = 09:30, which is < 10:00
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 11, 0); // 11:00 is not yet expired
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 12, 0);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("check-out deadline has passed");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if extension end time exceeds 20:00 opening hours")
+    void extendReservation_rejectsIfOutsideOpeningHours() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 18, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 19, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 20, 30); // 20:30 > 20:00
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("within opening hours");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if extension end time is not aligned to :00 or :30")
+    void extendReservation_rejectsIfSlotNotAligned() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 15, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 15, 15); // :15 not aligned
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("aligned to 0 or 30 minutes");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects if total duration exceeds 4 hours limit")
+    void extendReservation_rejectsIfDurationExceedsLimit() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 19, 0); // 5 hours total duration
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Reservation duration must be between 30 minutes and 4 hours");
+
+        assertThat(r.getEndTime()).isEqualTo(oldEnd);
     }
 }
