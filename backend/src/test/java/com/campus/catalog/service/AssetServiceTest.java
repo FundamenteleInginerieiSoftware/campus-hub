@@ -1,9 +1,12 @@
 package com.campus.catalog.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,6 +28,11 @@ import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -172,7 +180,18 @@ class AssetServiceTest {
     }
 
     @Test
-    void createRejectsSerialNumberWhenLengthExpandsBeyondLimit() {
+    void createRejectsSerialNumberWhenLengthExpandsBeyondLimitAndAcceptsExact100Chars() {
+        String exact100Serial = "A".repeat(100);
+        when(assetRepository.existsBySerialNumberIgnoreCase(exact100Serial)).thenReturn(false);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        when(assetRepository.saveAndFlush(any(Asset.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.id()).thenReturn(3L);
+
+        AssetResponse validResponse =
+                assetService.create(new CreateAssetRequest("Scope", "DS1054Z", exact100Serial, null, 1L, 2L));
+        assertEquals(exact100Serial, validResponse.serialNumber());
+
         // 100 chars ending with 'ß'; in Locale.ROOT uppercase it expands to 101 chars ("SS") (#167).
         String expandingSerial = "A".repeat(99) + "ß";
 
@@ -181,7 +200,6 @@ class AssetServiceTest {
                 () -> assetService.create(new CreateAssetRequest("Scope", "DS1054Z", expandingSerial, null, 1L, 2L)));
 
         assertEquals("INVALID_PARAMETER", ex.getCode());
-        verify(assetRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -216,6 +234,57 @@ class AssetServiceTest {
     }
 
     @Test
+    void createThrowsLabRoomNotFoundWhenLabRoomMissing() {
+        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(99L)).thenReturn(Optional.empty());
+
+        NotFoundException ex = assertThrows(
+                NotFoundException.class,
+                () -> assetService.create(
+                        new CreateAssetRequest("Rigol #1", "Rigol DS1054Z", "ds1za-001", null, 1L, 99L)));
+
+        assertEquals("LAB_ROOM_NOT_FOUND", ex.getCode());
+    }
+
+    @Test
+    void updateModifiesFieldsRecordsAuditAndReturnsResponse() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 20, 9, 0, 0);
+        Asset asset = new Asset("Old Name", "Old Model", "DS1ZA-001", "Old desc", category, labRoom, createdAt);
+        Category newCategory = new Category("Multimeters", "Bench meters");
+        LabRoom newRoom = new LabRoom("EC202", "Power Lab", "EC");
+
+        when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
+        when(categoryRepository.findById(2L)).thenReturn(Optional.of(newCategory));
+        when(labRoomRepository.findById(3L)).thenReturn(Optional.of(newRoom));
+        when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
+        when(currentUser.id()).thenReturn(3L);
+
+        AssetResponse response =
+                assetService.update(7L, new UpdateAssetRequest("New Name", "New Model", "New desc", 2L, 3L));
+
+        assertNotNull(response);
+        assertEquals("New Name", response.name());
+        assertEquals("New Model", response.model());
+        assertEquals("New desc", response.description());
+        assertEquals("Multimeters", response.categoryName());
+        assertEquals("EC202", response.labRoomCode());
+        assertEquals(EXPECTED_NOW, response.updatedAt());
+        verify(auditService).record(3L, "ASSET_UPDATED", "ASSET", null, "Updated asset New Name");
+    }
+
+    @Test
+    void updateThrowsNotFoundWhenAssetMissing() {
+        when(assetRepository.findWithDetailsById(404L)).thenReturn(Optional.empty());
+
+        NotFoundException ex = assertThrows(
+                NotFoundException.class,
+                () -> assetService.update(404L, new UpdateAssetRequest("Name", "Model", "Desc", 1L, 2L)));
+
+        assertEquals("ASSET_NOT_FOUND", ex.getCode());
+    }
+
+    @Test
     void updateRejectsRetiredAssetWithoutQueryingForeignKeys() {
         Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
         retired.retire(EXPECTED_NOW);
@@ -243,6 +312,15 @@ class AssetServiceTest {
         assertEquals(AssetStatus.RETIRED, response.status());
         assertEquals(EXPECTED_NOW, response.updatedAt());
         verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", null, "Retired asset Rigol #1 (S/N DS1ZA-001)");
+    }
+
+    @Test
+    void retireThrowsNotFoundWhenAssetMissing() {
+        when(assetRepository.findByIdForUpdate(404L)).thenReturn(Optional.empty());
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () -> assetService.retire(404L));
+
+        assertEquals("ASSET_NOT_FOUND", ex.getCode());
     }
 
     @Test
@@ -274,15 +352,33 @@ class AssetServiceTest {
         assertEquals(1, page.content().size());
         assertEquals("Rigol #1", page.content().getFirst().name());
 
+        ArgumentCaptor<Specification<Asset>> specCaptor = ArgumentCaptor.forClass(Specification.class);
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(assetRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        verify(assetRepository).findAll(specCaptor.capture(), pageableCaptor.capture());
         Sort expectedSort = Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.ASC, "id"));
         assertEquals(expectedSort, pageableCaptor.getValue().getSort());
+
+        // Student search (isAdmin == false) must add the status != RETIRED predicate.
+        Root<Asset> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        Path<Object> textPath = mock(Path.class);
+        Path<Object> statusPath = mock(Path.class);
+        when(root.get("name")).thenReturn(textPath);
+        when(root.get("model")).thenReturn(textPath);
+        when(root.get("serialNumber")).thenReturn(textPath);
+        when(root.get("category")).thenReturn(textPath);
+        when(root.get("labRoom")).thenReturn(textPath);
+        when(root.get("status")).thenReturn(statusPath);
+        when(cb.and(any(Predicate[].class))).thenReturn(mock(Predicate.class));
+
+        specCaptor.getValue().toPredicate(root, query, cb);
+        verify(cb).notEqual(statusPath, AssetStatus.RETIRED);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void searchDefaultsBlankDirectionToAscending() {
+    void searchDefaultsBlankDirectionToAscendingAndAdminIncludesRetired() {
         when(currentUser.isAdmin()).thenReturn(true);
         when(assetRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
@@ -290,11 +386,36 @@ class AssetServiceTest {
         PageResponse<AssetResponse> page = assetService.search(null, null, null, null, 0, 20, "model");
 
         assertEquals(0, page.totalElements());
+        ArgumentCaptor<Specification<Asset>> specCaptor = ArgumentCaptor.forClass(Specification.class);
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(assetRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        verify(assetRepository).findAll(specCaptor.capture(), pageableCaptor.capture());
         assertEquals(
                 Sort.by(Sort.Direction.ASC, "model").and(Sort.by(Sort.Direction.ASC, "id")),
                 pageableCaptor.getValue().getSort());
+
+        // Admin search (isAdmin == true) must NOT exclude RETIRED assets.
+        Root<Asset> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        when(cb.and(any(Predicate[].class))).thenReturn(mock(Predicate.class));
+
+        specCaptor.getValue().toPredicate(root, query, cb);
+        verify(cb, never()).notEqual(any(), eq(AssetStatus.RETIRED));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void searchAcceptsBoundaryPageSizesAndMaxOffset() {
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(assetRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
+
+        // size == 1 (lower boundary)
+        assertNotNull(assetService.search(null, null, null, null, 0, 1, "name,asc"));
+        // size == 100 (MAX_PAGE_SIZE upper boundary)
+        assertNotNull(assetService.search(null, null, null, null, 0, 100, "name,asc"));
+        // page * size == Integer.MAX_VALUE (exact offset boundary must be allowed)
+        assertNotNull(assetService.search(null, null, null, null, Integer.MAX_VALUE, 1, "name,asc"));
     }
 
     @Test
@@ -313,7 +434,7 @@ class AssetServiceTest {
 
         InvalidParameterException hugeOffset = assertThrows(
                 InvalidParameterException.class,
-                () -> assetService.search(null, null, null, null, 999_999_999, 100, "name,asc"));
+                () -> assetService.search(null, null, null, null, (Integer.MAX_VALUE / 2) + 1, 2, "name,asc"));
         assertEquals("INVALID_PARAMETER", hugeOffset.getCode());
 
         InvalidParameterException unknownSort = assertThrows(

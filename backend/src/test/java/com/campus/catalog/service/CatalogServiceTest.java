@@ -110,10 +110,11 @@ class CatalogServiceTest {
     }
 
     @Test
-    void markUnderMaintenanceAndLockForBookingThrowNotFoundWhenMissing() {
+    void markUnderMaintenanceMarkAvailableAndLockForBookingThrowNotFoundWhenMissing() {
         when(assetRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
         assertThrows(NotFoundException.class, () -> catalogService.markUnderMaintenance(99L));
+        assertThrows(NotFoundException.class, () -> catalogService.markAvailable(99L));
         assertThrows(NotFoundException.class, () -> catalogService.lockForBooking(99L));
     }
 
