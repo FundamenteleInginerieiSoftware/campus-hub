@@ -21,4 +21,5 @@
 | 08 | [08-catalog-optimizations-and-edge-cases.md](08-catalog-optimizations-and-edge-cases.md) | Catalog query optimizations, timestamp seconds, and constraint verification (#147, #160, #167, PR #192) |
 | 09 | `09-dev-catalog-seeder.md` | Development catalog seeder with multi-unit models for automated reassignment demos |
 | 11 | [11-admin-audit-log-endpoint.md](11-admin-audit-log-endpoint.md) | Administrative audit log search and filtering endpoint (`GET /api/v1/admin/audit-logs`, #217) |
-| 12 | [12-catalog-swagger-and-pit-mutation-tests.md](12-catalog-swagger-and-pit-mutation-tests.md) | Catalog Swagger error codes, `STALE_VERSION` optimistic lock test, and PIT mutation tests (#187) |
+| 12 | [12-catalog-swagger-and-pit-mutation-tests.md](12-catalog-swagger-and-pit-mutation-tests.md) | Catalog Swagger error codes, `STALE_VERSION` optimistic lock test, and PIT mutation tests (#187, #220) |
+| 13 | [13-admin-audit-log-frontend.md](13-admin-audit-log-frontend.md) | Administrator audit log frontend page (`/admin/audit-logs`, #221) |
