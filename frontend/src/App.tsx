@@ -6,6 +6,7 @@ import AdminInventoryPage from './pages/AdminInventoryPage.tsx'
 import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
 import CatalogPage from './pages/CatalogPage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
@@ -34,12 +35,7 @@ export default function App() {
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="catalog/:id" element={<AssetDetailsPage />} />
         <Route path="reservations" element={<MyReservationsPage />} />
-        <Route
-          path="incidents"
-          element={
-            <PlaceholderPage title="My incidents" description="Problems you reported and their status." owner="Stefania" />
-          }
-        />
+        <Route path="incidents" element={<MyIncidentsPage />} />
 
         {/* Admin only */}
         <Route path="admin" element={<RequireAdmin />}>
