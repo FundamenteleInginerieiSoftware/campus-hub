@@ -257,6 +257,9 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/reservations/recurring` | Logged in | `CreateRecurringReservationRequest` | `201` + `RecurringReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 RESERVATION_CONFLICT` (if any slot conflicts), `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_LIMIT_REACHED` |
+| `GET /api/v1/reservations/recurring/{seriesId}` | Owner or Admin | – | `200` + `RecurringReservationResponse` | `401 UNAUTHORIZED`, `404 SERIES_NOT_FOUND` |
+| `POST /api/v1/reservations/recurring/{seriesId}/cancel` | Owner or Admin | optional `?reason=...` | `200` + `List<ReservationResponse>` | `401 UNAUTHORIZED`, `404 SERIES_NOT_FOUND` |
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
@@ -269,6 +272,24 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "assetId": 1,
   "startTime": "2026-11-03T10:00:00",
   "endTime": "2026-11-03T12:00:00"
+}
+
+// CreateRecurringReservationRequest
+{
+  "assetId": 1,
+  "startTime": "14:00:00",
+  "endTime": "16:00:00",
+  "daysOfWeek": ["MONDAY", "WEDNESDAY"],
+  "startDate": "2026-11-09",
+  "endDate": "2026-11-25"
+}
+
+// RecurringReservationResponse
+{
+  "seriesId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "assetId": 1,
+  "totalOccurrences": 6,
+  "occurrences": [ /* list of ReservationResponse */ ]
 }
 
 // ReservationResponse (returned by booking, check-out, return, cancel)

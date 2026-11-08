@@ -149,4 +149,49 @@ public class ReservationController {
     public ResponseEntity<ReservationResponse> cancel(@PathVariable Long id) {
         return ResponseEntity.ok(reservationService.cancelReservation(id));
     }
+
+    @Operation(
+            summary = "Create recurring reservations",
+            description = "Creates a repeating series of reservations on specified weekdays; all-or-nothing atomicity")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Recurring series created successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation failed, bad time alignment, or past dates"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Asset not found"),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Conflict on any occurrence, asset not bookable, or quota exceeded")
+    })
+    @PostMapping("/recurring")
+    public ResponseEntity<RecurringReservationResponse> createRecurring(
+            @Valid @RequestBody CreateRecurringReservationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createRecurringReservations(request));
+    }
+
+    @Operation(
+            summary = "Get recurring reservation series",
+            description = "Retrieves all occurrences in a recurring reservation series (owner or admin)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Series found"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Series not found or belongs to another user")
+    })
+    @GetMapping("/recurring/{seriesId}")
+    public ResponseEntity<RecurringReservationResponse> getRecurringSeries(@PathVariable java.util.UUID seriesId) {
+        return ResponseEntity.ok(reservationService.getRecurringSeries(seriesId));
+    }
+
+    @Operation(
+            summary = "Cancel recurring reservation series",
+            description = "Cancels all active occurrences of a recurring reservation series (owner or admin)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Series occurrences cancelled"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Series not found or belongs to another user")
+    })
+    @PostMapping("/recurring/{seriesId}/cancel")
+    public ResponseEntity<List<ReservationResponse>> cancelRecurringSeries(
+            @PathVariable java.util.UUID seriesId, @RequestParam(required = false) String reason) {
+        return ResponseEntity.ok(reservationService.cancelRecurringSeries(seriesId, reason));
+    }
 }

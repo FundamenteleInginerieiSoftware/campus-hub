@@ -66,6 +66,9 @@ public class Reservation {
     @Column(name = "cancel_reason", length = 255)
     private String cancelReason;
 
+    @Column(name = "recurring_series_id")
+    private java.util.UUID recurringSeriesId;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -129,6 +132,10 @@ public class Reservation {
     public void markNoShow() {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.NO_SHOW;
+    }
+
+    public void assignRecurringSeries(java.util.UUID seriesId) {
+        this.recurringSeriesId = seriesId;
     }
 
     private void requireStatus(ReservationStatus expected) {

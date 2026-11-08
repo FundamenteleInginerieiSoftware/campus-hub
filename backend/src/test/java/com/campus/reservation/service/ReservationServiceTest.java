@@ -31,15 +31,22 @@ import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
+import com.campus.reservation.web.CreateRecurringReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.RecurringReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -1539,5 +1546,136 @@ class ReservationServiceTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, Integer.MAX_VALUE, 1))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Recurring: creates recurring reservation series and returns all occurrences")
+    void createRecurringReservations_success() {
+        LocalDate start = LocalDate.of(2026, 11, 2);
+        LocalDate end = LocalDate.of(2026, 11, 6);
+        LocalTime startTime = LocalTime.of(14, 0);
+        LocalTime endTime = LocalTime.of(16, 0);
+        CreateRecurringReservationRequest req = new CreateRecurringReservationRequest(
+                ASSET_ID, startTime, endTime, Set.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), any(), any(), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 100L);
+            return r;
+        });
+
+        RecurringReservationResponse response = reservationService.createRecurringReservations(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.seriesId()).isNotNull();
+        assertThat(response.totalOccurrences()).isEqualTo(2); // Monday Nov 2 and Wednesday Nov 4
+        assertThat(response.occurrences()).hasSize(2);
+        verify(catalogApi).lockForBooking(ASSET_ID);
+        verify(auditService)
+                .record(eq(USER_ID), eq("CREATE_RECURRING_SERIES"), eq("ReservationSeries"), eq(ASSET_ID), any());
+    }
+
+    @Test
+    @DisplayName("Recurring: rejects all occurrences if any slot has an overlap conflict")
+    void createRecurringReservations_rejectsIfOneOccurrenceOverlaps() {
+        LocalDate start = LocalDate.of(2026, 11, 2);
+        LocalDate end = LocalDate.of(2026, 11, 6);
+        LocalTime startTime = LocalTime.of(14, 0);
+        LocalTime endTime = LocalTime.of(16, 0);
+        CreateRecurringReservationRequest req = new CreateRecurringReservationRequest(
+                ASSET_ID, startTime, endTime, Set.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        // First occurrence Monday is free, second Wednesday has conflict
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID),
+                        eq(LocalDateTime.of(2026, 11, 2, 14, 0)),
+                        eq(LocalDateTime.of(2026, 11, 2, 16, 0)),
+                        eq(ReservationStatus.ACTIVE_STATUSES),
+                        eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID),
+                        eq(LocalDateTime.of(2026, 11, 4, 14, 0)),
+                        eq(LocalDateTime.of(2026, 11, 4, 16, 0)),
+                        eq(ReservationStatus.ACTIVE_STATUSES),
+                        eq(-1L)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.createRecurringReservations(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("overlaps with an existing reservation");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Recurring: rejects if student active booking quota is exceeded")
+    void createRecurringReservations_rejectsIfStudentQuotaExceeded() {
+        LocalDate start = LocalDate.of(2026, 11, 2);
+        LocalDate end = LocalDate.of(2026, 11, 6);
+        LocalTime startTime = LocalTime.of(14, 0);
+        LocalTime endTime = LocalTime.of(16, 0);
+        CreateRecurringReservationRequest req = new CreateRecurringReservationRequest(
+                ASSET_ID, startTime, endTime, Set.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        // User already has 1 active reservation, adding 2 would exceed limit of 2
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L);
+
+        assertThatThrownBy(() -> reservationService.createRecurringReservations(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Recurring: cancels entire series and audits changes")
+    void cancelRecurringSeries_success() {
+        UUID seriesId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignRecurringSeries(seriesId);
+
+        Reservation r2 = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 4, 14, 0),
+                LocalDateTime.of(2026, 11, 4, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+        r2.assignRecurringSeries(seriesId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByRecurringSeriesIdOrderByStartTimeAsc(seriesId))
+                .thenReturn(List.of(r1, r2));
+
+        List<ReservationResponse> responses = reservationService.cancelRecurringSeries(seriesId, "Plan changed");
+
+        assertThat(responses).hasSize(2);
+        assertThat(r1.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r2.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(101L), any());
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(102L), any());
     }
 }

@@ -110,4 +110,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             @Param("statuses") Collection<ReservationStatus> statuses);
+
+    List<Reservation> findByRecurringSeriesIdOrderByStartTimeAsc(java.util.UUID recurringSeriesId);
+
+    List<Reservation> findByRecurringSeriesIdAndStatusIn(
+            java.util.UUID recurringSeriesId, Collection<ReservationStatus> statuses);
 }

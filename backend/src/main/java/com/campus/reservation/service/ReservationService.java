@@ -19,7 +19,9 @@ import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
+import com.campus.reservation.web.CreateRecurringReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.RecurringReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
 import jakarta.persistence.criteria.Predicate;
@@ -36,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -111,6 +114,139 @@ public class ReservationService implements ReservationApi {
         auditService.record(userId, "CREATE_RESERVATION", "Reservation", saved.getId(), "Asset " + req.assetId());
 
         return ReservationResponse.from(saved);
+    }
+
+    /**
+     * Creates a series of recurring reservations across a specified date range and set of weekdays.
+     *
+     * <p>All-or-nothing guarantee: all occurrences are verified for overlap against active reservations.
+     * If even a single occurrence conflicts with an existing booking, the entire set is rejected with
+     * {@code 409 RESERVATION_CONFLICT} and no reservations are created.
+     *
+     * <p>Concurrency note: The asset row is locked with a pessimistic lock first, and the student's
+     * active quota lock is acquired to serialize parallel requests.
+     */
+    @Transactional
+    public RecurringReservationResponse createRecurringReservations(CreateRecurringReservationRequest req) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        validateRecurringRequest(req, now);
+
+        List<OccurrenceSlot> occurrences = generateOccurrences(req, now);
+        if (occurrences.isEmpty()) {
+            throw new BusinessRuleException("NO_RECURRING_OCCURRENCES", "No valid dates matched the recurring pattern");
+        }
+        if (occurrences.size() > 30) {
+            throw new BusinessRuleException(
+                    "RECURRING_LIMIT_EXCEEDED", "Recurring series cannot exceed 30 occurrences");
+        }
+
+        // 1. Lock asset row first
+        catalogApi.lockForBooking(req.assetId());
+
+        // 2. Operational bookable check
+        if (!catalogApi.isBookable(req.assetId())) {
+            throw new ConflictException("ASSET_NOT_BOOKABLE", "Asset is not available for booking");
+        }
+
+        // 3. Active quota check for non-admin students
+        if (!currentUser.isAdmin()) {
+            reservationRepository.lockUserQuota(userId);
+            long activeCount =
+                    reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
+            if (activeCount + occurrences.size() > 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED",
+                        "Student cannot have more than 2 active reservations (series has " + occurrences.size()
+                                + " occurrences)");
+            }
+        }
+
+        // 4. Overlap check for each occurrence (all-or-nothing atomicity)
+        for (OccurrenceSlot slot : occurrences) {
+            if (reservationRepository.existsOverlap(
+                    req.assetId(), slot.start(), slot.end(), ReservationStatus.ACTIVE_STATUSES, -1L)) {
+                throw new ConflictException(
+                        "RESERVATION_CONFLICT",
+                        "Recurring occurrence on " + slot.start() + " overlaps with an existing reservation");
+            }
+        }
+
+        // 5. Persist all occurrences sharing a series UUID
+        UUID seriesId = UUID.randomUUID();
+        List<Reservation> savedList = new ArrayList<>();
+        for (OccurrenceSlot slot : occurrences) {
+            Reservation reservation = new Reservation(userId, req.assetId(), slot.start(), slot.end(), now);
+            reservation.assignRecurringSeries(seriesId);
+            savedList.add(reservationRepository.save(reservation));
+        }
+
+        auditService.record(
+                userId,
+                "CREATE_RECURRING_SERIES",
+                "ReservationSeries",
+                req.assetId(),
+                "Series " + seriesId + " with " + savedList.size() + " occurrences on asset " + req.assetId());
+
+        List<ReservationResponse> responses =
+                savedList.stream().map(ReservationResponse::from).toList();
+        return new RecurringReservationResponse(seriesId, req.assetId(), responses.size(), responses);
+    }
+
+    /**
+     * Retrieves all occurrences belonging to a recurring reservation series.
+     * Only the series creator or an administrator may view it (IDOR protection: 404 for others).
+     */
+    @Transactional(readOnly = true)
+    public RecurringReservationResponse getRecurringSeries(UUID seriesId) {
+        Long userId = currentUser.id();
+        List<Reservation> occurrences = reservationRepository.findByRecurringSeriesIdOrderByStartTimeAsc(seriesId);
+        if (occurrences.isEmpty()) {
+            throw new NotFoundException("SERIES_NOT_FOUND", "Recurring reservation series not found");
+        }
+
+        if (!currentUser.isAdmin() && !occurrences.get(0).getUserId().equals(userId)) {
+            throw new NotFoundException("SERIES_NOT_FOUND", "Recurring reservation series not found");
+        }
+
+        List<ReservationResponse> responses =
+                occurrences.stream().map(ReservationResponse::from).toList();
+        return new RecurringReservationResponse(seriesId, occurrences.get(0).getAssetId(), responses.size(), responses);
+    }
+
+    /**
+     * Cancels all confirmed occurrences in a recurring reservation series.
+     */
+    @Transactional
+    public List<ReservationResponse> cancelRecurringSeries(UUID seriesId, String reason) {
+        Long userId = currentUser.id();
+        LocalDateTime now = now();
+
+        List<Reservation> occurrences = reservationRepository.findByRecurringSeriesIdOrderByStartTimeAsc(seriesId);
+        if (occurrences.isEmpty()) {
+            throw new NotFoundException("SERIES_NOT_FOUND", "Recurring reservation series not found");
+        }
+
+        if (!currentUser.isAdmin() && !occurrences.get(0).getUserId().equals(userId)) {
+            throw new NotFoundException("SERIES_NOT_FOUND", "Recurring reservation series not found");
+        }
+
+        List<ReservationResponse> results = new ArrayList<>();
+        for (Reservation r : occurrences) {
+            if (r.getStatus() == ReservationStatus.CONFIRMED) {
+                if (currentUser.isAdmin()) {
+                    r.cancel(now, reason != null ? reason : "Cancelled by admin");
+                } else {
+                    r.cancel(now, "Cancelled by user");
+                }
+                reservationRepository.save(r);
+                auditService.record(userId, "CANCEL_RESERVATION", "Reservation", r.getId(), "Series " + seriesId);
+            }
+            results.add(ReservationResponse.from(r));
+        }
+
+        return results;
     }
 
     /**
@@ -577,6 +713,73 @@ public class ReservationService implements ReservationApi {
         auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
         return true;
     }
+
+    private void validateRecurringRequest(CreateRecurringReservationRequest req, LocalDateTime now) {
+        if (!req.endTime().isAfter(req.startTime())) {
+            throw new BusinessRuleException("INVALID_TIME_RANGE", "End time must be after start time");
+        }
+        if (req.startDate().isAfter(req.endDate())) {
+            throw new BusinessRuleException("INVALID_TIME_RANGE", "Start date must be on or before end date");
+        }
+        if (req.startDate().isBefore(now.toLocalDate())) {
+            throw new BusinessRuleException("BOOKING_IN_PAST", "Start date cannot be in the past");
+        }
+        if (req.endDate().isAfter(now.toLocalDate().plusDays(60))) {
+            throw new BusinessRuleException(
+                    "BOOKING_TOO_FAR_AHEAD", "Recurring reservations cannot extend more than 60 days in advance");
+        }
+
+        // Slot alignment
+        if (req.startTime().getSecond() != 0
+                || req.startTime().getNano() != 0
+                || (req.startTime().getMinute() != 0 && req.startTime().getMinute() != 30)
+                || req.endTime().getSecond() != 0
+                || req.endTime().getNano() != 0
+                || (req.endTime().getMinute() != 0 && req.endTime().getMinute() != 30)) {
+            throw new BusinessRuleException(
+                    "SLOT_NOT_ALIGNED",
+                    "Reservation start and end times must be aligned to 0 or 30 minutes with zero seconds");
+        }
+
+        Duration duration = Duration.between(req.startTime(), req.endTime());
+        if (duration.compareTo(Duration.ofHours(4)) > 0) {
+            throw new BusinessRuleException(
+                    "INVALID_DURATION", "Reservation duration must be between 30 minutes and 4 hours");
+        }
+
+        // Opening hours: Monday through Friday, 08:00 - 20:00
+        LocalTime open = LocalTime.of(8, 0);
+        LocalTime close = LocalTime.of(20, 0);
+        if (req.startTime().isBefore(open) || req.endTime().isAfter(close)) {
+            throw new BusinessRuleException(
+                    "OUTSIDE_OPENING_HOURS", "Reservation times must be between 08:00 and 20:00");
+        }
+
+        for (DayOfWeek dow : req.daysOfWeek()) {
+            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+                throw new BusinessRuleException(
+                        "OUTSIDE_OPENING_HOURS", "Reservations are only permitted Monday through Friday");
+            }
+        }
+    }
+
+    private List<OccurrenceSlot> generateOccurrences(CreateRecurringReservationRequest req, LocalDateTime now) {
+        List<OccurrenceSlot> occurrences = new ArrayList<>();
+        LocalDate curr = req.startDate();
+        while (!curr.isAfter(req.endDate())) {
+            if (req.daysOfWeek().contains(curr.getDayOfWeek())) {
+                LocalDateTime start = curr.atTime(req.startTime());
+                LocalDateTime end = curr.atTime(req.endTime());
+                if (!start.isBefore(now)) {
+                    occurrences.add(new OccurrenceSlot(start, end));
+                }
+            }
+            curr = curr.plusDays(1);
+        }
+        return occurrences;
+    }
+
+    record OccurrenceSlot(LocalDateTime start, LocalDateTime end) {}
 
     // Bug fixed (#150): prevents integer overflow when Hibernate casts pageable.getOffset() to int.
     private static void validatePagination(int page, int size) {

@@ -291,4 +291,57 @@ class ReservationControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MISSING_PARAMETER"));
     }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/recurring returns 201 CREATED")
+    void createRecurringReturns201() throws Exception {
+        java.util.UUID seriesId = java.util.UUID.randomUUID();
+        RecurringReservationResponse response =
+                new RecurringReservationResponse(seriesId, 10L, 2, List.of(sampleResponse));
+
+        when(reservationService.createRecurringReservations(any())).thenReturn(response);
+
+        String json = """
+                {
+                    "assetId": 10,
+                    "startTime": "14:00:00",
+                    "endTime": "16:00:00",
+                    "daysOfWeek": ["MONDAY", "WEDNESDAY"],
+                    "startDate": "2026-11-02",
+                    "endDate": "2026-11-06"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/reservations/recurring")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.seriesId").value(seriesId.toString()))
+                .andExpect(jsonPath("$.totalOccurrences").value(2));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/recurring/{seriesId} returns 200 OK")
+    void getRecurringSeriesReturns200() throws Exception {
+        java.util.UUID seriesId = java.util.UUID.randomUUID();
+        RecurringReservationResponse response =
+                new RecurringReservationResponse(seriesId, 10L, 1, List.of(sampleResponse));
+
+        when(reservationService.getRecurringSeries(seriesId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/reservations/recurring/" + seriesId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.seriesId").value(seriesId.toString()));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/recurring/{seriesId}/cancel returns 200 OK")
+    void cancelRecurringSeriesReturns200() throws Exception {
+        java.util.UUID seriesId = java.util.UUID.randomUUID();
+        when(reservationService.cancelRecurringSeries(eq(seriesId), any())).thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(post("/api/v1/reservations/recurring/" + seriesId + "/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1));
+    }
 }
