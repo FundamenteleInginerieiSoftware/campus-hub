@@ -1,0 +1,137 @@
+classDiagram
+    direction TB
+
+    namespace Catalog_API {
+        class CatalogApi {
+            <<interface>>
+            +getAsset(Long assetId) AssetSummary
+            +isBookable(Long assetId) boolean
+            +lockForBooking(Long assetId) void
+            +findSameModelSubstitutes(Long categoryId, String model, Long excludeAssetId) List~AssetSummary~
+            +findSameCategorySubstitutes(Long categoryId, Long excludeAssetId) List~AssetSummary~
+            +markUnderMaintenance(Long assetId) void
+            +markAvailable(Long assetId) void
+        }
+        class AssetSummary {
+            <<record>>
+            +Long id
+            +String name
+            +String model
+            +String serialNumber
+            +AssetStatus status
+            +Long categoryId
+            +Long labRoomId
+        }
+    }
+
+    namespace Catalog_Domain_And_Service {
+        class Category {
+            -Long id
+            -String name
+            -String description
+            +update(String name, String description) void
+        }
+        class LabRoom {
+            -Long id
+            -String code
+            -String name
+            -String building
+            +update(String code, String name, String building) void
+        }
+        class Asset {
+            -Long id
+            -String name
+            -String model
+            -String serialNumber
+            -String description
+            -AssetStatus status
+            -Category category
+            -LabRoom labRoom
+            -Long version
+            -LocalDateTime createdAt
+            -LocalDateTime updatedAt
+            +markUnderMaintenance(LocalDateTime now) void
+            +markAvailable(LocalDateTime now) void
+            +retire(LocalDateTime now) void
+            +isBookable() boolean
+            +updateDetails(String name, String model, String description, Category category, LabRoom labRoom, LocalDateTime now) void
+        }
+        class AssetStatus {
+            <<enumeration>>
+            AVAILABLE
+            UNDER_MAINTENANCE
+            RETIRED
+        }
+        class CatalogService {
+            -AssetRepository assetRepository
+            -Clock clock
+        }
+        class AssetService {
+            -AssetRepository assetRepository
+            -CategoryRepository categoryRepository
+            -LabRoomRepository labRoomRepository
+            -AuditService auditService
+            -CurrentUser currentUser
+            -Clock clock
+            +searchAssets(String search, Long categoryId, Long labRoomId, AssetStatus status, int page, int size, String sort) PageResponse~AssetResponse~
+            +getAssetById(Long id) AssetResponse
+            +createAsset(CreateAssetRequest req) AssetResponse
+            +updateAsset(Long id, UpdateAssetRequest req) AssetResponse
+            +retireAsset(Long id) AssetResponse
+        }
+    }
+
+    namespace Common_And_Adapters {
+        class AppException {
+            <<abstract>>
+            -HttpStatus status
+            -String code
+            +getStatus() HttpStatus
+            +getCode() String
+        }
+        class GlobalExceptionHandler {
+            +handleAppException(AppException, HttpServletRequest) ProblemDetail
+            +handleValidation(MethodArgumentNotValidException, HttpServletRequest) ProblemDetail
+            +handleOptimisticLock(ObjectOptimisticLockingFailureException, HttpServletRequest) ProblemDetail
+            +handleUnexpected(Exception, HttpServletRequest) ProblemDetail
+        }
+        class PageResponse~T~ {
+            <<record>>
+            +List~T~ content
+            +int page
+            +int size
+            +long totalElements
+            +int totalPages
+            +from(Page~T~)$ PageResponse~T~
+            +from(Page~E~, Function~E,D~)$ PageResponse~D~
+        }
+        class AuditService {
+            <<interface>>
+            +record(Long actorId, String action, String entityType, Long entityId, String details) void
+            +search(Long actorId, String action, String entityType, Long entityId, LocalDateTime from, LocalDateTime to, int page, int size, String sort) PageResponse~AuditLogResponse~
+        }
+        class DatabaseAuditService {
+            -AuditLogRepository auditLogRepository
+            -Clock clock
+        }
+        class StorageService {
+            <<interface>>
+            +store(InputStream in, long size, String contentType, String ext) String
+            +load(String key) Resource
+            +delete(String key) void
+        }
+        class NotificationService {
+            <<interface>>
+            +notifyUser(Long userId, String subject, String body) void
+        }
+    }
+
+    CatalogService ..|> CatalogApi
+    CatalogService --> Asset : loads & locks
+    AssetService --> Asset : manages CRUD & retirement
+    Asset --> Category : ManyToOne LAZY
+    Asset --> LabRoom : ManyToOne LAZY
+    Asset --> AssetStatus : status
+    AssetService --> AuditService : records catalog audit trail
+    DatabaseAuditService ..|> AuditService
+    GlobalExceptionHandler --> AppException : maps to RFC 9457 ProblemDetail
