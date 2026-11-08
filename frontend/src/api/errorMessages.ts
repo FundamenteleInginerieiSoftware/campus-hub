@@ -39,6 +39,15 @@ const MESSAGES: Record<string, string> = {
   INVALID_PHOTO_TYPE: 'Only JPEG, PNG or WebP images are allowed.',
   PHOTO_TOO_LARGE: 'The photo is too large (max 5 MB).',
 
+  // Catalog error codes (api-contract §5, Liviu)
+  CATEGORY_NOT_FOUND: 'The selected category was not found.',
+  LAB_ROOM_NOT_FOUND: 'The selected lab room was not found.',
+  SERIAL_NUMBER_TAKEN: 'An asset with this serial number already exists.',
+  CATEGORY_NAME_TAKEN: 'A category with this name already exists.',
+  LAB_ROOM_CODE_TAKEN: 'A lab room with this code already exists.',
+  CATEGORY_IN_USE: 'Cannot delete this category because equipment is currently assigned to it.',
+  LAB_ROOM_IN_USE: 'Cannot delete this lab room because equipment is currently located in it.',
+
   // Generic codes from the error handler (api-contract §5) that pages can hit (#171)
   INVALID_PARAMETER: 'Some values in the request are not valid. Please check them and try again.',
   MALFORMED_REQUEST: 'The request could not be read. Please check the form and try again.',
