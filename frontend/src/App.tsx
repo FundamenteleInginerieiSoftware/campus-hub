@@ -8,6 +8,7 @@ import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
 import ReservationsDeskPage from './pages/ReservationsDeskPage.tsx'
+import AdminAuditLogPage from './pages/AdminAuditLogPage.tsx'
 
 // All pages of the app. Each owner replaces their <PlaceholderPage> with the real page component.
 // Pages under <AppLayout> get the side menu and need a login; pages under "admin" also need ADMIN.
@@ -69,6 +70,8 @@ export default function App() {
               />
             }
           />
+          <Route path="audit-logs" element={<AdminAuditLogPage />} />
+          <Route path="audit-log" element={<Navigate to="/admin/audit-logs" replace />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
