@@ -5,7 +5,9 @@ import {
   Card,
   Group,
   Modal,
+  NumberInput,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -14,25 +16,35 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
+  IconAlertTriangle,
   IconArrowsExchange,
   IconCalendar,
   IconCalendarCheck,
   IconCheck,
+  IconClockPlus,
+  IconPackage,
   IconPlus,
+  IconUserShare,
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import {
+  acceptTransfer,
   cancelReservation,
+  extendReservation,
   fetchAssetSummary,
   fetchMyReservations,
   fetchMyReservationSummary,
+  fetchPendingTransfers,
+  initiateTransfer,
   nowInBucharest,
   parseCampusLocalDateTime,
+  rejectTransfer,
   type AssetSummary,
   type Reservation,
   type ReservationStatus,
   type ReservationSummary,
+  type ReservationTransferResponse,
 } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
@@ -60,6 +72,40 @@ function formatSlotTime(startTime: string, endTime: string): string {
   const startPart = startTime.split('T')[1]?.slice(0, 5) ?? ''
   const endPart = endTime.split('T')[1]?.slice(0, 5) ?? ''
   return `${startPart} – ${endPart}`
+}
+
+/**
+ * Computes allowable new end times for an active reservation.
+ * Enforces the 4-hour max total duration and the 20:00 laboratory closing time constraint.
+ */
+function computeExtensionOptions(r: Reservation): { value: string; label: string }[] {
+  const [datePart, startPart] = r.startTime.split('T')
+  const [, endPart] = r.endTime.split('T')
+  if (!startPart || !endPart) return []
+
+  const [startH, startM] = startPart.split(':').map(Number)
+  const [endH, endM] = endPart.split(':').map(Number)
+  const startMins = startH * 60 + startM
+  const endMins = endH * 60 + endM
+
+  // Max 4 hours (240 min) from start, and lab closes at 20:00 (1200 min)
+  const maxMinsAllowed = Math.min(startMins + 240, 1200)
+  const remainingMins = maxMinsAllowed - endMins
+
+  const options: { value: string; label: string }[] = []
+  for (const step of [30, 60, 90, 120, 150, 180]) {
+    if (step <= remainingMins) {
+      const targetMins = endMins + step
+      const targetH = Math.floor(targetMins / 60)
+      const targetM = targetMins % 60
+      const timeStr = `${String(targetH).padStart(2, '0')}:${String(targetM).padStart(2, '0')}`
+      options.push({
+        value: `${datePart}T${timeStr}:00`,
+        label: `${timeStr} (+${step} min)`,
+      })
+    }
+  }
+  return options
 }
 
 function statusColor(status: ReservationStatus): string {
@@ -145,7 +191,23 @@ export default function MyReservationsPage() {
   const [cancelSubmitting, setCancelSubmitting] = useState(false)
   const [cancelError, setCancelError] = useState<unknown>(null)
 
-  // Fetch summary counts for the user across the entire database.
+  // Incoming pending transfers
+  const [pendingTransfers, setPendingTransfers] = useState<ReservationTransferResponse[]>([])
+  const [transferRespondingId, setTransferRespondingId] = useState<number | null>(null)
+
+  // Extend reservation modal state
+  const [extendingReservation, setExtendingReservation] = useState<Reservation | null>(null)
+  const [extendEndTime, setExtendEndTime] = useState<string | null>(null)
+  const [extendLoading, setExtendLoading] = useState(false)
+  const [extendError, setExtendError] = useState<unknown>(null)
+
+  // Transfer reservation modal state
+  const [transferringReservation, setTransferringReservation] = useState<Reservation | null>(null)
+  const [recipientUserId, setRecipientUserId] = useState<number | string>('')
+  const [transferLoading, setTransferLoading] = useState(false)
+  const [transferError, setTransferError] = useState<unknown>(null)
+
+  // Fetch summary counts and pending transfers for the student.
   useEffect(() => {
     let ignore = false
     fetchMyReservationSummary()
@@ -155,6 +217,15 @@ export default function MyReservationsPage() {
       .catch(() => {
         // Non-blocking fallback if summary is unavailable
       })
+
+    fetchPendingTransfers()
+      .then((transfers) => {
+        if (!ignore) setPendingTransfers(transfers)
+      })
+      .catch(() => {
+        // Non-blocking fallback if transfer queue is temporarily unreachable
+      })
+
     return () => {
       ignore = true
     }
@@ -258,6 +329,91 @@ export default function MyReservationsPage() {
     }
   }
 
+  async function handleAcceptTransfer(transferId: number) {
+    setTransferRespondingId(transferId)
+    setError(null)
+    try {
+      await acceptTransfer(transferId)
+      setActionNotice('Transfer accepted! The reservation has been transferred to your upcoming bookings.')
+      setError(null)
+      setLoading(true)
+      setReloadToken((t) => t + 1)
+    } catch (err) {
+      setError(err)
+    } finally {
+      setTransferRespondingId(null)
+    }
+  }
+
+  async function handleRejectTransfer(transferId: number) {
+    setTransferRespondingId(transferId)
+    setError(null)
+    try {
+      await rejectTransfer(transferId)
+      setActionNotice('Transfer offer declined.')
+      setError(null)
+      setLoading(true)
+      setReloadToken((t) => t + 1)
+    } catch (err) {
+      setError(err)
+    } finally {
+      setTransferRespondingId(null)
+    }
+  }
+
+  function handleStartExtend(reservation: Reservation) {
+    setExtendingReservation(reservation)
+    setExtendError(null)
+    const options = computeExtensionOptions(reservation)
+    setExtendEndTime(options[0]?.value ?? null)
+  }
+
+  async function handleConfirmExtend() {
+    if (!extendingReservation || !extendEndTime) return
+    setExtendLoading(true)
+    setExtendError(null)
+    try {
+      const updated = await extendReservation(extendingReservation.id, extendEndTime)
+      setExtendingReservation(null)
+      setActionNotice(
+        `Reservation #${updated.id} extended successfully until ${formatSlotTime(updated.startTime, updated.endTime)}.`,
+      )
+      setError(null)
+      setLoading(true)
+      setReloadToken((t) => t + 1)
+    } catch (err) {
+      setExtendError(err)
+    } finally {
+      setExtendLoading(false)
+    }
+  }
+
+  function handleStartTransfer(reservation: Reservation) {
+    setTransferringReservation(reservation)
+    setRecipientUserId('')
+    setTransferError(null)
+  }
+
+  async function handleConfirmTransfer() {
+    const toId = Number(recipientUserId)
+    if (!transferringReservation || !toId || isNaN(toId)) return
+    setTransferLoading(true)
+    setTransferError(null)
+    try {
+      await initiateTransfer(transferringReservation.id, toId)
+      const resId = transferringReservation.id
+      setTransferringReservation(null)
+      setActionNotice(`Transfer offer for Reservation #${resId} sent to Student #${toId}.`)
+      setError(null)
+      setLoading(true)
+      setReloadToken((t) => t + 1)
+    } catch (err) {
+      setTransferError(err)
+    } finally {
+      setTransferLoading(false)
+    }
+  }
+
   const columns: Column<Reservation>[] = [
     {
       header: 'Date & Time',
@@ -298,6 +454,18 @@ export default function MyReservationsPage() {
                 </Badge>
               </Tooltip>
             )}
+            {r.bundleId && (
+              <Badge
+                size="xs"
+                variant="light"
+                color="violet"
+                leftSection={<IconPackage size={12} />}
+                mt={4}
+                style={{ display: 'block', maxWidth: 'fit-content' }}
+              >
+                Bundle booking
+              </Badge>
+            )}
           </div>
         )
       },
@@ -333,29 +501,73 @@ export default function MyReservationsPage() {
     {
       header: 'Actions',
       render: (r) => {
-        // Backend rejects cancellation once startTime is reached (!now.isBefore(startTime)).
-        const canCancel = r.status === 'CONFIRMED'
-        if (!canCancel) return null
         const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
+        const canCancel = r.status === 'CONFIRMED' && !hasStartedInBucharest
+        const canExtend = r.status === 'CONFIRMED' || r.status === 'CHECKED_OUT'
+        const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest
+
         return (
-          <Tooltip
-            label="Students can only cancel before the reservation start time (Europe/Bucharest)."
-            disabled={!hasStartedInBucharest}
-          >
-            <Button
-              size="xs"
-              variant="light"
-              color="red"
-              // Not 'disabled': a disabled button swallows hover events, so the Mantine Tooltip would never show.
-              // data-disabled gives the same look; the click is ignored once the slot has started.
-              data-disabled={hasStartedInBucharest || undefined}
-              onClick={() => {
-                if (!hasStartedInBucharest) handleStartCancel(r)
-              }}
-            >
-              Cancel
-            </Button>
-          </Tooltip>
+          <Group gap="xs" wrap="nowrap">
+            {canExtend && (
+              <Tooltip label="Extend duration of this active reservation">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="blue"
+                  leftSection={<IconClockPlus size={14} />}
+                  onClick={() => handleStartExtend(r)}
+                >
+                  Extend
+                </Button>
+              </Tooltip>
+            )}
+
+            {canTransfer && (
+              <Tooltip label="Transfer this upcoming reservation to another student">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="violet"
+                  leftSection={<IconUserShare size={14} />}
+                  onClick={() => handleStartTransfer(r)}
+                >
+                  Transfer
+                </Button>
+              </Tooltip>
+            )}
+
+            {canCancel && (
+              <Tooltip
+                label="Students can only cancel before the reservation start time (Europe/Bucharest)."
+                disabled={!hasStartedInBucharest}
+              >
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="red"
+                  data-disabled={hasStartedInBucharest || undefined}
+                  onClick={() => {
+                    if (!hasStartedInBucharest) handleStartCancel(r)
+                  }}
+                >
+                  Cancel
+                </Button>
+              </Tooltip>
+            )}
+
+            <Tooltip label="Report an issue or damage on this equipment">
+              <Button
+                component={Link}
+                to={`/incidents?assetId=${r.assetId}`}
+                size="xs"
+                variant="subtle"
+                color="yellow"
+                leftSection={<IconAlertTriangle size={14} />}
+              >
+                Report
+              </Button>
+            </Tooltip>
+          </Group>
         )
       },
     },
@@ -394,6 +606,46 @@ export default function MyReservationsPage() {
           {actionNotice}
         </Alert>
       )}
+
+      {/* Incoming Reservation Transfer Offers */}
+      {pendingTransfers.map((t) => (
+        <Alert
+          key={t.id}
+          color="blue"
+          icon={<IconArrowsExchange size={18} />}
+          withCloseButton={false}
+          mb="md"
+        >
+          <Group justify="space-between" wrap="wrap">
+            <div>
+              <Text size="sm" fw={600}>
+                Incoming Reservation Transfer Offer
+              </Text>
+              <Text size="xs">
+                Student #{t.fromUserId} offered to transfer <b>Reservation #{t.reservationId}</b> to you. Accept to take ownership of this booking.
+              </Text>
+            </div>
+            <Group gap="xs">
+              <Button
+                size="xs"
+                color="teal"
+                loading={transferRespondingId === t.id}
+                onClick={() => handleAcceptTransfer(t.id)}
+              >
+                Accept
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                disabled={transferRespondingId === t.id}
+                onClick={() => handleRejectTransfer(t.id)}
+              >
+                Decline
+              </Button>
+            </Group>
+          </Group>
+        </Alert>
+      ))}
 
       <ErrorAlert error={error} />
 
@@ -539,6 +791,99 @@ export default function MyReservationsPage() {
           </Group>
         </Stack>
       </Modal>
+
+      {/* Extend Duration Modal */}
+      {extendingReservation && (
+        <Modal
+          opened
+          onClose={() => !extendLoading && setExtendingReservation(null)}
+          title={<Text fw={600}>Extend Reservation #{extendingReservation.id}</Text>}
+          centered
+        >
+          <Stack>
+            <ErrorAlert error={extendError} />
+            <div>
+              <Text size="sm">
+                Equipment: <b>{assetCache[extendingReservation.assetId]?.name ?? `Asset #${extendingReservation.assetId}`}</b>
+              </Text>
+              <Text size="xs" c="dimmed" mt={2}>
+                Current slot: {formatSlotDate(extendingReservation.startTime)} ({formatSlotTime(extendingReservation.startTime, extendingReservation.endTime)})
+              </Text>
+            </div>
+            {computeExtensionOptions(extendingReservation).length > 0 ? (
+              <Select
+                label="New end time"
+                description="Select new end time (maximum 4 hours total duration, closing at 20:00)."
+                data={computeExtensionOptions(extendingReservation)}
+                value={extendEndTime}
+                onChange={setExtendEndTime}
+                allowDeselect={false}
+              />
+            ) : (
+              <Alert color="yellow">
+                This reservation cannot be extended: it already reaches the 4-hour duration limit or the 20:00 lab closing time.
+              </Alert>
+            )}
+            <Group justify="flex-end" mt="md">
+              <Button variant="default" onClick={() => setExtendingReservation(null)} disabled={extendLoading}>
+                Cancel
+              </Button>
+              <Button
+                color="blue"
+                onClick={handleConfirmExtend}
+                loading={extendLoading}
+                disabled={!extendEndTime || computeExtensionOptions(extendingReservation).length === 0}
+              >
+                Confirm extension
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+      )}
+
+      {/* Transfer Reservation Modal */}
+      {transferringReservation && (
+        <Modal
+          opened
+          onClose={() => !transferLoading && setTransferringReservation(null)}
+          title={<Text fw={600}>Transfer Reservation #{transferringReservation.id}</Text>}
+          centered
+        >
+          <Stack>
+            <ErrorAlert error={transferError} />
+            <div>
+              <Text size="sm">
+                Offer booking for <b>{assetCache[transferringReservation.assetId]?.name ?? `Asset #${transferringReservation.assetId}`}</b> to another student.
+              </Text>
+              <Text size="xs" c="dimmed" mt={2}>
+                Slot: {formatSlotDate(transferringReservation.startTime)} ({formatSlotTime(transferringReservation.startTime, transferringReservation.endTime)})
+              </Text>
+            </div>
+            <NumberInput
+              label="Recipient Student User ID"
+              placeholder="e.g. 2"
+              description="The student will receive an incoming transfer offer to accept."
+              min={1}
+              value={recipientUserId}
+              onChange={setRecipientUserId}
+              required
+            />
+            <Group justify="flex-end" mt="md">
+              <Button variant="default" onClick={() => setTransferringReservation(null)} disabled={transferLoading}>
+                Cancel
+              </Button>
+              <Button
+                color="violet"
+                onClick={handleConfirmTransfer}
+                loading={transferLoading}
+                disabled={!recipientUserId}
+              >
+                Send transfer offer
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+      )}
     </>
   )
 }

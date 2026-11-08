@@ -27,6 +27,19 @@ export type Reservation = {
   returnedAt: string | null
   cancelledAt: string | null
   cancelReason: string | null
+  bundleId?: string | null
+}
+
+export type TransferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED'
+
+export type ReservationTransferResponse = {
+  id: number
+  reservationId: number
+  fromUserId: number
+  toUserId: number
+  status: TransferStatus
+  requestedAt: string
+  respondedAt: string | null
 }
 
 export type CreateReservationRequest = {
@@ -135,6 +148,51 @@ export function checkAvailability(params: {
  */
 export function fetchAssetSummary(assetId: number) {
   return apiFetch<AssetSummary>(`/api/v1/assets/${assetId}`)
+}
+
+/**
+ * Extends the duration of an active reservation (POST /api/v1/reservations/{id}/extend).
+ */
+export function extendReservation(id: number, newEndTime: string) {
+  return apiFetch<Reservation>(`/api/v1/reservations/${id}/extend`, {
+    method: 'POST',
+    body: { newEndTime },
+  })
+}
+
+/**
+ * Initiates a P2P transfer of an upcoming confirmed reservation (POST /api/v1/reservations/{id}/transfers).
+ */
+export function initiateTransfer(id: number, recipientUserId: number) {
+  return apiFetch<ReservationTransferResponse>(`/api/v1/reservations/${id}/transfers`, {
+    method: 'POST',
+    body: { recipientUserId },
+  })
+}
+
+/**
+ * Retrieves pending incoming reservation transfer requests for the current student (GET /api/v1/reservations/transfers/pending).
+ */
+export function fetchPendingTransfers() {
+  return apiFetch<ReservationTransferResponse[]>('/api/v1/reservations/transfers/pending')
+}
+
+/**
+ * Accepts a pending reservation transfer offer (POST /api/v1/reservations/transfers/{transferId}/accept).
+ */
+export function acceptTransfer(transferId: number) {
+  return apiFetch<ReservationTransferResponse>(`/api/v1/reservations/transfers/${transferId}/accept`, {
+    method: 'POST',
+  })
+}
+
+/**
+ * Rejects an incoming reservation transfer offer (POST /api/v1/reservations/transfers/{transferId}/reject).
+ */
+export function rejectTransfer(transferId: number) {
+  return apiFetch<ReservationTransferResponse>(`/api/v1/reservations/transfers/${transferId}/reject`, {
+    method: 'POST',
+  })
 }
 
 /**
