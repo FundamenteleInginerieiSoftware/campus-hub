@@ -52,13 +52,16 @@ export function setUnauthorizedHandler(handler: () => void) {
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  // A plain object is sent as JSON. FormData (a file upload) is sent as multipart/form-data:
+  // the browser then sets the Content-Type itself, with the boundary between the parts.
   body?: unknown
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = tokenStorage.get()
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (options.body !== undefined) {
+  const isForm = options.body instanceof FormData
+  if (options.body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json'
   }
   if (token) {
@@ -68,7 +71,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const response = await fetch(path, {
     method: options.method ?? 'GET',
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: isForm ? (options.body as FormData) : options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
 
   if (!response.ok) {
