@@ -32,30 +32,35 @@ The `common`, `storage`, and `notification` packages provide the shared foundati
 
 ### Exception Hierarchy
 
-The base class is `AppException(HttpStatus status, String code, String message)`. All subclasses provide a 1-argument constructor with a default code and a 2-argument constructor `(code, message)`:
+The base class is `AppException(HttpStatus status, String code, String message)`, which `GlobalExceptionHandler.handleAppException` maps to an RFC 9457 `ProblemDetail`. Constructor availability varies by subclass:
+- **Both `(message)` and `(code, message)`:** `NotFoundException`, `ConflictException`, `UnauthorizedException`, `ForbiddenException`, `InvalidStateTransitionException`, and `BusinessRuleException`.
+- **Only `(code, message)` (no 1-argument constructor / no default code):** `BadRequestException` and `PayloadTooLargeException`.
+- **Only `(message)`:** `InvalidParameterException` (extends `BadRequestException` and always sets `code = "INVALID_PARAMETER"`).
 
-| Exception | HTTP Status | Default Code | Typical Custom Codes | Usage / When to Throw |
-|---|---|---|---|---|
-| `NotFoundException` | `404 Not Found` | `NOT_FOUND` | `ASSET_NOT_FOUND`, `RESERVATION_NOT_FOUND`, `INCIDENT_NOT_FOUND`, `CATEGORY_NOT_FOUND`, `LAB_ROOM_NOT_FOUND` | Queried entity does not exist, or belongs to another user. |
-| `ConflictException` | `409 Conflict` | `CONFLICT` | `SERIAL_NUMBER_TAKEN`, `CATEGORY_NAME_TAKEN`, `LAB_ROOM_CODE_TAKEN`, `RESERVATION_CONFLICT`, `CATEGORY_IN_USE`, `LAB_ROOM_IN_USE` | Unique constraint violation, overlapping booking, in-use foreign key constraint. |
-| `BadRequestException` | `400 Bad Request` | `BAD_REQUEST` | `MALFORMED_REQUEST`, `INVALID_PHOTO_TYPE` | Unparseable input, corrupted upload. |
-| `InvalidParameterException` | `400 Bad Request` | `INVALID_PARAMETER` | — | Extends `BadRequestException`. Invalid or missing query/path parameters. |
-| `UnauthorizedException` | `401 Unauthorized` | `UNAUTHORIZED` | `INVALID_CREDENTIALS` | Thrown by `AuthService` on bad credentials, or `CurrentUser` when token is missing/expired. |
-| `PayloadTooLargeException` | `413 Payload Too Large`| `PAYLOAD_TOO_LARGE` | `PHOTO_TOO_LARGE` | Uploaded file exceeds application limit (5 MB). |
-| `InvalidStateTransitionException` | `409 Conflict` | `INVALID_STATE_TRANSITION` | `INVALID_RESERVATION_STATUS_TRANSITION`, `ASSET_RETIRED` | Entity cannot move from current status to requested status (e.g. retiring or booking a `RETIRED` asset). |
-| `BusinessRuleException` | `409 Conflict` | `BUSINESS_RULE_VIOLATION`| `BOOKING_TOO_FAR_AHEAD`, `OUTSIDE_OPENING_HOURS`, `RESERVATION_LIMIT_REACHED`, `SLOT_NOT_ALIGNED`, `INVALID_DURATION` | Domain-specific business rule violations. |
+| Exception | Constructors | HTTP Status | Default Code | Typical Custom Codes | Usage / When to Throw |
+|---|---|---|---|---|---|
+| `NotFoundException` | `(msg)`, `(code, msg)` | `404 Not Found` | `NOT_FOUND` | `ASSET_NOT_FOUND`, `RESERVATION_NOT_FOUND`, `INCIDENT_NOT_FOUND`, `CATEGORY_NOT_FOUND`, `LAB_ROOM_NOT_FOUND` | Queried entity does not exist, or belongs to another user. |
+| `ConflictException` | `(msg)`, `(code, msg)` | `409 Conflict` | `CONFLICT` | `SERIAL_NUMBER_TAKEN`, `CATEGORY_NAME_TAKEN`, `LAB_ROOM_CODE_TAKEN`, `RESERVATION_CONFLICT`, `CATEGORY_IN_USE`, `LAB_ROOM_IN_USE` | Unique constraint violation, overlapping booking, in-use foreign key constraint. |
+| `BadRequestException` | `(code, msg)` only | `400 Bad Request` | — | `INVALID_PHOTO_TYPE` | Invalid request data or unsupported file type. |
+| `InvalidParameterException` | `(msg)` only | `400 Bad Request` | `INVALID_PARAMETER` | — | Extends `BadRequestException`. Invalid or out-of-range query/path parameters. |
+| `UnauthorizedException` | `(msg)`, `(code, msg)` | `401 Unauthorized` | `UNAUTHORIZED` | `INVALID_CREDENTIALS` | Thrown by `AuthService` on bad credentials, or `CurrentUser.id()` called on a public path with no login. |
+| `ForbiddenException` | `(msg)`, `(code, msg)` | `403 Forbidden` | `FORBIDDEN` | — | Exists in `common.error`, though nothing throws it on `main` yet (403 on `/api/v1/admin/**` comes from `SecurityErrorHandler`). |
+| `PayloadTooLargeException` | `(code, msg)` only | `413 Payload Too Large` | — | `PHOTO_TOO_LARGE` | Uploaded file exceeds application limit (5 MB). |
+| `InvalidStateTransitionException` | `(msg)`, `(code, msg)` | `409 Conflict` | `INVALID_STATE_TRANSITION` | `INVALID_RESERVATION_STATUS_TRANSITION`, `ASSET_RETIRED` | Entity cannot move from current status to requested status (e.g. retiring or booking a `RETIRED` asset). |
+| `BusinessRuleException` | `(msg)`, `(code, msg)` | `409 Conflict` | `BUSINESS_RULE_VIOLATION` | `BOOKING_TOO_FAR_AHEAD`, `OUTSIDE_OPENING_HOURS`, `RESERVATION_LIMIT_REACHED`, `SLOT_NOT_ALIGNED`, `INVALID_DURATION` | Domain-specific business rule violations. |
 
 ### Framework Error Handling
 
 `GlobalExceptionHandler` also intercepts framework-level Spring exceptions and formats them as RFC 9457 `ProblemDetail`:
 - **`MethodArgumentNotValidException` (`@Valid` in request body):** Returns `400 VALIDATION_FAILED` containing field names and rejection reasons.
-- **`HandlerMethodValidationException` / `ConstraintViolationException` (`@Validated` parameter constraints):** Returns `400 VALIDATION_FAILED`.
+- **`HandlerMethodValidationException`:** Triggered by Spring Boot's built-in validation of controller method parameters; returns `400 VALIDATION_FAILED`.
+- **`ConstraintViolationException`:** Triggered by `@Validated` on a controller/service class; returns `400 VALIDATION_FAILED`.
 - **`HttpMessageNotReadableException` (Malformed or unparseable JSON):** Returns `400 MALFORMED_REQUEST`.
 - **`MethodArgumentTypeMismatchException` / `MissingServletRequestParameterException`:** Returns `400 INVALID_PARAMETER`.
 - **`ObjectOptimisticLockingFailureException` (`@Version` conflicts):** Returns `409 STALE_VERSION` when concurrent modifications conflict.
 - **`PropertyReferenceException` (Invalid sort property):** Returns `400 INVALID_PARAMETER` when callers request non-whitelisted sorting.
 - **`MaxUploadSizeExceededException`:** Returns `413 PHOTO_TOO_LARGE`.
-- **Catch-all (`Exception.class`):** Returns `500 INTERNAL_ERROR`. Logged at `ERROR` level; stack traces are never leaked to clients.
+- **Catch-all (`Exception.class` — `handleUnexpected`):** First checks `ex instanceof ErrorResponse`; if it is one, returns Spring's own HTTP status with `code = status.name()` (e.g. `405 METHOD_NOT_ALLOWED`, `404 NOT_FOUND` for unknown paths, `415 UNSUPPORTED_MEDIA_TYPE`). All other unhandled exceptions become `500 INTERNAL_ERROR` (logged at `ERROR` level; stack traces are never sent to the client).
 
 ### RFC 9457 ProblemDetail Payload Example
 
@@ -124,11 +129,20 @@ Query parameters follow Spring conventions: `?page=0&size=20&sort=name,asc`.
 
 ### Contract: `AuditService`
 
-Captures administrative and security-relevant actions into the PostgreSQL `audit_logs` table:
+Captures administrative and security-relevant actions into the PostgreSQL `audit_logs` table and provides filtered, paginated search for administrators (`GET /api/v1/admin/audit-logs`, `AdminAuditLogController`):
 
 ```java
 public interface AuditService {
     void record(Long actorId, String action, String entityType, Long entityId, String details);
+
+    PageResponse<AuditLogResponse> search(
+        Long actorId,
+        String action,
+        String entityType,
+        Long entityId,
+        LocalDateTime from,
+        LocalDateTime to,
+        Pageable pageable);
 }
 ```
 
@@ -138,8 +152,9 @@ public interface AuditService {
 - `action`: Standardized uppercase action verb:
   - **Catalog:** `ASSET_CREATED`, `ASSET_UPDATED`, `ASSET_RETIRED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_DELETED`, `LAB_ROOM_CREATED`, `LAB_ROOM_UPDATED`, `LAB_ROOM_DELETED`.
   - **Reservation:** `CREATE_RESERVATION`, `CANCEL_RESERVATION`, `CHECK_OUT_RESERVATION`, `RETURN_RESERVATION`, `REASSIGN_RESERVATION`, `FORCE_CANCEL_RESERVATION`, `AUTO_NO_SHOW`, `MARK_OVERDUE`.
-  - **User:** `USER_UPDATED`, `USER_DISABLED`, `USER_ENABLED`, `ROLE_CHANGED`.
-- `entityType`: Domain entity identifier (e.g. `ASSET`, `CATEGORY`, `LAB_ROOM`, `Reservation`, `User`).
+  - **User (`AdminUserService`):** `USER_DISABLED`, `USER_ENABLED`, `USER_ROLE_CHANGED`.
+  - **Incident (`IncidentService.audit`):** `INCIDENT_REPORTED`, `INCIDENT_REPAIR_STARTED`, `INCIDENT_RESOLVED`, `INCIDENT_REJECTED`, `INCIDENT_PHOTO_ADDED`, `INCIDENT_PHOTO_REPLACED`.
+- `entityType`: Domain entity identifier (`ASSET`, `CATEGORY`, `LAB_ROOM`, `USER`, `INCIDENT`, and `Reservation`).
 - `entityId`: Numeric ID of the modified entity.
 - `details`: Plain human-readable summary of what changed (e.g. `status changed to UNDER_MAINTENANCE`).
 
@@ -167,7 +182,7 @@ public interface StorageService {
 | Profile | Implementation | Target Storage | Security & Validations |
 |---|---|---|---|
 | `@Profile("!prod")` (Default / Dev / CI) | `LocalStorageService` | Local filesystem (`app.storage.local-dir`, default `./uploads`) | Strict `<uuid>.<ext>` regex validation preventing path traversal; magic-byte validation (`JPEG`, `PNG`, `WEBP`) and bounded stream reads (max 5 MB) via `StorageValidation`. |
-| `@Profile("prod")` (AWS) | `S3StorageService` | AWS S3 Bucket (`campus-hub-photos-*`) | Managed by Matei Necula via AWS SDK v2, authenticated via EC2 IAM instance roles. Uses the same `StorageValidation` rules. |
+| `@Profile("prod")` (AWS) | `S3StorageService` | AWS S3 Bucket configured via `app.storage.photo-bucket` (env `PHOTO_BUCKET`) | Managed by Matei Necula via AWS SDK v2, authenticated via EC2 IAM instance roles. Uses the same `StorageValidation` rules. |
 
 ---
 
@@ -203,8 +218,10 @@ cd backend
 
 - `GlobalExceptionHandlerTest`: Plain unit test (`new GlobalExceptionHandler()`) asserting RFC 9457 status codes, `code` fields, and validation problem formatting.
 - `PageResponseTest`: Unit test verifying pagination calculations and entity-to-DTO mapping overloads.
-- `DatabaseAuditServiceTest`: Mockito unit test verifying repository delegation.
-- `AuditLogRepositoryTest`: `@DataJpaTest` against local PostgreSQL verifying audit record persistence and queries.
+- `DatabaseAuditServiceTest`: Mockito unit test verifying repository delegation, pagination validation, and sort whitelisting.
+- `AuditLogRepositoryTest` & `AuditLogSpecificationTest`: `@DataJpaTest` against local PostgreSQL verifying audit record persistence and dynamic filter criteria.
+- `AdminAuditLogControllerTest`: `@WebMvcTest` verifying `/api/v1/admin/audit-logs` RBAC and parameter binding.
 - `LocalStorageServiceTest`: Validates filesystem storage, magic-byte detection, path traversal rejection, and size boundaries.
 - `S3StorageServiceTest`: Verifies S3 client interaction and validation delegation.
-- `LoggingNotificationServiceTest`: Verifies log output formatting.
+- `LoggingNotificationServiceTest`: Checks that `notifyUser` logs without throwing.
+- `SesNotificationServiceTest`: Verifies SES email request building, recipient lookup, and error handling.
