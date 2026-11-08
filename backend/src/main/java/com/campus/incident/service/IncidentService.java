@@ -12,10 +12,13 @@ import com.campus.incident.domain.IncidentReport.IncidentStatus;
 import com.campus.incident.repository.IncidentReportRepository;
 import com.campus.incident.web.CreateIncidentRequest;
 import com.campus.incident.web.IncidentResponse;
+import com.campus.storage.api.StorageService;
+import java.io.InputStream;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,7 +26,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+@Slf4j
 @Service
 public class IncidentService {
 
@@ -43,6 +49,7 @@ public class IncidentService {
     private final CatalogApi catalogApi;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final StorageService storageService;
     private final Clock clock;
 
     public IncidentService(
@@ -50,11 +57,13 @@ public class IncidentService {
             CatalogApi catalogApi,
             ApplicationEventPublisher eventPublisher,
             AuditService auditService,
+            StorageService storageService,
             Clock clock) {
         this.incidentReportRepository = incidentReportRepository;
         this.catalogApi = catalogApi;
         this.eventPublisher = eventPublisher;
         this.auditService = auditService;
+        this.storageService = storageService;
         this.clock = clock;
     }
 
@@ -166,12 +175,47 @@ public class IncidentService {
      */
     @Transactional(readOnly = true)
     public IncidentResponse getIncident(Long incidentId, Long requesterId, boolean requesterIsAdmin) {
-        IncidentReport report = findOrThrow(incidentId);
+        return toResponse(findVisibleOrThrow(incidentId, requesterId, requesterIsAdmin));
+    }
 
-        if (!requesterIsAdmin && !report.getReportedById().equals(requesterId)) {
-            throw notFound(incidentId);
+    /**
+     * Adds or replaces the photo of an OPEN or IN_REPAIR incident, for its reporter or an admin (anyone else:
+     * 404, like a missing id). StorageService checks the file: 400 INVALID_PHOTO_TYPE (not JPEG/PNG/WebP,
+     * empty, or the first bytes are not really that image type), 413 PHOTO_TOO_LARGE (over 5 MB).
+     *
+     * <p>The client's file name is ignored on purpose: the type comes from the Content-Type and the
+     * file's first bytes ("magic bytes"), never from the name, so a renamed .html can't pass as a .png.
+     */
+    @Transactional
+    public IncidentResponse attachPhoto(
+            Long incidentId,
+            InputStream content,
+            long size,
+            String contentType,
+            Long requesterId,
+            boolean requesterIsAdmin) {
+        IncidentReport report = findVisibleOrThrow(incidentId, requesterId, requesterIsAdmin);
+        report.checkPhotoCanChange();
+
+        String oldKey = report.getPhotoKey();
+        String newKey = storageService.store(content, size, contentType, null);
+        report.attachPhoto(newKey);
+        IncidentReport saved = incidentReportRepository.save(report);
+
+        cleanUpFilesAfterTransaction(oldKey, newKey);
+        audit(requesterId, oldKey == null ? "INCIDENT_PHOTO_ADDED" : "INCIDENT_PHOTO_REPLACED", saved, null);
+        return toResponse(saved);
+    }
+
+    /** The photo of one incident, for its reporter or an admin. 404 PHOTO_NOT_FOUND when it has none. */
+    @Transactional(readOnly = true)
+    public IncidentPhoto loadPhoto(Long incidentId, Long requesterId, boolean requesterIsAdmin) {
+        IncidentReport report = findVisibleOrThrow(incidentId, requesterId, requesterIsAdmin);
+        String key = report.getPhotoKey();
+        if (key == null) {
+            throw new NotFoundException("PHOTO_NOT_FOUND", "Photo was not found");
         }
-        return toResponse(report);
+        return new IncidentPhoto(storageService.load(key), StorageService.contentTypeForKey(key));
     }
 
     /**
@@ -194,6 +238,46 @@ public class IncidentService {
 
     private IncidentReport findOrThrow(Long incidentId) {
         return incidentReportRepository.findById(incidentId).orElseThrow(() -> notFound(incidentId));
+    }
+
+    // The reporter or an admin; anyone else gets the same 404 as for a missing id.
+    private IncidentReport findVisibleOrThrow(Long incidentId, Long requesterId, boolean requesterIsAdmin) {
+        IncidentReport report = findOrThrow(incidentId);
+        if (!requesterIsAdmin && !report.getReportedById().equals(requesterId)) {
+            throw notFound(incidentId);
+        }
+        return report;
+    }
+
+    /**
+     * Bug fixed (#171): files are not part of the database transaction. Before, a rollback after
+     * StorageService.store left a file that no row pointed to. Now the cleanup runs once the transaction
+     * is over: after a commit the replaced photo is deleted; after a rollback the new file is deleted.
+     * Without a transaction (plain unit tests) the old photo is deleted straight away.
+     */
+    private void cleanUpFilesAfterTransaction(String oldKey, String newKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            deleteQuietly(oldKey);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                deleteQuietly(status == STATUS_COMMITTED ? oldKey : newKey);
+            }
+        });
+    }
+
+    // A file that could not be deleted only wastes space; it must never fail the request.
+    private void deleteQuietly(String key) {
+        if (key == null) {
+            return;
+        }
+        try {
+            storageService.delete(key);
+        } catch (RuntimeException ex) {
+            log.warn("Could not delete incident photo {}: {}", key, ex.getMessage());
+        }
     }
 
     private static NotFoundException notFound(Long incidentId) {

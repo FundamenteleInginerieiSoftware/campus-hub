@@ -1,15 +1,20 @@
 package com.campus.incident.web;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.campus.common.error.BadRequestException;
 import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
@@ -19,7 +24,9 @@ import com.campus.common.security.CurrentUser;
 import com.campus.config.SecurityConfig;
 import com.campus.incident.domain.IncidentReport.IncidentSeverity;
 import com.campus.incident.domain.IncidentReport.IncidentStatus;
+import com.campus.incident.service.IncidentPhoto;
 import com.campus.incident.service.IncidentService;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -27,7 +34,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -255,5 +264,124 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
 
         verifyNoInteractions(incidentService);
+    }
+
+    // ---- photo (#171) ------------------------------------------------------------------------
+
+    private static final byte[] PNG_BYTES = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    private static final String PHOTO_KEY = "22222222-2222-2222-2222-222222222222.png";
+
+    private final MockMultipartFile pngFile = new MockMultipartFile("file", "crack.png", "image/png", PNG_BYTES);
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/incidents/{id}/photo returns 200 with the photoKey, for the logged-in user")
+    void uploadPhotoReturns200() throws Exception {
+        when(currentUser.id()).thenReturn(1L);
+        when(currentUser.isAdmin()).thenReturn(false);
+        IncidentResponse withPhoto = new IncidentResponse(
+                100L,
+                12L,
+                null,
+                1L,
+                "Display cracked",
+                IncidentSeverity.HIGH,
+                IncidentStatus.OPEN,
+                PHOTO_KEY,
+                LocalDateTime.of(2026, 11, 3, 14, 0),
+                null,
+                null,
+                null);
+        when(incidentService.attachPhoto(
+                        eq(100L),
+                        any(InputStream.class),
+                        eq((long) PNG_BYTES.length),
+                        eq("image/png"),
+                        eq(1L),
+                        eq(false)))
+                .thenReturn(withPhoto);
+
+        mockMvc.perform(multipart("/api/v1/incidents/100/photo").file(pngFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(100))
+                .andExpect(jsonPath("$.photoKey").value(PHOTO_KEY));
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/incidents/{id}/photo returns 400 INVALID_PHOTO_TYPE when storage refuses the file")
+    void uploadWrongTypeReturns400() throws Exception {
+        when(currentUser.id()).thenReturn(1L);
+        when(incidentService.attachPhoto(eq(100L), any(InputStream.class), anyLong(), any(), eq(1L), eq(false)))
+                .thenThrow(new BadRequestException("INVALID_PHOTO_TYPE", "Only JPEG, PNG or WebP images are allowed"));
+
+        mockMvc.perform(multipart("/api/v1/incidents/100/photo")
+                        .file(new MockMultipartFile("file", "page.html", "text/html", "<script>".getBytes())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PHOTO_TYPE"));
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/incidents/{id}/photo returns 400 without a \"file\" part, before the service runs")
+    void uploadWithoutFilePartReturns400() throws Exception {
+        mockMvc.perform(multipart("/api/v1/incidents/100/photo")
+                        .file(new MockMultipartFile("image", "crack.png", "image/png", PNG_BYTES)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(incidentService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/incidents/{id}/photo returns 409 on a closed incident")
+    void uploadToClosedIncidentReturns409() throws Exception {
+        when(currentUser.id()).thenReturn(1L);
+        when(incidentService.attachPhoto(eq(100L), any(InputStream.class), anyLong(), any(), eq(1L), eq(false)))
+                .thenThrow(new InvalidStateTransitionException(
+                        "INVALID_INCIDENT_STATUS_TRANSITION", "Photo cannot change when the incident is RESOLVED"));
+
+        mockMvc.perform(multipart("/api/v1/incidents/100/photo").file(pngFile))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_INCIDENT_STATUS_TRANSITION"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/incidents/{id}/photo returns 401 without a token")
+    void uploadWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(multipart("/api/v1/incidents/100/photo").file(pngFile)).andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(incidentService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("GET /api/v1/incidents/{id}/photo returns the bytes with their type, no-store and nosniff")
+    void getPhotoReturnsTheImage() throws Exception {
+        when(currentUser.id()).thenReturn(1L);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(incidentService.loadPhoto(100L, 1L, false))
+                .thenReturn(new IncidentPhoto(new ByteArrayResource(PNG_BYTES), "image/png"));
+
+        mockMvc.perform(get("/api/v1/incidents/100/photo"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/png"))
+                .andExpect(content().bytes(PNG_BYTES))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("GET /api/v1/incidents/{id}/photo returns 404 PHOTO_NOT_FOUND when there is no photo")
+    void getMissingPhotoReturns404() throws Exception {
+        when(currentUser.id()).thenReturn(1L);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(incidentService.loadPhoto(100L, 1L, false))
+                .thenThrow(new NotFoundException("PHOTO_NOT_FOUND", "Photo was not found"));
+
+        mockMvc.perform(get("/api/v1/incidents/100/photo"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PHOTO_NOT_FOUND"));
     }
 }

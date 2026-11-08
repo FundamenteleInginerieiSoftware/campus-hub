@@ -105,6 +105,23 @@ public class IncidentReport {
         this.resolvedAt = rejectedAt;
     }
 
+    /**
+     * A photo can be added or replaced only while the incident is still OPEN or IN_REPAIR. Called before the
+     * file is stored, so a closed incident never leaves an unused file behind.
+     */
+    public void checkPhotoCanChange() {
+        if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_INCIDENT_STATUS_TRANSITION", "Photo cannot change when the incident is " + this.status);
+        }
+    }
+
+    /** Stores the key returned by StorageService (never a path or a URL). */
+    public void attachPhoto(String photoKey) {
+        checkPhotoCanChange();
+        this.photoKey = photoKey;
+    }
+
     public void resolve(Long adminId, String resolutionNotes, LocalDateTime resolvedAt) {
         if (this.status != IncidentStatus.OPEN && this.status != IncidentStatus.IN_REPAIR) {
             throw new InvalidStateTransitionException(
