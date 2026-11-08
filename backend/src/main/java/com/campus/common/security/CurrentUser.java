@@ -18,7 +18,10 @@ public class CurrentUser {
         return Long.valueOf(jwt().getSubject());
     }
 
-    /** SecurityConfig turns roles: ["ADMIN"] into the ROLE_ADMIN authority. */
+    /**
+     * The role is read from the database on every request, not from the token's "roles" claim (#117): SecurityConfig
+     * looks the user up and grants ROLE_ADMIN or ROLE_STUDENT, so a role change counts from the next request.
+     */
     public boolean isAdmin() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         // No login (e.g. a public path): not an admin, instead of a NullPointerException.
