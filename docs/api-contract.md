@@ -259,6 +259,9 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/reservations/bundle` | Logged in | `CreateMultiAssetReservationRequest` | `201` + `MultiAssetReservationResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND`, `409 RESERVATION_CONFLICT` (if any asset conflicts), `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_LIMIT_REACHED` |
+| `GET /api/v1/reservations/bundle/{bundleId}` | Owner or Admin | – | `200` + `MultiAssetReservationResponse` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
+| `POST /api/v1/reservations/bundle/{bundleId}/cancel` | Owner or Admin | optional `?reason=...` | `200` + `List<ReservationResponse>` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
@@ -271,6 +274,22 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "assetId": 1,
   "startTime": "2026-11-03T10:00:00",
   "endTime": "2026-11-03T12:00:00"
+}
+
+// CreateMultiAssetReservationRequest
+{
+  "assetIds": [1, 2, 3],
+  "startTime": "2026-11-03T14:00:00",
+  "endTime": "2026-11-03T16:00:00"
+}
+
+// MultiAssetReservationResponse
+{
+  "bundleId": "b1c2d3e4-f5a6-7890-abcd-ef1234567890",
+  "startTime": "2026-11-03T14:00:00",
+  "endTime": "2026-11-03T16:00:00",
+  "totalAssets": 3,
+  "reservations": [ /* list of ReservationResponse */ ]
 }
 
 // ReservationResponse (returned by booking, check-out, return, cancel)

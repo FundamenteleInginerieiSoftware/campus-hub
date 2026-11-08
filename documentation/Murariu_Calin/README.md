@@ -34,6 +34,7 @@ Each document is structured in two parts:
 | 13 | [`13-frontend-caching-and-cancel-guards.md`](./13-frontend-caching-and-cancel-guards.md) | Frontend Asset Cache & Cancel Guards | `fetchedAssetIdsRef` deduplication, pre-start cancellation guard, stale booking error reset |
 | 14 | [`14-swagger-examples-and-mutation-test-gaps.md`](./14-swagger-examples-and-mutation-test-gaps.md) | Swagger Examples & Mutation Test Gaps | Slot-aligned Swagger examples, `ReassignmentRollbackIT` DB isolation, PIT survivor elimination in reservation/reassignment |
 | 15 | [`15-test-plan-pit-mutation-and-reassignment-architecture.md`](./15-test-plan-pit-mutation-and-reassignment-architecture.md) | Test Plan, PIT Mutation Testing & Reassignment Architecture | Formalized SQA test plan, testing pyramid, 100% PIT mutation coverage, `REQUIRES_NEW` reassignment engine |
+| 16 | [`16-simultaneous-multi-asset-bundle-reservations.md`](./16-simultaneous-multi-asset-bundle-reservations.md) | Simultaneous Multi-Asset Bundle Reservations | Atomic kit booking (2..5 assets), deadlock prevention via sorted locks, collective cancellation |
 
 ---
 

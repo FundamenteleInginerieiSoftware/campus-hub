@@ -31,7 +31,9 @@ import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.AvailabilityResponse;
+import com.campus.reservation.web.CreateMultiAssetReservationRequest;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.MultiAssetReservationResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
 import java.time.Clock;
@@ -40,6 +42,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -1539,5 +1543,199 @@ class ReservationServiceTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> reservationService.getAdminReservations(null, null, null, null, Integer.MAX_VALUE, 1))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Bundle: creates simultaneous multi-asset reservations locking assets in ascending order")
+    void createMultiAssetReservation_success() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(20L, 10L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 100L + r.getAssetId());
+            return r;
+        });
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.bundleId()).isNotNull();
+        assertThat(response.totalAssets()).isEqualTo(2);
+        assertThat(response.reservations()).hasSize(2);
+
+        // Verify deterministic ascending lock order: 10L locked before 20L (deadlock prevention)
+        InOrder inOrder = inOrder(catalogApi);
+        inOrder.verify(catalogApi).lockForBooking(10L);
+        inOrder.verify(catalogApi).lockForBooking(20L);
+
+        verify(auditService)
+                .record(eq(USER_ID), eq("CREATE_BUNDLE_RESERVATION"), eq("ReservationBundle"), eq(10L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Confirmed"), any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects all reservations if one asset has an overlap conflict")
+    void createMultiAssetReservation_rejectsIfOneAssetOverlaps() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        eq(10L), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.existsOverlap(
+                        eq(20L), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("overlaps with an existing reservation");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if less than 2 assets requested")
+    void createMultiAssetReservation_rejectsIfLessThanTwoAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if more than 5 assets requested")
+    void createMultiAssetReservation_rejectsIfMoreThanFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("Bundle: cancels all confirmed reservations in the bundle")
+    void cancelBundle_success() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        Reservation r2 = new Reservation(
+                USER_ID,
+                20L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+        r2.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1, r2));
+
+        List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Cancelled entire kit");
+
+        assertThat(responses).hasSize(2);
+        assertThat(r1.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r2.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(101L), any());
+        verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(102L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Cancelled"), any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects student cancellation after start time")
+    void cancelBundle_rejectsIfAfterStartTime() {
+        UUID bundleId = UUID.randomUUID();
+        // Start is 09:00, while Clock is 10:00
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, "late cancel"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("cancelled before start time");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if student already reached max active reservations limit (2)")
+    void createMultiAssetReservation_rejectsIfQuotaExceeded() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L); // Already at limit of 2
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("cannot have more than 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("Bundle: allows exact upper boundary of 5 assets in a single bundle")
+    void createMultiAssetReservation_allowsExactFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.totalAssets()).isEqualTo(5);
+        assertThat(response.reservations()).hasSize(5);
     }
 }

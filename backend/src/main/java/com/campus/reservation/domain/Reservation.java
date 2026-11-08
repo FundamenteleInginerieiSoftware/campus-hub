@@ -66,6 +66,9 @@ public class Reservation {
     @Column(name = "cancel_reason", length = 255)
     private String cancelReason;
 
+    @Column(name = "bundle_id")
+    private java.util.UUID bundleId;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -129,6 +132,10 @@ public class Reservation {
     public void markNoShow() {
         requireStatus(ReservationStatus.CONFIRMED);
         this.status = ReservationStatus.NO_SHOW;
+    }
+
+    public void assignBundle(java.util.UUID bundleId) {
+        this.bundleId = bundleId;
     }
 
     private void requireStatus(ReservationStatus expected) {
