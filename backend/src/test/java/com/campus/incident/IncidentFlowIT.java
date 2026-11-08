@@ -2,6 +2,7 @@ package com.campus.incident;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.jayway.jsonpath.JsonPath;
@@ -14,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -253,7 +255,98 @@ class IncidentFlowIT {
         assertThat(field(result, "$.code")).isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
     }
 
+    // ---- photo (#171) ------------------------------------------------------------------------
+
+    // Real PNG and JPEG signatures: StorageService checks the first bytes, not just the Content-Type.
+    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D};
+    private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0x10, 'J', 'F'};
+
+    @Test
+    void theReporterAddsAPhoto_andOnlyTheReporterAndAdminsCanSeeIt() throws Exception {
+        long incidentId = report(studentA, "Screen cracked");
+
+        MvcResult uploaded = uploadAs(studentA, incidentId, "image/png", PNG);
+        assertThat(uploaded.getResponse().getStatus()).as(body(uploaded)).isEqualTo(200);
+        String key = field(uploaded, "$.photoKey");
+        assertThat(key).endsWith(".png");
+        assertThat(field(getAs(studentA, "/api/v1/incidents/" + incidentId), "$.photoKey"))
+                .isEqualTo(key);
+
+        MvcResult mine = getAs(studentA, "/api/v1/incidents/" + incidentId + "/photo");
+        assertThat(mine.getResponse().getStatus()).isEqualTo(200);
+        assertThat(mine.getResponse().getContentType()).isEqualTo("image/png");
+        assertThat(mine.getResponse().getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+        assertThat(mine.getResponse().getContentAsByteArray()).isEqualTo(PNG);
+
+        assertThat(getAs(admin, "/api/v1/incidents/" + incidentId + "/photo")
+                        .getResponse()
+                        .getStatus())
+                .isEqualTo(200);
+        MvcResult other = getAs(studentB, "/api/v1/incidents/" + incidentId + "/photo");
+        assertThat(other.getResponse().getStatus()).isEqualTo(404);
+        assertThat(field(other, "$.code")).isEqualTo("INCIDENT_NOT_FOUND");
+        MvcResult otherUpload = uploadAs(studentB, incidentId, "image/png", PNG);
+        assertThat(otherUpload.getResponse().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    void anAdminReplacesThePhoto_andTheNewOneIsServed() throws Exception {
+        long incidentId = report(studentA, "Screen cracked");
+        String firstKey = field(uploadAs(studentA, incidentId, "image/png", PNG), "$.photoKey");
+
+        MvcResult replaced = uploadAs(admin, incidentId, "image/jpeg", JPEG);
+
+        assertThat(replaced.getResponse().getStatus()).as(body(replaced)).isEqualTo(200);
+        assertThat(field(replaced, "$.photoKey")).isNotEqualTo(firstKey).endsWith(".jpg");
+        MvcResult served = getAs(studentA, "/api/v1/incidents/" + incidentId + "/photo");
+        assertThat(served.getResponse().getContentType()).isEqualTo("image/jpeg");
+        assertThat(served.getResponse().getContentAsByteArray()).isEqualTo(JPEG);
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT action FROM audit_logs WHERE entity_type = 'INCIDENT' AND entity_id = ? ORDER BY id",
+                        String.class,
+                        incidentId))
+                .containsExactly("INCIDENT_REPORTED", "INCIDENT_PHOTO_ADDED", "INCIDENT_PHOTO_REPLACED");
+    }
+
+    // An HTML file renamed to .png with a PNG Content-Type: the first bytes give it away.
+    @Test
+    void aFileThatIsNotReallyAnImage_isA400_andNothingIsSaved() throws Exception {
+        long incidentId = report(studentA, "Screen cracked");
+
+        MvcResult result = uploadAs(studentA, incidentId, "image/png", "<html><script>".getBytes());
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertThat(field(result, "$.code")).isEqualTo("INVALID_PHOTO_TYPE");
+        MvcResult photo = getAs(studentA, "/api/v1/incidents/" + incidentId + "/photo");
+        assertThat(photo.getResponse().getStatus()).isEqualTo(404);
+        assertThat(field(photo, "$.code")).isEqualTo("PHOTO_NOT_FOUND");
+    }
+
+    @Test
+    void aClosedIncident_keepsItsPhoto_butItCanNoLongerChange() throws Exception {
+        long incidentId = report(studentA, "Screen cracked");
+        uploadAs(studentA, incidentId, "image/png", PNG);
+        postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/resolve", null);
+
+        MvcResult result = uploadAs(studentA, incidentId, "image/jpeg", JPEG);
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(409);
+        assertThat(field(result, "$.code")).isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
+        assertThat(getAs(studentA, "/api/v1/incidents/" + incidentId + "/photo")
+                        .getResponse()
+                        .getContentAsByteArray())
+                .isEqualTo(PNG);
+    }
+
     // ---- helpers ---------------------------------------------------------------------------
+
+    private MvcResult uploadAs(String token, long incidentId, String contentType, byte[] bytes) throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "photo", contentType, bytes);
+        return mockMvc.perform(multipart("/api/v1/incidents/" + incidentId + "/photo")
+                        .file(file)
+                        .header("Authorization", token))
+                .andReturn();
+    }
 
     private long report(String token, String description) throws Exception {
         return createdId(token, "/api/v1/incidents", reportJson(assetId, description));

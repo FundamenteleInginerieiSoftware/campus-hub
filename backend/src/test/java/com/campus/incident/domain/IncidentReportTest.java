@@ -143,4 +143,31 @@ class IncidentReportTest {
         assertThat(report.getStatus()).isEqualTo(from);
         assertThat(report.getResolvedById()).isNull();
     }
+
+    // ---- photo (#171) ------------------------------------------------------------------------
+
+    @ParameterizedTest
+    @CsvSource({"OPEN", "IN_REPAIR"})
+    void attachPhoto_setsTheKey_whileTheIncidentIsActive(IncidentStatus status) {
+        IncidentReport report = inStatus(status);
+
+        report.attachPhoto("22222222-2222-2222-2222-222222222222.png");
+
+        assertThat(report.getPhotoKey()).isEqualTo("22222222-2222-2222-2222-222222222222.png");
+        assertThat(report.getStatus()).isEqualTo(status);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"RESOLVED", "REJECTED"})
+    void attachPhoto_fails_onAClosedIncident_andKeepsTheOldKey(IncidentStatus closed) {
+        IncidentReport report = inStatus(closed);
+        ReflectionTestUtils.setField(report, "photoKey", "old.jpg");
+
+        assertThatThrownBy(() -> report.attachPhoto("new.png"))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessageContaining(closed.name())
+                .extracting("code")
+                .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
+        assertThat(report.getPhotoKey()).isEqualTo("old.jpg");
+    }
 }

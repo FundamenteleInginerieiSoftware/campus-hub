@@ -3,7 +3,9 @@ package com.campus.incident.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -15,9 +17,11 @@ import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
+import com.campus.common.error.BadRequestException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.error.PayloadTooLargeException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.incident.domain.IncidentReport;
@@ -26,6 +30,9 @@ import com.campus.incident.domain.IncidentReport.IncidentStatus;
 import com.campus.incident.repository.IncidentReportRepository;
 import com.campus.incident.web.CreateIncidentRequest;
 import com.campus.incident.web.IncidentResponse;
+import com.campus.storage.api.StorageService;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -43,6 +50,8 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -67,6 +76,9 @@ class IncidentServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private StorageService storageService;
+
     private Clock clock;
     private IncidentService incidentService;
     private final Long adminId = 99L;
@@ -76,8 +88,8 @@ class IncidentServiceTest {
     void setUp() {
         // 123 ms on purpose: the service must cut the time to whole seconds.
         clock = Clock.fixed(Instant.parse("2026-10-25T12:00:00.123Z"), ZoneId.of("UTC"));
-        incidentService =
-                new IncidentService(incidentReportRepository, catalogApi, eventPublisher, auditService, clock);
+        incidentService = new IncidentService(
+                incidentReportRepository, catalogApi, eventPublisher, auditService, storageService, clock);
     }
 
     private LocalDateTime nowInSeconds() {
@@ -641,6 +653,162 @@ class IncidentServiceTest {
                             new CreateIncidentRequest(ASSET_ID, "Broken", IncidentSeverity.LOW), reporterId))
                     .isInstanceOf(InvalidStateTransitionException.class);
             verifyNoInteractions(auditService);
+        }
+    }
+
+    // ---- photo (#171) ------------------------------------------------------------------------
+
+    @Nested
+    class Photo {
+
+        private static final String OLD_KEY = "11111111-1111-1111-1111-111111111111.jpg";
+        private static final String NEW_KEY = "22222222-2222-2222-2222-222222222222.png";
+
+        private final InputStream content = new ByteArrayInputStream(new byte[] {1, 2, 3});
+
+        private IncidentReport withPhoto(Long id, IncidentStatus status, String key) {
+            IncidentReport report = incident(id, status);
+            ReflectionTestUtils.setField(report, "photoKey", key);
+            return report;
+        }
+
+        private void givenStoreReturns(String key) {
+            when(storageService.store(any(InputStream.class), anyLong(), any(), isNull()))
+                    .thenReturn(key);
+        }
+
+        @Test
+        void firstPhoto_isStored_saved_andAuditedAsAdded() {
+            givenIncident(incident(1L, IncidentStatus.OPEN));
+            givenStoreReturns(NEW_KEY);
+            givenSaveReturnsItsArgument();
+
+            IncidentResponse response = incidentService.attachPhoto(1L, content, 3, "image/png", reporterId, false);
+
+            assertThat(response.photoKey()).isEqualTo(NEW_KEY);
+            // The client's file name is never passed on: the extension comes from the checked type.
+            verify(storageService).store(content, 3, "image/png", null);
+            verify(storageService, never()).delete(any());
+            verify(auditService).record(reporterId, "INCIDENT_PHOTO_ADDED", "INCIDENT", 1L, "Asset 10");
+        }
+
+        // No transaction in a plain unit test, so the old file goes straight away (IncidentFlowIT covers commit).
+        @Test
+        void replacingAPhoto_deletesTheOldFile_andIsAuditedAsReplaced() {
+            givenIncident(withPhoto(1L, IncidentStatus.IN_REPAIR, OLD_KEY));
+            givenStoreReturns(NEW_KEY);
+            givenSaveReturnsItsArgument();
+
+            IncidentResponse response = incidentService.attachPhoto(1L, content, 3, "image/png", adminId, true);
+
+            assertThat(response.photoKey()).isEqualTo(NEW_KEY);
+            verify(storageService).delete(OLD_KEY);
+            verify(storageService, never()).delete(NEW_KEY);
+            verify(auditService).record(adminId, "INCIDENT_PHOTO_REPLACED", "INCIDENT", 1L, "Asset 10");
+        }
+
+        @Test
+        void aFailedDeleteOfTheOldFile_doesNotFailTheUpload() {
+            givenIncident(withPhoto(1L, IncidentStatus.OPEN, OLD_KEY));
+            givenStoreReturns(NEW_KEY);
+            givenSaveReturnsItsArgument();
+            doThrow(new IllegalStateException("disk error"))
+                    .when(storageService)
+                    .delete(OLD_KEY);
+
+            assertThat(incidentService
+                            .attachPhoto(1L, content, 3, "image/png", reporterId, false)
+                            .photoKey())
+                    .isEqualTo(NEW_KEY);
+        }
+
+        @ParameterizedTest
+        @CsvSource({"RESOLVED", "REJECTED"})
+        void isRefused_onAClosedIncident_beforeAnyFileIsStored(IncidentStatus closed) {
+            givenIncident(incident(1L, closed));
+
+            assertThatThrownBy(() -> incidentService.attachPhoto(1L, content, 3, "image/png", reporterId, false))
+                    .isInstanceOf(InvalidStateTransitionException.class)
+                    .extracting("code")
+                    .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
+            verifyNoInteractions(storageService, auditService);
+            verify(incidentReportRepository, never()).save(any());
+        }
+
+        @Test
+        void isA404_forAnotherStudent_andNothingIsStored() {
+            givenIncident(incident(1L, IncidentStatus.OPEN));
+
+            assertThatThrownBy(() -> incidentService.attachPhoto(1L, content, 3, "image/png", 7L, false))
+                    .isInstanceOf(NotFoundException.class)
+                    .extracting("code")
+                    .isEqualTo("INCIDENT_NOT_FOUND");
+            verifyNoInteractions(storageService, auditService);
+        }
+
+        @Test
+        void aWrongFileType_isA400_andTheIncidentKeepsItsOldPhoto() {
+            IncidentReport report = withPhoto(1L, IncidentStatus.OPEN, OLD_KEY);
+            givenIncident(report);
+            when(storageService.store(any(InputStream.class), anyLong(), any(), isNull()))
+                    .thenThrow(new BadRequestException("INVALID_PHOTO_TYPE", "Only JPEG, PNG or WebP"));
+
+            assertThatThrownBy(() -> incidentService.attachPhoto(1L, content, 3, "text/html", reporterId, false))
+                    .isInstanceOf(BadRequestException.class)
+                    .extracting("code")
+                    .isEqualTo("INVALID_PHOTO_TYPE");
+            assertThat(report.getPhotoKey()).isEqualTo(OLD_KEY);
+            verify(storageService, never()).delete(any());
+            verify(incidentReportRepository, never()).save(any());
+            verifyNoInteractions(auditService);
+        }
+
+        @Test
+        void aFileOver5Mb_isA413() {
+            givenIncident(incident(1L, IncidentStatus.OPEN));
+            when(storageService.store(any(InputStream.class), anyLong(), any(), isNull()))
+                    .thenThrow(new PayloadTooLargeException("PHOTO_TOO_LARGE", "Max 5 MB"));
+
+            assertThatThrownBy(
+                            () -> incidentService.attachPhoto(1L, content, 6_000_000, "image/jpeg", reporterId, false))
+                    .isInstanceOf(PayloadTooLargeException.class)
+                    .extracting("code")
+                    .isEqualTo("PHOTO_TOO_LARGE");
+            verifyNoInteractions(auditService);
+        }
+
+        @Test
+        void load_returnsTheFile_withTheTypeFromItsKey() {
+            givenIncident(withPhoto(1L, IncidentStatus.RESOLVED, NEW_KEY));
+            Resource file = new ByteArrayResource(new byte[] {1});
+            when(storageService.load(NEW_KEY)).thenReturn(file);
+
+            IncidentPhoto photo = incidentService.loadPhoto(1L, reporterId, false);
+
+            assertThat(photo.resource()).isSameAs(file);
+            assertThat(photo.contentType()).isEqualTo("image/png");
+        }
+
+        @Test
+        void load_isA404_whenThereIsNoPhotoYet() {
+            givenIncident(incident(1L, IncidentStatus.OPEN));
+
+            assertThatThrownBy(() -> incidentService.loadPhoto(1L, adminId, true))
+                    .isInstanceOf(NotFoundException.class)
+                    .extracting("code")
+                    .isEqualTo("PHOTO_NOT_FOUND");
+            verifyNoInteractions(storageService);
+        }
+
+        @Test
+        void load_isA404_forAnotherStudent() {
+            givenIncident(withPhoto(1L, IncidentStatus.OPEN, NEW_KEY));
+
+            assertThatThrownBy(() -> incidentService.loadPhoto(1L, 7L, false))
+                    .isInstanceOf(NotFoundException.class)
+                    .extracting("code")
+                    .isEqualTo("INCIDENT_NOT_FOUND");
+            verifyNoInteractions(storageService);
         }
     }
 }
