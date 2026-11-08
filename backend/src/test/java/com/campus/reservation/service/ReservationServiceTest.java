@@ -1609,6 +1609,31 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("Bundle: rejects if less than 2 assets requested")
+    void createMultiAssetReservation_rejectsIfLessThanTwoAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if more than 5 assets requested")
+    void createMultiAssetReservation_rejectsIfMoreThanFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 2 and 5 assets");
+    }
+
+    @Test
     @DisplayName("Bundle: cancels all confirmed reservations in the bundle")
     void cancelBundle_success() {
         UUID bundleId = UUID.randomUUID();

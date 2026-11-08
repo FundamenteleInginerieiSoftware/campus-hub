@@ -135,9 +135,9 @@ public class ReservationService implements ReservationApi {
 
         if (req.assetIds() == null
                 || req.assetIds().size() < 2
-                || req.assetIds().size() > 10) {
+                || req.assetIds().size() > 5) {
             throw new BusinessRuleException(
-                    "INVALID_BUNDLE_SIZE", "Multi-asset booking must include between 2 and 10 assets");
+                    "INVALID_BUNDLE_SIZE", "Multi-asset booking must include between 2 and 5 assets");
         }
 
         List<Long> sortedAssetIds = req.assetIds().stream().sorted().toList();

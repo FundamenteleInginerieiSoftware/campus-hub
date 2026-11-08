@@ -13,7 +13,7 @@ import java.util.Set;
 @Schema(description = "Request to create simultaneous multi-asset reservations (bundle)")
 public record CreateMultiAssetReservationRequest(
         @NotEmpty(message = "assetIds must not be empty")
-        @Size(min = 2, max = 10, message = "assetIds must contain between 2 and 10 assets")
+        @Size(min = 2, max = 5, message = "assetIds must contain between 2 and 5 assets")
         @Schema(description = "Set of asset IDs to reserve together", example = "[1, 2, 3]")
         Set<Long> assetIds,
 
