@@ -154,17 +154,14 @@ public class ReservationService implements ReservationApi {
             }
         }
 
-        // 3. User quota check for students
+        // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
         if (!currentUser.isAdmin()) {
             reservationRepository.lockUserQuota(userId);
             long activeCount =
                     reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
-            if (activeCount + sortedAssetIds.size() > 2) {
+            if (activeCount + 1 > 2) {
                 throw new ConflictException(
-                        "RESERVATION_LIMIT_REACHED",
-                        "Student cannot have more than 2 active reservations (requested "
-                                + sortedAssetIds.size()
-                                + " items in bundle)");
+                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }
         }
 
@@ -193,6 +190,11 @@ public class ReservationService implements ReservationApi {
                 "ReservationBundle",
                 sortedAssetIds.get(0),
                 "Bundle " + bundleId + " with " + savedList.size() + " assets: " + sortedAssetIds);
+
+        notificationService.notifyUser(
+                userId,
+                "Reservation Bundle Confirmed",
+                "Your reservation bundle #" + bundleId + " with " + savedList.size() + " assets was confirmed.");
 
         List<ReservationResponse> responses =
                 savedList.stream().map(ReservationResponse::from).toList();
@@ -238,6 +240,13 @@ public class ReservationService implements ReservationApi {
             throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
         }
 
+        Reservation first = items.get(0);
+        // Student cancellation is only allowed before start time (#72)
+        if (!currentUser.isAdmin() && !now.isBefore(first.getStartTime())) {
+            throw new ConflictException(
+                    "CANCELLATION_NOT_ALLOWED", "Reservations can only be cancelled before start time");
+        }
+
         List<ReservationResponse> results = new ArrayList<>();
         for (Reservation r : items) {
             if (r.getStatus() == ReservationStatus.CONFIRMED) {
@@ -251,6 +260,9 @@ public class ReservationService implements ReservationApi {
             }
             results.add(ReservationResponse.from(r));
         }
+
+        notificationService.notifyUser(
+                userId, "Reservation Bundle Cancelled", "Your reservation bundle #" + bundleId + " was cancelled.");
 
         return results;
     }

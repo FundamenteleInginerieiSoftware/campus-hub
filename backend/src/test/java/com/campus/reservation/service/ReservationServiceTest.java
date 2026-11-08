@@ -1581,6 +1581,7 @@ class ReservationServiceTest {
 
         verify(auditService)
                 .record(eq(USER_ID), eq("CREATE_BUNDLE_RESERVATION"), eq("ReservationBundle"), eq(10L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Confirmed"), any());
     }
 
     @Test
@@ -1666,5 +1667,50 @@ class ReservationServiceTest {
         assertThat(r2.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
         verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(101L), any());
         verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(102L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Cancelled"), any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects student cancellation after start time")
+    void cancelBundle_rejectsIfAfterStartTime() {
+        UUID bundleId = UUID.randomUUID();
+        // Start is 09:00, while Clock is 10:00
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, "late cancel"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("cancelled before start time");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects if student already reached max active reservations limit (2)")
+    void createMultiAssetReservation_rejectsIfQuotaExceeded() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L); // Already at limit of 2
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("cannot have more than 2 active reservations");
     }
 }
