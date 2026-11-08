@@ -5,6 +5,7 @@ import {
   Center,
   Group,
   Loader,
+  Modal,
   Pagination,
   Paper,
   Select,
@@ -18,6 +19,7 @@ import {
 import { useDebouncedValue } from '@mantine/hooks'
 import {
   IconAlertTriangle,
+  IconCalendarPlus,
   IconCpu,
   IconDoor,
   IconFolder,
@@ -25,8 +27,9 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { useAuth } from '../auth/useAuth.ts'
+import CalendarBookingView from '../components/CalendarBookingView.tsx'
 import {
   getCategories,
   getLabRooms,
@@ -67,8 +70,12 @@ function statusLabel(status: AssetStatus): string {
 }
 
 export default function CatalogPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
+
+  // Quick book modal state
+  const [quickBookAsset, setQuickBookAsset] = useState<Asset | null>(null)
 
   // Data states
   const [categories, setCategories] = useState<Category[]>([])
@@ -352,9 +359,20 @@ export default function CatalogPage() {
                         Retired
                       </Button>
                     ) : (
-                      <Button component={Link} to={`/catalog/${asset.id}`} variant="light" color="teal" size="xs">
-                        View & Book
-                      </Button>
+                      <Group gap={6}>
+                        <Button
+                          variant="light"
+                          color="blue"
+                          size="xs"
+                          leftSection={<IconCalendarPlus size={14} />}
+                          onClick={() => setQuickBookAsset(asset)}
+                        >
+                          Quick Book
+                        </Button>
+                        <Button component={Link} to={`/catalog/${asset.id}`} variant="subtle" color="teal" size="xs">
+                          Details
+                        </Button>
+                      </Group>
                     )}
                   </Group>
                 </Card>
@@ -381,6 +399,43 @@ export default function CatalogPage() {
             </Group>
           ) : null}
         </>
+      )}
+
+      {/* Quick Booking Modal directly on the catalog */}
+      {quickBookAsset && (
+        <Modal
+          opened
+          onClose={() => setQuickBookAsset(null)}
+          title={
+            <div>
+              <Text fw={600} size="md">
+                Quick Book — {quickBookAsset.name}
+              </Text>
+              <Text size="xs" c="dimmed">
+                Model: {quickBookAsset.model} · Room: {quickBookAsset.labRoomCode} ({quickBookAsset.labRoomName})
+              </Text>
+            </div>
+          }
+          size="xl"
+          centered
+        >
+          <CalendarBookingView
+            asset={{
+              id: quickBookAsset.id,
+              name: quickBookAsset.name,
+              model: quickBookAsset.model,
+              serialNumber: quickBookAsset.serialNumber,
+              status: quickBookAsset.status,
+              categoryId: quickBookAsset.categoryId,
+              labRoomId: quickBookAsset.labRoomId,
+            }}
+            onBack={() => setQuickBookAsset(null)}
+            onSuccess={(reservation) => {
+              setQuickBookAsset(null)
+              navigate('/reservations', { state: { bookedId: reservation.id } })
+            }}
+          />
+        </Modal>
       )}
     </Stack>
   )
