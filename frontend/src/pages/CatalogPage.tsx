@@ -15,6 +15,7 @@ import {
   ThemeIcon,
   Tooltip,
 } from '@mantine/core'
+import { useDebouncedValue } from '@mantine/hooks'
 import {
   IconAlertTriangle,
   IconCpu,
@@ -82,6 +83,7 @@ export default function CatalogPage() {
 
   // Filter states
   const [search, setSearch] = useState('')
+  const [debouncedSearch] = useDebouncedValue(search, 300)
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [labRoomId, setLabRoomId] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -108,7 +110,7 @@ export default function CatalogPage() {
     let active = true
 
     searchAssets({
-      search: search.trim() || undefined,
+      search: debouncedSearch.trim() || undefined,
       categoryId: categoryId ? Number(categoryId) : undefined,
       labRoomId: labRoomId ? Number(labRoomId) : undefined,
       status: (status as AssetStatus) || undefined,
@@ -119,6 +121,7 @@ export default function CatalogPage() {
       .then((data) => {
         if (active) {
           setPageData(data)
+          setError(null)
           setLoading(false)
         }
       })
@@ -132,9 +135,13 @@ export default function CatalogPage() {
     return () => {
       active = false
     }
-  }, [search, categoryId, labRoomId, status, page])
+  }, [debouncedSearch, categoryId, labRoomId, status, page])
 
   const handleResetFilters = () => {
+    // Return early if no filters are active to avoid hanging spinner on empty catalogs
+    if (!search && !categoryId && !labRoomId && !status && page === 0) {
+      return
+    }
     setLoading(true)
     setSearch('')
     setCategoryId(null)
@@ -364,6 +371,9 @@ export default function CatalogPage() {
                 total={pageData.totalPages}
                 value={pageData.page + 1}
                 onChange={(val) => {
+                  // Mantine fires onChange for the current page. Setting the same page does not
+                  // trigger the effect, which would leave loading true indefinitely.
+                  if (val - 1 === page) return
                   setLoading(true)
                   setPage(val - 1)
                 }}

@@ -14,7 +14,7 @@ import {
   TextInput,
   Tooltip,
 } from '@mantine/core'
-import { useDisclosure } from '@mantine/hooks'
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
 import {
   IconCpu,
   IconDoor,
@@ -96,8 +96,10 @@ export default function AdminInventoryPage() {
   })
   const [assetsLoading, setAssetsLoading] = useState(true)
   const [assetSearchQuery, setAssetSearchQuery] = useState('')
+  const [debouncedAssetSearch] = useDebouncedValue(assetSearchQuery, 300)
   const [assetCurrentPage, setAssetCurrentPage] = useState(0)
   const [reloadTrigger, setReloadTrigger] = useState(0)
+  const [modalError, setModalError] = useState<unknown | null>(null)
 
   // Asset Form Modal
   const [assetModalOpened, { open: openAssetModal, close: closeAssetModal }] = useDisclosure(false)
@@ -118,7 +120,7 @@ export default function AdminInventoryPage() {
   useEffect(() => {
     let active = true
     searchAssets({
-      search: assetSearchQuery.trim() || undefined,
+      search: debouncedAssetSearch.trim() || undefined,
       page: assetCurrentPage,
       size: 15,
       sort: 'name,asc',
@@ -126,6 +128,7 @@ export default function AdminInventoryPage() {
       .then((data) => {
         if (active) {
           setAssetsPage(data)
+          setError(null)
           setAssetsLoading(false)
         }
       })
@@ -139,7 +142,7 @@ export default function AdminInventoryPage() {
     return () => {
       active = false
     }
-  }, [assetCurrentPage, assetSearchQuery, reloadTrigger])
+  }, [assetCurrentPage, debouncedAssetSearch, reloadTrigger])
 
   const handleOpenAddAsset = () => {
     setEditingAsset(null)
@@ -149,6 +152,7 @@ export default function AdminInventoryPage() {
     setAssetFormDescription('')
     setAssetFormCategoryId(categories.length > 0 ? String(categories[0].id) : null)
     setAssetFormLabRoomId(labRooms.length > 0 ? String(labRooms[0].id) : null)
+    setModalError(null)
     openAssetModal()
   }
 
@@ -160,6 +164,7 @@ export default function AdminInventoryPage() {
     setAssetFormDescription(asset.description || '')
     setAssetFormCategoryId(String(asset.categoryId))
     setAssetFormLabRoomId(String(asset.labRoomId))
+    setModalError(null)
     openAssetModal()
   }
 
@@ -169,7 +174,7 @@ export default function AdminInventoryPage() {
     }
 
     setAssetFormLoading(true)
-    setError(null)
+    setModalError(null)
     try {
       if (editingAsset) {
         await updateAsset(editingAsset.id, {
@@ -193,7 +198,7 @@ export default function AdminInventoryPage() {
       setAssetsLoading(true)
       setReloadTrigger((v) => v + 1)
     } catch (err) {
-      setError(err)
+      setModalError(err)
     } finally {
       setAssetFormLoading(false)
     }
@@ -202,14 +207,14 @@ export default function AdminInventoryPage() {
   const handleConfirmRetire = async () => {
     if (!retiringAsset) return
     setRetireLoading(true)
-    setError(null)
+    setModalError(null)
     try {
       await retireAsset(retiringAsset.id)
       closeRetireModal()
       setAssetsLoading(true)
       setReloadTrigger((v) => v + 1)
     } catch (err) {
-      setError(err)
+      setModalError(err)
     } finally {
       setRetireLoading(false)
     }
@@ -278,6 +283,7 @@ export default function AdminInventoryPage() {
                   color="red"
                   onClick={() => {
                     setRetiringAsset(a)
+                    setModalError(null)
                     openRetireModal()
                   }}
                 >
@@ -312,6 +318,7 @@ export default function AdminInventoryPage() {
     setEditingCategory(null)
     setCategoryFormName('')
     setCategoryFormDescription('')
+    setModalError(null)
     openCategoryModal()
   }
 
@@ -319,13 +326,14 @@ export default function AdminInventoryPage() {
     setEditingCategory(cat)
     setCategoryFormName(cat.name)
     setCategoryFormDescription(cat.description || '')
+    setModalError(null)
     openCategoryModal()
   }
 
   const handleSaveCategory = async () => {
     if (!categoryFormName.trim()) return
     setCategoryFormLoading(true)
-    setError(null)
+    setModalError(null)
     try {
       if (editingCategory) {
         await updateCategory(editingCategory.id, {
@@ -340,8 +348,9 @@ export default function AdminInventoryPage() {
       }
       closeCategoryModal()
       loadLookups()
+      setReloadTrigger((v) => v + 1)
     } catch (err) {
-      setError(err)
+      setModalError(err)
     } finally {
       setCategoryFormLoading(false)
     }
@@ -350,13 +359,14 @@ export default function AdminInventoryPage() {
   const handleConfirmDeleteCategory = async () => {
     if (!deletingCategory) return
     setDeleteCatLoading(true)
-    setError(null)
+    setModalError(null)
     try {
       await deleteCategory(deletingCategory.id)
       closeDeleteCatModal()
       loadLookups()
+      setReloadTrigger((v) => v + 1)
     } catch (err) {
-      setError(err)
+      setModalError(err)
     } finally {
       setDeleteCatLoading(false)
     }
@@ -381,6 +391,7 @@ export default function AdminInventoryPage() {
     setRoomFormCode('')
     setRoomFormName('')
     setRoomFormBuilding('')
+    setModalError(null)
     openRoomModal()
   }
 
@@ -389,13 +400,14 @@ export default function AdminInventoryPage() {
     setRoomFormCode(room.code)
     setRoomFormName(room.name)
     setRoomFormBuilding(room.building || '')
+    setModalError(null)
     openRoomModal()
   }
 
   const handleSaveRoom = async () => {
     if (!roomFormCode.trim() || !roomFormName.trim()) return
     setRoomFormLoading(true)
-    setError(null)
+    setModalError(null)
     try {
       if (editingRoom) {
         await updateLabRoom(editingRoom.id, {
@@ -412,8 +424,9 @@ export default function AdminInventoryPage() {
       }
       closeRoomModal()
       loadLookups()
+      setReloadTrigger((v) => v + 1)
     } catch (err) {
-      setError(err)
+      setModalError(err)
     } finally {
       setRoomFormLoading(false)
     }
@@ -422,13 +435,14 @@ export default function AdminInventoryPage() {
   const handleConfirmDeleteRoom = async () => {
     if (!deletingRoom) return
     setDeleteRoomLoading(true)
-    setError(null)
+    setModalError(null)
     try {
       await deleteLabRoom(deletingRoom.id)
       closeDeleteRoomModal()
       loadLookups()
+      setReloadTrigger((v) => v + 1)
     } catch (err) {
-      setError(err)
+      setModalError(err)
     } finally {
       setDeleteRoomLoading(false)
     }
@@ -540,6 +554,7 @@ export default function AdminInventoryPage() {
                                 color="red"
                                 onClick={() => {
                                   setDeletingCategory(c)
+                                  setModalError(null)
                                   openDeleteCatModal()
                                 }}
                               >
@@ -608,6 +623,7 @@ export default function AdminInventoryPage() {
                                 color="red"
                                 onClick={() => {
                                   setDeletingRoom(r)
+                                  setModalError(null)
                                   openDeleteRoomModal()
                                 }}
                               >
@@ -637,6 +653,7 @@ export default function AdminInventoryPage() {
         centered
       >
         <Stack gap="sm">
+          {modalError ? <ErrorAlert error={modalError} /> : null}
           <TextInput
             label="Equipment Name"
             placeholder="e.g. Rigol DS1054Z Oscilloscope no. 4"
@@ -717,12 +734,13 @@ export default function AdminInventoryPage() {
       {/* ------------------------------------------------------------- */}
       <Modal opened={retireModalOpened} onClose={closeRetireModal} title="Retire Equipment" centered>
         <Stack gap="md">
+          {modalError ? <ErrorAlert error={modalError} /> : null}
           <Text size="sm">
             Are you sure you want to retire <strong>{retiringAsset?.name}</strong> (S/N:{' '}
             {retiringAsset?.serialNumber})?
           </Text>
           <Text size="xs" c="dimmed">
-            Retiring an asset permanently prevents future bookings. It remains archived in the database for auditing
+            Retiring an asset permanently prevents new bookings. It remains archived in the database for auditing
             purposes.
           </Text>
           <Group justify="flex-end" mt="md">
@@ -746,6 +764,7 @@ export default function AdminInventoryPage() {
         centered
       >
         <Stack gap="sm">
+          {modalError ? <ErrorAlert error={modalError} /> : null}
           <TextInput
             label="Category Name"
             placeholder="e.g. Signal Generators"
@@ -776,6 +795,7 @@ export default function AdminInventoryPage() {
       {/* ------------------------------------------------------------- */}
       <Modal opened={deleteCatModalOpened} onClose={closeDeleteCatModal} title="Delete Category" centered>
         <Stack gap="md">
+          {modalError ? <ErrorAlert error={modalError} /> : null}
           <Text size="sm">
             Are you sure you want to delete category <strong>{deletingCategory?.name}</strong>?
           </Text>
@@ -803,6 +823,7 @@ export default function AdminInventoryPage() {
         centered
       >
         <Stack gap="sm">
+          {modalError ? <ErrorAlert error={modalError} /> : null}
           <TextInput
             label="Room Code"
             placeholder="e.g. C305"
@@ -843,6 +864,7 @@ export default function AdminInventoryPage() {
       {/* ------------------------------------------------------------- */}
       <Modal opened={deleteRoomModalOpened} onClose={closeDeleteRoomModal} title="Delete Lab Room" centered>
         <Stack gap="md">
+          {modalError ? <ErrorAlert error={modalError} /> : null}
           <Text size="sm">
             Are you sure you want to delete lab room <strong>{deletingRoom?.code}</strong> ({deletingRoom?.name})?
           </Text>

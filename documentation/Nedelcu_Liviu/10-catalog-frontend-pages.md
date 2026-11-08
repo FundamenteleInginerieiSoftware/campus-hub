@@ -8,7 +8,7 @@ This milestone delivers the complete visual user experience for the catalog modu
 
 1. **Equipment Catalog (`/catalog`):**
    - An intuitive storefront for laboratory hardware.
-   - Students and staff can search by text (name, model, serial number) and filter by category (e.g. Oscilloscopes), lab room (e.g. A101), or operational status (`AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED`).
+   - Students and staff can search by text (name, model, serial number) and filter by category (e.g. Oscilloscopes) or lab room (e.g. A101); staff/administrators can also filter by operational status (`AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED`), while students automatically see only active, non-retired equipment.
    - Results are displayed as clean cards with color-coded status badges (Teal for Available, Yellow for Under Maintenance, Gray for Retired).
    - Paginated browsing ensures smooth performance even with hundreds of lab items.
 

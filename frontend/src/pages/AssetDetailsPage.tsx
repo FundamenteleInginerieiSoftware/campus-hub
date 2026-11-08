@@ -21,7 +21,6 @@ import {
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowLeft,
-  IconCheck,
   IconCpu,
   IconDoor,
   IconFolder,
@@ -75,7 +74,7 @@ export default function AssetDetailsPage() {
   // Modals
   const [retireOpened, { open: openRetire, close: closeRetire }] = useDisclosure(false)
   const [retireLoading, setRetireLoading] = useState(false)
-  const [bookingSuccess, setBookingSuccess] = useState(false)
+  const [retireError, setRetireError] = useState<unknown | null>(null)
 
   useEffect(() => {
     if (assetId === null) return
@@ -85,6 +84,7 @@ export default function AssetDetailsPage() {
       .then((data) => {
         if (active) {
           setAsset(data)
+          setError(null)
           setLoading(false)
         }
       })
@@ -103,13 +103,13 @@ export default function AssetDetailsPage() {
   const handleRetire = async () => {
     if (!asset) return
     setRetireLoading(true)
-    setError(null)
+    setRetireError(null)
     try {
       const updated = await retireAsset(asset.id)
       setAsset(updated)
       closeRetire()
     } catch (err) {
-      setError(err)
+      setRetireError(err)
     } finally {
       setRetireLoading(false)
     }
@@ -153,7 +153,15 @@ export default function AssetDetailsPage() {
         </Button>
 
         {isAdmin && asset.status !== 'RETIRED' ? (
-          <Button variant="light" color="red" leftSection={<IconTrash size={16} />} onClick={openRetire}>
+          <Button
+            variant="light"
+            color="red"
+            leftSection={<IconTrash size={16} />}
+            onClick={() => {
+              setRetireError(null)
+              openRetire()
+            }}
+          >
             Retire Equipment
           </Button>
         ) : null}
@@ -250,16 +258,6 @@ export default function AssetDetailsPage() {
             Select a convenient weekday time slot (08:00 – 20:00, max 4 hours duration) to reserve this equipment.
           </Text>
 
-          {bookingSuccess ? (
-            <Alert color="teal" title="Reservation Confirmed!" icon={<IconCheck size={18} />} mb="md">
-              Your booking has been created successfully. You can manage and review it in{' '}
-              <Link to="/reservations" style={{ color: 'inherit', fontWeight: 600 }}>
-                My Reservations
-              </Link>
-              .
-            </Alert>
-          ) : null}
-
           {/* Calin's Calendar Booking View component */}
           <CalendarBookingView
             asset={{
@@ -270,9 +268,6 @@ export default function AssetDetailsPage() {
               status: asset.status,
               categoryId: asset.categoryId,
               labRoomId: asset.labRoomId,
-            }}
-            onSuccess={() => {
-              setBookingSuccess(true)
             }}
           />
         </Card>
@@ -308,11 +303,12 @@ export default function AssetDetailsPage() {
       {/* Confirmation Modal for Retiring an Asset */}
       <Modal opened={retireOpened} onClose={closeRetire} title="Retire Equipment Asset" centered>
         <Stack gap="md">
+          {retireError ? <ErrorAlert error={retireError} /> : null}
           <Text size="sm">
             Are you sure you want to retire <strong>{asset.name}</strong> (S/N: {asset.serialNumber})?
           </Text>
           <Text size="xs" c="dimmed">
-            Retiring an asset permanently prevents any future bookings or modifications. Existing historical records
+            Retiring an asset permanently prevents any new bookings or modifications. Existing historical records
             will remain preserved for auditing.
           </Text>
           <Group justify="flex-end" mt="md">
