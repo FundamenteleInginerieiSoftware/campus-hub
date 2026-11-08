@@ -11,3 +11,6 @@ Text sources live next to their exported PNGs. PlantUML (`.puml`) and Mermaid (`
 | `reservation-lifecycle.mmd` | State diagram of a reservation (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, ...) | Calin |
 | `reservation-booking-sequence.mmd` | Sequence diagram: booking flow with pessimistic row lock, quota check, and overlap validation | Calin |
 | `reassignment-sequence.mmd` | Sequence diagram: incident report → `AssetDamagedEvent` → reassignment engine | Calin |
+| `asset-lifecycle.mmd` | State diagram of an equipment asset (`AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED`) | Liviu |
+| `catalog-and-common-class.mmd` | UML class diagram of `catalog`, `common` (`error`, `paging`, `audit`), `storage`, and `notification` | Liviu |
+| `database-er.mmd` | Entity-Relationship (ER) diagram of all 8 PostgreSQL 18 tables from Flyway migrations | Liviu |
