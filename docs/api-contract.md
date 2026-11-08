@@ -202,7 +202,7 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Module | Owner | Base paths |
 |---|---|---|
 | Auth / users | Matei (auth), Stefania (admin) | `/api/v1/auth/**`, `/api/v1/users/me`, `/api/v1/admin/users/**` |
-| Catalog | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-log` |
+| Catalog / Shared | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-logs` |
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
 
@@ -403,5 +403,39 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "labRoomName": "Electronics Lab",
   "createdAt": "2026-10-29T12:00:00",
   "updatedAt": "2026-10-29T12:00:00"
+}
+```
+
+---
+
+### Audit log endpoints (Liviu)
+
+All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/admin/audit-logs` (alias: `GET /api/v1/admin/audit-log`) | `ADMIN` | `200` `PageResponse<AuditLogResponse>` | `400 INVALID_PARAMETER`, `401`, `403` |
+
+`GET /api/v1/admin/audit-logs` optional query parameters:
+- `actorId`: ID of the user who performed the action (numeric; `null` for automated system background jobs)
+- `action`: machine-readable action code, e.g. `ASSET_RETIRED`, `USER_DISABLED` (case-insensitive)
+- `entityType`: target domain type, e.g. `ASSET`, `USER`, `INCIDENT`, `RESERVATION` (case-insensitive)
+- `entityId`: ID of the affected entity (numeric)
+- `from`: start timestamp filter (ISO-8601, e.g. `2026-11-01T00:00:00`, inclusive)
+- `to`: end timestamp filter (ISO-8601, e.g. `2026-11-08T23:59:59`, inclusive; rejected if `from > to`)
+- `page`: zero-based page index (default `0`, `>= 0`)
+- `size`: page size (default `20`, `1..100`)
+- `sort`: sort property and direction (default `createdAt,desc`; whitelisted fields: `createdAt`, `id`, `action`, `entityType`, `actorId`, `entityId`, direction `asc` or `desc`; deterministic secondary tie-breaking on `id`)
+
+```json
+// AuditLogResponse
+{
+  "id": 1,
+  "actorId": 3,
+  "action": "ASSET_RETIRED",
+  "entityType": "ASSET",
+  "entityId": 12,
+  "details": "Retired damaged multimeter",
+  "createdAt": "2026-11-08T10:00:00"
 }
 ```

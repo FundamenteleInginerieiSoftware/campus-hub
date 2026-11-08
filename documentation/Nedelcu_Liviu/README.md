@@ -20,3 +20,4 @@
 | 07 | [07-catalog-audit-and-pagination-fixes.md](07-catalog-audit-and-pagination-fixes.md) | Fixes: Page offset bounds, audit error isolation, and error contract (#119, #120, #121) |
 | 08 | [08-catalog-optimizations-and-edge-cases.md](08-catalog-optimizations-and-edge-cases.md) | Catalog query optimizations, timestamp seconds, and constraint verification (#147, #160, #167, PR #192) |
 | 09 | `09-dev-catalog-seeder.md` | Development catalog seeder with multi-unit models for automated reassignment demos |
+| 11 | [11-admin-audit-log-endpoint.md](11-admin-audit-log-endpoint.md) | Administrative audit log search and filtering endpoint (`GET /api/v1/admin/audit-logs`) |
