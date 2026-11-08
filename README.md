@@ -78,7 +78,7 @@ Reports after `build`: tests in `backend/build/reports/tests/test/index.html`, c
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (7 Nov 2026, week 5):** on `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs), **incident reporting**, the **auto-reassignment engine**, ArchUnit rules, the Docker image and the S3/SES adapters for AWS. **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, My reservations + booking calendar, admin Reservations desk; catalog, incident and inventory pages are in review. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
+> **Status (9 Nov 2026, week 6):** on `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the Docker image and the S3/SES adapters for AWS. **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
 
 ---
 
@@ -247,7 +247,7 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 5 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
+What is on `main` and what is still in review, per member. **As of 9 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
 
 ### Matei Necula: cloud, security & auth
 
@@ -272,17 +272,27 @@ What is on `main` and what is still in review, per member. **As of 5 Nov 2026**;
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
 | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136, #144 |
 | Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
 | No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
 | Old tokens ignored on the public `/api/v1/auth/**` endpoints | #126 |
 | Firewall-rejected URLs answer ProblemDetail JSON | #127 |
 | Disabled or deleted users lose access at once (`UserApi.findActiveRole`, checked on every request with a token) | #128 |
-| Personal docs 01-22 + README index of them | #14 + each PR above, #137 |
+| S3 + SES adapters for `prod` (photos in S3, e-mails through SES); missing S3 keys, slow or failing sends handled | #129, #177 |
+| `users.created_at` in whole seconds | #135 |
+| Register trims spaces around the email; a token with a bad subject gets 401, not 500 | #175, #176 |
+| Admin **Reservations desk** page (today's pickups and returns, check-out/return), sorted by start time on the backend | #138, #194 |
+| Security pass as tests: IDOR with two students, students rejected on admin endpoints, no stack traces (`SecurityPassIT`) | #139 |
+| Mutation testing on demand (`./gradlew pitest`) + tests for the gaps it found in my code | #180, #182 |
+| `DemoFlowIT`: the whole demo through the HTTP API; a failure names the step and its owner | #181 |
+| Defense playbook (`docs/testing/defense-playbook.md`) + test rules in `AGENTS.md` | #183 |
+| Swagger: 401/403 and `ProblemDetail` errors documented on every endpoint | #184 |
+| Security chapter of the report + JWT sequence diagram; UML component + deployment diagrams | #185, #186 |
+| All security rules in `docs/api-contract.md` §2; SSM arrow fixed in the AWS diagram | #195 |
+| README quick start (run, open, test) at the top | #200 |
+| Personal docs 01-37 + README index of them | #14 + each PR above, #137 |
 
-**In review:** #129 (S3 + SES adapters for `prod`), #135 (`users.created_at` in whole seconds), #138 (admin reservations desk page), #139 (security pass tests); all need re-approval after merging main.
-
-**Next:** Terraform parts 1 + 2 (W5); push the image to ECR + tag `v0.1.0` (W6). Full list: `docs/whats-left.md` §4.
+**Next:** Terraform parts 1 + 2, push the image to ECR (W6); run the M1 flow and tag `v0.1.0`; EC2 + CloudFront, first AWS deploy (W7). Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -300,8 +310,16 @@ What is on `main` and what is still in review, per member. **As of 5 Nov 2026**;
 | Local disk storage with security checks (type, size, path traversal) | #90 |
 | Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
 | Query-parameter validation errors → 400 `VALIDATION_FAILED` | #110 |
+| Large page offsets → 400, audit errors kept apart from duplicate-name errors, error contract aligned | #143 |
+| Fewer catalog queries, audit times in whole seconds, constraint checks | #192 |
+| **`CatalogSeeder`** (dev): 4 categories, 3 lab rooms, 18 assets, several units of the same model | #193 |
+| Frontend: catalog page, asset details page, admin inventory page | #196 |
+| `docs/modules/common.md` | #197 |
+| Audit log search `GET /api/v1/admin/audit-logs` + audit log page | #217, #221 |
+| Swagger error codes, `STALE_VERSION` test, PIT survivors in catalog/common/storage | #220 |
+| Catalog/common class + ER diagrams, report chapter | #222 |
 
-**Next:** `CatalogSeeder`, catalog / asset details / admin inventory pages (W6, for M1); retire flow with Calin (W7). Full list: `docs/whats-left.md` §5.
+**Next:** retire flow with Calin (W7); coverage, final diagrams, demo part (W10–W12). Full list: `docs/whats-left.md` §5.
 
 ### Calin Murariu: reservations & reassignment
 
@@ -331,16 +349,28 @@ What is on `main` and what is still in review, per member. **As of 5 Nov 2026**;
 | No check-out of an overdue or non-bookable asset | #131 |
 | Reassignment: one transaction per booking, one failed move no longer rolls back the rest | #132 |
 | My reservations: loader and error reset on every fetch | #133 |
+| OVERDUE bookings block the asset until returned | #141 |
+| Reassignment: candidate lookup outside the lock transaction, retry with the next substitute; same room first in the preventive cascade | #152, #161 |
+| Huge page offsets → 400; per-user booking limit checked under an advisory lock | #153, #173 |
+| Admin cancel reason and notification, `sortDir` on the admin search | #172 |
+| Sweep/reassignment indexes + admin Swagger docs; Swagger examples and error codes | #162, #191 |
+| Frontend fixes: Today button, 14-day slot horizon, campus clock, no cancel after the start | #154, #163, #174 |
+| More ArchUnit rules: method-level `@CrossOrigin`/`@Transactional`, Boot 4 imports, admin prefix | #179 |
+| Tests for remaining branches and PIT survivors in reservation and reassignment | #178, #201 |
+| Test plan with PIT, Strategy pattern doc, booking sequence diagram, report chapter, personal doc 15 | #199, #205, #204, #203, #202 |
+| Observer pattern doc | #207 |
+| New (not in the original plan): multi-asset bundle booking, extend an active booking, transfer a booking to a classmate, 1-minute slot hold | #212, #213, #214, #219 |
+| Frontend: quick-book modal on the catalog and asset details, report-incident button | #226 |
 
 | In review | PRs |
 |---|---|
-| OVERDUE bookings block the asset until returned (closes #113; needs re-approval) | #141 |
+| Extend + transfer in My reservations; hold countdown in the calendar view; tests for the remaining PIT survivors | #224, #225, #227 |
 
 | Parked (draft, after M1) | PRs |
 |---|---|
 | Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
 
-**Next:** booking on the asset details page (W6, for M1); `AssetRetiredEvent` listener if the team picks it (W7); test lead from W10. Full list: `docs/whats-left.md` §6.
+**Next:** finish #224, #225, #227; `AssetRetiredEvent` listener if the team picks it (W7); test lead from W10. Full list: `docs/whats-left.md` §6.
 
 ### Stefania: incidents, users & frontend lead
 
@@ -353,15 +383,18 @@ What is on `main` and what is still in review, per member. **As of 5 Nov 2026**;
 | Frontend scaffold (Vite + React + TypeScript + Mantine, routing) | #84 |
 | API client, auth context, login page | #85 |
 | App layout, role-based routes, shared components, conventions (`docs/modules/frontend.md`) | #86 |
+| Register page | #107 |
+| Incident triage (start repair, reject), `GET /incidents/me`, `GET /incidents/{id}` | #108 |
+| Every triage action audited, list indexes, error responses in Swagger | #208 |
+| Incident photo upload + view (reporter or admin), orphan files cleaned up | #210 |
+| Admin user endpoints: search, details, enable/disable, change role | #206 |
+| ADR-002 ✅ in `docs/decisions.md` (Spring serves the React build) | #111 |
+| Frontend: keep the token when the backend is down on startup; unique `ErrorAlert` keys, `/admin` index route | #142, #145 |
+| Personal docs; `CurrentUser.isAdmin()` Javadoc fix | #198, #215 |
+| Frontend: My incidents page + Report a problem form with photo | #216 |
+| Frontend: admin incident queue (start repair, resolve, reject, photo view) | #223 |
 
-| In review | PRs |
-|---|---|
-| Register page (approved) | #107 |
-| Incident start-repair, reject, my incidents, incident details (changes requested) | #108 |
-| ADR-002 ✅ in `docs/decisions.md` (approved) | #111 |
-| Keep the token when the backend is down on startup (closes #124) | #142 |
-
-**Next:** merge #111 (ADR-002 ✅) and #107 (register page); fix #108; photo upload, triage, user admin endpoints, report-incident form, register page (W5–W6). Full list: `docs/whats-left.md` §7.
+**Next:** run the M1 flow with the team (W6); incident details page (W7); reassignment log page (W8). Full list: `docs/whats-left.md` §7.
 
 ### Everyone
 
