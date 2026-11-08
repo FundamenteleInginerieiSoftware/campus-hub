@@ -93,3 +93,20 @@ cd backend
 - **`frontend/src/components/CalendarBookingView.tsx`**: Interactive Google Calendar timetable with 30-minute intervals (Mon–Fri, 08:00–20:00). Features real-time availability checks via `GET /api/v1/reservations/availability`, RFC 9457 error display (`<ErrorAlert error={availability.error} />`), synchronized week navigation (`handleNextWeek`/`handlePrevWeek`), past-time auto-disabling, asset operational state verification, and strict enforcement of the 20:00 lab closing constraint (durations exceeding 20:00 are dynamically disabled and capped).
 - **`frontend/src/api/reservations.ts`**: Frontend API client bindings mapping to the reservation REST endpoints (`createReservation`, `cancelReservation`, `fetchMyReservations`, `fetchMyReservationSummary`, `checkAvailability`, `fetchAssetSummary`).
 
+---
+
+## 8. Simultaneous Multi-Asset Bundle Reservations
+
+The module supports simultaneous atomic reservation of multiple laboratory equipment items (bundles):
+- **Endpoint:** `POST /api/v1/reservations/bundle` (`CreateMultiAssetReservationRequest(assetIds, startTime, endTime)`).
+- **Bundle Constraints:** The bundle must contain between 2 and 5 assets (`@Size(min = 2, max = 5)`). If fewer than 2 or more than 5 assets are requested, rejected with `409 INVALID_BUNDLE_SIZE`.
+- **Deadlock Avoidance via Sorted Pessimistic Locking:** Asset IDs are sorted in ascending order before acquiring pessimistic locks (`catalogApi.lockForBooking(id)`), strictly preventing database deadlocks between concurrent multi-asset booking requests.
+- **Atomic All-or-Nothing Guarantee:**
+  - Every asset in the bundle is checked for operational bookability (`catalogApi.isBookable(id)`) and interval collisions (`existsOverlap`).
+  - If any single equipment item is unavailable, under maintenance, or booked, the entire bundle fails immediately with `409 RESERVATION_CONFLICT` or `409 ASSET_NOT_BOOKABLE`, and no reservation rows are saved.
+- **Bundle Grouping & Collective Management:**
+  - All reservations in the bundle share a common `bundle_id` (`UUID`).
+  - `GET /api/v1/reservations/bundle/{bundleId}`: inspect all reservations in the kit.
+  - `POST /api/v1/reservations/bundle/{bundleId}/cancel`: cancel the entire kit collectively in a single call.
+
+
