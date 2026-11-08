@@ -1,12 +1,14 @@
 package com.campus.catalog.web;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -94,6 +96,21 @@ class LabRoomControllerTest {
                                 {"code": "EC203", "name": "Embedded Lab", "building": "EC"}"""))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("LAB_ROOM_CODE_TAKEN"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void adminUpdateReturns200() throws Exception {
+        when(labRoomService.update(eq(2L), any(LabRoomRequest.class)))
+                .thenReturn(new LabRoomResponse(2L, "EC203", "Robotics Lab", "EC"));
+
+        mockMvc.perform(put("/api/v1/admin/lab-rooms/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code": "EC203", "name": "Robotics Lab", "building": "EC"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(2))
+                .andExpect(jsonPath("$.name").value("Robotics Lab"));
     }
 
     @Test

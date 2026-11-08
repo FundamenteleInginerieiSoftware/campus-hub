@@ -75,9 +75,7 @@ public final class StorageValidation {
         if (contentType == null || contentType.isBlank()) {
             throw invalidPhotoType("Photo content type is required");
         }
-        int semicolon = contentType.indexOf(';');
-        String raw = semicolon >= 0 ? contentType.substring(0, semicolon) : contentType;
-        return raw.trim().toLowerCase(Locale.ROOT);
+        return contentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
     }
 
     private static void validateOptionalExtension(String ext, String canonicalExt) {

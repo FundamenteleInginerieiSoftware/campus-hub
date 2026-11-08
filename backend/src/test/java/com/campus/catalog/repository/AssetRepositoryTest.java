@@ -21,6 +21,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 @DataJpaTest
 class AssetRepositoryTest {
@@ -145,5 +146,30 @@ class AssetRepositoryTest {
                 () -> AssetResponse.from(firstPage.getContent().getFirst()));
         assertEquals("SearchTest Oscilloscopes", mappedDetached.categoryName());
         assertTrue(List.of("SRCH105", "SRCH210").contains(mappedDetached.labRoomCode()));
+    }
+
+    @Test
+    void rejectsConcurrentStaleVersionUpdateOnAsset() {
+        Category category = categoryRepository.save(new Category("OptimisticLock Scopes", "Masura"));
+        LabRoom labRoom = labRoomRepository.save(new LabRoom("OPT101", "Lab Opt", "Corp B"));
+        Asset saved = assetRepository.saveAndFlush(
+                new Asset("Osciloscop #1", "DS1054Z", "OPT-OSC-001", "Initial", category, labRoom, NOW));
+        entityManager.clear();
+
+        // Admin A loads the asset (version = 0) and detaches it while editing the form.
+        Asset staleCopy = assetRepository.findWithDetailsById(saved.getId()).orElseThrow();
+        entityManager.detach(staleCopy);
+
+        // Meanwhile Admin B loads, updates, and flushes the same asset (version becomes 1 in DB).
+        Asset freshCopy = assetRepository.findWithDetailsById(saved.getId()).orElseThrow();
+        freshCopy.updateDetails(
+                "Osciloscop #1 (Admin B)", "DS1054Z", "Updated by B", category, labRoom, NOW.plusMinutes(1));
+        assetRepository.saveAndFlush(freshCopy);
+        entityManager.clear();
+
+        // Admin A attempts to save their stale snapshot (version = 0) -> must fail with OptimisticLockingFailure.
+        staleCopy.updateDetails(
+                "Osciloscop #1 (Admin A)", "DS1054Z", "Updated by A", category, labRoom, NOW.plusMinutes(2));
+        assertThrows(ObjectOptimisticLockingFailureException.class, () -> assetRepository.saveAndFlush(staleCopy));
     }
 }

@@ -91,6 +91,21 @@ class CategoryControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void adminUpdateReturns200() throws Exception {
+        when(categoryService.update(eq(10L), any(CategoryRequest.class)))
+                .thenReturn(new CategoryResponse(10L, "Cameras", "Video equipment"));
+
+        mockMvc.perform(put("/api/v1/admin/categories/10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Cameras", "description": "Video equipment"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(10))
+                .andExpect(jsonPath("$.name").value("Cameras"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void updateMissingCategoryReturns404() throws Exception {
         when(categoryService.update(eq(99L), any(CategoryRequest.class)))
                 .thenThrow(new NotFoundException("CATEGORY_NOT_FOUND", "Category 99 was not found"));
