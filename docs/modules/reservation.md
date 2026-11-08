@@ -132,10 +132,20 @@ The module supports atomic duration extensions for active equipment reservations
 ## 10. Peer-to-Peer Reservation Transfer Workflow
 
 The module supports peer-to-peer transfer of upcoming confirmed reservations between students:
-- **Initiation:** The owner of a `CONFIRMED` reservation can initiate a transfer to another registered student (`POST /api/v1/reservations/{id}/transfer`). Only one pending transfer is allowed per reservation at a time. Self-transfers and transfers to disabled users are rejected.
+- **Initiation:** The owner of a `CONFIRMED` reservation can initiate a transfer to another registered student (`POST /api/v1/reservations/{id}/transfers`). Only one pending transfer is allowed per reservation at a time. Self-transfers and transfers to disabled users are rejected.
 - **Recipient Acceptance:** The recipient can accept (`POST /api/v1/reservations/transfers/{transferId}/accept`). The recipient's quota is locked via advisory lock (`lockUserQuota`) to ensure they do not exceed the 2-active-reservations limit. Upon acceptance, ownership is transferred atomically, and the transfer status transitions to `ACCEPTED`.
 - **Rejection & Cancellation:** The recipient can reject (`POST /api/v1/reservations/transfers/{transferId}/reject`), or the sender can cancel before acceptance (`POST /api/v1/reservations/transfers/{transferId}/cancel`).
 - **Audit & Notification:** Every transfer transition is audited via `AuditService` and both parties receive notifications through `NotificationService`.
+
+---
+
+## 11. Reservation Holds (Temporary Slot Locking)
+
+To prevent checkout collisions during high-traffic lab hours, the module provides a temporary 1-minute slot locking workflow (`reservation_holds` table):
+- **Acquire Hold (`POST /api/v1/reservations/holds`):** Temporarily locks the asset slot for 60 seconds. Other students receive `409 SLOT_HELD`. Anti-hoarding rules limit each student to at most 1 active hold.
+- **Confirm Hold (`POST /api/v1/reservations/holds/{id}/confirm`):** Converts the active hold into a confirmed reservation atomically under row lock. If 1 minute elapsed without confirmation, returns `409 HOLD_EXPIRED`.
+- **Release Hold (`POST /api/v1/reservations/holds/{id}/release`):** Frees the slot immediately if the user cancels or navigates away.
+- **Automated Cleanup Job:** `ReservationLifecycleService.sweepExpiredHolds()` runs periodically to mark abandoned holds as `EXPIRED`. Queries filter `status = 'ACTIVE' AND expires_at > now`, so expired holds unblock availability immediately.
 
 
 

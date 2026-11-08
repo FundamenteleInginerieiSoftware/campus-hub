@@ -63,8 +63,20 @@ public class ReservationLifecycleService {
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
+        reservationService.sweepExpiredHolds(now);
 
         return new LifecycleSweepSummary(now, noShowCount, overdueCount, cascadedIds.size(), cascadedIds);
+    }
+
+    /**
+     * Autonomous background job running every minute to release expired reservation holds.
+     */
+    @Scheduled(
+            fixedDelayString = "${app.reservation.hold-sweep-ms:60000}",
+            initialDelayString = "${app.reservation.hold-initial-delay-ms:30000}")
+    public int sweepExpiredHolds() {
+        LocalDateTime now = now();
+        return reservationService.sweepExpiredHolds(now);
     }
 
     private LocalDateTime now() {

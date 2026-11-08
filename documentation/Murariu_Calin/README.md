@@ -39,6 +39,7 @@ Each document is structured in two parts:
 
 | 17 | [`17-active-reservation-extension.md`](./17-active-reservation-extension.md) | Active Reservation Duration Extension | Atomic extension, pessimistic locking, slot alignment, overlap check, zero corruption |
 | 18 | [`18-p2p-reservation-transfer.md`](./18-p2p-reservation-transfer.md) | Peer-to-Peer Reservation Transfer Workflow | Two-way handshake, advisory quota locking, state machine, zero double-booking |
+| 19 | [`19-reservation-hold-slot-locking.md`](./19-reservation-hold-slot-locking.md) | Reservation Hold & Automated Expiry | 1-minute temporary slot hold, concurrency protection, anti-hoarding hold quota, automated expiration sweep |
 
 
 

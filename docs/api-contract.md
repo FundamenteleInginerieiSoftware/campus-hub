@@ -185,7 +185,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Reservations (Calin)
 
-`RESERVATION_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409 · `MISSING_PARAMETER` 409 · `CONFLICTING_PARAMETERS` 409
+`RESERVATION_NOT_FOUND` 404 · `HOLD_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `SLOT_HELD` 409 · `HOLD_EXPIRED` 409 · `ACTIVE_HOLD_LIMIT_REACHED` 409 · `INVALID_HOLD_STATUS_TRANSITION` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409 · `MISSING_PARAMETER` 409 · `CONFLICTING_PARAMETERS` 409
 
 ### Incidents (Stefania)
 
@@ -270,6 +270,10 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/reservations/transfers/{transferId}/accept` | Recipient | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 RESERVATION_LIMIT_REACHED`, `409 TRANSFER_NOT_ALLOWED` |
 | `POST /api/v1/reservations/transfers/{transferId}/reject` | Recipient or Admin | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 INVALID_TRANSFER_STATUS_TRANSITION` |
 | `POST /api/v1/reservations/transfers/{transferId}/cancel` | Sender or Admin | – | `200` + `ReservationTransferResponse` | `401 UNAUTHORIZED`, `404 TRANSFER_NOT_FOUND`, `409 INVALID_TRANSFER_STATUS_TRANSITION` |
+| `POST /api/v1/reservations/holds` | Logged in | `CreateHoldRequest` | `201` + `ReservationHoldResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `404 ASSET_NOT_FOUND`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 SLOT_HELD`, `409 ACTIVE_HOLD_LIMIT_REACHED`, `409 RESERVATION_LIMIT_REACHED`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `POST /api/v1/reservations/holds/{id}/confirm` | Owner or Admin | – | `200` + `ReservationResponse` | `404 HOLD_NOT_FOUND`, `409 HOLD_EXPIRED`, `409 INVALID_HOLD_STATUS_TRANSITION`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
+| `POST /api/v1/reservations/holds/{id}/release` | Owner or Admin | – | `200` + `ReservationHoldResponse` | `404 HOLD_NOT_FOUND`, `409 INVALID_HOLD_STATUS_TRANSITION` |
+| `GET /api/v1/reservations/holds/active` | Logged in | – | `200` + `List<ReservationHoldResponse>` | `401 UNAUTHORIZED` |
 
 
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
