@@ -62,11 +62,14 @@ export default function ReportIncidentModal({ onClose, onReported, initialAssetI
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  // Kept apart from error: a failed search must not look like a failed report.
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [touched, setTouched] = useState(false)
   // Set when the report was saved but the photo was not: the next submit only retries the photo.
   const [savedIncident, setSavedIncident] = useState<Incident | null>(null)
 
-  // The pre-selected asset is loaded by id; a wrong or retired id just leaves the box empty.
+  // The pre-selected asset is loaded by id. GET /assets/{id} also returns RETIRED assets, which cannot be
+  // reported (409 ASSET_RETIRED), so those and wrong ids just leave the box empty.
   useEffect(() => {
     if (!initialAssetId) {
       return
@@ -74,7 +77,7 @@ export default function ReportIncidentModal({ onClose, onReported, initialAssetI
     let ignore = false
     fetchAssetSummary(initialAssetId)
       .then((asset) => {
-        if (!ignore) setSelected(asset)
+        if (!ignore && asset.status !== 'RETIRED') setSelected(asset)
       })
       .catch(() => {
         // nothing to pre-select: the student picks the equipment by hand
@@ -92,10 +95,12 @@ export default function ReportIncidentModal({ onClose, onReported, initialAssetI
     let ignore = false
     searchAssets(searchText)
       .then((page) => {
-        if (!ignore) setResults(page.content)
+        if (ignore) return
+        setResults(page.content.filter((asset) => asset.status !== 'RETIRED'))
+        setSearchError(null)
       })
-      .catch((err) => {
-        if (!ignore) setError(err)
+      .catch(() => {
+        if (!ignore) setSearchError('Could not load the equipment list. Type again to retry.')
       })
       .finally(() => {
         if (!ignore) setResultsFor(searchText)
@@ -188,7 +193,7 @@ export default function ReportIncidentModal({ onClose, onReported, initialAssetI
           // The server already filtered by the text; filtering again here would hide nothing useful.
           filter={({ options: all }) => all}
           nothingFoundMessage={resultsFor !== searchText ? 'Searching…' : 'No equipment matches'}
-          error={touched && assetId === null ? 'Pick the equipment' : null}
+          error={searchError ?? (touched && assetId === null ? 'Pick the equipment' : null)}
         />
 
         <Textarea

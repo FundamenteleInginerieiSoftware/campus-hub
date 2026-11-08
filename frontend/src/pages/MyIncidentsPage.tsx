@@ -196,6 +196,9 @@ export default function MyIncidentsPage() {
         columns={columns}
         rowKey={(i) => i.id}
         onPageChange={(next) => {
+          // Mantine also calls this for the page you are already on; the effect would not run, so loading
+          // would stay true (same guard as #133 / #196).
+          if (next === pageNumber) return
           setLoading(true)
           setPageNumber(next)
         }}
