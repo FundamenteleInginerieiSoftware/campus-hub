@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-09
-**Branch / PR:** `fix/docker-os-patches`
+**Branch / PR:** `fix/docker-os-patches` (#252)
 **See also:** `19-dockerfile.md` (the Dockerfile), `45-terraform-data.md` (the ECR repository)
 
 ---
@@ -64,4 +64,4 @@ Trade-off: two builds of the same commit on different days can contain different
 | `docker build --platform linux/amd64 -t campus-hub:patched .` | Builds |
 | `docker run --rm --entrypoint sh campus-hub:patched -c 'apk info -v \| grep zlib; whoami'` | `zlib-1.4-r0`, `app` (still not root) |
 
-After merge: push the image built from the new `main` commit and check that ECR's scan shows no CRITICAL finding.
+After merge (#252): the image built from the new `main` commit (`86c9998`) was pushed to ECR; its scan finished with **no findings at all** (`findingSeverityCounts: {}`).
