@@ -78,7 +78,7 @@ It needs Java (any recent version; we used 25) and Graphviz `dot` (`sudo apt ins
 | One `JDBC` arrow from the whole application to PostgreSQL | Each module reaches its own tables through Spring Data JPA; drawing six identical arrows adds nothing |
 | Deployment: `<<device>>` for machines, `<<executionEnvironment>>` / `<<container>>` for JVM, Docker, Node, PostgreSQL, artifacts for deployed files | UML 2 deployment notation; the professor can map every box to a real thing |
 | AWS network parts (account, region, VPC, subnets) as plain rectangles | They are not nodes in UML; rectangles group the nodes like the draw.io picture does |
-| AWS diagram titled "PLANNED (W7–W9), not deployed yet" | Nothing runs on AWS yet; Terraform is still to come |
+| AWS diagram titled "PLANNED (W7–W9), not deployed yet" | Nothing runs on the server yet: Terraform parts 1 + 2 are applied (network, photo bucket, ECR, instance role, SSM), EC2 and CloudFront are still to come |
 
 ### Agreement with `aws-architecture.drawio`
 

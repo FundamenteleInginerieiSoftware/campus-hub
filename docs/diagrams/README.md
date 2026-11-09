@@ -6,7 +6,7 @@ Text sources live next to their exported PNGs. PlantUML (`.puml`) and Mermaid (`
 |---|---|---|
 | `component.puml` + `.png` | UML component diagram: backend modules, their `api` interfaces, the dependencies between them (from the real imports), Observer and Strategy | Matei |
 | `deployment-local.puml` + `.png` | UML deployment diagram: a developer laptop (browser, Vite :5173, Spring Boot :8080, PostgreSQL 18 :5432) and the GitHub Actions `ci` job | Matei |
-| `deployment-aws.puml` + `.png` | UML deployment diagram of the planned AWS production setup (CloudFront, EC2 + Docker, RDS, S3, SES, SSM, ECR) | Matei |
+| `deployment-aws.puml` + `.png` | UML deployment diagram of the planned AWS production setup (CloudFront, EC2 + Docker, RDS, S3, SES, SSM, ECR). Terraform parts 1 + 2 are applied (network, photo bucket, ECR, instance role, SSM); EC2 and CloudFront are still to come | Matei |
 | `aws-architecture.drawio` + `.png` | The same AWS setup with AWS icons (ADR-002) | Matei |
 | `reservation-lifecycle.mmd` | State diagram of a reservation (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, ...) | Calin |
 | `reservation-booking-sequence.mmd` | Sequence diagram: booking flow with pessimistic row lock, quota check, and overlap validation | Calin |

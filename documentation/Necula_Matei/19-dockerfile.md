@@ -80,6 +80,6 @@ With `SPRING_PROFILES_ACTIVE=prod` the app used to stop at startup: `Reassignmen
 
 | Step | Week |
 |---|---|
-| ECR repository (Terraform part 1), push the image | W6 |
+| ECR repository (Terraform part 2, #250), push the image (first push done 9 Nov) | W6 ✅ |
 | `S3StorageService` + `SesNotificationService`, so `prod` starts | W8 |
 | `deploy.yml`: build, push with the commit SHA, SSM Run Command, wait for `healthy` | W8 |

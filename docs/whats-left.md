@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Mon 9 Nov 2026 (W6).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Mon 9 Nov 2026, night (W6).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -30,11 +30,13 @@
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
+| #247 | Calin | Fixes for #240 (bundle quota, after-commit emails, edge-case guards) | Changes requested: hold cooldown only matches the exact same slot |
+| #244 | Liviu | Audit log date filters reject time-zone offsets (#241) | Approved, behind `main`: update branch, then merge |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
-Merged since the last update: Calin #224, #225, #227, #233, #234 (closes #228), #235 (`bookBundle`); Matei #232, #236 (Projects engine).
+Merged since the last update: Matei #239, #238, #243, #248 (Projects content, pages, Reserve all, bundle banner), #249, #250 (Terraform parts 1 and 2); Calin #246 (bundle banner in My reservations); Liviu #242 (closes #230).
 
-Open issues: **#140** (Projects: engine on `main`; left: 9 more projects, student-kit models in the catalog seed (Liviu), pages, "Reserve all"), **#229** (Stefania + team decision), **#230** (Liviu).
+Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are on `main`; left: student-kit models in the catalog seed (Liviu) and the app-wide RO/EN choice (Stefania)), **#229** (Stefania + team decision), **#240** (Calin, PR #247), **#241** (Liviu, PR #244), **#245** (retire flow, team decision).
 
 ---
 
@@ -42,12 +44,12 @@ Open issues: **#140** (Projects: engine on `main`; left: 9 more projects, studen
 
 | When | Task | Waits on |
 |---|---|---|
-| **W6 (now)** | **Terraform part 1** (`infra/`): S3 state bucket, VPC, 1 public subnet + 2 private DB subnets, no NAT, security groups (EC2 only from CloudFront, RDS only from EC2); `terraform plan` | – |
-| W6 | **Terraform part 2**: RDS PostgreSQL 18 (`db.t4g.micro`, private, encrypted), S3 photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`; first `apply`, stop RDS when idle | Part 1 |
-| W6 | ~~Dockerfile~~ (✅ #114) · ~~run the image locally with `prod`~~ (✅ smoke test, #129) · push to ECR | Terraform part 2 (ECR) |
+| W6 | ~~**Terraform part 1** (`infra/`): S3 state bucket, VPC, 1 public subnet + 2 private DB subnets, no NAT, security groups~~ (✅ #249, applied) | – |
+| W6 | ~~**Terraform part 2**: photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`, log group~~ (✅ #250, applied). RDS is written but **off** (`db_enabled=false`) until the W7 deploy | Part 1 |
+| W6 | ~~Dockerfile~~ (✅ #114) · ~~run the image locally with `prod`~~ (✅ smoke test, #129) · ~~push to ECR~~ (✅ 9 Nov, tagged with the commit SHA) | Terraform part 2 (ECR) |
 | W6 | ~~Swagger check~~ (✅ #184) · run the M1 flow · tag `v0.1.0` · status update | Section 2 |
-| W6–W8 | **Projects (#140)**: ~~design + plan~~ (✅ #232) · ~~engine: library, search, details endpoints~~ (✅ #236) · 9 more projects (PR 3) · `/projects` pages with RO/EN switch (PR 4) · `POST /projects/{slug}/reserve` + "Reserve all" (PR 5, uses `bookBundle` ✅ #235) | Liviu: student-kit models in the seed; Stefania: whole-app i18n choice |
-| W7–W8 | **First AWS deploy**: EC2 (Docker) + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront | Dockerfile, Terraform |
+| W6–W8 | **Projects (#140)**: ~~design + plan~~ (✅ #232) · ~~engine: library, search, details endpoints~~ (✅ #236) · ~~10 projects~~ (✅ #239) · ~~`/projects` pages with RO/EN switch~~ (✅ #238) · ~~`POST /projects/{slug}/reserve` + "Reserve all"~~ (✅ #243, #248) | Liviu: student-kit models in the seed; Stefania: whole-app i18n choice |
+| W7–W8 | **First AWS deploy**: EC2 (Docker) + Elastic IP + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront · flip `db_enabled` to true (creates RDS) · `MAIL_FROM` with a verified SES sender (the app does not start without it) · `ADMIN_EMAIL` / `ADMIN_PASSWORD` in SSM | Dockerfile, Terraform ✅ |
 | W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · ~~`S3StorageService`~~ (✅ #129, #177) · first live deploy **by the end of W8** | – |
 | W9 | ~~`SesNotificationService`~~ (✅ #129, #177) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
 | W9 | ~~Frontend: **admin reservations desk page**~~ (✅ #138, #194) | – |

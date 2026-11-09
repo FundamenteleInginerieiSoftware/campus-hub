@@ -78,7 +78,7 @@ Reports after `build`: tests in `backend/build/reports/tests/test/index.html`, c
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (9 Nov 2026, week 6):** on `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the Docker image and the S3/SES adapters for AWS. **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
+> **Status (9 Nov 2026, week 6):** on `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the **Projects** feature (search, details, Reserve all), the Docker image, the S3/SES adapters and the **Terraform** for the AWS network, photo bucket, ECR and instance role (applied; EC2 and CloudFront come in W7). **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk, Projects pages. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
 
 ---
 
@@ -220,10 +220,10 @@ campus-hub/
 │           ├── application-dev.yml      local dev (local PostgreSQL, default profile)
 │           ├── application-prod.yml     AWS (everything from env vars)
 │           └── db/migration/            Flyway SQL migrations
-├── frontend/                 React app (not yet; Stefania sets it up)
+├── frontend/                 React + Vite + TypeScript app (Stefania leads)
 ├── docs/                     decisions log, API contract, AWS ADRs + diagram, clickable prototype (docs/prototype/)
 ├── documentation/            one folder per member (personal docs)
-├── infra/                    Terraform for AWS (not yet; Matei)
+├── infra/                    Terraform for AWS: network, security groups, photo bucket, ECR, instance role, SSM parameters; RDS is written but off until the W7 deploy (Matei)
 ├── .github/                  CODEOWNERS, CI workflow, PR template, issue templates
 └── CONTRIBUTING.md           Git, code, database and test rules (read before your first PR)
 ```
@@ -290,10 +290,11 @@ What is on `main` and what is still in review, per member. **As of 9 Nov 2026**;
 | Security chapter of the report + JWT sequence diagram; UML component + deployment diagrams | #185, #186 |
 | All security rules in `docs/api-contract.md` §2; SSM arrow fixed in the AWS diagram | #195 |
 | README quick start (run, open, test) at the top | #200 |
-| Projects feature (#140): design + plan; engine with bilingual search and free units per model (`GET /api/v1/projects`, `/projects/{slug}`) | #232, #236 |
-| Personal docs 01-39 + README index of them | #14 + each PR above, #137 |
+| Projects feature (#140): design + plan; engine with bilingual search and free units per model (`GET /api/v1/projects`, `/projects/{slug}`); 10 projects; Projects pages; Reserve all; confirmation banner | #232, #236, #239, #238, #243, #248 |
+| Terraform part 1 (state bucket, VPC, subnets, security groups) and part 2 (photo bucket, ECR, instance role, SSM parameters; RDS off until W7), applied; first image pushed to ECR | #249, #250 |
+| Personal docs 01-45 + README index of them | #14 + each PR above, #137 |
 
-**Next:** run the M1 flow and tag `v0.1.0`; Projects PRs 3-5 (content, pages, "Reserve all"); Terraform parts 1 + 2, push the image to ECR (W6); EC2 + CloudFront, first AWS deploy (W7). Full list: `docs/whats-left.md` §4.
+**Next:** run the M1 flow and tag `v0.1.0`; W7 deploy: EC2 + Elastic IP + CloudFront, RDS on, verified SES sender, admin credentials in SSM; W8 `deploy.yml`. Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
