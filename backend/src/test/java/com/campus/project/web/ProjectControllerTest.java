@@ -5,18 +5,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
 import com.campus.config.SecurityConfig;
 import com.campus.project.domain.Difficulty;
 import com.campus.project.domain.Lang;
+import com.campus.project.service.ProjectReservationService;
 import com.campus.project.service.ProjectService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -40,6 +45,9 @@ class ProjectControllerTest {
 
     @MockitoBean
     private ProjectService projectService;
+
+    @MockitoBean
+    private ProjectReservationService projectReservationService;
 
     @Test
     void requiresLogin() throws Exception {
@@ -249,5 +257,136 @@ class ProjectControllerTest {
                         "timezone offset on start must return ProblemDetail code INVALID_PARAMETER; see ProjectController.details")
                 .isEqualTo("INVALID_PARAMETER");
         verifyNoInteractions(projectService);
+    }
+
+    private static final String SLOT_BODY = "{\"start\":\"2026-11-16T10:00:00\",\"end\":\"2026-11-16T12:00:00\"}";
+
+    private MockHttpServletResponse postReserve(String slug, String body) throws Exception {
+        return mockMvc.perform(post("/api/v1/projects/" + slug + "/reserve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andReturn()
+                .getResponse();
+    }
+
+    private String code(MockHttpServletResponse response) throws Exception {
+        return jsonMapper.readTree(response.getContentAsString()).path("code").asString();
+    }
+
+    @Test
+    @WithMockUser
+    void reserveReturns201WithBundle() throws Exception {
+        UUID bundleId = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        when(projectReservationService.reserve("oscilloscope-pwm", START, END))
+                .thenReturn(new ReserveProjectResponse(
+                        bundleId, START, END, List.of(new ReservedItem(4L, "Rigol DS1054Z #1", "DS1054Z"))));
+
+        MockHttpServletResponse response = postReserve("oscilloscope-pwm", SLOT_BODY);
+
+        assertThat(response.getStatus())
+                .as(
+                        "POST /api/v1/projects/{slug}/reserve must return 201 (body: %s); see ProjectController.reserve",
+                        response.getContentAsString())
+                .isEqualTo(201);
+        var json = jsonMapper.readTree(response.getContentAsString());
+        assertThat(json.path("bundleId").asString())
+                .as("reserve response must serialize $.bundleId; see ReserveProjectResponse")
+                .isEqualTo(bundleId.toString());
+        assertThat(json.path("start").asString())
+                .as("reserve response must serialize $.start without an offset; see ReserveProjectResponse")
+                .isEqualTo("2026-11-16T10:00:00");
+        assertThat(json.path("items").path(0).path("assetId").asLong())
+                .as("reserve response must serialize $.items[0].assetId; see ReservedItem")
+                .isEqualTo(4L);
+        assertThat(json.path("items").path(0).path("assetName").asString())
+                .as("reserve response must serialize $.items[0].assetName; see ReservedItem")
+                .isEqualTo("Rigol DS1054Z #1");
+        assertThat(json.path("items").path(0).path("model").asString())
+                .as("reserve response must serialize $.items[0].model; see ReservedItem")
+                .isEqualTo("DS1054Z");
+    }
+
+    @Test
+    @WithMockUser
+    void reserveWithoutEndIs400() throws Exception {
+        MockHttpServletResponse response = postReserve("oscilloscope-pwm", "{\"start\":\"2026-11-16T10:00:00\"}");
+
+        assertThat(response.getStatus())
+                .as(
+                        "reserve without end must return 400 (body: %s); see ReserveProjectRequest @NotNull",
+                        response.getContentAsString())
+                .isEqualTo(400);
+        assertThat(code(response))
+                .as("missing end must return ProblemDetail code VALIDATION_FAILED; see ReserveProjectRequest")
+                .isEqualTo("VALIDATION_FAILED");
+        verifyNoInteractions(projectReservationService);
+    }
+
+    @Test
+    @WithMockUser
+    void reserveRejectsTimeZoneOffset() throws Exception {
+        MockHttpServletResponse response = postReserve(
+                "oscilloscope-pwm", "{\"start\":\"2026-11-16T10:00:00Z\",\"end\":\"2026-11-16T12:00:00Z\"}");
+
+        assertThat(response.getStatus())
+                .as(
+                        "reserve with a Z offset must return 400 (body: %s); see ReserveProjectRequest @JsonFormat(lenient = FALSE)",
+                        response.getContentAsString())
+                .isEqualTo(400);
+        assertThat(code(response))
+                .as("an offset in the body must return MALFORMED_REQUEST, like reservation requests since #233; "
+                        + "see ReserveProjectRequest")
+                .isEqualTo("MALFORMED_REQUEST");
+        verifyNoInteractions(projectReservationService);
+    }
+
+    @Test
+    void reserveRequiresLogin() throws Exception {
+        MockHttpServletResponse response = postReserve("oscilloscope-pwm", SLOT_BODY);
+
+        assertThat(response.getStatus())
+                .as(
+                        "reserve without a token must return 401 (body: %s); see SecurityConfig.apiChain",
+                        response.getContentAsString())
+                .isEqualTo(401);
+        verifyNoInteractions(projectReservationService);
+    }
+
+    @Test
+    @WithMockUser
+    void reserveUnknownSlugIs404() throws Exception {
+        when(projectReservationService.reserve("unknown", START, END))
+                .thenThrow(new NotFoundException("PROJECT_NOT_FOUND", "Project 'unknown' was not found"));
+
+        MockHttpServletResponse response = postReserve("unknown", SLOT_BODY);
+
+        assertThat(response.getStatus())
+                .as(
+                        "reserve on an unknown slug must return 404 (body: %s); see ProjectReservationService.reserve",
+                        response.getContentAsString())
+                .isEqualTo(404);
+        assertThat(code(response))
+                .as("unknown slug must return ProblemDetail code PROJECT_NOT_FOUND; see ProjectService.findProject")
+                .isEqualTo("PROJECT_NOT_FOUND");
+    }
+
+    @Test
+    @WithMockUser
+    void reserveShortComponentIs409() throws Exception {
+        when(projectReservationService.reserve("oscilloscope-pwm", START, END))
+                .thenThrow(new ConflictException(
+                        "PROJECT_COMPONENT_UNAVAILABLE", "Not enough free units of 'DS1054Z' in this slot"));
+
+        MockHttpServletResponse response = postReserve("oscilloscope-pwm", SLOT_BODY);
+
+        assertThat(response.getStatus())
+                .as(
+                        "a short component must return 409 (body: %s); see ProjectReservationService.pickUnits",
+                        response.getContentAsString())
+                .isEqualTo(409);
+        assertThat(code(response))
+                .as("a short component must return ProblemDetail code PROJECT_COMPONENT_UNAVAILABLE; "
+                        + "see ProjectReservationService.pickUnits")
+                .isEqualTo("PROJECT_COMPONENT_UNAVAILABLE");
     }
 }

@@ -1,19 +1,25 @@
 package com.campus.project.web;
 
 import com.campus.project.domain.Lang;
+import com.campus.project.service.ProjectReservationService;
 import com.campus.project.service.ProjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -29,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final ProjectReservationService projectReservationService;
 
     // lang is read as a raw String and validated via Lang.parse so an unknown value throws
     // BadRequestException (400 VALIDATION_FAILED) instead of Spring's enum conversion failure
@@ -65,5 +72,30 @@ public class ProjectController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime start,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime end) {
         return projectService.details(slug, Lang.parse(lang), start, end);
+    }
+
+    @PostMapping("/{slug}/reserve")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(
+            summary = "Reserve all: book one free unit of every item in the project kit",
+            description =
+                    "Picks the lowest-id free unit of each model and books them together through ReservationApi.bookBundle "
+                            + "(all or nothing, one bundleId). Booking rules, holds and the student limit are checked there.")
+    @ApiResponse(responseCode = "201", description = "Kit booked; every item shares the returned bundleId")
+    @ApiResponse(
+            responseCode = "400",
+            description =
+                    "start/end missing, malformed or with a time zone offset, or end not after start (VALIDATION_FAILED, MALFORMED_REQUEST)")
+    @ApiResponse(responseCode = "404", description = "Unknown project slug (PROJECT_NOT_FOUND)")
+    // Calin's booking rules are BusinessRuleExceptions, which Liviu's handler answers with 409.
+    @ApiResponse(
+            responseCode = "409",
+            description =
+                    "Not enough free units of a model (PROJECT_COMPONENT_UNAVAILABLE); from bookBundle: a unit taken in the meantime "
+                            + "(RESERVATION_CONFLICT, SLOT_HELD, ASSET_NOT_BOOKABLE), the student limit (RESERVATION_LIMIT_REACHED) "
+                            + "or a booking rule (BOOKING_IN_PAST, SLOT_NOT_ALIGNED, INVALID_DURATION, BOOKING_TOO_FAR_AHEAD, OUTSIDE_OPENING_HOURS)")
+    public ReserveProjectResponse reserve(
+            @PathVariable String slug, @Valid @RequestBody ReserveProjectRequest request) {
+        return projectReservationService.reserve(slug, request.start(), request.end());
     }
 }
