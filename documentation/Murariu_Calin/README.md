@@ -47,6 +47,7 @@ Each document is structured in two parts:
 | 24 | [`24-reservation-api-book-bundle-facade-and-project-architecture.md`](./24-reservation-api-book-bundle-facade-and-project-architecture.md) | ReservationApi bookBundle Facade & Project Assistant | In-process atomic booking facade (1..5 assets) for project assistant, ArchUnit leaf module rule for project |
 | 25 | [`25-bundle-booking-confirmation-banner.md`](./25-bundle-booking-confirmation-banner.md) | Bundle Booking Confirmation Banner in My Reservations | Navigation state handling for `bookedBundleId`, item count banner formatting, project kit feedback |
 | 26 | [`26-reservation-bundle-quota-after-commit-notifications-and-guards.md`](./26-reservation-bundle-quota-after-commit-notifications-and-guards.md) | Reservation Bundle Quota, After-Commit Emails & Edge Guards | Distinct session counting (`coalesce(bundle_id, id)`), `afterCommit` notification sync, anti-probing, hold cooldown, bundle extend guard |
+| 28 | [`28-admin-equipment-analytics-and-demand-heatmap-ui.md`](./28-admin-equipment-analytics-and-demand-heatmap-ui.md) | Equipment Utilization Analytics & Demand Heatmap UI | Admin dashboard with KPI cards, 7x12 weekly demand intensity heatmap, capacity planning bottleneck alerts, per-equipment utilization table |
 
 
 

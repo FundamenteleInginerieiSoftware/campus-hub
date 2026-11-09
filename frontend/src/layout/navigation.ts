@@ -4,6 +4,7 @@ import {
   IconBox,
   IconBulb,
   IconCalendarEvent,
+  IconChartBar,
   IconClipboardList,
   IconHistory,
   IconLayoutGrid,
@@ -38,6 +39,7 @@ const ADMIN_MENU: NavGroup[] = [
     title: 'Operations',
     items: [
       { label: 'Reservations desk', path: '/admin/reservations', icon: IconClipboardList },
+      { label: 'Analytics & Heatmap', path: '/admin/analytics', icon: IconChartBar },
       { label: 'Incident queue', path: '/admin/incidents', icon: IconAlertTriangle },
       { label: 'Reassignment log', path: '/admin/reassignments', icon: IconArrowsExchange },
       { label: 'Audit log', path: '/admin/audit-logs', icon: IconHistory },
