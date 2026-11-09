@@ -48,6 +48,15 @@ During thorough end-to-end testing of the reservation workflow against real Post
 - In `createHold`: Added 2-minute cooldown check via `existsByUserIdAndAssetIdAndStartTimeAndEndTimeAndCreatedAtAfter` throwing 409 `HOLD_COOLDOWN_ACTIVE`.
 - In `extendReservation`: Added guard checking `reservation.getBundleId() != null` throwing 409 `BUNDLE_EXTEND_NOT_ALLOWED`. Added invocation of `cancelPendingTransferIfExists`.
 
-### Verification
-- Full test suite `./gradlew test --tests "com.campus.reservation.*"`: 379 tests passed.
-- Full project `./gradlew spotlessApply build`: BUILD SUCCESSFUL.
+### Verification & PIT Mutation Testing
+- Full test suite: `./gradlew test --tests "com.campus.reservation.*"` passed (383 tests).
+- Full project: `./gradlew spotlessApply build` passed (BUILD SUCCESSFUL, 971 unit & integration tests).
+- **PIT Mutation Testing (`./gradlew pitest`):**
+  - Project-wide mutation score: 97% killed (1089/1123 mutations), 98% test strength, 96% line coverage.
+  - Eliminated all real business rule survivors in `ReservationService`:
+    - `bookBundle` slot rules enforcement (`validateSlotRules`).
+    - `bookBundle` null element rejection in asset IDs.
+    - `bookBundle` 5-item boundary condition.
+    - `bookBundle` student vs admin quota evaluation via `userApi.findActiveRole`.
+    - `initiateTransfer` row-locking verification via `catalogApi.lockForBooking`.
+    - `checkOutReservation` transfer auto-cancellation audit attribution.

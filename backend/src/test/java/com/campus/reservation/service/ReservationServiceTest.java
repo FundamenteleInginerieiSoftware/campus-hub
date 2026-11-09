@@ -1899,8 +1899,22 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, null, start, end))
+                .as("null bundle: null asset list must throw INVALID_BUNDLE_SIZE; see ReservationService.bookBundle")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 1 and 5 assets");
+
         assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(), start, end))
                 .as("empty bundle: empty asset list must throw INVALID_BUNDLE_SIZE; see ReservationService.bookBundle")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 1 and 5 assets");
+
+        List<Long> listWithNull = new java.util.ArrayList<>();
+        listWithNull.add(1L);
+        listWithNull.add(null);
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, listWithNull, start, end))
+                .as(
+                        "null element: bundle containing null must throw INVALID_BUNDLE_SIZE; see ReservationService.bookBundle")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("between 1 and 5 assets");
 
@@ -1909,6 +1923,81 @@ class ReservationServiceTest {
                 .as("overflow bundle: > 5 assets must throw INVALID_BUNDLE_SIZE; see ReservationService.bookBundle")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("between 1 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: validates slot rules (#140)")
+    void bookBundle_validatesSlotRules() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 14, 0); // end before start
+
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(10L), start, end))
+                .as("invalid slot: end before start must be rejected; see ReservationService.bookBundle")
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: allows boundary of exactly 5 assets (#140)")
+    void bookBundle_allowsExactlyFiveAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        List<Long> fiveAssets = List.of(1L, 2L, 3L, 4L, 5L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UUID bundleId = reservationService.bookBundle(USER_ID, fiveAssets, start, end);
+        assertThat(bundleId).isNotNull();
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: admin resolved via userApi bypasses quota (#140)")
+    void bookBundle_adminResolvedViaUserApiBypassesQuota() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        List<Long> assetIds = List.of(10L, 20L);
+
+        // currentUser has no admin role in JWT context, but userApi finds Role.ADMIN
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.ADMIN));
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UUID bundleId = reservationService.bookBundle(USER_ID, assetIds, start, end);
+        assertThat(bundleId).isNotNull();
+        verify(reservationRepository, never()).lockUserQuota(anyLong());
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: student resolved via userApi enforces quota (#140)")
+    void bookBundle_studentResolvedViaUserApiEnforcesQuota() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        List<Long> assetIds = List.of(10L, 20L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, assetIds, start, end))
+                .isInstanceOf(ConflictException.class)
+                .as("student quota: student must not bypass quota in bookBundle; see ReservationService.bookBundle")
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
     }
 
     @Test
@@ -2130,6 +2219,7 @@ class ReservationServiceTest {
         assertThat(response.id()).isEqualTo(500L);
         assertThat(response.status()).isEqualTo(TransferStatus.PENDING);
         assertThat(response.toUserId()).isEqualTo(99L);
+        verify(catalogApi).lockForBooking(ASSET_ID);
         verify(notificationService).notifyUser(eq(99L), eq("Reservation Transfer Offer"), any());
         verify(auditService).record(eq(USER_ID), eq("TRANSFER_INITIATED"), eq("ReservationTransfer"), eq(500L), any());
     }
@@ -3302,6 +3392,7 @@ class ReservationServiceTest {
         ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 9, 0));
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
+        when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
@@ -3319,6 +3410,8 @@ class ReservationServiceTest {
                         "check-out: pending transfer must transition to CANCELLED; see ReservationService.checkOutReservation")
                 .isEqualTo(TransferStatus.CANCELLED);
         verify(reservationTransferRepository).save(transfer);
+        verify(auditService).record(eq(USER_ID), eq("TRANSFER_CANCELLED"), eq("ReservationTransfer"), eq(500L), any());
+        verify(auditService).record(eq(USER_ID), eq("CHECK_OUT_RESERVATION"), eq("Reservation"), eq(100L), any());
     }
 
     @Test
