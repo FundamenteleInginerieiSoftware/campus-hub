@@ -187,16 +187,14 @@ public class CatalogSeeder implements CommandLineRunner {
                 roomB204,
                 now);
 
-        // Pre-configured UNDER_MAINTENANCE unit for catalog filtering demos.
         Asset mcu5 = new Asset(
-                "ESP32-S3 DevKit 2 (Under Maintenance)",
+                "ESP32-S3 DevKit 2",
                 "ESP32-S3-DevKitC-1",
                 "ESP32-S3-002",
-                "Wi-Fi + BLE 5.0 development board - undergoing USB-C connector repair",
+                "Wi-Fi + BLE 5.0 development board with Xtensa 32-bit LX7 dual core",
                 catMicrocontrollers,
                 roomB204,
                 now);
-        mcu5.markUnderMaintenance(now);
 
         Asset printer1 = new Asset(
                 "Prusa i3 MK3S+ 3D Printer 1",

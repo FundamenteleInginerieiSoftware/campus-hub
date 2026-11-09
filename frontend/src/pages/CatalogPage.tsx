@@ -116,6 +116,13 @@ export default function CatalogPage() {
   useEffect(() => {
     let active = true
 
+    // Bug fixed (#230): the spinner turned on per keystroke, but no fetch ran when the debounced text didn't change.
+    // Fix: the effect alone manages the loading spinner right when an API fetch begins.
+    // Microtask avoids React cascading render / linter warning when updating state inside an effect.
+    void Promise.resolve().then(() => {
+      if (active) setLoading(true)
+    })
+
     searchAssets({
       search: debouncedSearch.trim() || undefined,
       categoryId: categoryId ? Number(categoryId) : undefined,
@@ -129,12 +136,15 @@ export default function CatalogPage() {
         if (active) {
           setPageData(data)
           setError(null)
-          setLoading(false)
         }
       })
       .catch((err) => {
         if (active) {
           setError(err)
+        }
+      })
+      .finally(() => {
+        if (active) {
           setLoading(false)
         }
       })
@@ -145,11 +155,6 @@ export default function CatalogPage() {
   }, [debouncedSearch, categoryId, labRoomId, status, page])
 
   const handleResetFilters = () => {
-    // Return early if no filters are active to avoid hanging spinner on empty catalogs
-    if (!search && !categoryId && !labRoomId && !status && page === 0) {
-      return
-    }
-    setLoading(true)
     setSearch('')
     setCategoryId(null)
     setLabRoomId(null)
@@ -196,7 +201,6 @@ export default function CatalogPage() {
             placeholder="Search name, model, serial..."
             value={search}
             onChange={(e) => {
-              setLoading(true)
               setSearch(e.currentTarget.value)
               setPage(0)
             }}
@@ -208,7 +212,6 @@ export default function CatalogPage() {
             data={categoryOptions}
             value={categoryId}
             onChange={(val) => {
-              setLoading(true)
               setCategoryId(val)
               setPage(0)
             }}
@@ -221,7 +224,6 @@ export default function CatalogPage() {
             data={labRoomOptions}
             value={labRoomId}
             onChange={(val) => {
-              setLoading(true)
               setLabRoomId(val)
               setPage(0)
             }}
@@ -235,7 +237,6 @@ export default function CatalogPage() {
               data={statusOptions}
               value={status}
               onChange={(val) => {
-                setLoading(true)
                 setStatus(val)
                 setPage(0)
               }}
@@ -388,13 +389,7 @@ export default function CatalogPage() {
               <Pagination
                 total={pageData.totalPages}
                 value={pageData.page + 1}
-                onChange={(val) => {
-                  // Mantine fires onChange for the current page. Setting the same page does not
-                  // trigger the effect, which would leave loading true indefinitely.
-                  if (val - 1 === page) return
-                  setLoading(true)
-                  setPage(val - 1)
-                }}
+                onChange={(val) => setPage(val - 1)}
               />
             </Group>
           ) : null}
