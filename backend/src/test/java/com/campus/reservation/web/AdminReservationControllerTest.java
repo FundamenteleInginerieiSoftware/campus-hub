@@ -138,6 +138,19 @@ class AdminReservationControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reservations returns 400 when date parameter contains timezone offset")
+    void searchRejectsTimezoneOffsetDate() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reservations").param("date", "2026-11-10Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+
+        mockMvc.perform(get("/api/v1/admin/reservations").param("date", "2026-11-10+02:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     @DisplayName("POST /api/v1/admin/reservations/{id}/check-out returns 200 when successful")
     void checkOutReturns200() throws Exception {
         when(reservationService.checkOutReservation(1L)).thenReturn(checkedOutResponse);

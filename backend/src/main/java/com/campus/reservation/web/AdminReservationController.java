@@ -55,7 +55,7 @@ public class AdminReservationController {
             @RequestParam(required = false) ReservationStatus status,
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Long assetId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "desc") String sortDir) {

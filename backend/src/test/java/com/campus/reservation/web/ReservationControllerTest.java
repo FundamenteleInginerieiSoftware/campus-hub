@@ -297,6 +297,22 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/reservations with invalid calendar date (e.g. Nov 31) returns 400 MALFORMED_REQUEST")
+    void createWithInvalidCalendarDateReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "assetId": 10,
+                            "startTime": "2026-11-31T14:00:00",
+                            "endTime": "2026-11-31T16:00:00"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/reservations with missing required fields returns 400 Bad Request")
     void createWithInvalidBodyReturns400() throws Exception {
         mockMvc.perform(post("/api/v1/reservations")

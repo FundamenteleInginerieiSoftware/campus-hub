@@ -1,6 +1,7 @@
 package com.campus.reservation.web;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.OptBoolean;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -20,10 +21,10 @@ public record CreateMultiAssetReservationRequest(
 
         @NotNull(message = "startTime must not be null")
         @Schema(description = "Start date-time of the reservation window", example = "2026-11-09T14:00:00")
-        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
+        @JsonFormat(lenient = OptBoolean.FALSE)
         LocalDateTime startTime,
 
         @NotNull(message = "endTime must not be null")
         @Schema(description = "End date-time of the reservation window", example = "2026-11-09T16:00:00")
-        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
+        @JsonFormat(lenient = OptBoolean.FALSE)
         LocalDateTime endTime) {}
