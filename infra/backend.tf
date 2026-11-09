@@ -4,7 +4,7 @@
 # overwrite each other (no DynamoDB table needed since Terraform 1.10).
 terraform {
   backend "s3" {
-    bucket       = "STATE_BUCKET_PLACEHOLDER"
+    bucket       = "campus-hub-tfstate-099cd54b"
     key          = "campus-hub/terraform.tfstate"
     region       = "eu-central-1"
     encrypt      = true
