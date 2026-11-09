@@ -1,6 +1,7 @@
-import { ActionIcon, Alert, Badge, Button, Group, SegmentedControl, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Alert, Anchor, Badge, Button, Group, SegmentedControl, Text, Tooltip } from '@mantine/core'
 import { IconCheck, IconPhoto, IconTool, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { fetchAdminUser, type AdminUser } from '../api/adminUsers.ts'
 import {
   fetchAdminIncidents,
@@ -61,11 +62,14 @@ export default function IncidentQueuePage() {
 
   useEffect(() => {
     let ignore = false
+    // Set when this page came back empty and we move to the previous one: the next load ends the spinner.
+    let movedBack = false
     fetchAdminIncidents(filter === 'ALL' ? null : filter, pageNumber, PAGE_SIZE)
       .then(async (response) => {
         if (ignore) return
         // The last row of a later page was just moved to another status: go back one page.
         if (response.content.length === 0 && pageNumber > 0) {
+          movedBack = true
           setPageNumber(pageNumber - 1)
           return
         }
@@ -83,16 +87,21 @@ export default function IncidentQueuePage() {
         // One merge per lookup instead of a new object per row.
         const newAssets = foundAssets.filter((a): a is AssetSummary => a !== null).map((a) => [a.id, a])
         const newUsers = foundUsers.filter((u): u is AdminUser => u !== null).map((u) => [u.id, u])
-        assetsRef.current = { ...assetsRef.current, ...Object.fromEntries(newAssets) }
-        usersRef.current = { ...usersRef.current, ...Object.fromEntries(newUsers) }
-        setAssets(assetsRef.current)
-        setUsers(usersRef.current)
+        // Everything already cached: no new state, so no extra render.
+        if (newAssets.length > 0) {
+          assetsRef.current = { ...assetsRef.current, ...Object.fromEntries(newAssets) }
+          setAssets(assetsRef.current)
+        }
+        if (newUsers.length > 0) {
+          usersRef.current = { ...usersRef.current, ...Object.fromEntries(newUsers) }
+          setUsers(usersRef.current)
+        }
       })
       .catch((err) => {
         if (!ignore) setError(err)
       })
       .finally(() => {
-        if (!ignore) setLoading(false)
+        if (!ignore && !movedBack) setLoading(false)
       })
     return () => {
       ignore = true
@@ -143,9 +152,9 @@ export default function IncidentQueuePage() {
         const asset = assets[i.assetId]
         return asset ? (
           <div>
-            <Text size="sm" fw={500}>
+            <Anchor component={Link} to={`/catalog/${asset.id}`} size="sm" fw={500}>
               {asset.name}
-            </Text>
+            </Anchor>
             <Text size="xs" c="dimmed">
               SN {asset.serialNumber}
             </Text>
@@ -181,9 +190,17 @@ export default function IncidentQueuePage() {
         return (
           <div>
             <Text size="sm">{formatCampusDateTime(i.createdAt)}</Text>
-            <Text size="xs" c="dimmed">
-              {user ? user.fullName : `user #${i.reportedById}`}
-            </Text>
+            {user ? (
+              <Tooltip label={user.email}>
+                <Text size="xs" c="dimmed">
+                  {user.fullName}
+                </Text>
+              </Tooltip>
+            ) : (
+              <Text size="xs" c="dimmed">
+                user #{i.reportedById}
+              </Text>
+            )}
           </div>
         )
       },
@@ -232,6 +249,8 @@ export default function IncidentQueuePage() {
               variant="light"
               color="green"
               leftSection={<IconCheck size={14} />}
+              // While Start repair is running for this row, a second action would only get a 409.
+              disabled={startingId === i.id}
               onClick={() => setClosing({ incident: i, outcome: 'resolve' })}
             >
               Resolve
@@ -241,6 +260,7 @@ export default function IncidentQueuePage() {
               variant="subtle"
               color="red"
               leftSection={<IconX size={14} />}
+              disabled={startingId === i.id}
               onClick={() => setClosing({ incident: i, outcome: 'reject' })}
             >
               Reject

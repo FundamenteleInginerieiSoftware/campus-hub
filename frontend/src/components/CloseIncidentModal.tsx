@@ -59,6 +59,8 @@ export default function CloseIncidentModal({ incident, outcome, onClose, onDone 
           {text.explain}
         </Text>
         <Textarea
+          // Mantine puts the cursor here when the window opens.
+          data-autofocus
           label={text.label}
           placeholder={text.placeholder}
           autosize
