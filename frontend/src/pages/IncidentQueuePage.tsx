@@ -80,8 +80,11 @@ export default function IncidentQueuePage() {
           Promise.all(userIds.map((id) => fetchAdminUser(id).catch(() => null))),
         ])
         if (ignore) return
-        for (const asset of foundAssets) if (asset) assetsRef.current = { ...assetsRef.current, [asset.id]: asset }
-        for (const user of foundUsers) if (user) usersRef.current = { ...usersRef.current, [user.id]: user }
+        // One merge per lookup instead of a new object per row.
+        const newAssets = foundAssets.filter((a): a is AssetSummary => a !== null).map((a) => [a.id, a])
+        const newUsers = foundUsers.filter((u): u is AdminUser => u !== null).map((u) => [u.id, u])
+        assetsRef.current = { ...assetsRef.current, ...Object.fromEntries(newAssets) }
+        usersRef.current = { ...usersRef.current, ...Object.fromEntries(newUsers) }
         setAssets(assetsRef.current)
         setUsers(usersRef.current)
       })
