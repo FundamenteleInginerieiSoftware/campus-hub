@@ -27,8 +27,11 @@ RUN ./gradlew bootJar --no-daemon && mv build/libs/*.jar app.jar
 
 # Stage 3: what runs on EC2. Only a Java runtime (no compiler) and the jar.
 FROM eclipse-temurin:25-jre-alpine
+# Bug fixed: the base image can be weeks behind Alpine's security fixes. The first image pushed to
+# ECR (9 Nov) had zlib 1.3.2 with a critical CVE (CVE-2026-4738) although Alpine already shipped
+# 1.4. Fix: install the OS updates at build time, so every build gets the patched packages.
 # Not root: if someone breaks into the app, they can't change the container's system files.
-RUN addgroup -S app && adduser -S app -G app
+RUN apk upgrade --no-cache && addgroup -S app && adduser -S app -G app
 USER app
 WORKDIR /app
 COPY --from=backend /app/app.jar app.jar
