@@ -111,7 +111,16 @@ Only Matei runs this, with the `terraform-admin` CLI profile (`09-aws-architectu
 | `terraform validate` in `infra/` and in `infra/bootstrap/` | `Success! The configuration is valid.` (Terraform 1.16.7) |
 | `git check-ignore -v infra/.terraform infra/bootstrap/bootstrap.tfplan` | Both ignored (`infra/**/.terraform/`, `*.tfplan`) |
 
-<!-- TODO Claude: plan/apply results -->
+Run on 9 Nov 2026 against the real account (plans by Claude, each apply run by Matei from the saved plan file, so exactly the reviewed plan was applied):
+
+| Step | Result |
+|---|---|
+| `terraform plan -out=bootstrap.tfplan` → `terraform apply bootstrap.tfplan` (in `bootstrap/`) | 5 added. State bucket `campus-hub-tfstate-099cd54b` |
+| `terraform init` (in `infra/`) | `Successfully configured the backend "s3"!` |
+| `terraform plan -out=part1.tfplan` → `terraform apply part1.tfplan` | 16 added, 0 changed, 0 destroyed: VPC, internet gateway, 3 subnets, 2 route tables + 3 associations, 2 security groups + 4 rules |
+| `terraform plan` again | `No changes. Your infrastructure matches the configuration.` |
+| `aws ec2 describe-route-tables` on the DB route table | Only `10.0.0.0/16 local`: no way to the internet |
+| `aws ec2 describe-security-group-rules` on `campus-hub-db` | One rule: inbound 5432 from `campus-hub-app`; no outbound rules |
 
 ### Problems and open points
 
