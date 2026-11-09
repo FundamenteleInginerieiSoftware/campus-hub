@@ -226,4 +226,28 @@ class ProjectControllerTest {
                 .isEqualTo("INVALID_PARAMETER");
         verifyNoInteractions(projectService);
     }
+
+    @Test
+    @WithMockUser
+    void rejectsTimeZoneOffsetOnSlotParams() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/api/v1/projects/thermometer")
+                        .param("start", "2026-11-16T10:00:00Z")
+                        .param("end", "2026-11-16T12:00:00"))
+                .andReturn()
+                .getResponse();
+
+        assertThat(response.getStatus())
+                .as(
+                        "ISO date-time with timezone offset on start must return 400 (body: %s); see ProjectController.details",
+                        response.getContentAsString())
+                .isEqualTo(400);
+        assertThat(jsonMapper
+                        .readTree(response.getContentAsString())
+                        .path("code")
+                        .asString())
+                .as(
+                        "timezone offset on start must return ProblemDetail code INVALID_PARAMETER; see ProjectController.details")
+                .isEqualTo("INVALID_PARAMETER");
+        verifyNoInteractions(projectService);
+    }
 }

@@ -62,8 +62,8 @@ public class ProjectController {
     public ProjectDetailsResponse details(
             @PathVariable String slug,
             @RequestParam(required = false) String lang,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime start,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime end) {
         return projectService.details(slug, Lang.parse(lang), start, end);
     }
 }
