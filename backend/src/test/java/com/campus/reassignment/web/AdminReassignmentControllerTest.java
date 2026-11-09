@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -157,5 +158,29 @@ class AdminReassignmentControllerTest {
                 .andExpect(jsonPath("$.targetAssetId").value(1))
                 .andExpect(jsonPath("$.resolved").value(true))
                 .andExpect(jsonPath("$.applied").value(false));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift defaults dryRun to false for production execution")
+    void resolveChainShiftDefaultsToProductionExecution() throws Exception {
+        ChainShiftPlanResponse plan = new ChainShiftPlanResponse(
+                1L,
+                LocalDateTime.of(2026, 11, 15, 10, 0),
+                LocalDateTime.of(2026, 11, 15, 12, 0),
+                true,
+                true,
+                List.of(),
+                "Plan applied");
+
+        when(reassignmentService.resolveChainShift(eq(1L), any(), any(), eq(false)))
+                .thenReturn(plan);
+
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00")
+                        .param("endTime", "2026-11-15T12:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applied").value(true));
     }
 }

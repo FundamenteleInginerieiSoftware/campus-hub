@@ -49,7 +49,7 @@ When applying an augmenting path:
   - `targetAssetId` (Long, required): The equipment item to free.
   - `startTime` (ISO-8601, required): Start of the needed time slot.
   - `endTime` (ISO-8601, required): End of the needed time slot.
-  - `dryRun` (Boolean, default `true`): If true, returns the plan and explanation without modifying the database. If false, atomically executes all relocations and logs to `reassignment_log`.
+  - `dryRun` (Boolean, default `false`): Defaults to `false` for production execution (atomically executes all relocations and logs to `reassignment_log`). Pass `dryRun=true` to simulate the plan without database modifications.
 
 ### 3. Verification & Architecture
 

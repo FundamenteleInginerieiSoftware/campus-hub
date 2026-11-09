@@ -66,7 +66,7 @@ public class AdminReassignmentController {
             @RequestParam Long targetAssetId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
-            @RequestParam(defaultValue = "true") boolean dryRun) {
+            @RequestParam(defaultValue = "false") boolean dryRun) {
         return ResponseEntity.ok(reassignmentService.resolveChainShift(targetAssetId, startTime, endTime, dryRun));
     }
 }
