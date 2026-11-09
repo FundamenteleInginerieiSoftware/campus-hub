@@ -888,35 +888,6 @@ export default function MyReservationsPage() {
               </Text>
             </div>
 
-            {/* Classmate Quick Pick */}
-            <div>
-              <Text size="xs" fw={500} mb={6}>
-                Quick Pick Classmate:
-              </Text>
-              <Group gap="xs">
-                {user?.id !== 2 && (
-                  <Button
-                    size="xs"
-                    variant={recipientUserId === 2 ? 'filled' : 'light'}
-                    color="violet"
-                    onClick={() => setRecipientUserId(2)}
-                  >
-                    Student Two (ID: #2)
-                  </Button>
-                )}
-                {user?.id !== 1 && (
-                  <Button
-                    size="xs"
-                    variant={recipientUserId === 1 ? 'filled' : 'light'}
-                    color="violet"
-                    onClick={() => setRecipientUserId(1)}
-                  >
-                    Student One (ID: #1)
-                  </Button>
-                )}
-              </Group>
-            </div>
-
             <NumberInput
               label="Recipient Student User ID"
               placeholder="e.g. 2"

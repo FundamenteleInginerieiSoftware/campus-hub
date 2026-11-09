@@ -34,12 +34,12 @@ const MESSAGES: Record<string, string> = {
   CANNOT_TRANSFER_TO_SELF: 'You cannot transfer a reservation to yourself.',
   TRANSFER_ALREADY_PENDING: 'A transfer offer for this reservation is already pending.',
   TRANSFER_NOT_FOUND: 'The transfer request was not found or has already expired.',
-  RESERVATION_NOT_TRANSFERABLE: 'Only upcoming confirmed reservations can be transferred.',
+  TRANSFER_NOT_ALLOWED: 'Only upcoming confirmed reservations can be transferred.',
+  INVALID_TRANSFER_STATUS_TRANSITION: 'This transfer offer is no longer valid or has changed status.',
   SLOT_HELD: 'This time slot is temporarily held by another student.',
   HOLD_EXPIRED: 'Your temporary slot hold has expired. Please select a time slot again.',
   HOLD_NOT_FOUND: 'The slot hold was not found or has already been released.',
-  HOLD_LIMIT_REACHED: 'You already have an active slot hold. Please confirm or release it first.',
-  ACTIVE_HOLD_EXISTS: 'You already have an active hold on this or another slot.',
+  ACTIVE_HOLD_LIMIT_REACHED: 'You already have an active slot hold. Please confirm or release it first.',
 
   // Incident error codes (api-contract §5, Stefania)
   INCIDENT_NOT_FOUND: 'Incident was not found.',
