@@ -66,18 +66,33 @@ class CatalogSeederTest {
 
         catalogSeeder.run();
 
-        verify(categoryRepository, times(4)).save(any(Category.class));
+        verify(categoryRepository, times(6)).save(any(Category.class));
         verify(labRoomRepository, times(3)).save(any(LabRoom.class));
         verify(assetRepository).saveAll(assetsCaptor.capture());
 
         List<Asset> seededAssets = assetsCaptor.getValue();
-        assertEquals(18, seededAssets.size());
+        assertEquals(36, seededAssets.size());
 
         // Verify multiple units of the same model exist for SameModelStrategy
         long ds1054zCount = seededAssets.stream()
                 .filter(a -> "DS1054Z".equals(a.getModel()))
                 .count();
         assertTrue(ds1054zCount >= 3, "Expected at least 3 DS1054Z units for substitution demo");
+
+        // Verify all 8 project models requested in #140 exist for Projects Assistant
+        for (String model : List.of(
+                "Arduino Uno R3",
+                "DS18B20 temperature sensor kit",
+                "HC-SR04 ultrasonic sensor kit",
+                "16x2 I2C LCD module kit",
+                "2WD robot chassis + L298N kit",
+                "Breadboard + jumper wire kit",
+                "DP832",
+                "FX-888D")) {
+            assertTrue(
+                    seededAssets.stream().anyMatch(a -> model.equals(a.getModel())),
+                    "project model missing: " + model + "; see CatalogSeeder");
+        }
 
         // Verify status distribution: available and retired;
         // seeded assets must not be UNDER_MAINTENANCE without an open incident (#230).
@@ -91,7 +106,7 @@ class CatalogSeederTest {
                 .filter(a -> a.getStatus() == AssetStatus.RETIRED)
                 .count();
 
-        assertEquals(17, availableCount, "17 assets should be AVAILABLE");
+        assertEquals(35, availableCount, "35 assets should be AVAILABLE");
         assertEquals(
                 0,
                 maintenanceCount,

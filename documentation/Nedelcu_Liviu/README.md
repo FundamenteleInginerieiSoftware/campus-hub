@@ -27,3 +27,4 @@
 | 14 | [14-diagrams-and-report-chapter.md](14-diagrams-and-report-chapter.md) | Final UML/ER diagrams (`asset-lifecycle`, `catalog-and-common-class`, `database-er`) and FIS report chapter (`catalog-and-shared-services.md`, #222) |
 | 15 | [15-catalog-spinner-audit-filters-and-seeder-fixes.md](15-catalog-spinner-audit-filters-and-seeder-fixes.md) | Bug fixes: Catalog debounce spinner, audit filter actions/entities, and seeder asset 14 status (#230) |
 | 16 | [16-audit-log-timezone-offset-rejection.md](16-audit-log-timezone-offset-rejection.md) | Reject timezone offsets in audit log date filters with 400 `INVALID_PARAMETER` (#241) |
+| 17 | [17-project-kit-models-seeder.md](17-project-kit-models-seeder.md) | Seed student project hardware kit models for the Projects Assistant (#140) |
