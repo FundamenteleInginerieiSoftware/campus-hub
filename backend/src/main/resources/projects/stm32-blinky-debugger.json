@@ -1,0 +1,117 @@
+{
+  "slug": "stm32-blinky-debugger",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 2,
+  "title": {
+    "ro": "LED care clipește pe STM32, cu depanatorul",
+    "en": "STM32 blinky with the debugger"
+  },
+  "summary": {
+    "ro": "Primul program pe placa STM32F4-Discovery: aprinde pe rând cele patru LED-uri ale plăcii, apoi oprește programul cu breakpoint-uri și urmărește variabilele și registrele cu depanatorul ST-LINK integrat.",
+    "en": "Your first program on the STM32F4-Discovery: light the board's four LEDs one after another, then pause the program with breakpoints and watch variables and registers with the on-board ST-LINK debugger."
+  },
+  "keywords": {
+    "ro": ["stm32", "led", "leduri", "clipire", "clipește", "blinky", "depanator", "depanare", "breakpoint", "st-link", "microcontroler", "cubeide", "hal", "registre"],
+    "en": ["stm32", "led", "leds", "blink", "blinky", "debugger", "debugging", "breakpoint", "st-link", "microcontroller", "cubeide", "hal", "registers"]
+  },
+  "components": [
+    {
+      "model": "STM32F407G-DISC1",
+      "quantity": 1,
+      "why": {
+        "ro": "Placă cu microcontroler ARM Cortex-M4, patru LED-uri de utilizator pe PD12–PD15, un buton pe PA0 și depanator ST-LINK/V2-A pe aceeași placă.",
+        "en": "ARM Cortex-M4 board with four user LEDs on PD12–PD15, a user button on PA0 and an ST-LINK/V2-A debugger on the same board."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Cablu USB-A la Mini-USB (mufa ST-LINK a plăcii)",
+      "en": "USB-A to Mini-USB cable (the board's ST-LINK connector)"
+    },
+    {
+      "ro": "Laptop cu STM32CubeIDE instalat",
+      "en": "Laptop with STM32CubeIDE installed"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Creează proiectul pentru placă",
+        "en": "Create the project for the board"
+      },
+      "text": {
+        "ro": "În STM32CubeIDE alege File → New → STM32 Project, apoi în Board Selector caută STM32F407G-DISC1 și acceptă inițializarea perifericelor cu valorile implicite. Pinii PD12–PD15 apar deja configurați ca ieșiri pentru LED-uri.",
+        "en": "In STM32CubeIDE choose File → New → STM32 Project, find STM32F407G-DISC1 in the Board Selector and accept initialising all peripherals with their default mode. Pins PD12–PD15 are already set up as LED outputs."
+      }
+    },
+    {
+      "title": {
+        "ro": "Scrie bucla de clipire",
+        "en": "Write the blink loop"
+      },
+      "text": {
+        "ro": "În main.c, în interiorul while(1), între comentariile USER CODE BEGIN 3 și USER CODE END 3, apelează HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12) și HAL_Delay(500). LED-ul verde LD4 clipește o dată pe secundă.",
+        "en": "In main.c, inside while(1), between the USER CODE BEGIN 3 and USER CODE END 3 comments, call HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12) and HAL_Delay(500). The green LED LD4 blinks once a second."
+      }
+    },
+    {
+      "title": {
+        "ro": "Încarcă programul prin ST-LINK",
+        "en": "Flash it through the ST-LINK"
+      },
+      "text": {
+        "ro": "Conectează cablul la mufa Mini-USB de sus (CN1, ST-LINK), apoi apasă Run. Dacă IDE-ul cere actualizarea firmware-ului ST-LINK, acceptă și reconectează placa.",
+        "en": "Plug the cable into the top Mini-USB connector (CN1, ST-LINK), then press Run. If the IDE asks to update the ST-LINK firmware, accept and reconnect the board."
+      }
+    },
+    {
+      "title": {
+        "ro": "Depanează cu breakpoint-uri",
+        "en": "Debug with breakpoints"
+      },
+      "text": {
+        "ro": "Pornește Debug, pune un breakpoint pe linia HAL_GPIO_TogglePin și apasă Resume: programul se oprește de fiecare dată înainte să schimbe LED-ul. Folosește Step Over și urmărește un contor în fereastra Variables.",
+        "en": "Start Debug, put a breakpoint on the HAL_GPIO_TogglePin line and press Resume: the program stops every time before it flips the LED. Use Step Over and watch a counter in the Variables view."
+      }
+    },
+    {
+      "title": {
+        "ro": "Privește registrul GPIO",
+        "en": "Look at the GPIO register"
+      },
+      "text": {
+        "ro": "În fereastra SFRs deschide GPIOD → ODR. La fiecare pas, bitul 12 se schimbă din 0 în 1 și invers, exact în momentul în care LED-ul se aprinde sau se stinge.",
+        "en": "In the SFRs view open GPIOD → ODR. At every step bit 12 flips between 0 and 1, exactly when the LED turns on or off."
+      }
+    },
+    {
+      "title": {
+        "ro": "Adaugă butonul",
+        "en": "Add the button"
+      },
+      "text": {
+        "ro": "Citește butonul albastru B1 cu HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0); cât timp este apăsat (citire 1), aprinde pe rând LED-urile PD12, PD13, PD14 și PD15 la 100 ms.",
+        "en": "Read the blue button B1 with HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0); while it is pressed (reads 1), light PD12, PD13, PD14 and PD15 in turn every 100 ms."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Cod scris în afara blocurilor USER CODE BEGIN/END: la următoarea generare din fișierul .ioc, CubeIDE îl șterge fără avertisment.",
+      "en": "Writing code outside the USER CODE BEGIN/END blocks: the next time code is generated from the .ioc file, CubeIDE deletes it without warning."
+    },
+    {
+      "ro": "Cablul pus în mufa Micro-USB de jos (USB OTG): placa se aprinde, dar depanatorul nu este găsit.",
+      "en": "Plugging the cable into the bottom Micro-USB connector (USB OTG): the board powers up but the debugger is not found."
+    },
+    {
+      "ro": "Depanarea unei versiuni compilate cu optimizări (-O2): variabilele apar „optimized out”, iar Step Over sare peste linii. Folosește configurația Debug (-O0 sau -Og).",
+      "en": "Debugging a build compiled with optimisations (-O2): variables show as \"optimized out\" and Step Over jumps over lines. Use the Debug configuration (-O0 or -Og)."
+    },
+    {
+      "ro": "Un breakpoint lăsat în bucla principală când rulezi normal: programul pare blocat, iar LED-ul nu mai clipește.",
+      "en": "Leaving a breakpoint in the main loop when you just want to run: the program looks frozen and the LED stops blinking."
+    }
+  ]
+}
