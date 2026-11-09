@@ -292,7 +292,7 @@ What is on `main` and what is still in review, per member. **As of 9 Nov 2026**;
 | README quick start (run, open, test) at the top | #200 |
 | Projects feature (#140): design + plan; engine with bilingual search and free units per model (`GET /api/v1/projects`, `/projects/{slug}`); 10 projects; Projects pages; Reserve all; confirmation banner | #232, #236, #239, #238, #243, #248 |
 | Terraform part 1 (state bucket, VPC, subnets, security groups) and part 2 (photo bucket, ECR, instance role, SSM parameters; RDS off until W7), applied; first image pushed to ECR | #249, #250 |
-| Personal docs 01-39 + README index of them | #14 + each PR above, #137 |
+| Personal docs 01-45 + README index of them | #14 + each PR above, #137 |
 
 **Next:** run the M1 flow and tag `v0.1.0`; W7 deploy: EC2 + Elastic IP + CloudFront, RDS on, verified SES sender, admin credentials in SSM; W8 `deploy.yml`. Full list: `docs/whats-left.md` §4.
 
