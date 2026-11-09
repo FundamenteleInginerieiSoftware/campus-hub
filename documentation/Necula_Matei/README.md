@@ -70,8 +70,8 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 42 | [42-project-reserve-all.md](42-project-reserve-all.md) | Projects "Reserve all" (#140): book every item of a project kit in one go | #243 |
 | 43 | [43-project-bundle-banner.md](43-project-bundle-banner.md) | Projects: "Bundle booking confirmed!" banner after Reserve all (passes the bundle id to Calin's #246 banner) | #248 |
 | 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | #249 |
-| 45 | [45-terraform-data.md](45-terraform-data.md) | Terraform part 2: RDS (off until W7), photo bucket, ECR, server role, secrets in SSM | (in review) |
 | 46 | [46-docker-os-patches.md](46-docker-os-patches.md) | First image in ECR; OS security updates in the Docker image (ECR scan found a critical zlib CVE) | (in review) |
+| 45 | [45-terraform-data.md](45-terraform-data.md) | Terraform part 2: RDS (off until W7), photo bucket, ECR, server role, secrets in SSM | #250 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done

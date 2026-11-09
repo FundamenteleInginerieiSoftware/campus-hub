@@ -10,8 +10,8 @@ The next three weeks for the whole team, ending with **M1 = `v0.1.0`** on 15 Nov
 
 | Week | Result |
 |---|---|
-| **W4** | ✅ Done except Terraform part 1 (Matei, carried into W5). Merged: #34–#37, #39, #40 (reservations, booking, incidents, reassignment engine, docs), #53, #62, #64, #66, #74, #76, #78, #80, #81, #82, #60, and Stefania's frontend #84–#86 + Calin's #87. **Prototype demo runs on `main`** (tag not set yet) |
-| **W5 (now)** | In review: #88 (Matei), #89, #90, #92 (Liviu). Not started: Terraform (Matei), photo upload, triage, user admin, report form (Stefania) |
+| **W4** | ✅ Done (Terraform part 1 was carried into W5 and merged as #249). Merged: #34–#37, #39, #40 (reservations, booking, incidents, reassignment engine, docs), #53, #62, #64, #66, #74, #76, #78, #80, #81, #82, #60, and Stefania's frontend #84–#86 + Calin's #87. **Prototype demo runs on `main`** (tag `v0.1.0-prototype` set) |
+| **W5** | ✅ Done: #88, #89, #90, #92, photo upload, triage, user admin, report form. Terraform parts 1 + 2 landed in W6 (#249, #250) |
 | **W6** | M1 still needs: asset search (#92), `CatalogSeeder`, catalog / asset details / inventory pages (Liviu), booking on asset details (Calin), register page (Stefania), Dockerfile (Matei, waits on ADR-002) |
 
 **Tables on `main`:** `users`, `categories`, `lab_rooms`, `assets`, `reservations`, `incident_reports`, `reassignment_log`, `audit_logs`. **Dev accounts:** `student1@campus.test` (id 1), `student2@campus.test` (id 2), `admin@campus.test` (id 3), all with password `password`.
@@ -33,12 +33,12 @@ Weekly meeting time · real week dates and the defense date · milestones (M1 en
 
 ## 3. Week by week
 
-### W4 (26 Oct – 1 Nov): merge the open PRs, frontend scaffold, admin CRUD: ✅ done, except Terraform part 1
+### W4 (26 Oct – 1 Nov): merge the open PRs, frontend scaffold, admin CRUD: ✅ done (Terraform part 1: ✅ #249)
 
 | Who | Tasks |
 |---|---|
 | **Everyone** | Get the open PRs merged in the order above; **reviews the same day** while they're blocking others. Pull `main` and check the dev accounts work in Swagger (README section 2) |
-| **Matei** | `archunit-junit5` in `build.gradle` (Mon) · merge #53, then `GET /api/v1/users/me` · prototype demo + tag · **Terraform part 1**: state in S3, network (VPC, 1 public subnet, 2 private DB subnets, no NAT), security groups (EC2 only from CloudFront, RDS only from EC2); `terraform plan` only |
+| **Matei** | `archunit-junit5` in `build.gradle` (Mon) · merge #53, then `GET /api/v1/users/me` · prototype demo + tag · **Terraform part 1** (✅ #249): state in S3, network (VPC, 1 public subnet, 2 private DB subnets, no NAT), security groups (EC2 only from CloudFront, RDS only from EC2); `terraform plan` only |
 | **Liviu** | **Admin CRUD** for assets, categories and lab rooms under `/api/v1/admin/**` (`SERIAL_NUMBER_TAKEN`, `CATEGORY_IN_USE`, ...), with retire instead of delete · **real `AuditService`**, recording admin actions · tests: service + `@WebMvcTest` (201, 400, 403 for a student, 404, 409) |
 | **Calin** | Rebase #35 → #37 onto `main` one by one as each lower PR merges (drop the copies in #35) · `gh pr edit 39 --base main` · **ArchUnit module rules** (freeze mode) once the dependency is in |
 | **Stefania** | Finish #40 (rebase, `CurrentUser` agreement, contract entries) · then a small follow-up: `markUnderMaintenance` on report (`CatalogApi` is on `main` now) · **frontend scaffold**: Vite + React + TS, `package.json`, API client that sends the token, login page, layout + routing by role, shared components (table with paging, error alert). The frontend CI job switches on by itself once `frontend/package.json` exists. *(CI on PostgreSQL + JaCoCo is already done.)* |
@@ -47,7 +47,7 @@ Weekly meeting time · real week dates and the defense date · milestones (M1 en
 
 | Who | Tasks |
 |---|---|
-| **Matei** | **Terraform part 2**: RDS PostgreSQL 18 (`db.t4g.micro`, private, encrypted), S3 photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`; first `apply`, stop RDS when idle · **first admin in prod** from `ADMIN_EMAIL` / `ADMIN_PASSWORD` · security review of `LocalStorageService` (the S3 version must match it) · reviews |
+| **Matei** | **Terraform part 2** (✅ #250; RDS off until W7): RDS PostgreSQL 18 (`db.t4g.micro`, private, encrypted), S3 photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`; first `apply`, stop RDS when idle · **first admin in prod** from `ADMIN_EMAIL` / `ADMIN_PASSWORD` · security review of `LocalStorageService` (the S3 version must match it) · reviews |
 | **Liviu** | **Asset search** with optional filters (`Specification`), `@EntityGraph` against N+1 queries, sort whitelist, `PageResponse` · `@DataJpaTest` for the filter combinations |
 | **Calin** | The remaining booking rules from the handbook, each with a test · `GET /api/v1/reservations/me` · availability endpoint · real `ReservationApi` (whatever #36 doesn't cover yet) |
 | **Stefania** | Photo upload + `GET /incidents/{id}/photo` (`StorageService`, ownership check) · admin triage: resolve/reject → `markAvailable` only if no other open incident on the asset · **user admin endpoints** in `user/admin/` · report-incident form (frontend) |

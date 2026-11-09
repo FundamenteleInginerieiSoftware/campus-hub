@@ -291,7 +291,7 @@ The dev and test values are deliberately fake and only work on a laptop database
 
 | Item | Plan | Source |
 |---|---|---|
-| Prod secrets | SSM Parameter Store `SecureString` under `/campus/` (KMS-encrypted). Terraform generates the DB password and the JWT secret. The deploy script reads them with the instance role into a root-only env file (`chmod 600`) and starts the container with `--env-file`. No extra library: Spring sees plain environment variables | ADR-003 |
+| Prod secrets | SSM Parameter Store `SecureString` under `/campus/` (KMS-encrypted; created by Terraform, #250). Terraform generates the DB password and the JWT secret. The deploy script reads them with the instance role into a root-only env file (`chmod 600`) and starts the container with `--env-file`. No extra library: Spring sees plain environment variables | ADR-003 |
 | No rotation | Parameter Store has no automatic rotation; a leaked secret is changed by hand and the app redeployed | ADR-003 (consequences) |
 | Deploy credentials | GitHub Actions assumes an AWS role through **OIDC**: no AWS keys stored in GitHub | ADR-002, ADR-005 |
 
@@ -299,15 +299,15 @@ The dev and test values are deliberately fake and only work on a laptop database
 
 ## 7. Cloud security (planned, W7–W9)
 
-**None of this is deployed yet** (no `infra/` folder and no `deploy.yml` on `main`). What exists in code is the Docker image and the prod adapters; the rest is the design in ADR-002/003/005.
+**Part of this exists, applied with Terraform** (`infra/` on `main`, #249 and #250): the network and security groups, the private photo bucket, the ECR repository, the instance role and the SSM parameters. RDS is written but off until the W7 deploy. **Not there yet:** EC2, CloudFront and `deploy.yml`. The rest is the design in ADR-002/003/005.
 
 | Area | Design | Source |
 |---|---|---|
 | HTTPS | CloudFront in front of the server with its default `*.cloudfront.net` certificate. **Limitation:** CloudFront → EC2 is plain HTTP | ADR-002 |
-| Server reachability | EC2 security group accepts port 8080 **only from CloudFront** (AWS prefix list `com.amazonaws.global.cloudfront.origin-facing`). No SSH port: shell through SSM Session Manager | ADR-002 |
+| Server reachability | EC2 security group accepts port 8080 **only from CloudFront** (AWS prefix list `com.amazonaws.global.cloudfront.origin-facing`). No SSH port: shell through SSM Session Manager | ADR-002; groups created by Terraform (#249) |
 | Database | RDS PostgreSQL 18 in private subnets, encrypted, not publicly accessible; port 5432 only from the EC2 security group | ADR-002 |
-| Photos | Private S3 bucket. The app reaches it only through the instance role | ADR-002, doc 23 |
-| Least-privilege instance role | `s3:PutObject/GetObject/DeleteObject` on `<bucket>/*`, `s3:ListBucket` on the bucket (so a missing photo is a 404, not a 403, #148), `ses:SendEmail`, read `/campus/*` parameters, pull from ECR, write logs | ADR-002, doc 29 |
+| Photos | Private S3 bucket (created by Terraform, #250). The app reaches it only through the instance role | ADR-002, doc 23 |
+| Least-privilege instance role | `s3:PutObject/GetObject/DeleteObject` on `<bucket>/*`, `s3:ListBucket` on the bucket (so a missing photo is a 404, not a 403, #148), `ses:SendEmail`, read `/campus/*` parameters, pull from ECR, write logs | ADR-002, doc 29; role created by Terraform (#250) |
 | E-mail | SES starts in **sandbox**: it only sends to verified addresses. For the demo the team's addresses get verified | doc 23, `docs/whats-left.md` W9 |
 | AWS account | Root with MFA and no keys; daily work through IAM user `terraform-admin` (known risk: long-lived key without MFA, kept only on Matei's laptop); budget alerts at $5/$20/$40 | ADR-005 |
 
