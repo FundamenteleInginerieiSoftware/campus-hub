@@ -12,9 +12,11 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
@@ -154,5 +156,22 @@ public class IdempotencyService {
         });
 
         return response;
+    }
+
+    /**
+     * Autonomous background job running every 2 days to purge expired idempotency records.
+     * Fixed delay is set to 172,800,000 ms (48 hours = 2 days), with a configurable property.
+     */
+    @Scheduled(
+            fixedDelayString = "${app.reservation.idempotency-cleanup-ms:172800000}",
+            initialDelayString = "${app.reservation.idempotency-cleanup-initial-delay-ms:600000}")
+    @Transactional
+    public int sweepExpiredRecords() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        int deleted = repository.deleteExpiredRecords(now);
+        if (deleted > 0) {
+            log.info("Purged {} expired idempotency records older than {}", deleted, now);
+        }
+        return deleted;
     }
 }
