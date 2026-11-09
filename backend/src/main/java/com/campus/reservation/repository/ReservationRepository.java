@@ -124,4 +124,25 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             @Param("statuses") Collection<ReservationStatus> statuses);
 
     List<Reservation> findByBundleIdOrderByAssetIdAsc(java.util.UUID bundleId);
+
+    @Query("""
+        select r from Reservation r
+        where r.startTime < :to
+          and r.endTime > :from
+        order by r.startTime asc
+        """)
+    List<Reservation> findIntersecting(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("""
+        select r from Reservation r
+        where r.assetId = :assetId
+          and r.startTime < :to
+          and r.endTime > :from
+        order by r.startTime asc
+        """)
+    List<Reservation> findIntersectingByAssetId(
+            @Param("assetId") Long assetId, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("select distinct r.assetId from Reservation r order by r.assetId asc")
+    List<Long> findDistinctAssetIds();
 }

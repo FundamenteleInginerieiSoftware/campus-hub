@@ -207,7 +207,7 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 |---|---|---|
 | Auth / users | Matei (auth), Stefania (admin) | `/api/v1/auth/**`, `/api/v1/users/me`, `/api/v1/admin/users/**` |
 | Catalog / Shared | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-logs` |
-| Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
+| Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments`, `/api/v1/admin/analytics/**` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
 | Projects | Matei | `/api/v1/projects/**` |
 
@@ -286,6 +286,8 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `GET /api/v1/admin/analytics/utilization` | Admin | optional `?from=...&to=...` | `200` + `UtilizationAnalyticsResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `GET /api/v1/admin/analytics/heatmap` | Admin | optional `?from=...&to=...&assetId=...` | `200` + `HeatmapResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
 ```json
 // CreateReservationRequest
