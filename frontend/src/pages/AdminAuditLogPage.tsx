@@ -16,6 +16,9 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'CATEGORY', label: 'Category (CATEGORY)' },
   { value: 'LAB_ROOM', label: 'Lab Room (LAB_ROOM)' },
   { value: 'Reservation', label: 'Reservation' },
+  { value: 'ReservationBundle', label: 'Reservation Bundle (ReservationBundle)' },
+  { value: 'ReservationHold', label: 'Reservation Hold (ReservationHold)' },
+  { value: 'ReservationTransfer', label: 'Reservation Transfer (ReservationTransfer)' },
   { value: 'INCIDENT', label: 'Incident (INCIDENT)' },
   { value: 'USER', label: 'User (USER)' },
 ]
@@ -39,9 +42,17 @@ const ACTION_OPTIONS = [
     group: 'Reservations & Reassignment',
     items: [
       'CREATE_RESERVATION',
+      'CREATE_BUNDLE_RESERVATION',
+      'EXTEND_RESERVATION',
       'CANCEL_RESERVATION',
       'CHECK_OUT_RESERVATION',
       'RETURN_RESERVATION',
+      'HOLD_ACQUIRED',
+      'HOLD_RELEASED',
+      'TRANSFER_INITIATED',
+      'TRANSFER_ACCEPTED',
+      'TRANSFER_REJECTED',
+      'TRANSFER_CANCELLED',
       'REASSIGN_RESERVATION',
       'FORCE_CANCEL_RESERVATION',
       'AUTO_NO_SHOW',
@@ -81,7 +92,8 @@ function actionBadgeColor(action: string): string {
     action.startsWith('CREATE_') ||
     action.endsWith('_RESOLVED') ||
     action.endsWith('_ENABLED') ||
-    action.startsWith('RETURN_')
+    action.startsWith('RETURN_') ||
+    action === 'TRANSFER_ACCEPTED'
   ) {
     return 'green'
   }
@@ -92,7 +104,9 @@ function actionBadgeColor(action: string): string {
     action.endsWith('_OVERDUE') ||
     action.endsWith('_NO_SHOW') ||
     action.endsWith('_DISABLED') ||
-    action.endsWith('_REJECTED')
+    action.endsWith('_REJECTED') ||
+    action === 'HOLD_RELEASED' ||
+    action === 'TRANSFER_REJECTED'
   ) {
     return 'red'
   }
@@ -100,7 +114,10 @@ function actionBadgeColor(action: string): string {
     action.endsWith('_UPDATED') ||
     action.startsWith('REASSIGN_') ||
     action.endsWith('_STARTED') ||
-    action.endsWith('_CHANGED')
+    action.endsWith('_CHANGED') ||
+    action.startsWith('EXTEND_') ||
+    action === 'HOLD_ACQUIRED' ||
+    action === 'TRANSFER_INITIATED'
   ) {
     return 'orange'
   }
@@ -143,6 +160,12 @@ export default function AdminAuditLogPage() {
   useEffect(() => {
     let ignore = false
 
+    // Bug fixed (#230): the effect alone manages the loading spinner right when an API fetch begins.
+    // Microtask avoids React cascading render / linter warning when updating state inside an effect.
+    void Promise.resolve().then(() => {
+      if (!ignore) setLoading(true)
+    })
+
     const actorId = parsePositiveId(debouncedActorId)
     const entityId = parsePositiveId(debouncedEntityId)
     // Convert YYYY-MM-DD date inputs to local ISO-8601 bounds without timezone offset.
@@ -181,8 +204,6 @@ export default function AdminAuditLogPage() {
   }, [entityType, action, debouncedActorId, debouncedEntityId, fromDate, toDate, pageNumber, reloadToken])
 
   function handleResetFilters() {
-    if (!hasActiveFilters && pageNumber === 0) return
-    setLoading(true)
     setEntityType(null)
     setAction(null)
     setActorIdInput('')
@@ -193,7 +214,6 @@ export default function AdminAuditLogPage() {
   }
 
   function handleRefresh() {
-    setLoading(true)
     setReloadToken((value) => value + 1)
   }
 
@@ -276,8 +296,6 @@ export default function AdminAuditLogPage() {
               data={ENTITY_TYPE_OPTIONS}
               value={entityType}
               onChange={(val) => {
-                if (val === entityType) return
-                setLoading(true)
                 setEntityType(val)
                 setPageNumber(0)
               }}
@@ -291,8 +309,6 @@ export default function AdminAuditLogPage() {
               data={ACTION_OPTIONS}
               value={action}
               onChange={(val) => {
-                if (val === action) return
-                setLoading(true)
                 setAction(val)
                 setPageNumber(0)
               }}
@@ -309,6 +325,11 @@ export default function AdminAuditLogPage() {
                   setActorIdInput(event.currentTarget.value)
                   setPageNumber(0)
                 }}
+                error={
+                  actorIdInput.trim() !== '' && parsePositiveId(actorIdInput) === undefined
+                    ? 'Must be a positive number'
+                    : undefined
+                }
               />
               <TextInput
                 label="Entity ID"
@@ -318,6 +339,11 @@ export default function AdminAuditLogPage() {
                   setEntityIdInput(event.currentTarget.value)
                   setPageNumber(0)
                 }}
+                error={
+                  entityIdInput.trim() !== '' && parsePositiveId(entityIdInput) === undefined
+                    ? 'Must be a positive number'
+                    : undefined
+                }
               />
             </Group>
 
@@ -326,10 +352,7 @@ export default function AdminAuditLogPage() {
               type="date"
               value={fromDate}
               onChange={(event) => {
-                const next = event.currentTarget.value
-                if (next === fromDate) return
-                setLoading(true)
-                setFromDate(next)
+                setFromDate(event.currentTarget.value)
                 setPageNumber(0)
               }}
             />
@@ -339,10 +362,7 @@ export default function AdminAuditLogPage() {
               type="date"
               value={toDate}
               onChange={(event) => {
-                const next = event.currentTarget.value
-                if (next === toDate) return
-                setLoading(true)
-                setToDate(next)
+                setToDate(event.currentTarget.value)
                 setPageNumber(0)
               }}
             />
@@ -368,12 +388,7 @@ export default function AdminAuditLogPage() {
         rowKey={(row) => row.id}
         loading={loading}
         emptyText="No audit log entries match the selected filters."
-        onPageChange={(nextPage) => {
-          // Mantine Pagination also fires onChange when clicking the current page.
-          if (nextPage === pageNumber) return
-          setLoading(true)
-          setPageNumber(nextPage)
-        }}
+        onPageChange={(nextPage) => setPageNumber(nextPage)}
       />
     </Stack>
   )

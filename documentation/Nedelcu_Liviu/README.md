@@ -25,3 +25,4 @@
 | 12 | [12-catalog-swagger-and-pit-mutation-tests.md](12-catalog-swagger-and-pit-mutation-tests.md) | Catalog Swagger error codes, `STALE_VERSION` optimistic lock test, and PIT mutation tests (#187, #220) |
 | 13 | [13-admin-audit-log-frontend.md](13-admin-audit-log-frontend.md) | Administrator audit log frontend page (`/admin/audit-logs`, #221) |
 | 14 | [14-diagrams-and-report-chapter.md](14-diagrams-and-report-chapter.md) | Final UML/ER diagrams (`asset-lifecycle`, `catalog-and-common-class`, `database-er`) and FIS report chapter (`catalog-and-shared-services.md`, #222) |
+| 15 | [15-catalog-spinner-audit-filters-and-seeder-fixes.md](15-catalog-spinner-audit-filters-and-seeder-fixes.md) | Bug fixes: Catalog debounce spinner, audit filter actions/entities, and seeder asset 14 status (#230) |

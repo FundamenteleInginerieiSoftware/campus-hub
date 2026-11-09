@@ -79,7 +79,8 @@ class CatalogSeederTest {
                 .count();
         assertTrue(ds1054zCount >= 3, "Expected at least 3 DS1054Z units for substitution demo");
 
-        // Verify status distribution: available, under maintenance, and retired
+        // Verify status distribution: available and retired;
+        // seeded assets must not be UNDER_MAINTENANCE without an open incident (#230).
         long availableCount = seededAssets.stream()
                 .filter(a -> a.getStatus() == AssetStatus.AVAILABLE)
                 .count();
@@ -90,9 +91,12 @@ class CatalogSeederTest {
                 .filter(a -> a.getStatus() == AssetStatus.RETIRED)
                 .count();
 
-        assertEquals(16, availableCount);
-        assertEquals(1, maintenanceCount);
-        assertEquals(1, retiredCount);
+        assertEquals(17, availableCount, "17 assets should be AVAILABLE");
+        assertEquals(
+                0,
+                maintenanceCount,
+                "seeded assets must not be UNDER_MAINTENANCE without an open incident (#230); see CatalogSeeder.run");
+        assertEquals(1, retiredCount, "1 asset should be RETIRED (Anycubic Photon Mono)");
 
         // First asset must be AVAILABLE so ReservationSeeder can book it
         assertEquals(AssetStatus.AVAILABLE, seededAssets.get(0).getStatus());
