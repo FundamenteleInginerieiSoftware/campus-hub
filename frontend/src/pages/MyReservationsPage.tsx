@@ -49,6 +49,7 @@ import {
 } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
 import { useAuth } from '../auth/useAuth.ts'
+import { ApiError } from '../api/client.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import PagedTable, { type Column } from '../components/PagedTable.tsx'
@@ -411,11 +412,14 @@ export default function MyReservationsPage() {
       setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err: unknown) {
-      const errorObj = err as { code?: string; message?: string }
-      if (errorObj?.code === 'RESERVATION_LIMIT_REACHED') {
-        setTransferError({
-          message: "This student can't take another booking right now (they have reached the 2 active reservations limit).",
-        })
+      if (err instanceof ApiError && err.code === 'RESERVATION_LIMIT_REACHED') {
+        setTransferError(
+          new ApiError(
+            409,
+            'RECIPIENT_QUOTA_FULL',
+            "This student can't take another booking right now (they have reached the 2 active reservations limit).",
+          ),
+        )
       } else {
         setTransferError(err)
       }
