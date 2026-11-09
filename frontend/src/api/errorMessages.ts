@@ -30,6 +30,16 @@ const MESSAGES: Record<string, string> = {
   CANCELLATION_NOT_ALLOWED: 'Reservations can only be cancelled before their start time.',
   CHECKOUT_WINDOW_CLOSED: 'Pick-up window is closed (allowed from 15 min before start to 30 min after start).',
   INVALID_RESERVATION_STATUS_TRANSITION: 'This reservation cannot be transitioned to the requested status.',
+  EXTENSION_CONFLICT: 'Cannot extend reservation: the requested time slot overlaps with another booking or hold.',
+  CANNOT_TRANSFER_TO_SELF: 'You cannot transfer a reservation to yourself.',
+  TRANSFER_ALREADY_PENDING: 'A transfer offer for this reservation is already pending.',
+  TRANSFER_NOT_FOUND: 'The transfer request was not found or has already expired.',
+  TRANSFER_NOT_ALLOWED: 'Only upcoming confirmed reservations can be transferred.',
+  INVALID_TRANSFER_STATUS_TRANSITION: 'This transfer offer is no longer valid or has changed status.',
+  SLOT_HELD: 'This time slot is temporarily held by another student.',
+  HOLD_EXPIRED: 'Your temporary slot hold has expired. Please select a time slot again.',
+  HOLD_NOT_FOUND: 'The slot hold was not found or has already been released.',
+  ACTIVE_HOLD_LIMIT_REACHED: 'You already have an active slot hold. Please confirm or release it first.',
 
   // Incident error codes (api-contract §5, Stefania)
   INCIDENT_NOT_FOUND: 'Incident was not found.',
