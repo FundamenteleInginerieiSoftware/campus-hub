@@ -75,6 +75,9 @@ class ReassignmentServiceTest {
     private ReassignmentLogRepository reassignmentLogRepository;
 
     @Mock
+    private com.campus.reassignment.service.chain.ChainShiftingConflictResolver chainShiftingConflictResolver;
+
+    @Mock
     private SubstituteStrategy primaryStrategy;
 
     @Mock
@@ -98,7 +101,13 @@ class ReassignmentServiceTest {
                 clock,
                 transactionManager);
         reassignmentService = new ReassignmentService(
-                catalogApi, reservationApi, notificationService, bookingProcessor, reassignmentLogRepository, clock);
+                catalogApi,
+                reservationApi,
+                notificationService,
+                bookingProcessor,
+                reassignmentLogRepository,
+                chainShiftingConflictResolver,
+                clock);
     }
 
     @Test
@@ -351,7 +360,13 @@ class ReassignmentServiceTest {
 
         ReassignmentBookingProcessor mockProcessor = mock(ReassignmentBookingProcessor.class);
         ReassignmentService service = new ReassignmentService(
-                catalogApi, reservationApi, notificationService, mockProcessor, reassignmentLogRepository, clock);
+                catalogApi,
+                reservationApi,
+                notificationService,
+                mockProcessor,
+                reassignmentLogRepository,
+                chainShiftingConflictResolver,
+                clock);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))

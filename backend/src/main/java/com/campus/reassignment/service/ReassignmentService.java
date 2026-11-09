@@ -40,6 +40,7 @@ public class ReassignmentService {
     private final NotificationService notificationService;
     private final ReassignmentBookingProcessor bookingProcessor;
     private final ReassignmentLogRepository reassignmentLogRepository;
+    private final com.campus.reassignment.service.chain.ChainShiftingConflictResolver chainShiftingConflictResolver;
     private final Clock clock;
 
     /**
@@ -121,5 +122,39 @@ public class ReassignmentService {
         Pageable pageable = PageRequest.of(page, size);
         Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);
+    }
+
+    /**
+     * Resolves reservation conflicts on a desired asset by discovering and optionally executing
+     * an augmenting path chain of shifts to idle substitute equipment.
+     */
+    @Transactional
+    public com.campus.reassignment.web.ChainShiftPlanResponse resolveChainShift(
+            Long targetAssetId, LocalDateTime startTime, LocalDateTime endTime, boolean dryRun) {
+        com.campus.reassignment.service.chain.ChainShiftPlan plan =
+                chainShiftingConflictResolver.planChainShift(targetAssetId, startTime, endTime);
+
+        boolean applied = false;
+        if (plan.resolved() && !dryRun && !plan.steps().isEmpty()) {
+            for (com.campus.reassignment.service.chain.ChainShiftStep step : plan.steps()) {
+                boolean moved = reservationApi.moveToAsset(
+                        step.reservationId(), step.toAssetId(), "CHAIN_SHIFT: " + step.strategyName());
+                if (moved) {
+                    ReassignmentLog logEntry = new ReassignmentLog(
+                            0L, // 0 indicates non-incident administrative chain shift
+                            step.reservationId(),
+                            step.fromAssetId(),
+                            step.toAssetId(),
+                            ReassignmentOutcome.REASSIGNED,
+                            "ChainShift:" + step.strategyName(),
+                            now());
+                    reassignmentLogRepository.save(logEntry);
+                }
+            }
+            applied = true;
+        }
+
+        return new com.campus.reassignment.web.ChainShiftPlanResponse(
+                targetAssetId, startTime, endTime, plan.resolved(), applied, plan.steps(), plan.explanation());
     }
 }

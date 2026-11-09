@@ -51,6 +51,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Import({
     ReassignmentService.class,
     ReassignmentBookingProcessor.class,
+    com.campus.reassignment.service.chain.ChainShiftingConflictResolver.class,
     ReservationService.class,
     SameModelStrategy.class,
     SameCategoryStrategy.class,

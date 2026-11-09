@@ -8,10 +8,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,5 +48,25 @@ public class AdminReassignmentController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ResponseEntity.ok(reassignmentService.getLogs(page, size));
+    }
+
+    @PostMapping("/chain-shift")
+    @Operation(
+            summary = "Resolve reservation conflict via augmenting path chain shift",
+            description =
+                    "Discovers an augmenting path chain shifting existing bookings to idle substitute assets to free the target asset.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Chain shift plan calculated and optionally applied"),
+        @ApiResponse(responseCode = "400", description = "Validation failed on parameters"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)"),
+        @ApiResponse(responseCode = "404", description = "Target asset not found")
+    })
+    public ResponseEntity<ChainShiftPlanResponse> resolveChainShift(
+            @RequestParam Long targetAssetId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            @RequestParam(defaultValue = "true") boolean dryRun) {
+        return ResponseEntity.ok(reassignmentService.resolveChainShift(targetAssetId, startTime, endTime, dryRun));
     }
 }
