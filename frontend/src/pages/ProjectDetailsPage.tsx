@@ -226,9 +226,13 @@ export default function ProjectDetailsPage() {
     setReserving(true)
     setReserveError(null)
     try {
-      await reserveProject(slug, slot)
+      const booked = await reserveProject(slug, slot)
       // The new bookings show there as one "Bundle booking" (same bundleId).
-      navigate('/reservations')
+      // Bug fixed: we navigated without state, so Calin's confirmation banner in MyReservationsPage
+      // (#246, it reads bookedBundleId + bundleItemCount from the navigation state) never showed.
+      navigate('/reservations', {
+        state: { bookedBundleId: booked.bundleId, bundleItemCount: booked.items.length },
+      })
     } catch (err) {
       setReserveError(err)
       // 409: a unit was taken in the meantime, or a booking rule / the student limit said no.
