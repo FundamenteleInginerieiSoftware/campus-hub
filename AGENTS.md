@@ -170,6 +170,7 @@ catalog.api               <- reservation, incident, reassignment
 reservation.api           <- reassignment (optionally incident)
 incident.api (events)     <- reassignment
 storage, notification     <- incident, reassignment, reservation
+catalog.api, reservation.api <- project   (Matei, #140; project is a leaf: nothing depends on it)
 catalog      must NOT depend on reservation / incident / reassignment
 reservation  must NOT depend on incident / reassignment
 ```
