@@ -65,7 +65,8 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 37 | [37-contract-security-rules.md](37-contract-security-rules.md) | All security rules in the API contract, SSM arrow fixed in the AWS diagram | #195 |
 | 38 | [38-project-assistant-design.md](38-project-assistant-design.md) | Projects feature (#140): design and plan, who builds which part | #232 |
 | 39 | [39-project-engine.md](39-project-engine.md) | Projects engine (#140): startup loader, bilingual search, live availability endpoints | #236 |
-| 40 | [40-project-content.md](40-project-content.md) | Projects content (#140): seven more project guides in Romanian and English | (in review) |
+| 40 | [40-project-content.md](40-project-content.md) | Projects content (#140): seven more project guides in Romanian and English | #239 |
+| 41 | [41-projects-pages.md](41-projects-pages.md) | Projects pages (#140): search list, project details, slot availability check | #238 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done

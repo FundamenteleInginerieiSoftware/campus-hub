@@ -11,6 +11,8 @@ import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
+import ProjectDetailsPage from './pages/ProjectDetailsPage.tsx'
+import ProjectsPage from './pages/ProjectsPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
 import ReservationsDeskPage from './pages/ReservationsDeskPage.tsx'
 import AdminAuditLogPage from './pages/AdminAuditLogPage.tsx'
@@ -37,6 +39,8 @@ export default function App() {
         <Route path="catalog/:id" element={<AssetDetailsPage />} />
         <Route path="reservations" element={<MyReservationsPage />} />
         <Route path="incidents" element={<MyIncidentsPage />} />
+        <Route path="projects" element={<ProjectsPage />} />
+        <Route path="projects/:slug" element={<ProjectDetailsPage />} />
 
         {/* Admin only */}
         <Route path="admin" element={<RequireAdmin />}>
