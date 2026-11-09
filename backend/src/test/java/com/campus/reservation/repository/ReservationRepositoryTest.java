@@ -345,4 +345,46 @@ class ReservationRepositoryTest {
                 reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, LocalDateTime.of(2026, 11, 2, 12, 0));
         assertThat(upcoming).extracting(Reservation::getId).containsExactly(existingReservation.getId());
     }
+
+    @Test
+    @DisplayName("countBookingSessionsByUserIdAndStatusIn: treats multi-item bundle as 1 session")
+    void countBookingSessions_countsBundleAsOneSession() {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+
+        // existingReservation is a single booking (userId = 100) -> 1 session
+        long initialCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                USER_ID, ReservationStatus.ACTIVE_STATUSES);
+        assertThat(initialCount)
+                .as("Initial single booking counts as 1 session")
+                .isEqualTo(1);
+
+        // Add 2 reservations belonging to the same bundle
+        Reservation item1 = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 3, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 0));
+        item1.assignBundle(bundleId);
+        reservationRepository.saveAndFlush(item1);
+
+        Reservation item2 = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 3, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 0));
+        item2.assignBundle(bundleId);
+        reservationRepository.saveAndFlush(item2);
+
+        // Total active rows = 3, but total booking sessions = 2 (1 single + 1 bundle)
+        long rowCount = reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
+        long sessionCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                USER_ID, ReservationStatus.ACTIVE_STATUSES);
+
+        assertThat(rowCount).as("Raw reservation row count should be 3").isEqualTo(3);
+        assertThat(sessionCount)
+                .as("Booking session count should be 2 (1 single + 1 bundle)")
+                .isEqualTo(2);
+    }
 }

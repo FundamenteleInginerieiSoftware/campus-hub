@@ -144,7 +144,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -163,7 +163,8 @@ class ReservationServiceTest {
         inOrder.verify(reservationRepository)
                 .existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L);
         inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
-        inOrder.verify(reservationRepository).countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
+        inOrder.verify(reservationRepository)
+                .countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         inOrder.verify(reservationRepository).save(any(Reservation.class));
         inOrder.verify(auditService).record(eq(USER_ID), eq("CREATE_RESERVATION"), eq("Reservation"), any(), any());
     }
@@ -185,7 +186,7 @@ class ReservationServiceTest {
         ReservationResponse response = reservationService.createReservation(req);
 
         assertThat(response).isNotNull();
-        verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
     @Test
@@ -274,7 +275,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -295,7 +296,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -316,7 +317,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -336,7 +337,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -385,7 +386,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -514,7 +515,7 @@ class ReservationServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasFieldOrPropertyWithValue("code", "RESERVATION_CONFLICT");
 
-        verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
     @Test
@@ -529,7 +530,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L);
 
         assertThatThrownBy(() -> reservationService.createReservation(req))
@@ -606,7 +607,7 @@ class ReservationServiceTest {
     @DisplayName("getMySummary returns aggregate stats for active, completed, and reassigned bookings")
     void getMySummaryReturnsAccurateAggregateCounts() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.countByUserIdAndStatusIn(
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                         eq(USER_ID),
                         eq(List.of(
                                 ReservationStatus.CONFIRMED,
@@ -1642,7 +1643,7 @@ class ReservationServiceTest {
         when(reservationRepository.existsOverlap(
                         anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -1789,7 +1790,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L); // Already at limit of 2
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
@@ -1811,7 +1812,7 @@ class ReservationServiceTest {
         when(reservationRepository.existsOverlap(
                         anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1836,7 +1837,7 @@ class ReservationServiceTest {
         when(reservationRepository.existsOverlap(
                         anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -1873,7 +1874,7 @@ class ReservationServiceTest {
         when(reservationRepository.existsOverlap(
                         anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -1929,7 +1930,7 @@ class ReservationServiceTest {
 
         assertThat(bundleId).isNotNull();
         verify(reservationRepository, never()).lockUserQuota(anyLong());
-        verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
     @Test
@@ -2116,8 +2117,6 @@ class ReservationServiceTest {
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
-        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(0L);
         when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
             ReservationTransfer t = inv.getArgument(0);
             ReflectionTestUtils.setField(t, "id", 500L);
@@ -2136,8 +2135,9 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("Transfer: rejects initiate if recipient active quota is reached (boundary == 2)")
-    void initiateTransfer_rejectsIfRecipientQuotaReached() {
+    @DisplayName(
+            "Transfer: anti-probing: allows initiate even if recipient is at quota (quota enforced at accept, #240 point 3)")
+    void initiateTransfer_doesNotProbeRecipientQuota() {
         Reservation r = new Reservation(
                 USER_ID,
                 ASSET_ID,
@@ -2151,43 +2151,42 @@ class ReservationServiceTest {
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
-        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(2L);
-
-        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("Recipient student already has 2 active reservations");
-    }
-
-    @Test
-    @DisplayName("Transfer: allows initiate if recipient has exactly 1 active reservation (boundary 1 < 2)")
-    void initiateTransfer_allowsIfRecipientHasOneActiveReservation() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
-        ReflectionTestUtils.setField(r, "id", 100L);
-
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
-        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
-        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
-                .thenReturn(Optional.empty());
-        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(1L);
+        when(reservationTransferRepository.countByReservationIdAndRequestedAtAfter(eq(100L), any()))
+                .thenReturn(0L);
         when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
             ReservationTransfer t = inv.getArgument(0);
-            ReflectionTestUtils.setField(t, "id", 501L);
+            ReflectionTestUtils.setField(t, "id", 502L);
             return t;
         });
 
-        ReservationTransferResponse response =
-                reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+        ReservationTransferResponse res = reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+        assertThat(res).isNotNull();
+        assertThat(res.id()).isEqualTo(502L);
+        assertThat(res.status()).isEqualTo(TransferStatus.PENDING);
+    }
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(501L);
+    @Test
+    @DisplayName("Transfer: rejects initiate if 24-hour transfer offer limit is reached (#240 point 3)")
+    void initiateTransfer_rejectsWhenDailyTransferOfferLimitReached() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationTransferRepository.countByReservationIdAndRequestedAtAfter(eq(100L), any()))
+                .thenReturn(3L);
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Maximum transfer offers reached for this reservation");
     }
 
     @Test
@@ -2230,7 +2229,8 @@ class ReservationServiceTest {
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
-        when(reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                        recipientId, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
 
         ReservationTransferResponse response = reservationService.acceptTransfer(500L);
@@ -2266,7 +2266,8 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
         // Recipient already has 2 active bookings
-        when(reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                        recipientId, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L);
 
         assertThatThrownBy(() -> reservationService.acceptTransfer(500L))
@@ -2636,7 +2637,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L); // Boundary: 1 active reservation (1 + 1 <= 2) -> allowed!
         when(reservationRepository.existsOverlap(
                         anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
@@ -2660,7 +2661,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L); // Boundary: 2 active reservations -> (2 + 1 > 2) rejects!
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
@@ -2894,7 +2895,7 @@ class ReservationServiceTest {
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
                         eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
@@ -2941,7 +2942,7 @@ class ReservationServiceTest {
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
                         eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
@@ -3154,8 +3155,6 @@ class ReservationServiceTest {
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
-        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(0L);
         when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
             ReservationTransfer t = inv.getArgument(0);
             ReflectionTestUtils.setField(t, "id", 500L);
@@ -3432,7 +3431,7 @@ class ReservationServiceTest {
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), any(), eq(-1L)))
                 .thenReturn(false);
@@ -3492,5 +3491,84 @@ class ReservationServiceTest {
                         "extension hold check: hold on subsequent slot must prevent extension; see ReservationService.extendReservation")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("temporarily held by another student");
+    }
+
+    @Test
+    @DisplayName("extendReservation: rejects extension if item is part of a bundle (#240 point 5)")
+    void extendReservation_rejectsIfPartOfBundle() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+        r.assignBundle(java.util.UUID.randomUUID());
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 14, 0);
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .isInstanceOf(ConflictException.class)
+                .as(
+                        "bundle extension: individual items in a bundle cannot be extended; see ReservationService.extendReservation")
+                .hasMessageContaining("Individual items in a bundle booking cannot be extended");
+    }
+
+    @Test
+    @DisplayName("extendReservation: cancels pending transfer offer upon extension (#240 point 6)")
+    void extendReservation_cancelsPendingTransferOffer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(100L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 9, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(transfer));
+
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 14, 0);
+        reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd));
+
+        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+        verify(auditService).record(eq(USER_ID), eq("TRANSFER_CANCELLED"), eq("ReservationTransfer"), eq(500L), any());
+    }
+
+    @Test
+    @DisplayName(
+            "Quota: student with bundle of 2 items can still book a single item (1 bundle + 1 single = 2 sessions <= 2) (#240 point 1)")
+    void quota_bundleCountsAsOneSessionForNextBooking() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(-1L)))
+                .thenReturn(false);
+        // Student already has 1 active booking session (e.g. a bundle of 2 items)
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(1L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 200L);
+            return saved;
+        });
+
+        CreateReservationRequest req = new CreateReservationRequest(
+                ASSET_ID, LocalDateTime.of(2026, 11, 3, 10, 0), LocalDateTime.of(2026, 11, 3, 12, 0));
+
+        ReservationResponse response = reservationService.createReservation(req);
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(200L);
     }
 }

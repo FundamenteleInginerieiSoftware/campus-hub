@@ -62,4 +62,7 @@ public interface ReservationHoldRepository extends JpaRepository<ReservationHold
           AND h.expiresAt <= :now
     """)
     int expireOldHolds(@Param("now") LocalDateTime now);
+
+    boolean existsByUserIdAndAssetIdAndStartTimeAndEndTimeAndCreatedAtAfter(
+            Long userId, Long assetId, LocalDateTime startTime, LocalDateTime endTime, LocalDateTime threshold);
 }
