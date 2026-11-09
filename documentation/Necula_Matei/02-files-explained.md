@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the ten project guides (`40-project-content.md`) and the Projects pages (`41-projects-pages.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -22,6 +22,7 @@ campus-hub/
 ├── documentation/Necula_Matei/  README.md  NN-topic.md   (my notes)
 ├── frontend/src/  pages/ReservationsDeskPage.tsx  api/reservationDesk.ts   (26-reservations-desk-page.md)
 │                 pages/Projects{Page,Parts}.tsx  pages/ProjectDetailsPage.tsx  api/projects.ts   (41-projects-pages.md)
+│                 "Reserve all" button in ProjectDetailsPage.tsx + reserveProject() in api/projects.ts   (42-project-reserve-all.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
     ├── gradlew  gradlew.bat  gradle/wrapper/
@@ -38,7 +39,11 @@ campus-hub/
         │                          user/service/AdminBootstrap.java,
         │                          user/api/UserApi.java, user/api/UserSummary.java,
         │                          user/web/{Register,Login}Request.java, {User,Login}Response.java,
-        │                          user/web/UserController.java
+        │                          user/web/UserController.java,
+        │                          project/** (39-project-engine.md),
+        │                          project/service/ProjectReservationService.java,
+        │                          project/web/{ReserveProjectRequest,ReserveProjectResponse,ReservedItem}.java
+        │                                                  (42-project-reserve-all.md)
         ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
         │                    db/migration/V2026_10_21_1500__platform_init.sql
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
@@ -50,6 +55,7 @@ campus-hub/
         │                          SesNotificationServiceTest, ProdProfileStartupTest, SecurityPassIT,
         │                          UserControllerTest, SpaConfigTest, DemoFlowIT, OpenApiDocsIT,
         │                          project/service/ShippedProjectsTest
+        │                          project/service/ProjectReservationServiceTest (42-project-reserve-all.md)
         └── test/resources/application-test.yml  static/index.html
 ```
 
@@ -185,7 +191,7 @@ campus-hub/
 | `docs/diagrams/deployment-aws.puml` + `.png` | How the app will run on AWS (planned, weeks 7–9): CloudFront, one server with Docker, the database, photos, e-mails, passwords. |
 | `docs/diagrams/README.md` | The list of all diagrams in the folder, one line each. |
 
-### `docs/superpowers/` and `project/`: Projects feature (`38-project-assistant-design.md`, `39-project-engine.md`, `40-project-content.md`)
+### `docs/superpowers/` and `project/`: Projects feature (`38-project-assistant-design.md`, `39-project-engine.md`, `40-project-content.md`, `42-project-reserve-all.md`)
 | File | What it does |
 |---|---|
 | `docs/superpowers/specs/2026-11-09-project-assistant-design.md` | The design of the Projects feature: a student describes a project and gets the equipment, steps, mistakes and a "Reserve all" button. Who builds which part, how search works, which endpoints exist. |
@@ -198,6 +204,9 @@ campus-hub/
 | `resources/projects/<slug>.json` (10 files) | The ten project guides in Romanian and English: thermometer, line follower robot, parking sensor, ESP32 weather station, LCD clock, PWM with the oscilloscope, multimeter basics, 3D-printed case, STM32 blinky with the debugger, motor on the bench supply. |
 | `ShippedProjectsTest` | Checks the real guides: typical searches ("senzor parcare", "weather station", …) find the right project first, and every piece of equipment is a model the catalog knows. |
 | `ProjectLibraryTest`, `ProjectSearchTest`, `ProjectServiceTest`, `ProjectControllerTest` | Tests for broken project files, Romanian/English search rules, live availability counts, and the HTTP endpoints. |
+| `ProjectReservationService.java` | "Reserve all": picks the first free unit(s) of every model a project needs and books them together through Calin's reservation module, all or nothing. |
+| `ReserveProjectRequest`, `ReserveProjectResponse`, `ReservedItem` | What the student sends (start and end of the slot) and what comes back (one bundle id and the list of booked units). |
+| `ProjectReservationServiceTest` | Tests that the lowest free units are picked, a busy unit is skipped, a missing model blocks the booking, and the booking always uses the logged-in user. |
 
 ### Frontend: Reservations desk (`26-reservations-desk-page.md`)
 | File | What it does |
@@ -205,13 +214,14 @@ campus-hub/
 | `frontend/src/pages/ReservationsDeskPage.tsx` | The admin's page at the lab counter (`/admin/reservations`): three lists (to pick up today, out now, overdue), a "Check out" button when a student takes the equipment and a "Return" button when they bring it back. On a phone each booking is a card. |
 | `frontend/src/api/reservationDesk.ts` | The three calls the page makes to Calin's admin reservation endpoints: search, check out, return. |
 
-### Frontend: Projects pages (`41-projects-pages.md`)
+### Frontend: Projects pages (`41-projects-pages.md`, `42-project-reserve-all.md`)
 | File | What it does |
 |---|---|
 | `frontend/src/pages/ProjectsPage.tsx` | The "Projects" page (`/projects`): a search box, the list of matching projects, "Did you mean …?" when two match almost equally, and a RO/EN switch. |
-| `frontend/src/pages/ProjectDetailsPage.tsx` | One project (`/projects/:slug`): the lab equipment it needs and how many are free, what to bring from home, the steps, common mistakes, and a card to pick a time slot and check that the whole kit is free then. |
+| `frontend/src/pages/ProjectDetailsPage.tsx` | One project (`/projects/:slug`): the lab equipment it needs and how many are free, what to bring from home, the steps, common mistakes, and a card to pick a time slot, check that the whole kit is free then, and book it all with "Reserve all". |
 | `frontend/src/pages/ProjectsParts.tsx` | Small pieces both pages share: the difficulty label, the RO/EN switch, the error box. |
-| `frontend/src/api/projects.ts` | The two calls the pages make to the backend, plus remembering the RO/EN choice. |
+| `frontend/src/api/projects.ts` | The calls the pages make to the backend (search, details, "Reserve all"), plus remembering the RO/EN choice. |
+| `docs/screenshots/projects-10..14-*.png` | Pictures of "Reserve all": ready to book, the kit in My reservations, the student limit message, and on a phone the "someone was faster" message. |
 
 ### `documentation/Necula_Matei/` (my notes)
 | File | What it does |
@@ -333,6 +343,9 @@ campus-hub/
 | `resources/projects/*.json` | 10 projects, one file each, slug = file name: `thermometer`, `oscilloscope-pwm`, `multimeter-basics` (#236), `line-follower-robot`, `parking-sensor`, `esp32-weather-station`, `lcd-digital-clock`, `printed-enclosure`, `stm32-blinky-debugger`, `bench-motor-test` (doc 40). Only spec §5.3 models, ≤ 5 units each, 5–6 steps, 4 mistakes |
 | `ShippedProjectsTest` | 18 parameterized queries (RO + EN, the 3 old projects too) must rank their slug first; `componentsUseOnlyAgreedModels` checks every model against the §5.3 list. Fails with the ranking (`slug=score`) so you know which keywords to change. Details in `40-project-content.md` |
 | `ProjectLibraryTest`, `ProjectSearchTest`, `ProjectServiceTest`, `ProjectControllerTest` | 10 invalid JSON fixture directories + classpath loader & field validation tests (17), 17 bilingual search rule tests, 11 Mockito service tests, and 7 `@WebMvcTest` + `@Import(SecurityConfig.class)` slice tests |
+| `ProjectReservationService` | `@Service`, `@Transactional` `reserve(slug, start, end)`: 404 `PROJECT_NOT_FOUND` / 400 `VALIDATION_FAILED` (shared `ProjectService.findProject` / `requireEndAfterStart`), per component in file order `findAvailableByModel(model, null)` sorted by id + `isAssetFree` + `limit(quantity)`, short → 409 `PROJECT_COMPONENT_UNAVAILABLE`, then `ReservationApi.bookBundle(currentUser.id(), ids, start, end)` in the same transaction (it locks and re-checks; its errors pass through). Details in `42-project-reserve-all.md` |
+| `ReserveProjectRequest` / `ReserveProjectResponse` / `ReservedItem` | `POST /api/v1/projects/{slug}/reserve` (201): `@NotNull` `start`/`end` with `@JsonFormat(lenient = FALSE)` so `Z`/offsets → 400 `MALFORMED_REQUEST` (as #233); response `{ bundleId, start, end, items[{assetId, assetName, model}] }` |
+| `ProjectReservationServiceTest` (+ 6 reserve tests in `ProjectControllerTest`) | 9 Mockito tests (lowest id, quantity 2, busy skipped, short → 409 naming the model, model missing from catalog, `bookBundle` error unchanged, user from `CurrentUser`, 404, end = start → 400) and 6 slice tests (201 shape, 400 missing `end`, 400 `Z` offset, 401, 404, 409) |
 
 ### Frontend: Reservations desk
 | File | Key points |
@@ -344,9 +357,9 @@ campus-hub/
 | File | Key points |
 |---|---|
 | `ProjectsPage.tsx` | `useDebouncedCallback(changeQuery, 300)`; Enter = `cancel()` + search. `changeQuery`/`changeLang` return early when the (trimmed) value is unchanged, so `loading` is only set when the effect will run (#133/#196). One effect on `[query, lang]` with an `ignore` flag; `loading` ends in `finally`. Chips for the top 2 when `ambiguous`; hours/items columns `visibleFrom="sm"`. Details in `41-projects-pages.md` |
-| `ProjectDetailsPage.tsx` | Local slot helpers follow Calin's booking rules (Mon–Fri, 08:00–20:00, 30-min steps, ≤ 4 h, ≤ 14 days, start in the future) with his exported `nowInBucharest()`. State: `selectedSlot` (selects), `slotToCheck` (sent; a new object per click reloads), `checkedSlot` (what the numbers are for), `kitReservable` (both equal + `project.reservable`), read by PR 5's "Reserve all" |
+| `ProjectDetailsPage.tsx` | Local slot helpers follow Calin's booking rules (Mon–Fri, 08:00–20:00, 30-min steps, ≤ 4 h, ≤ 14 days, start in the future) with his exported `nowInBucharest()`. State: `selectedSlot` (selects), `slotToCheck` (sent; a new object per click reloads), `checkedSlot` (what the numbers are for), `kitReservable` (both equal + `project.reservable`). "Reserve all" (`reserveAll`): enabled only when `kitReservable` and not loading, `loading={reserving}` stops a double submit, POSTs `selectedSlot`; 201 → `navigate('/reservations')`; 409 → error in the card + reload the numbers (`setSlotToCheck({...slot})`); `reserving` reset in `finally`. Details in `42-project-reserve-all.md` |
 | `ProjectsParts.tsx` | `DifficultyBadge` (label `overflow: visible` so columns don't cut it), `LangSwitch` (`SegmentedControl`), `ProjectErrorAlert` (local `PROJECT_*` text, else Stefania's `ErrorAlert`) |
-| `projects.ts` | `searchProjects(q, lang)` → `GET /api/v1/projects`, `fetchProject(slug, lang, slot?)` → `GET /api/v1/projects/{slug}`; types mirror `com.campus.project.web`; `loadProjectLang`/`saveProjectLang` (key `campus.projects.lang`, try/catch, default `ro`); `projectErrorMessage` |
+| `projects.ts` | `searchProjects(q, lang)` → `GET /api/v1/projects`, `fetchProject(slug, lang, slot?)` → `GET /api/v1/projects/{slug}`; types mirror `com.campus.project.web`; `loadProjectLang`/`saveProjectLang` (key `campus.projects.lang`, try/catch, default `ro`); `projectErrorMessage`; `reserveProject(slug, slot)` → `POST /api/v1/projects/{slug}/reserve` + `PROJECT_COMPONENT_UNAVAILABLE` text |
 
 ### Tests
 | Test | What it proves |

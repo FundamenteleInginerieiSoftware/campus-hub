@@ -67,6 +67,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 39 | [39-project-engine.md](39-project-engine.md) | Projects engine (#140): startup loader, bilingual search, live availability endpoints | #236 |
 | 40 | [40-project-content.md](40-project-content.md) | Projects content (#140): seven more project guides in Romanian and English | #239 |
 | 41 | [41-projects-pages.md](41-projects-pages.md) | Projects pages (#140): search list, project details, slot availability check | #238 |
+| 42 | [42-project-reserve-all.md](42-project-reserve-all.md) | Projects "Reserve all" (#140): book every item of a project kit in one go | #243 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done

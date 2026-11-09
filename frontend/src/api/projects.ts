@@ -75,6 +75,30 @@ export function fetchProject(slug: string, lang: ProjectLang, slot?: Slot) {
   return apiFetch<ProjectDetails>(`/api/v1/projects/${encodeURIComponent(slug)}?${params.toString()}`)
 }
 
+// What POST /api/v1/projects/{slug}/reserve returns: every booked unit shares one bundleId, so My
+// reservations shows them as one "Bundle booking".
+export type ReservedItem = { assetId: number; assetName: string; model: string }
+
+export type ReserveProjectResponse = {
+  bundleId: string
+  start: string
+  end: string
+  items: ReservedItem[]
+}
+
+/**
+ * "Reserve all": the backend picks the lowest-id free unit of every model the project needs and books
+ * them together through Calin's bundle booking (all or nothing). 409 PROJECT_COMPONENT_UNAVAILABLE when
+ * a model is short; booking-rule and limit codes (RESERVATION_LIMIT_REACHED, SLOT_HELD, ...) come
+ * from Calin's ReservationApi.bookBundle unchanged.
+ */
+export function reserveProject(slug: string, slot: Slot) {
+  return apiFetch<ReserveProjectResponse>(`/api/v1/projects/${encodeURIComponent(slug)}/reserve`, {
+    method: 'POST',
+    body: slot,
+  })
+}
+
 // The pages' own RO/EN switch, remembered for the next visit. Stefania picks the whole-app approach
 // later (#140 §4); until then only the project texts follow it. Default Romanian (most students).
 // try/catch: storage throws in some private windows, like in client.ts's tokenStorage.
@@ -100,6 +124,8 @@ export function saveProjectLang(lang: ProjectLang) {
 // back to the shared errorMessages.ts, which Stefania owns, so we don't add our codes there.
 const PROJECT_MESSAGES: Record<string, string> = {
   PROJECT_NOT_FOUND: 'This project does not exist. Go back to the list and pick another one.',
+  PROJECT_COMPONENT_UNAVAILABLE:
+    'Not every item is free in this slot any more (someone booked one a moment ago), so nothing was booked. The numbers are updated: pick another slot.',
 }
 
 export function projectErrorMessage(error: unknown): string | null {

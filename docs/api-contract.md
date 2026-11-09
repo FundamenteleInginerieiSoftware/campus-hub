@@ -193,7 +193,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Projects (Matei)
 
-`PROJECT_NOT_FOUND` 404 (+ `VALIDATION_FAILED` 400 and `INVALID_PARAMETER` 400 above)
+`PROJECT_NOT_FOUND` 404 · `PROJECT_COMPONENT_UNAVAILABLE` 409 (+ `VALIDATION_FAILED` 400, `INVALID_PARAMETER` 400, `MALFORMED_REQUEST` 400 above; `POST /projects/{slug}/reserve` also passes on the Reservations codes from `bookBundle`)
 
 Owners: check the status codes above when you implement them, and fix this list if yours differ.
 
@@ -400,6 +400,7 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`) and are open to b
 |---|---|---|---|
 | `GET /api/v1/projects?q=&lang=` | `STUDENT`, `ADMIN` | `200` `ProjectSearchResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED` |
 | `GET /api/v1/projects/{slug}?lang=&start=&end=` | `STUDENT`, `ADMIN` | `200` `ProjectDetailsResponse` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 PROJECT_NOT_FOUND` |
+| `POST /api/v1/projects/{slug}/reserve` | `STUDENT`, `ADMIN` | `201` `ReserveProjectResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `401 UNAUTHORIZED`, `404 PROJECT_NOT_FOUND`, `409 PROJECT_COMPONENT_UNAVAILABLE`, `409` any `bookBundle` code (`RESERVATION_CONFLICT`, `SLOT_HELD`, `ASSET_NOT_BOOKABLE`, `RESERVATION_LIMIT_REACHED`, `BOOKING_IN_PAST`, `BOOKING_TOO_FAR_AHEAD`, `SLOT_NOT_ALIGNED`, `INVALID_DURATION`, `OUTSIDE_OPENING_HOURS`) |
 
 Query parameters:
 - `q` (`GET /api/v1/projects`, optional, max 200 characters): search text matched against both RO and EN keywords/titles (diacritics stripped, prefix matching ≥ 5 characters). Empty or stop-words-only returns all projects sorted by English title (`ambiguous: false`, `score: 0`). Over 200 characters → `400 VALIDATION_FAILED`. Not paginated (~10 projects in the library); no catalog/reservation calls on the list view.
@@ -409,6 +410,12 @@ Query parameters:
   - With both `start` and `end`: `available` counts `AVAILABLE` units that are also free in the slot (`ReservationApi.isAssetFree(id, start, end, null)`); `slotChecked: true`.
   - Providing only one of `start`/`end`, or `end` not after `start` → `400 VALIDATION_FAILED`. Malformed date-time → `400 INVALID_PARAMETER`.
   - `reservable` is `true` when every component has `available >= quantity`.
+
+`POST /api/v1/projects/{slug}/reserve` ("Reserve all"): body `ReserveProjectRequest { start, end }`, both required, ISO-8601 local date-time **without offset** (`Z` or `+02:00` → `400 MALFORMED_REQUEST`, same as the reservation requests since #233).
+1. Unknown slug → `404 PROJECT_NOT_FOUND`; `end` not after `start` → `400 VALIDATION_FAILED`.
+2. For each component, in file order: the `AVAILABLE` units of its `model`, lowest id first, that are free in the slot (`ReservationApi.isAssetFree`); the first `quantity` are picked. Fewer → `409 PROJECT_COMPONENT_UNAVAILABLE`, the `detail` names the model (also when the catalog has no unit of that model yet).
+3. All picked units are booked in one call to Calin's `ReservationApi.bookBundle(currentUser, ids, start, end)`: all or nothing, one `bundleId`. It locks the assets and checks again, so its errors come back unchanged (`RESERVATION_CONFLICT` / `SLOT_HELD` if a unit was taken in the meantime, booking rules, `RESERVATION_LIMIT_REACHED` for students; admins skip the limit). No automatic retry: check availability again and retry.
+4. The booking user is always the logged-in user (JWT), never a body field. The new bookings show in `GET /api/v1/reservations/me` with the same `bundleId`.
 
 ```json
 // ProjectSearchResponse (returned by GET /api/v1/projects?q=termometru&lang=ro)
@@ -458,6 +465,23 @@ Query parameters:
   "slotChecked": true,
   "reservable": true
 }
+
+// ReserveProjectRequest (POST /api/v1/projects/oscilloscope-pwm/reserve)
+{ "start": "2026-11-10T10:00:00", "end": "2026-11-10T12:00:00" }
+
+// ReserveProjectResponse (201)
+{
+  "bundleId": "660ebcaa-aa01-473d-b769-4d22d1a6913e",
+  "start": "2026-11-10T10:00:00",
+  "end": "2026-11-10T12:00:00",
+  "items": [
+    { "assetId": 10, "assetName": "STM32F4-Discovery Kit 1", "model": "STM32F407G-DISC1" },
+    { "assetId": 2, "assetName": "Rigol DS1054Z Digital Oscilloscope 2", "model": "DS1054Z" }
+  ]
+}
+
+// 409 when a model is short in the slot
+{ "status": 409, "code": "PROJECT_COMPONENT_UNAVAILABLE", "detail": "Not enough free units of 'DS1054Z' in this slot: need 1, found 0" }
 ```
 
 ---

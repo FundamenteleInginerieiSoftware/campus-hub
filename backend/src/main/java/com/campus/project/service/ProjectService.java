@@ -51,14 +51,12 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public ProjectDetailsResponse details(String slug, Lang lang, LocalDateTime start, LocalDateTime end) {
-        Project project = projectLibrary
-                .find(slug)
-                .orElseThrow(() -> new NotFoundException("PROJECT_NOT_FOUND", "Project '" + slug + "' was not found"));
+        Project project = findProject(projectLibrary, slug);
         if ((start == null) != (end == null)) {
             throw new BadRequestException("VALIDATION_FAILED", "Both start and end must be provided together");
         }
-        if (start != null && !end.isAfter(start)) {
-            throw new BadRequestException("VALIDATION_FAILED", "end must be after start");
+        if (start != null) {
+            requireEndAfterStart(start, end);
         }
 
         boolean slotChecked = start != null;
@@ -88,6 +86,20 @@ public class ProjectService {
                 reservable);
     }
 
+    // Shared with ProjectReservationService, so details and Reserve all answer an unknown slug
+    // and an empty slot with the same status and code.
+    static Project findProject(ProjectLibrary projectLibrary, String slug) {
+        return projectLibrary
+                .find(slug)
+                .orElseThrow(() -> new NotFoundException("PROJECT_NOT_FOUND", "Project '" + slug + "' was not found"));
+    }
+
+    static void requireEndAfterStart(LocalDateTime start, LocalDateTime end) {
+        if (!end.isAfter(start)) {
+            throw new BadRequestException("VALIDATION_FAILED", "end must be after start");
+        }
+    }
+
     private ComponentView toComponentView(
             ProjectComponent comp, Lang lang, boolean slotChecked, LocalDateTime start, LocalDateTime end) {
         // Liviu's CatalogApi.findAvailableByModel filters to AVAILABLE operational status;
@@ -98,8 +110,9 @@ public class ProjectService {
         if (!slotChecked) {
             available = candidates.size();
         } else {
-            // Calin's ReservationApi.isAssetFree checks other students' active bookings and holds
-            // in the slot; null ignoreReservationId excludes no reservation.
+            // Calin's ReservationApi.isAssetFree checks active bookings (CONFIRMED, CHECKED_OUT,
+            // OVERDUE) in the slot; null ignoreReservationId excludes no reservation. It does not see
+            // 1-minute holds, so a held unit still counts here; Reserve all then gets SLOT_HELD.
             available = (int) candidates.stream()
                     .filter(a -> reservationApi.isAssetFree(a.id(), start, end, null))
                     .count();

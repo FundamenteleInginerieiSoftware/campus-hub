@@ -16,10 +16,12 @@ import {
 } from '@mantine/core'
 import { IconArrowLeft, IconCheck, IconX } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
+import { ApiError } from '../api/client.ts'
 import {
   fetchProject,
   loadProjectLang,
+  reserveProject,
   saveProjectLang,
   type ComponentView,
   type ProjectDetails,
@@ -175,6 +177,12 @@ export default function ProjectDetailsPage() {
     selectedSlot.end === checkedSlot.end
   const kitReservable = slotIsCurrent && project !== null && project.slotChecked && project.reservable
 
+  const navigate = useNavigate()
+  // true while the POST runs: the button shows a spinner and can't be clicked twice.
+  const [reserving, setReserving] = useState(false)
+  // Shown inside the "Book the kit" card, next to the button that caused it.
+  const [reserveError, setReserveError] = useState<unknown>(null)
+
   useEffect(() => {
     let ignore = false
     fetchProject(slug, lang, slotToCheck ?? undefined)
@@ -207,8 +215,31 @@ export default function ProjectDetailsPage() {
     if (!selectedSlot) return
     setLoading(true)
     setError(null)
+    setReserveError(null)
     // A new object every time, so a second click on the same slot loads fresh numbers.
     setSlotToCheck({ ...selectedSlot })
+  }
+
+  async function reserveAll() {
+    if (!selectedSlot || !kitReservable || reserving) return
+    const slot = selectedSlot
+    setReserving(true)
+    setReserveError(null)
+    try {
+      await reserveProject(slug, slot)
+      // The new bookings show there as one "Bundle booking" (same bundleId).
+      navigate('/reservations')
+    } catch (err) {
+      setReserveError(err)
+      // 409: a unit was taken in the meantime, or a booking rule / the student limit said no.
+      // Reload the numbers for this slot so the table shows what is really free now.
+      if (err instanceof ApiError && err.status === 409) {
+        setLoading(true)
+        setSlotToCheck({ ...slot })
+      }
+    } finally {
+      setReserving(false)
+    }
   }
 
   function changeDay(next: string | null) {
@@ -325,7 +356,12 @@ export default function ProjectDetailsPage() {
                 >
                   Check availability
                 </Button>
-                {/* Reserve all (PR 5) goes here: enabled only when kitReservable, books selectedSlot. */}
+                {/* Enabled only when the numbers on screen are for this exact slot and every item is free.
+                    The backend checks everything again while booking (locks, rules, limit). */}
+                <Button onClick={reserveAll} loading={reserving} disabled={!kitReservable || loading}>
+                  Reserve all
+                </Button>
+                {reserveError ? <ProjectErrorAlert error={reserveError} /> : null}
 
                 {checkedSlot !== null &&
                   (slotIsCurrent ? (
