@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -1928,8 +1929,10 @@ class ReservationServiceTest {
     @Test
     @DisplayName("bookBundle facade: validates slot rules (#140)")
     void bookBundle_validatesSlotRules() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 14, 0); // end before start
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(16).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.minusHours(2); // end before start
 
         assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(10L), start, end))
                 .as("invalid slot: end before start must be rejected; see ReservationService.bookBundle")
@@ -1939,8 +1942,10 @@ class ReservationServiceTest {
     @Test
     @DisplayName("bookBundle facade: allows boundary of exactly 5 assets (#140)")
     void bookBundle_allowsExactlyFiveAssets() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
         List<Long> fiveAssets = List.of(1L, 2L, 3L, 4L, 5L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -1954,14 +1959,18 @@ class ReservationServiceTest {
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UUID bundleId = reservationService.bookBundle(USER_ID, fiveAssets, start, end);
-        assertThat(bundleId).isNotNull();
+        assertThat(bundleId)
+                .as("boundary size: 5 assets bundle must succeed; see ReservationService.bookBundle")
+                .isNotNull();
     }
 
     @Test
     @DisplayName("bookBundle facade: admin resolved via userApi bypasses quota (#140)")
     void bookBundle_adminResolvedViaUserApiBypassesQuota() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
         List<Long> assetIds = List.of(10L, 20L);
 
         // currentUser has no admin role in JWT context, but userApi finds Role.ADMIN
@@ -1975,7 +1984,10 @@ class ReservationServiceTest {
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UUID bundleId = reservationService.bookBundle(USER_ID, assetIds, start, end);
-        assertThat(bundleId).isNotNull();
+        assertThat(bundleId)
+                .as(
+                        "admin bypass: user with ADMIN role in userApi must bypass quota in bookBundle; see ReservationService.bookBundle")
+                .isNotNull();
         verify(reservationRepository, never()).lockUserQuota(anyLong());
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
@@ -1983,8 +1995,10 @@ class ReservationServiceTest {
     @Test
     @DisplayName("bookBundle facade: student resolved via userApi enforces quota (#140)")
     void bookBundle_studentResolvedViaUserApiEnforcesQuota() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
         List<Long> assetIds = List.of(10L, 20L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -3544,8 +3558,10 @@ class ReservationServiceTest {
     @Test
     @DisplayName("Bundle: rejects null element in assetIds (#228 point 11)")
     void createMultiAssetReservation_rejectsNullElementInAssetIds() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
         Set<Long> idsWithNull = new HashSet<>();
         idsWithNull.add(10L);
         idsWithNull.add(null);
@@ -3563,11 +3579,13 @@ class ReservationServiceTest {
     @Test
     @DisplayName("extendReservation: rejects if extension slot is held by another student (#228 point 7)")
     void extendReservation_rejectsIfSlotHeldByAnotherStudent() {
-        LocalDateTime oldStart = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 17, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime oldStart =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime oldEnd = oldStart.plusHours(2);
+        LocalDateTime newEnd = oldStart.plusHours(3);
 
-        Reservation r = new Reservation(USER_ID, ASSET_ID, oldStart, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, oldStart, oldEnd, now.minusHours(2));
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -3589,35 +3607,37 @@ class ReservationServiceTest {
     @Test
     @DisplayName("extendReservation: rejects extension if item is part of a bundle (#240 point 5)")
     void extendReservation_rejectsIfPartOfBundle() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 10, 0),
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                LocalDateTime.of(2026, 11, 2, 8, 0));
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        LocalDateTime createdAt = now.minusHours(2);
+
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, end, createdAt);
         ReflectionTestUtils.setField(r, "id", 100L);
         r.assignBundle(java.util.UUID.randomUUID());
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
 
-        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime newEnd = start.plusHours(4);
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
-                .isInstanceOf(ConflictException.class)
                 .as(
                         "bundle extension: individual items in a bundle cannot be extended; see ReservationService.extendReservation")
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Individual items in a bundle booking cannot be extended");
     }
 
     @Test
     @DisplayName("extendReservation: cancels pending transfer offer upon extension (#240 point 6)")
     void extendReservation_cancelsPendingTransferOffer() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 10, 0),
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                LocalDateTime.of(2026, 11, 2, 8, 0));
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        LocalDateTime createdAt = now.minusHours(2);
+
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, end, createdAt);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -3627,15 +3647,18 @@ class ReservationServiceTest {
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 9, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, 99L, now.minusHours(1));
         ReflectionTestUtils.setField(transfer, "id", 500L);
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime newEnd = start.plusHours(4);
         reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd));
 
-        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.CANCELLED);
+        assertThat(transfer.getStatus())
+                .as(
+                        "transfer cancellation: extending a reservation must cancel any pending transfer offer; see ReservationService.extendReservation")
+                .isEqualTo(TransferStatus.CANCELLED);
         verify(reservationTransferRepository).save(transfer);
         verify(auditService).record(eq(USER_ID), eq("TRANSFER_CANCELLED"), eq("ReservationTransfer"), eq(500L), any());
     }
@@ -3648,7 +3671,9 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(-1L)))
                 .thenReturn(false);
-        // Student already has 1 active booking session (e.g. a bundle of 2 items)
+        // Student already has 1 active booking session (e.g. a bundle of 2 items).
+        // ReservationService checks countBookingSessionsByUserIdAndStatusIn <= 2;
+        // The real database grouping logic (bundle_id vs null) is verified in ReservationRepositoryTest.
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
@@ -3657,11 +3682,60 @@ class ReservationServiceTest {
             return saved;
         });
 
-        CreateReservationRequest req = new CreateReservationRequest(
-                ASSET_ID, LocalDateTime.of(2026, 11, 3, 10, 0), LocalDateTime.of(2026, 11, 3, 12, 0));
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
 
         ReservationResponse response = reservationService.createReservation(req);
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(200L);
+        assertThat(response)
+                .as(
+                        "quota rule: student with 1 active bundle session (verified in ReservationRepositoryTest) can book a second session; see ReservationService.createReservation")
+                .isNotNull();
+        assertThat(response.id())
+                .as("created reservation id must match saved entity; see ReservationService.createReservation")
+                .isEqualTo(200L);
+    }
+
+    @Test
+    @DisplayName("cancelBundle: defers notification until transaction afterCommit (#240 point 2)")
+    void cancelBundle_defersNotificationUntilAfterCommit() {
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0),
+                now.plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            reservationService.cancelBundle(bundleId, "Cancelled entire kit");
+
+            // While transaction is active and not committed yet, notificationService must NOT have been called
+            verify(notificationService, never()).notifyUser(anyLong(), anyString(), anyString());
+
+            // Simulate transaction commit
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            // After commit hook executes, notification is dispatched
+            verify(notificationService)
+                    .notifyUser(
+                            eq(USER_ID),
+                            eq("Reservation Bundle Cancelled"),
+                            contains("bundle #" + bundleId + " was cancelled"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 }

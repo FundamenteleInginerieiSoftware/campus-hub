@@ -1516,13 +1516,14 @@ public class ReservationService implements ReservationApi {
         // 5. Anti-hoarding & active limit checks for students
         if (!currentUser.isAdmin()) {
             // Anti-hoarding hold cooldown guard (#240 point 4):
-            // Prevent repeated hold -> release -> hold loops on the same slot by requiring a 2-minute cooldown
+            // Prevent repeated hold -> release -> hold loops across overlapping windows by requiring a 2-minute
+            // cooldown
             LocalDateTime cooldownThreshold = now.minusMinutes(2);
-            if (reservationHoldRepository.existsByUserIdAndAssetIdAndStartTimeAndEndTimeAndCreatedAtAfter(
+            if (reservationHoldRepository.existsRecentHoldOverlap(
                     userId, req.assetId(), req.startTime(), req.endTime(), cooldownThreshold)) {
                 throw new ConflictException(
                         "HOLD_COOLDOWN_ACTIVE",
-                        "You recently held this equipment slot. Please wait before holding it again or book it directly.");
+                        "You recently held an overlapping slot on this equipment. Please wait before holding it again or book it directly.");
             }
 
             reservationRepository.lockUserQuota(userId);

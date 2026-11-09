@@ -600,17 +600,19 @@ class ReservationHoldServiceTest {
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), any(), any(), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
-        when(reservationHoldRepository.existsByUserIdAndAssetIdAndStartTimeAndEndTimeAndCreatedAtAfter(
-                        eq(USER_ID), eq(ASSET_ID), any(), any(), any()))
+        when(reservationHoldRepository.existsRecentHoldOverlap(eq(USER_ID), eq(ASSET_ID), any(), any(), any()))
                 .thenReturn(true);
 
-        CreateHoldRequest req = new CreateHoldRequest(
-                ASSET_ID, LocalDateTime.of(2026, 11, 2, 10, 0), LocalDateTime.of(2026, 11, 2, 12, 0));
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateHoldRequest req = new CreateHoldRequest(ASSET_ID, start, end);
 
         assertThatThrownBy(() -> reservationService.createHold(req))
-                .isInstanceOf(ConflictException.class)
                 .as(
-                        "hold cooldown: student cannot repeatedly hold and release the same slot; see ReservationService.createHold")
-                .hasMessageContaining("You recently held this equipment slot");
+                        "hold cooldown: student cannot repeatedly hold and release overlapping slots; see ReservationService.createHold")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("You recently held an overlapping slot on this equipment");
     }
 }
