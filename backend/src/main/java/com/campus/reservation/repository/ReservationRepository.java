@@ -40,6 +40,18 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
 
     long countByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses);
 
+    // Bug fixed (#240): count distinct booking sessions instead of raw rows.
+    // A multi-asset bundle (common bundleId) counts as 1 slot of the student quota (max 2).
+    // Individual bookings (bundleId IS NULL) count as 1 slot each.
+    @Query("""
+        select count(distinct coalesce(cast(r.bundleId as string), cast(r.id as string)))
+        from Reservation r
+        where r.userId = :userId
+          and r.status in :statuses
+        """)
+    long countBookingSessionsByUserIdAndStatusIn(
+            @Param("userId") Long userId, @Param("statuses") Collection<ReservationStatus> statuses);
+
     // Acquires a transaction-scoped PostgreSQL advisory lock for this student, so two simultaneous
     // booking requests from the same student on different assets wait for each other before counting
     // active bookings (the asset row locks alone don't, because they lock different rows).

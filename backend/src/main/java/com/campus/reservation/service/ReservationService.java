@@ -84,6 +84,33 @@ public class ReservationService implements ReservationApi {
     private final UserApi userApi;
     private final ReservationHoldRepository reservationHoldRepository;
 
+    /**
+     * Dispatches notification to the recipient strictly after the active database transaction commits (#240 point 2).
+     * Prevents phantom notifications in production (e.g. SES) if an operation subsequently rolls back.
+     */
+    private void notifyUserAfterCommit(Long userId, String subject, String body) {
+        if (notificationService == null) {
+            return;
+        }
+        Runnable task = () -> {
+            try {
+                notificationService.notifyUser(userId, subject, body);
+            } catch (Exception e) {
+                log.warn("Failed to notify user {} of '{}': {}", userId, subject, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+        } else {
+            task.run();
+        }
+    }
+
     @Autowired
     public ReservationService(
             ReservationRepository reservationRepository,
@@ -252,7 +279,8 @@ public class ReservationService implements ReservationApi {
         // so deadlocks cannot occur.
         if (!currentUser.isAdmin()) {
             reservationRepository.lockUserQuota(userId);
-            if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+            if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
+                    >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }
@@ -375,8 +403,8 @@ public class ReservationService implements ReservationApi {
 
         if (!isAdmin) {
             reservationRepository.lockUserQuota(userId);
-            long activeCount =
-                    reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
+            long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                    userId, ReservationStatus.ACTIVE_STATUSES);
             if (activeCount + 1 > 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
@@ -413,7 +441,7 @@ public class ReservationService implements ReservationApi {
                 sortedAssetIds.get(0),
                 "Bundle " + bundleId + " with " + savedList.size() + " assets: " + sortedAssetIds);
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 userId,
                 "Reservation Bundle Confirmed",
                 "Your reservation bundle #" + bundleId + " with " + savedList.size() + " assets was confirmed.");
@@ -503,7 +531,7 @@ public class ReservationService implements ReservationApi {
 
         // Notify each owner of the cancelled items (fixes notifying admin on admin cancel, #228 point 12)
         for (Long ownerId : ownerIds) {
-            notificationService.notifyUser(
+            notifyUserAfterCommit(
                     ownerId,
                     "Reservation Bundle Cancelled",
                     "Your reservation bundle #" + bundleId + " was cancelled.");
@@ -546,7 +574,7 @@ public class ReservationService implements ReservationApi {
      */
     public ReservationSummaryResponse getMySummary() {
         Long userId = currentUser.id();
-        long active = reservationRepository.countByUserIdAndStatusIn(
+        long active = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                 userId, List.of(ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE));
         long completed = reservationRepository.countByUserIdAndStatusIn(userId, List.of(ReservationStatus.RETURNED));
         long reassigned = reservationRepository.countByUserIdAndOriginalAssetIdIsNotNull(userId);
@@ -600,26 +628,10 @@ public class ReservationService implements ReservationApi {
         if (cancelledByAdminForAnotherUser) {
             Long ownerId = r.getUserId();
             Long reservationId = r.getId();
-            Runnable notifyTask = () -> {
-                try {
-                    notificationService.notifyUser(
-                            ownerId,
-                            "Reservation Cancelled by Administrator",
-                            "Your reservation #" + reservationId + " has been cancelled by an administrator.");
-                } catch (Exception e) {
-                    log.warn("Failed to notify user {} of admin cancellation: {}", ownerId, e.getMessage());
-                }
-            };
-            if (TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        notifyTask.run();
-                    }
-                });
-            } else {
-                notifyTask.run();
-            }
+            notifyUserAfterCommit(
+                    ownerId,
+                    "Reservation Cancelled by Administrator",
+                    "Your reservation #" + reservationId + " has been cancelled by an administrator.");
         }
         return ReservationResponse.from(r);
     }
@@ -640,7 +652,7 @@ public class ReservationService implements ReservationApi {
                         reservationTransferRepository.save(transfer);
                         auditService.record(
                                 actorId, "TRANSFER_CANCELLED", "ReservationTransfer", transfer.getId(), auditReason);
-                        notificationService.notifyUser(
+                        notifyUserAfterCommit(
                                 transfer.getToUserId(), "Reservation Transfer Cancelled", notificationMessage);
                     });
         }
@@ -665,6 +677,12 @@ public class ReservationService implements ReservationApi {
                     "INVALID_RESERVATION_STATUS_TRANSITION",
                     "Only CONFIRMED or CHECKED_OUT reservations can be extended; current status is "
                             + reservation.getStatus());
+        }
+
+        // Items in a multi-asset bundle cannot be extended individually (#240 point 5)
+        if (reservation.getBundleId() != null) {
+            throw new ConflictException(
+                    "BUNDLE_EXTEND_NOT_ALLOWED", "Individual items in a bundle booking cannot be extended");
         }
 
         LocalDateTime newEndTime = req.newEndTime();
@@ -730,6 +748,16 @@ public class ReservationService implements ReservationApi {
         reservation.extendEndTime(newEndTime);
         Reservation saved = reservationRepository.save(reservation);
 
+        // Auto-cancel any pending transfer offer when reservation duration is extended (#240 point 6)
+        cancelPendingTransferIfExists(
+                reservation.getId(),
+                now,
+                currentUser.id(),
+                "Auto-cancelled due to reservation duration extension",
+                "The transfer offer for reservation #"
+                        + reservation.getId()
+                        + " was cancelled because the reservation duration was extended.");
+
         auditService.record(
                 currentUser.id(),
                 "EXTEND_RESERVATION",
@@ -737,7 +765,7 @@ public class ReservationService implements ReservationApi {
                 saved.getId(),
                 "Extended to " + newEndTime + " on asset " + saved.getAssetId());
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 reservation.getUserId(),
                 "Reservation Extended",
                 "Your reservation #"
@@ -806,10 +834,12 @@ public class ReservationService implements ReservationApi {
                     "TRANSFER_ALREADY_PENDING", "A transfer offer is already pending for this reservation");
         }
 
-        // Check recipient quota
-        if (reservationRepository.countByUserIdAndStatusIn(recipientId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+        // Anti-spam guard: limit to at most 3 transfer offers per reservation in a 24-hour window (#240 point 3)
+        LocalDateTime dayAgo = now.minusHours(24);
+        if (reservationTransferRepository.countByReservationIdAndRequestedAtAfter(reservationId, dayAgo) >= 3) {
             throw new ConflictException(
-                    "RESERVATION_LIMIT_REACHED", "Recipient student already has 2 active reservations");
+                    "TRANSFER_LIMIT_REACHED",
+                    "Maximum transfer offers reached for this reservation in the last 24 hours");
         }
 
         // fromUserId is always the reservation owner (fixes admin transfer fromUserId bug, #228 point 5)
@@ -823,7 +853,7 @@ public class ReservationService implements ReservationApi {
                 saved.getId(),
                 "Offered reservation #" + reservationId + " to user #" + recipientId);
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 recipientId,
                 "Reservation Transfer Offer",
                 "User #" + fromUserId + " has offered to transfer reservation #" + reservationId + " to you.");
@@ -891,7 +921,8 @@ public class ReservationService implements ReservationApi {
         // Acquire advisory lock on recipient quota (bypassed by admins)
         if (!currentUser.isAdmin()) {
             reservationRepository.lockUserQuota(userId);
-            if (reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+            if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
+                    >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }
@@ -915,7 +946,7 @@ public class ReservationService implements ReservationApi {
                         + " to #"
                         + userId);
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 transfer.getFromUserId(),
                 "Reservation Transfer Accepted",
                 "User #" + userId + " accepted your transfer of reservation #" + reservation.getId() + ".");
@@ -954,7 +985,7 @@ public class ReservationService implements ReservationApi {
                 transfer.getId(),
                 "Rejected by recipient user #" + userId);
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 transfer.getFromUserId(),
                 "Reservation Transfer Rejected",
                 "User #" + userId + " declined your transfer of reservation #" + transfer.getReservationId() + ".");
@@ -993,7 +1024,7 @@ public class ReservationService implements ReservationApi {
                 transfer.getId(),
                 "Cancelled by sender user #" + userId);
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 transfer.getToUserId(),
                 "Reservation Transfer Cancelled",
                 "User #" + userId + " cancelled the transfer offer for reservation #" + transfer.getReservationId()
@@ -1484,6 +1515,17 @@ public class ReservationService implements ReservationApi {
 
         // 5. Anti-hoarding & active limit checks for students
         if (!currentUser.isAdmin()) {
+            // Anti-hoarding hold cooldown guard (#240 point 4):
+            // Prevent repeated hold -> release -> hold loops across overlapping windows by requiring a 2-minute
+            // cooldown
+            LocalDateTime cooldownThreshold = now.minusMinutes(2);
+            if (reservationHoldRepository.existsRecentHoldOverlap(
+                    userId, req.assetId(), req.startTime(), req.endTime(), cooldownThreshold)) {
+                throw new ConflictException(
+                        "HOLD_COOLDOWN_ACTIVE",
+                        "You recently held an overlapping slot on this equipment. Please wait before holding it again or book it directly.");
+            }
+
             reservationRepository.lockUserQuota(userId);
 
             // A student can hold at most 1 slot at a time
@@ -1496,8 +1538,8 @@ public class ReservationService implements ReservationApi {
             }
 
             // Active reservations + active hold must not exceed quota (2)
-            long activeReservations =
-                    reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
+            long activeReservations = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                    userId, ReservationStatus.ACTIVE_STATUSES);
             if (activeReservations >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot exceed active reservation quota (max 2)");
@@ -1568,7 +1610,9 @@ public class ReservationService implements ReservationApi {
                 : !studentId.equals(userId) || !currentUser.isAdmin();
         if (holdOwnerIsStudent) {
             reservationRepository.lockUserQuota(studentId);
-            if (reservationRepository.countByUserIdAndStatusIn(studentId, ReservationStatus.ACTIVE_STATUSES) >= 2) {
+            if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                            studentId, ReservationStatus.ACTIVE_STATUSES)
+                    >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }
@@ -1587,7 +1631,7 @@ public class ReservationService implements ReservationApi {
                 savedReservation.getId(),
                 "Confirmed from hold #" + hold.getId());
 
-        notificationService.notifyUser(
+        notifyUserAfterCommit(
                 studentId, "Reservation Confirmed", "Your reservation #" + savedReservation.getId() + " is confirmed.");
 
         return ReservationResponse.from(savedReservation);

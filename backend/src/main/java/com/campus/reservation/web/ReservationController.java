@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -190,7 +191,7 @@ public class ReservationController {
     })
     @PostMapping("/bundle/{bundleId}/cancel")
     public ResponseEntity<List<ReservationResponse>> cancelBundle(
-            @PathVariable java.util.UUID bundleId, @RequestParam(required = false) String reason) {
+            @PathVariable java.util.UUID bundleId, @RequestParam(required = false) @Size(max = 255) String reason) {
         return ResponseEntity.ok(reservationService.cancelBundle(bundleId, reason));
     }
 

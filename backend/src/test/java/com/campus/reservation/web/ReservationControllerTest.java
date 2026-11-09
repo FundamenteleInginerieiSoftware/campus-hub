@@ -452,6 +452,18 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName(
+            "POST /api/v1/reservations/bundle/{bundleId}/cancel rejects reason over 255 chars with 400 (#240 point 2)")
+    void cancelBundle_rejectsOverlongReasonWith400() throws Exception {
+        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        String overlongReason = "a".repeat(256);
+
+        mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel")
+                        .param("reason", overlongReason))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("POST /api/v1/reservations/{id}/extend returns 200 OK")
     void extendReturns200() throws Exception {
         when(reservationService.extendReservation(eq(1L), any())).thenReturn(sampleResponse);

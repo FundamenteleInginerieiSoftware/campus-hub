@@ -21,4 +21,6 @@ public interface ReservationTransferRepository extends JpaRepository<Reservation
     List<ReservationTransfer> findByReservationIdOrderByRequestedAtDesc(Long reservationId);
 
     Optional<ReservationTransfer> findByReservationIdAndStatus(Long reservationId, TransferStatus status);
+
+    long countByReservationIdAndRequestedAtAfter(Long reservationId, java.time.LocalDateTime threshold);
 }

@@ -62,4 +62,21 @@ public interface ReservationHoldRepository extends JpaRepository<ReservationHold
           AND h.expiresAt <= :now
     """)
     int expireOldHolds(@Param("now") LocalDateTime now);
+
+    // Cooldown check (#240 point 4): verifies if the student has recently acquired a hold that overlaps
+    // with the requested window on this asset, preventing script loops that vary start/end slightly.
+    @Query("""
+        SELECT COUNT(h) > 0 FROM ReservationHold h
+        WHERE h.userId = :userId
+          AND h.assetId = :assetId
+          AND h.startTime < :endTime
+          AND h.endTime > :startTime
+          AND h.createdAt > :threshold
+    """)
+    boolean existsRecentHoldOverlap(
+            @Param("userId") Long userId,
+            @Param("assetId") Long assetId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("threshold") LocalDateTime threshold);
 }

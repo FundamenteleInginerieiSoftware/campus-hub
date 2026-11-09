@@ -95,7 +95,7 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(
                         eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
                 .thenReturn(0L);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationHoldRepository.save(any(ReservationHold.class))).thenAnswer(inv -> {
             ReservationHold h = inv.getArgument(0);
@@ -184,7 +184,7 @@ class ReservationHoldServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -323,7 +323,7 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(
                         eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
                 .thenReturn(0L);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L); // Boundary: 1 active reservation (max quota is 2)
         when(reservationHoldRepository.save(any(ReservationHold.class))).thenAnswer(inv -> {
             ReservationHold h = inv.getArgument(0);
@@ -355,7 +355,7 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(
                         eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
                 .thenReturn(0L);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L); // Boundary: 2 active reservations -> limit reached
 
         assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END)))
@@ -400,7 +400,7 @@ class ReservationHoldServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L); // Boundary: 1 active reservation (limit is 2)
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -431,7 +431,7 @@ class ReservationHoldServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L); // Boundary: 2 active reservations -> limit reached
 
         assertThatThrownBy(() -> reservationService.confirmHold(1L))
@@ -468,7 +468,7 @@ class ReservationHoldServiceTest {
         assertThat(response.id())
                 .as("admin override: confirmed reservation ID must be returned; see ReservationService.confirmHold")
                 .isEqualTo(55L);
-        verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
     @Test
@@ -530,7 +530,8 @@ class ReservationHoldServiceTest {
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(reservationRepository.countByUserIdAndStatusIn(studentId, ReservationStatus.ACTIVE_STATUSES))
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                        studentId, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L);
 
         assertThatThrownBy(() -> reservationService.confirmHold(1L))
@@ -587,5 +588,31 @@ class ReservationHoldServiceTest {
                         "existence: releasing non-existent hold must receive 404 Not Found; see ReservationService.releaseHold")
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Reservation hold not found");
+    }
+
+    @Test
+    @DisplayName("createHold: rejects if cooldown is active for same slot (#240 point 4)")
+    void createHold_rejectsIfCooldownActive() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(-1L)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), any(), any(), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsRecentHoldOverlap(eq(USER_ID), eq(ASSET_ID), any(), any(), any()))
+                .thenReturn(true);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateHoldRequest req = new CreateHoldRequest(ASSET_ID, start, end);
+
+        assertThatThrownBy(() -> reservationService.createHold(req))
+                .as(
+                        "hold cooldown: student cannot repeatedly hold and release overlapping slots; see ReservationService.createHold")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("You recently held an overlapping slot on this equipment");
     }
 }

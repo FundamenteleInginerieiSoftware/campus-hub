@@ -102,4 +102,53 @@ class ReservationHoldRepositoryTest {
         assertThat(reloaded1.getStatus()).isEqualTo(HoldStatus.EXPIRED);
         assertThat(reloaded2.getStatus()).isEqualTo(HoldStatus.ACTIVE);
     }
+
+    @Test
+    @DisplayName(
+            "existsRecentHoldOverlap: detects recent hold on overlapping slot within cooldown threshold (#240 point 4)")
+    void existsRecentHoldOverlap_detectsOverlappingHoldWithinThreshold() {
+        // Hold on 14:00 - 16:00 created at NOW
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, EXPIRES, NOW);
+        reservationHoldRepository.saveAndFlush(hold);
+
+        LocalDateTime threshold = NOW.minusMinutes(2);
+
+        // 1. Exact slot (14:00 - 16:00) overlaps
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(USER_ID, ASSET_ID, START, END, threshold))
+                .as("cooldown: exact slot must match recent hold")
+                .isTrue();
+
+        // 2. Sub-slot (14:00 - 15:30) overlaps — prevents script variation loop (#240 review)
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(
+                        USER_ID, ASSET_ID, START, START.plusMinutes(90), threshold))
+                .as("cooldown: sub-slot overlapping 14:00-16:00 must be blocked by cooldown")
+                .isTrue();
+
+        // 3. Partial overlap (15:00 - 17:00) overlaps
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(
+                        USER_ID, ASSET_ID, START.plusHours(1), END.plusHours(1), threshold))
+                .as("cooldown: partially overlapping window must be blocked")
+                .isTrue();
+
+        // 4. Non-overlapping abutting slot (16:00 - 18:00) does NOT overlap
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(
+                        USER_ID, ASSET_ID, END, END.plusHours(2), threshold))
+                .as("cooldown: adjacent non-overlapping slot must not be blocked")
+                .isFalse();
+
+        // 5. Older hold outside threshold (threshold = NOW + 1s) does NOT match
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(USER_ID, ASSET_ID, START, END, NOW.plusSeconds(1)))
+                .as("cooldown: hold created before threshold must not trigger cooldown")
+                .isFalse();
+
+        // 6. Different user does NOT match
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(999L, ASSET_ID, START, END, threshold))
+                .as("cooldown: another student's recent hold must not trigger cooldown for this user")
+                .isFalse();
+
+        // 7. Different asset does NOT match
+        assertThat(reservationHoldRepository.existsRecentHoldOverlap(USER_ID, 999L, START, END, threshold))
+                .as("cooldown: recent hold on another asset must not trigger cooldown")
+                .isFalse();
+    }
 }
