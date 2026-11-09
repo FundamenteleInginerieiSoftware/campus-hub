@@ -1,5 +1,6 @@
 package com.campus.reservation.web;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
@@ -18,10 +19,12 @@ public record CreateReservationRequest(
                 description = "Booking slot start time (must be aligned to :00 or :30, future weekday 09:00-20:00)",
                 example = "2026-11-10T14:00:00")
         @NotNull
+        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
         LocalDateTime startTime,
 
         @Schema(
                 description = "Booking slot end time (must be aligned to :00 or :30, max 4 hours duration)",
                 example = "2026-11-10T16:00:00")
         @NotNull
+        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
         LocalDateTime endTime) {}
