@@ -100,10 +100,11 @@ public class ReservationAnalyticsService {
         }
 
         // 3. Asset summaries & utilization breakdown
+        // CatalogApi does not expose an asset enumeration facade, so we track utilization across
+        // all equipment assets known to the reservation repository.
         Set<Long> allAssetIds = new TreeSet<>(reservationRepository.findDistinctAssetIds());
         List<AssetUtilizationItem> assetItems = new ArrayList<>();
         Map<String, List<Long>> modelToAssetIds = new HashMap<>();
-        Map<String, String> modelToCategoryName = new HashMap<>();
 
         for (Long assetId : allAssetIds) {
             try {
