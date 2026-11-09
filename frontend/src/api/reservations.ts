@@ -48,6 +48,26 @@ export type CreateReservationRequest = {
   endTime: string // "YYYY-MM-DDTHH:mm:ss"
 }
 
+export type HoldStatus = 'ACTIVE' | 'CONFIRMED' | 'RELEASED' | 'EXPIRED'
+
+export type ReservationHoldResponse = {
+  id: number
+  assetId: number
+  userId: number
+  startTime: string
+  endTime: string
+  expiresAt: string
+  status: HoldStatus
+  createdAt: string
+  remainingSeconds: number
+}
+
+export type CreateHoldRequest = {
+  assetId: number
+  startTime: string
+  endTime: string
+}
+
 export type AvailabilityResponse = {
   assetId: number | null
   categoryId: number | null
@@ -119,6 +139,34 @@ export function cancelReservation(id: number) {
  */
 export function createReservation(request: CreateReservationRequest) {
   return apiFetch<Reservation>('/api/v1/reservations', { method: 'POST', body: request })
+}
+
+/**
+ * Acquires a temporary 1-minute slot hold on an asset (POST /api/v1/reservations/holds).
+ */
+export function createHold(request: CreateHoldRequest) {
+  return apiFetch<ReservationHoldResponse>('/api/v1/reservations/holds', {
+    method: 'POST',
+    body: request,
+  })
+}
+
+/**
+ * Confirms an active slot hold into a confirmed reservation (POST /api/v1/reservations/holds/{id}/confirm).
+ */
+export function confirmHold(holdId: number) {
+  return apiFetch<Reservation>(`/api/v1/reservations/holds/${holdId}/confirm`, {
+    method: 'POST',
+  })
+}
+
+/**
+ * Releases an active slot hold early (POST /api/v1/reservations/holds/{id}/release).
+ */
+export function releaseHold(holdId: number) {
+  return apiFetch<ReservationHoldResponse>(`/api/v1/reservations/holds/${holdId}/release`, {
+    method: 'POST',
+  })
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   Grid,
   Group,
   Paper,
+  Progress,
   Stack,
   Text,
   Tooltip,
@@ -19,18 +20,24 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconClock,
+  IconLock,
+  IconLockOpen,
   IconX,
 } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   checkAvailability,
+  confirmHold,
+  createHold,
   createReservation,
   nowInBucharest,
   parseCampusLocalDateTime,
+  releaseHold,
   type AssetSummary,
   type AvailabilityResponse,
   type Reservation,
+  type ReservationHoldResponse,
 } from '../api/reservations.ts'
 import ErrorAlert from './ErrorAlert.tsx'
 
@@ -182,6 +189,46 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
 
+  // 1-minute slot hold state (concurrency locking)
+  const [activeHold, setActiveHold] = useState<ReservationHoldResponse | null>(null)
+  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number>(0)
+  const [holdLoading, setHoldLoading] = useState(false)
+  const [holdError, setHoldError] = useState<unknown>(null)
+  const activeHoldRef = useRef<ReservationHoldResponse | null>(null)
+  const deadlineRef = useRef<number>(0)
+
+  useEffect(() => {
+    activeHoldRef.current = activeHold
+  }, [activeHold])
+
+  // Live countdown timer for active hold using wall-clock deadline to resist background tab throttling
+  useEffect(() => {
+    if (!activeHold) return
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.round((deadlineRef.current - Date.now()) / 1000))
+      setHoldRemainingSeconds(remaining)
+      if (remaining <= 0) {
+        activeHoldRef.current = null
+        setActiveHold(null)
+      }
+    }
+    updateTimer()
+    const timer = setInterval(updateTimer, 1000)
+    return () => clearInterval(timer)
+  }, [activeHold])
+
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (activeHoldRef.current) {
+        releaseHold(activeHoldRef.current.id).catch(() => {})
+        activeHoldRef.current = null
+      }
+    }
+  }, [])
+
   // Compute the 5 weekdays for the active week view.
   const weekDays = useMemo(() => {
     return Array.from({ length: 5 }, (_, i) => {
@@ -240,15 +287,27 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }, [asset.id, startIso, endIso])
 
   function selectSlot(day: string, time: string) {
+    if (activeHoldRef.current) {
+      releaseHold(activeHoldRef.current.id).catch(() => {})
+      activeHoldRef.current = null
+      setActiveHold(null)
+    }
     setSelectedDay(day)
     setSelectedStartTime(time)
     setBookingError(null)
+    setHoldError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
   function handleDurationChange(val: number) {
+    if (activeHoldRef.current) {
+      releaseHold(activeHoldRef.current.id).catch(() => {})
+      activeHoldRef.current = null
+      setActiveHold(null)
+    }
     setDurationMinutes(val)
     setBookingError(null)
+    setHoldError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
@@ -316,15 +375,69 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     selectSlot(schedule.day, schedule.time)
   }
 
-  async function handleConfirmBooking() {
-    setBookingLoading(true)
+  async function handleAcquireHold() {
+    setHoldLoading(true)
+    setHoldError(null)
     setBookingError(null)
     try {
-      const res = await createReservation({
+      const hold = await createHold({
         assetId: asset.id,
         startTime: startIso,
         endTime: endIso,
       })
+      if (!isMountedRef.current) {
+        // Component unmounted while createHold was in-flight: release immediately to prevent leaking
+        releaseHold(hold.id).catch(() => {})
+        return
+      }
+      activeHoldRef.current = hold
+      deadlineRef.current = Date.now() + (hold.remainingSeconds > 0 ? hold.remainingSeconds : 60) * 1000
+      setActiveHold(hold)
+      setHoldRemainingSeconds(hold.remainingSeconds > 0 ? hold.remainingSeconds : 60)
+    } catch (err) {
+      if (isMountedRef.current) {
+        setHoldError(err)
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setHoldLoading(false)
+      }
+    }
+  }
+
+  async function handleReleaseHold() {
+    if (!activeHold) return
+    setHoldLoading(true)
+    try {
+      await releaseHold(activeHold.id)
+      activeHoldRef.current = null
+      setActiveHold(null)
+      setHoldRemainingSeconds(0)
+    } catch (err) {
+      setHoldError(err)
+    } finally {
+      setHoldLoading(false)
+    }
+  }
+
+  async function handleConfirmBooking() {
+    setBookingLoading(true)
+    setBookingError(null)
+    try {
+      let res: Reservation
+      if (activeHold) {
+        res = await confirmHold(activeHold.id)
+        activeHoldRef.current = null
+        setActiveHold(null)
+      } else {
+        res = await createReservation({
+          assetId: asset.id,
+          startTime: startIso,
+          endTime: endIso,
+        })
+        activeHoldRef.current = null
+        setActiveHold(null)
+      }
       if (onSuccess) {
         onSuccess(res)
       } else {
@@ -741,17 +854,79 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 </Text>
               </Stack>
 
-              <Button
-                size="md"
-                color="campus"
-                fullWidth
-                onClick={handleConfirmBooking}
-                loading={bookingLoading}
-                disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE'}
-                mt="xs"
-              >
-                Confirm booking
-              </Button>
+              <ErrorAlert error={holdError || bookingError} />
+
+              {/* Concurrency Slot Hold Locking Banner */}
+              {activeHold ? (
+                <Paper withBorder p="xs" radius="sm" bg="var(--mantine-color-blue-light)">
+                  <Group justify="space-between" mb={4}>
+                    <Group gap={6}>
+                      <IconLock size={16} color="var(--mantine-color-blue-filled)" />
+                      <Text size="xs" fw={700} c="blue">
+                        Slot locked for you: {holdRemainingSeconds}s
+                      </Text>
+                    </Group>
+                    <Badge size="xs" color={holdRemainingSeconds < 15 ? 'red' : 'blue'}>
+                      {holdRemainingSeconds}s left
+                    </Badge>
+                  </Group>
+                  <Progress
+                    value={(holdRemainingSeconds / 60) * 100}
+                    color={holdRemainingSeconds < 15 ? 'red' : 'blue'}
+                    size="xs"
+                    animated
+                    mb="xs"
+                  />
+                  <Text size="xs" c="dimmed" mb="xs">
+                    Slot held exclusively. Click Confirm to finalize your booking or Release to free the slot.
+                  </Text>
+                  <Group gap="xs" grow>
+                    <Button
+                      size="xs"
+                      color="teal"
+                      leftSection={<IconCheck size={14} />}
+                      onClick={handleConfirmBooking}
+                      loading={bookingLoading}
+                    >
+                      Confirm reservation
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconLockOpen size={14} />}
+                      onClick={handleReleaseHold}
+                      disabled={bookingLoading || holdLoading}
+                    >
+                      Release hold
+                    </Button>
+                  </Group>
+                </Paper>
+              ) : (
+                <Stack gap="xs" mt="xs">
+                  <Button
+                    size="sm"
+                    variant="light"
+                    color="blue"
+                    fullWidth
+                    leftSection={<IconLock size={16} />}
+                    onClick={handleAcquireHold}
+                    loading={holdLoading}
+                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE'}
+                  >
+                    Lock slot (1-min hold)
+                  </Button>
+                  <Button
+                    size="md"
+                    color="campus"
+                    fullWidth
+                    onClick={handleConfirmBooking}
+                    loading={bookingLoading}
+                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE'}
+                  >
+                    Confirm booking
+                  </Button>
+                </Stack>
+              )}
             </Stack>
           </Card>
         </Grid.Col>
