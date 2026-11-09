@@ -1,0 +1,111 @@
+{
+  "slug": "multimeter-basics",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 1,
+  "title": {
+    "ro": "Testarea unui circuit cu multimetrul",
+    "en": "Testing a circuit with the multimeter"
+  },
+  "summary": {
+    "ro": "Învață să măsori corect continuitatea, rezistența, căderea de tensiune și curentul printr-un circuit cu LED pe breadboard folosind multimetrul Fluke 115.",
+    "en": "Learn how to safely measure continuity, resistance, voltage drop, and series current on a breadboard LED circuit using the Fluke 115 multimeter."
+  },
+  "keywords": {
+    "ro": ["multimetru", "tensiune", "curent", "rezistenta", "continuitate"],
+    "en": ["multimeter", "voltage", "current", "resistance", "continuity"]
+  },
+  "components": [
+    {
+      "model": "Fluke 115",
+      "quantity": 1,
+      "why": {
+        "ro": "Multimetru digital True-RMS pentru măsurarea rezistenței, continuității, tensiunii DC și curentului DC.",
+        "en": "True-RMS digital multimeter for resistance, continuity, DC voltage, and DC current measurements."
+      }
+    },
+    {
+      "model": "Breadboard + jumper wire kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Permite montarea rapidă a rezistorului și LED-ului și deschiderea buclei pentru măsurarea curentului în serie.",
+        "en": "Lets you build the resistor-LED circuit and easily break the loop to measure current in series."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Rezistoare (de exemplu 330 Ω și 1 kΩ) și un LED de 5 mm",
+      "en": "Assorted resistors (e.g. 330 Ω and 1 kΩ) and a 5 mm LED"
+    },
+    {
+      "ro": "Baterie de 9 V cu conector sau sursă de 5 V",
+      "en": "9 V battery with snap connector or a 5 V power source"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Verifică firele și breadboard-ul cu testul de continuitate",
+        "en": "Check jumper wires and breadboard tracks with continuity mode"
+      },
+      "text": {
+        "ro": "Introdu cablul negru în borna COM și cablul roșu în borna V/Ω. Rotește selectorul pe simbolul de continuitate (bip) și atinge capetele fiecărui fir jumper pentru a confirma că nu este întrerupt.",
+        "en": "Plug the black lead into COM and the red lead into V/Ω. Turn the dial to the continuity (beeper) symbol and touch both ends of each jumper wire to confirm it is intact."
+      }
+    },
+    {
+      "title": {
+        "ro": "Măsoară rezistorul înainte de alimentare",
+        "en": "Measure the resistor before applying power"
+      },
+      "text": {
+        "ro": "Comută selectorul pe Ω (rezistență) și măsoară rezistorul în afara circuitului alimentat. Verifică dacă valoarea afișată corespunde codului culorilor.",
+        "en": "Switch the dial to Ω (resistance) and measure the resistor with no power connected. Confirm the reading matches its color-band value."
+      }
+    },
+    {
+      "title": {
+        "ro": "Montează circuitul cu rezistor și LED",
+        "en": "Build the series resistor and LED circuit"
+      },
+      "text": {
+        "ro": "Montează rezistorul în serie cu anodul (piciorușul lung) al LED-ului pe breadboard și conectează catodul la borna negativă a sursei. Alimentează circuitul și verifică aprinderea LED-ului.",
+        "en": "Place the resistor in series with the LED anode (longer leg) on the breadboard and connect the cathode to the negative rail. Connect power and verify the LED lights up."
+      }
+    },
+    {
+      "title": {
+        "ro": "Măsoară tensiunea în paralel pe componente",
+        "en": "Measure voltage drops in parallel"
+      },
+      "text": {
+        "ro": "Rotește selectorul pe V DC (tensiune continuă). Cu cablul roșu în borna V/Ω, pune sondele în paralel pe bornele rezistorului și apoi pe bornele LED-ului; suma celor două tensiuni trebuie să fie egală cu tensiunea sursei.",
+        "en": "Turn the dial to V DC. With the red lead in the V/Ω jack, touch the probes in parallel across the resistor and then across the LED; the two drops should add up to the supply voltage."
+      }
+    },
+    {
+      "title": {
+        "ro": "Măsoară curentul în serie și mută sonda înapoi pe V/Ω",
+        "en": "Measure current in series and return the lead to V/Ω"
+      },
+      "text": {
+        "ro": "Deconectează alimentarea, mută cablul roșu în borna A, selectează A DC și întrerupe circuitul între rezistor și LED. Închide circuitul prin sondele multimetrului, citește curentul, apoi mută imediat cablul roșu înapoi în borna V/Ω.",
+        "en": "Disconnect power, move the red lead to the A jack, select A DC, and open the circuit between the resistor and LED. Bridge the gap with the meter probes to read the current, then immediately move the red lead back to V/Ω."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Punerea sondelor în paralel pe sursă în modul de curent (A): multimetrul are rezistență internă aproape zero pe borna A, scurtcircuitează sursa și arde siguranța internă.",
+      "en": "Placing the probes in parallel across a voltage source while in current (A) mode: the ammeter shunt has near-zero resistance, shorting the source and blowing the meter's fuse."
+    },
+    {
+      "ro": "Măsurarea rezistenței sau a continuității pe un circuit sub tensiune: curentul din circuit falsifică valoarea afișată și poate declanșa protecția multimetrului.",
+      "en": "Measuring resistance or continuity on a live circuit: external circuit voltage skews the reading and can trip the meter's input protection."
+    },
+    {
+      "ro": "Uitatul cablului roșu în borna de curent (10 A) când revii la măsurarea unei tensiuni: produce un scurtcircuit direct prin șuntul de curent.",
+      "en": "Leaving the red test lead in the 10 A current jack when switching back to measure voltage: creates a direct short circuit through the current shunt."
+    }
+  ]
+}

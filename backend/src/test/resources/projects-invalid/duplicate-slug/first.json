@@ -1,0 +1,18 @@
+{
+  "slug": "same-slug",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 1,
+  "title": { "ro": "Primul", "en": "First" },
+  "summary": { "ro": "Sumar", "en": "Summary" },
+  "keywords": { "ro": ["test"], "en": ["test"] },
+  "components": [
+    { "model": "Arduino Uno R3", "quantity": 1, "why": { "ro": "De ce", "en": "Why" } }
+  ],
+  "bringYourself": [],
+  "steps": [
+    { "title": { "ro": "Pas 1", "en": "Step 1" }, "text": { "ro": "Text", "en": "Text" } }
+  ],
+  "mistakes": [
+    { "ro": "Greșeală", "en": "Mistake" }
+  ]
+}
