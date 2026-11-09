@@ -2,6 +2,7 @@ import {
   IconAlertTriangle,
   IconArrowsExchange,
   IconBox,
+  IconBulb,
   IconCalendarEvent,
   IconClipboardList,
   IconHistory,
@@ -16,7 +17,13 @@ export type NavGroup = { title: string; items: NavItem[] }
 // The side menu per role, in the same groups and order as the prototype. When you add a page,
 // add its route in App.tsx and, if it belongs in the menu, a line here.
 const STUDENT_MENU: NavGroup[] = [
-  { title: 'Equipment', items: [{ label: 'Catalog', path: '/catalog', icon: IconLayoutGrid }] },
+  {
+    title: 'Equipment',
+    items: [
+      { label: 'Catalog', path: '/catalog', icon: IconLayoutGrid },
+      { label: 'Projects', path: '/projects', icon: IconBulb },
+    ],
+  },
   {
     title: 'Mine',
     items: [
@@ -40,6 +47,7 @@ const ADMIN_MENU: NavGroup[] = [
     title: 'Equipment',
     items: [
       { label: 'Catalog', path: '/catalog', icon: IconLayoutGrid },
+      { label: 'Projects', path: '/projects', icon: IconBulb },
       { label: 'Inventory', path: '/admin/inventory', icon: IconBox },
     ],
   },
