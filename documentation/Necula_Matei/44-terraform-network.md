@@ -81,7 +81,7 @@ Only Matei runs this, with the `terraform-admin` CLI profile (`09-aws-architectu
    cd infra/bootstrap && terraform init && terraform apply
    ```
    It prints `state_bucket = "campus-hub-tfstate-<suffix>"`.
-2. **Once:** paste that name into `infra/backend.tf` (replaces `STATE_BUCKET_PLACEHOLDER`) and commit it. The name is not a secret.
+2. **Once:** paste that name into `infra/backend.tf` (done: `campus-hub-tfstate-099cd54b`) and commit it. The name is not a secret.
 3. **Every time:**
    ```bash
    cd infra && terraform init && terraform plan && terraform apply
