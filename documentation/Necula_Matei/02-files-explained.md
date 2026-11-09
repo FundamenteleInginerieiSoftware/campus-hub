@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`) and its confirmation banner (`43-project-bundle-banner.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) and Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -23,6 +23,8 @@ campus-hub/
 ├── frontend/src/  pages/ReservationsDeskPage.tsx  api/reservationDesk.ts   (26-reservations-desk-page.md)
 │                 pages/Projects{Page,Parts}.tsx  pages/ProjectDetailsPage.tsx  api/projects.ts   (41-projects-pages.md)
 │                 "Reserve all" button in ProjectDetailsPage.tsx + reserveProject() in api/projects.ts   (42-project-reserve-all.md, 43-project-bundle-banner.md)
+├── infra/  versions.tf  backend.tf  variables.tf  network.tf  security_groups.tf  outputs.tf  .terraform.lock.hcl   (44-terraform-network.md)
+│   └── bootstrap/  main.tf  .terraform.lock.hcl          (44-terraform-network.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
     ├── gradlew  gradlew.bat  gradle/wrapper/
@@ -160,6 +162,18 @@ campus-hub/
 | `S3StorageServiceTest`, `SesNotificationServiceTest` | Check what we ask S3 and SES to do, without connecting to AWS. |
 | `ProdProfileStartupTest` | Starts the whole app in AWS mode, so a missing piece shows up in CI instead of on the server. |
 
+### `infra/`: AWS as code with Terraform, part 1 (`44-terraform-network.md`)
+| File | What it does |
+|---|---|
+| `infra/bootstrap/main.tf` | Run once, ever: creates the private, encrypted bucket where Terraform keeps its list of what it created. Terraform refuses to delete it. |
+| `infra/versions.tf` | Which Terraform and plugin versions we need, the region, and a `campus-hub` label on everything we create (to find it on the bill). |
+| `infra/backend.tf` | Tells Terraform to keep its list in that bucket, never in GitHub, and to lock it while someone works on it. |
+| `infra/variables.tf` | The few settings you may change: the region and the network's address range. |
+| `infra/network.tf` | Our private network on AWS: a public part for the app server and two private parts for the database, with no way to the internet. |
+| `infra/security_groups.tf` | The firewall: only CloudFront may reach the app server, only the app server may reach the database, no SSH. |
+| `infra/outputs.tf` | The IDs the next steps (the server in W7) need, printed by `terraform output`. |
+| `.terraform.lock.hcl` (two) | The exact plugin versions, so every run builds the same thing. |
+
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
 |---|---|
@@ -236,6 +250,8 @@ campus-hub/
 | `.idea/` | My IntelliJ settings. |
 | `CLAUDE.local.md` | My private notes for Claude, hidden through `.git/info/exclude`. |
 | `backend/uploads/` | Photos uploaded while testing locally. |
+| `infra/**/.terraform/`, `*.tfplan` | Terraform's plugin downloads and saved plans, recreated on every run. |
+| `infra/bootstrap/terraform.tfstate` | The state bucket's own small list. No secrets in it; harmless to lose (`44-terraform-network.md`). |
 
 ---
 
@@ -248,7 +264,7 @@ campus-hub/
 | `CODEOWNERS` | One line, `*` = all four of us, so GitHub requests every teammate on every PR (never the author). Since 4 Nov 2026 the `protect-main` ruleset no longer requires a code owner's approval: 1 approval from anyone is enough. Before that, every path had owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania). |
 | `ci.yml` | One job named **`ci`**, which is the exact name the `protect-main` ruleset requires. A `postgres:18` service container with `campus_test`; `SPRING_DATASOURCE_*` env vars point the tests at it. Java 25 (Temurin) + `gradle/actions/setup-gradle@v6`, then `./gradlew build` and the JaCoCo report as an artifact. Every backend step has `if: hashFiles('backend/gradlew') != ''` and every frontend step `hashFiles('frontend/package.json')`, so docs-only PRs (like #12) still pass. |
 | Templates | PR checklist uses `./gradlew build`; the task template's Definition of Done says "works from a fresh database (reset in pgAdmin)". |
-| `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |
+| `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; Terraform: `infra/**/.terraform/`, `*.tfplan`, `*.tfstate`, `*.tfstate.backup`, `*.tfvars`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |
 | `Dockerfile` / `.dockerignore` | 3 stages: `node:24-slim` builds `frontend/dist`; `eclipse-temurin:25-jdk` caches Gradle dependencies, copies `dist` into `src/main/resources/static`, runs `bootJar` (no tests, CI ran them); `eclipse-temurin:25-jre-alpine` runs only `app.jar` as non-root user `app`, `SPRING_PROFILES_ACTIVE=prod`, `HEALTHCHECK` on `/actuator/health`, `-XX:MaxRAMPercentage=75`. `.dockerignore` keeps `.git`, `node_modules`, build output and `.env` files out. Details in `19-dockerfile.md`. |
 
 ### `build.gradle`
@@ -317,6 +333,16 @@ campus-hub/
 |---|---|
 | `aws-architecture.drawio` | CloudFront → EC2 `t3.small` (Docker, API + React build) → RDS PostgreSQL 18 in private subnets; S3, SES, SSM Parameter Store, ECR, CloudWatch Logs; deploy from GitHub Actions through ECR + SSM Run Command. No ECS, ALB or NAT |
 | ADRs | Format: Status, Context, Decision, Why, Consequences (+ Alternatives). Each one has a matching row in `docs/decisions.md` §4. Details in `09-aws-architecture.md` |
+
+### `infra/` (Terraform)
+| File | Key points |
+|---|---|
+| `bootstrap/main.tf` | Own `terraform` + `provider` blocks (region written out), **local** state. `random_id` (4 bytes) → `aws_s3_bucket` `campus-hub-tfstate-<hex>` with `prevent_destroy`, versioning, SSE `AES256`, all four public-access blocks. Output `state_bucket` → paste into `backend.tf`. Details in `44-terraform-network.md` |
+| `versions.tf` | `required_version >= 1.10` (S3-native locking), `aws ~> 6.72`, `random ~> 3.9` (locked: 6.72.0, 3.9.1); provider `region = var.aws_region`, `default_tags` `Project`/`ManagedBy` |
+| `backend.tf` | `backend "s3"`: bucket `campus-hub-tfstate-099cd54b` (from bootstrap), key `campus-hub/terraform.tfstate`, `eu-central-1`, `encrypt`, `use_lockfile` (no DynamoDB). Backend blocks can't read variables, so values are literal |
+| `network.tf` | `aws_vpc` `10.0.0.0/16` with DNS support + hostnames (RDS host name); IGW; public subnet `cidrsubnet(…, 8, 1)` in AZ[0], `map_public_ip_on_launch`, route `0.0.0.0/0` → IGW; DB subnets `count = 2`, `cidrsubnet(…, 8, 11 + i)` in AZ[0]/AZ[1], route table with only the implicit `local` route. No NAT gateway (ADR-002) |
+| `security_groups.tf` | `campus-hub-app`: ingress 8080 from managed prefix list `com.amazonaws.global.cloudfront.origin-facing` (weighs 55 of 60 rules), egress 443 to `0.0.0.0/0`, egress 5432 to the DB group. `campus-hub-db`: ingress 5432 from the app group (by group id, not IP), no egress. One `aws_vpc_security_group_{ingress,egress}_rule` resource per rule |
+| `outputs.tf` | VPC, public subnet, DB subnets and both security group IDs for W7 |
 
 ### `docs/report/` and the JWT diagram
 | File | Key points |

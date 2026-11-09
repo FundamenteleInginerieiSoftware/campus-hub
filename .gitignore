@@ -21,7 +21,8 @@ Thumbs.db
 # Secrets & infra
 .env
 *.env.local
-infra/.terraform/
+infra/**/.terraform/
+*.tfplan
 *.tfstate
 *.tfstate.backup
 *.tfvars
