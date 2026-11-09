@@ -1,7 +1,9 @@
 package com.campus.reservation.web;
 
 import com.campus.common.paging.PageResponse;
+import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.idempotency.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,6 +41,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final CurrentUser currentUser;
+    private final IdempotencyService idempotencyService;
 
     @Operation(
             summary = "Create a reservation",
@@ -52,9 +57,15 @@ public class ReservationController {
         @ApiResponse(responseCode = "409", description = "Booking conflict, quota exceeded, or outside opening hours")
     })
     @PostMapping
-    public ResponseEntity<ReservationResponse> create(@Valid @RequestBody CreateReservationRequest request) {
-        ReservationResponse response = reservationService.createReservation(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    public ResponseEntity<ReservationResponse> create(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody CreateReservationRequest request) {
+        Long userId = currentUser.id();
+        return idempotencyService.execute(
+                idempotencyKey, userId, "POST", "/api/v1/reservations", request, ReservationResponse.class, () -> {
+                    ReservationResponse response = reservationService.createReservation(request);
+                    return ResponseEntity.status(HttpStatus.CREATED).body(response);
+                });
     }
 
     @Operation(
@@ -164,8 +175,18 @@ public class ReservationController {
     })
     @PostMapping("/bundle")
     public ResponseEntity<MultiAssetReservationResponse> createBundle(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateMultiAssetReservationRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createMultiAssetReservation(request));
+        Long userId = currentUser.id();
+        return idempotencyService.execute(
+                idempotencyKey,
+                userId,
+                "POST",
+                "/api/v1/reservations/bundle",
+                request,
+                MultiAssetReservationResponse.class,
+                () -> ResponseEntity.status(HttpStatus.CREATED)
+                        .body(reservationService.createMultiAssetReservation(request)));
     }
 
     @Operation(
