@@ -70,10 +70,15 @@ resource "aws_iam_role_policy" "app" {
         # The deploy script reads /campus/* into the container's environment (ADR-003).
         # SecureString values are decrypted with the AWS-managed aws/ssm key, whose key policy
         # already allows that through SSM, so no kms:Decrypt is needed here.
-        Sid      = "ReadAppParameters"
-        Effect   = "Allow"
-        Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/campus/*"
+        # Two ARNs: GetParametersByPath is checked against the folder itself ("parameter/campus"),
+        # which "parameter/campus/*" alone doesn't match.
+        Sid    = "ReadAppParameters"
+        Effect = "Allow"
+        Action = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/campus",
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/campus/*",
+        ]
       },
       {
         # Docker's awslogs driver (W7) writes the container output to our log group only.

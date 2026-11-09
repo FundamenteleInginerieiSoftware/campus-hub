@@ -39,11 +39,13 @@ resource "aws_ssm_parameter" "db_username" {
 }
 
 # Only exists while the database exists (db_enabled in rds.tf): the URL needs its host name.
+# sslmode=require: the driver refuses a connection that isn't encrypted (its default "prefer"
+# would quietly fall back to plain text). RDS's certificate isn't checked, so no CA file needed.
 resource "aws_ssm_parameter" "db_url" {
   count = var.db_enabled ? 1 : 0
   name  = "/campus/DB_URL"
   type  = "String"
-  value = "jdbc:postgresql://${aws_db_instance.main[0].endpoint}/campus"
+  value = "jdbc:postgresql://${aws_db_instance.main[0].endpoint}/campus?sslmode=require"
 }
 
 resource "aws_ssm_parameter" "aws_region" {

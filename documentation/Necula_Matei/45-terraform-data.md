@@ -46,7 +46,7 @@
 | `deletion_protection` / `skip_final_snapshot` | `false` / `true` | `terraform destroy` works without manual steps and leaves no paid snapshot. In production both would be the other way round |
 | `apply_immediately` | `true` | A change (e.g. a new password) applies now, not in the weekly maintenance window |
 
-**Careful:** setting `db_enabled` back to `false`, or running a later `terraform apply` **without** `-var db_enabled=true`, deletes the database and its data, with no final snapshot. Once the DB is on, pass the flag every time (or set it in a `terraform.tfvars`, which git ignores).
+**Careful:** setting `db_enabled` back to `false`, or running a later `terraform apply` **without** `-var db_enabled=true`, deletes the database and its data, with no final snapshot. Once the DB is on, pass the flag every time; the W7 deploy PR flips the default in `variables.tf` to `true` so nobody can forget it.
 
 ### IAM: what the server may do
 
@@ -57,7 +57,7 @@ The role can only be worn by EC2 (`sts:AssumeRole` for `ec2.amazonaws.com`); EC2
 | `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` | `<photo-bucket-arn>/*` | `S3StorageService` (#129): store, load, delete photos |
 | `s3:ListBucket` | `<photo-bucket-arn>` | `S3StorageService`: without it S3 answers 403 instead of 404 for a missing photo, so the code can't tell "not found" from "not allowed" (#177, doc 29) |
 | `ses:SendEmail` | `*` | `SesNotificationService` (#129). SES itself limits it: only verified sender identities (W9), and only verified recipients while in the SES sandbox |
-| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` | `parameter/campus/*` | Deploy script (W8): reads `/campus/*` into the container's env file (ADR-003). No `kms:Decrypt`: the AWS-managed `aws/ssm` key already allows decryption through SSM |
+| `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` | `parameter/campus` + `parameter/campus/*` | Deploy script (W8): reads `/campus/*` into the container's env file (ADR-003). Two ARNs because `GetParametersByPath` is checked against the folder itself, which `/*` alone doesn't match. No `kms:Decrypt`: the AWS-managed `aws/ssm` key already allows decryption through SSM |
 | `logs:CreateLogStream`, `logs:PutLogEvents` | `<log-group-arn>:*` | Docker `awslogs` driver (W7): container output into `/campus-hub/app` |
 | `AmazonSSMManagedInstanceCore` (AWS-managed) | | Session Manager (our shell, no SSH) and Run Command (the W8 deploy) |
 | `AmazonEC2ContainerRegistryReadOnly` (AWS-managed) | | `docker pull` of our image from ECR |
@@ -68,7 +68,7 @@ Each parameter name is exactly the variable `application-prod.yml` reads, so the
 
 | Parameter | Type | Value from | Env var | Status |
 |---|---|---|---|---|
-| `/campus/DB_URL` | String | `jdbc:postgresql://<rds-endpoint>/campus` | `DB_URL` | Only while `db_enabled = true` (needs the RDS host name) |
+| `/campus/DB_URL` | String | `jdbc:postgresql://<rds-endpoint>/campus?sslmode=require` | `DB_URL` | Only while `db_enabled = true` (needs the RDS host name). `sslmode=require`: the driver refuses an unencrypted connection instead of quietly falling back |
 | `/campus/DB_USERNAME` | String | `campus` | `DB_USERNAME` | Done |
 | `/campus/DB_PASSWORD` | SecureString | `random_password.db` (32, letters + digits) | `DB_PASSWORD` | Done |
 | `/campus/JWT_SECRET` | SecureString | `random_password.jwt` (64 characters = 64 bytes) | `JWT_SECRET` | Done. HS256 needs ≥ 32 bytes, a shorter one fails at startup (doc 23) |
@@ -139,6 +139,5 @@ Same as part 1 (`44-terraform-network.md`), from `infra/`:
 |---|---|
 | `MAIL_FROM` before the first deploy | The app refuses to start without it. Needs a verified SES identity, which the plan put in W9 |
 | `db_enabled` must be passed on every apply once on | Otherwise Terraform plans to delete the database (see the warning above) |
-| `GetParametersByPath` resource | The policy allows `parameter/campus/*`. Check on the first deploy that reading the whole `/campus` path works; if AWS checks the path itself (`parameter/campus`), add that ARN |
 | No admin on a fresh RDS | Until `ADMIN_EMAIL` / `ADMIN_PASSWORD` exist in SSM, `AdminBootstrap` does nothing (doc 18) |
 | Two `random_id "suffix"` | One in `bootstrap/` (state bucket), one in `storage.tf` (photo bucket). Separate configs, so two different suffixes; that's fine |
