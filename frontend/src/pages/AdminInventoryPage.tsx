@@ -119,6 +119,12 @@ export default function AdminInventoryPage() {
 
   useEffect(() => {
     let active = true
+
+    // Bug fixed (#230): the effect alone manages the loading spinner right when an API fetch begins.
+    // Microtask avoids React cascading render / linter warning when updating state inside an effect.
+    void Promise.resolve().then(() => {
+      if (active) setAssetsLoading(true)
+    })
     searchAssets({
       search: debouncedAssetSearch.trim() || undefined,
       page: assetCurrentPage,
@@ -129,12 +135,15 @@ export default function AdminInventoryPage() {
         if (active) {
           setAssetsPage(data)
           setError(null)
-          setAssetsLoading(false)
         }
       })
       .catch((err) => {
         if (active) {
           setError(err)
+        }
+      })
+      .finally(() => {
+        if (active) {
           setAssetsLoading(false)
         }
       })
@@ -195,7 +204,6 @@ export default function AdminInventoryPage() {
         })
       }
       closeAssetModal()
-      setAssetsLoading(true)
       setReloadTrigger((v) => v + 1)
     } catch (err) {
       setModalError(err)
@@ -211,7 +219,6 @@ export default function AdminInventoryPage() {
     try {
       await retireAsset(retiringAsset.id)
       closeRetireModal()
-      setAssetsLoading(true)
       setReloadTrigger((v) => v + 1)
     } catch (err) {
       setModalError(err)
@@ -480,7 +487,6 @@ export default function AdminInventoryPage() {
                 placeholder="Search equipment..."
                 value={assetSearchQuery}
                 onChange={(e) => {
-                  setAssetsLoading(true)
                   setAssetSearchQuery(e.currentTarget.value)
                   setAssetCurrentPage(0)
                 }}
@@ -497,10 +503,7 @@ export default function AdminInventoryPage() {
               page={assetsPage}
               columns={assetColumns}
               rowKey={(a) => a.id}
-              onPageChange={(p) => {
-                setAssetsLoading(true)
-                setAssetCurrentPage(p)
-              }}
+              onPageChange={(p) => setAssetCurrentPage(p)}
               loading={assetsLoading}
               emptyText="No equipment found in inventory."
             />

@@ -11,7 +11,7 @@ The `CatalogSeeder` acts as an automated "stocking crew":
   - **3 Lab Rooms:** A101 (Electronics Lab), B204 (Embedded Systems Lab), and C305 (Prototyping Lab).
   - **18 Assets:** Carefully organized across labs and categories.
 - **Why multiple units of the same model?** Crucially, it creates groups of identical equipment (e.g. 3 units of the `DS1054Z` digital oscilloscope). When an incident is reported on unit #1, the disaster-recovery reassignment engine can automatically find an available duplicate unit (unit #2) in the same laboratory and seamlessly transfer upcoming student reservations without human intervention.
-- It also seeds sample equipment with non-standard operational statuses (`UNDER_MAINTENANCE` and `RETIRED`) so developers and testers can immediately test catalog filtering, badge rendering, and status transition constraints.
+- It also seeds a sample equipment with retired status (`RETIRED`) so developers and testers can immediately test catalog filtering, badge rendering, and status transition constraints (note: assets are not seeded `UNDER_MAINTENANCE` without an active incident report; see doc 15 / #230).
 
 ---
 
@@ -33,7 +33,7 @@ Spring Boot executes `CommandLineRunner` beans ordered via `@Order(n)`:
 |---|---|---|---|---|
 | Oscilloscopes | A101, B204 | 5 | `DS1054Z` (x3: `RIGOL-DS1054Z-001..003`), `DSOX1204G` (x2: `KEYSIGHT-1204G-001..002`) | All `AVAILABLE` |
 | Multimeters | A101, B204 | 4 | `Fluke 115` (x3: `FLUKE-115-001..003`), `DM3058E` (x1: `RIGOL-DM3058E-001`) | All `AVAILABLE` |
-| Microcontrollers | B204 | 5 | `STM32F407G-DISC1` (x3: `STM32-DISC-001..003`), `ESP32-S3-DevKitC-1` (x2) | 4 `AVAILABLE`, 1 `UNDER_MAINTENANCE` |
+| Microcontrollers | B204 | 5 | `STM32F407G-DISC1` (x3: `STM32-DISC-001..003`), `ESP32-S3-DevKitC-1` (x2) | All `AVAILABLE` (#230) |
 | 3D Printers | C305 | 4 | `Prusa i3 MK3S+` (x2), `X1-Carbon` (x1), `Photon Mono` (x1) | 3 `AVAILABLE`, 1 `RETIRED` |
 
 ### Key Design Principles
