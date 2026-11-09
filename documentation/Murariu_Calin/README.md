@@ -45,6 +45,7 @@ Each document is structured in two parts:
 | 22 | [`22-catalog-quick-book-and-asset-details-report-button.md`](./22-catalog-quick-book-and-asset-details-report-button.md) | Catalog Quick Book Modal & Asset Details Report | Overlay booking calendar directly on catalog cards, non-retired asset problem report button |
 | 23 | [`23-bundle-transfer-hold-security-hardening.md`](./23-bundle-transfer-hold-security-hardening.md) | Bundle, Transfer & Hold Security Hardening | Multi-asset bundle privacy, P2P transfer unique index & role checks, hold overlap verification, cascade transfer cancellation |
 | 24 | [`24-reservation-api-book-bundle-facade-and-project-architecture.md`](./24-reservation-api-book-bundle-facade-and-project-architecture.md) | ReservationApi bookBundle Facade & Project Assistant | In-process atomic booking facade (1..5 assets) for project assistant, ArchUnit leaf module rule for project |
+| 25 | [`25-bundle-booking-confirmation-banner.md`](./25-bundle-booking-confirmation-banner.md) | Bundle Booking Confirmation Banner in My Reservations | Navigation state handling for `bookedBundleId`, item count banner formatting, project kit feedback |
 
 
 
