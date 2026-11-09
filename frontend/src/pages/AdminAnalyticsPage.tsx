@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -31,6 +32,7 @@ import {
   IconRefresh,
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import {
   formatLocalIsoDateTime,
   getDemandHeatmap,
@@ -137,12 +139,16 @@ export default function AdminAnalyticsPage() {
     }
   }
 
+  const displayedAssets = selectedAssetId
+    ? (utilization?.assets ?? []).filter((a) => String(a.assetId) === selectedAssetId)
+    : (utilization?.assets ?? [])
+
   function getCellColor(intensity: number, count: number): string {
-    if (count === 0) return 'var(--mantine-color-gray-1)'
-    if (intensity < 0.25) return 'var(--mantine-color-blue-1)'
-    if (intensity < 0.5) return 'var(--mantine-color-blue-3)'
-    if (intensity < 0.75) return 'var(--mantine-color-orange-3)'
-    return 'var(--mantine-color-red-5)'
+    if (count === 0) return 'transparent'
+    if (intensity < 0.25) return 'rgba(59, 130, 246, 0.18)'
+    if (intensity < 0.5) return 'rgba(59, 130, 246, 0.40)'
+    if (intensity < 0.75) return 'rgba(249, 115, 22, 0.55)'
+    return 'rgba(239, 68, 68, 0.85)'
   }
 
   function getCellTextColor(intensity: number, count: number): string {
@@ -392,31 +398,51 @@ export default function AdminAnalyticsPage() {
                     Intensity:
                   </Text>
                   <Group gap={4}>
-                    <Box w={16} h={16} style={{ backgroundColor: 'var(--mantine-color-gray-1)', borderRadius: 3 }} />
+                    <Box
+                      w={16}
+                      h={16}
+                      style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 3 }}
+                    />
                     <Text size="xs" c="dimmed">
                       0
                     </Text>
                   </Group>
                   <Group gap={4}>
-                    <Box w={16} h={16} style={{ backgroundColor: 'var(--mantine-color-blue-1)', borderRadius: 3 }} />
+                    <Box
+                      w={16}
+                      h={16}
+                      style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)', borderRadius: 3 }}
+                    />
                     <Text size="xs" c="dimmed">
                       Low
                     </Text>
                   </Group>
                   <Group gap={4}>
-                    <Box w={16} h={16} style={{ backgroundColor: 'var(--mantine-color-blue-3)', borderRadius: 3 }} />
+                    <Box
+                      w={16}
+                      h={16}
+                      style={{ backgroundColor: 'rgba(59, 130, 246, 0.40)', borderRadius: 3 }}
+                    />
                     <Text size="xs" c="dimmed">
                       Moderate
                     </Text>
                   </Group>
                   <Group gap={4}>
-                    <Box w={16} h={16} style={{ backgroundColor: 'var(--mantine-color-orange-3)', borderRadius: 3 }} />
+                    <Box
+                      w={16}
+                      h={16}
+                      style={{ backgroundColor: 'rgba(249, 115, 22, 0.55)', borderRadius: 3 }}
+                    />
                     <Text size="xs" c="dimmed">
                       High
                     </Text>
                   </Group>
                   <Group gap={4}>
-                    <Box w={16} h={16} style={{ backgroundColor: 'var(--mantine-color-red-5)', borderRadius: 3 }} />
+                    <Box
+                      w={16}
+                      h={16}
+                      style={{ backgroundColor: 'rgba(239, 68, 68, 0.85)', borderRadius: 3 }}
+                    />
                     <Text size="xs" c="dimmed">
                       Peak
                     </Text>
@@ -507,19 +533,26 @@ export default function AdminAnalyticsPage() {
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {utilization.assets.length === 0 ? (
+                    {displayedAssets.length === 0 ? (
                       <Table.Tr>
                         <Table.Td colSpan={7} style={{ textAlign: 'center' }}>
                           <Text c="dimmed" py="md">
-                            No equipment found in catalog.
+                            {selectedAssetId
+                              ? 'No equipment matches the chosen asset filter.'
+                              : 'No equipment found in catalog.'}
                           </Text>
                         </Table.Td>
                       </Table.Tr>
                     ) : (
-                      utilization.assets.map((asset) => (
+                      displayedAssets.map((asset) => (
                         <Table.Tr key={asset.assetId}>
                           <Table.Td fw={600}>
-                            {asset.name} <Text span size="xs" c="dimmed">#{asset.assetId}</Text>
+                            <Anchor component={Link} to={`/catalog/${asset.assetId}`} size="sm" fw={600}>
+                              {asset.name}
+                            </Anchor>{' '}
+                            <Text span size="xs" c="dimmed">
+                              #{asset.assetId}
+                            </Text>
                           </Table.Td>
                           <Table.Td>{asset.model}</Table.Td>
                           <Table.Td>
