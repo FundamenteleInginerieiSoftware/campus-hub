@@ -151,7 +151,9 @@ public class ReservationController {
     })
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ReservationResponse> cancel(@PathVariable Long id) {
-        return ResponseEntity.ok(reservationService.cancelReservation(id));
+        ReservationResponse response =
+                retryExecutor.executeWithRetry(() -> reservationService.cancelReservation(id), "cancelReservation");
+        return ResponseEntity.ok(response);
     }
 
     @Operation(
@@ -197,7 +199,9 @@ public class ReservationController {
     @PostMapping("/bundle/{bundleId}/cancel")
     public ResponseEntity<List<ReservationResponse>> cancelBundle(
             @PathVariable java.util.UUID bundleId, @RequestParam(required = false) @Size(max = 255) String reason) {
-        return ResponseEntity.ok(reservationService.cancelBundle(bundleId, reason));
+        List<ReservationResponse> responses =
+                retryExecutor.executeWithRetry(() -> reservationService.cancelBundle(bundleId, reason), "cancelBundle");
+        return ResponseEntity.ok(responses);
     }
 
     @Operation(
@@ -233,7 +237,9 @@ public class ReservationController {
     @PostMapping("/{id}/transfers")
     public ResponseEntity<ReservationTransferResponse> initiateTransfer(
             @PathVariable Long id, @Valid @RequestBody InitiateTransferRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.initiateTransfer(id, request));
+        ReservationTransferResponse response = retryExecutor.executeWithRetry(
+                () -> reservationService.initiateTransfer(id, request), "initiateTransfer");
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @Operation(

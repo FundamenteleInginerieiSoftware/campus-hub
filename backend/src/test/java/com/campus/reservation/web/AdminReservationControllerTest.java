@@ -18,8 +18,11 @@ import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.ReservationService;
 import com.campus.reservation.service.retry.RetryMetrics;
+import com.campus.reservation.service.retry.TransientFaultRetryExecutor;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +44,16 @@ class AdminReservationControllerTest {
 
     @MockitoBean
     private RetryMetrics retryMetrics;
+
+    @MockitoBean
+    private TransientFaultRetryExecutor retryExecutor;
+
+    @BeforeEach
+    void setUpRetryExecutor() {
+        org.mockito.Mockito.lenient()
+                .when(retryExecutor.executeWithRetry(any(), any()))
+                .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(0)).get());
+    }
 
     private final ReservationResponse checkedOutResponse = new ReservationResponse(
             1L,
