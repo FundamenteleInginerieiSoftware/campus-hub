@@ -69,7 +69,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 41 | [41-projects-pages.md](41-projects-pages.md) | Projects pages (#140): search list, project details, slot availability check | #238 |
 | 42 | [42-project-reserve-all.md](42-project-reserve-all.md) | Projects "Reserve all" (#140): book every item of a project kit in one go | #243 |
 | 43 | [43-project-bundle-banner.md](43-project-bundle-banner.md) | Projects: "Bundle booking confirmed!" banner after Reserve all (passes the bundle id to Calin's #246 banner) | #248 |
-| 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | (in review) |
+| 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | #249 |
 | 45 | [45-terraform-data.md](45-terraform-data.md) | Terraform part 2: RDS (off until W7), photo bucket, ECR, server role, secrets in SSM | (in review) |
 
 **Team docs:**
