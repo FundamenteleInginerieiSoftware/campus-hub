@@ -410,8 +410,15 @@ export default function MyReservationsPage() {
       setError(null)
       setLoading(true)
       setReloadToken((t) => t + 1)
-    } catch (err) {
-      setTransferError(err)
+    } catch (err: unknown) {
+      const errorObj = err as { code?: string; message?: string }
+      if (errorObj?.code === 'RESERVATION_LIMIT_REACHED') {
+        setTransferError({
+          message: "This student can't take another booking right now (they have reached the 2 active reservations limit).",
+        })
+      } else {
+        setTransferError(err)
+      }
     } finally {
       setTransferLoading(false)
     }
@@ -893,6 +900,7 @@ export default function MyReservationsPage() {
               placeholder="e.g. 2"
               description="Classmates can find their Student ID in the banner at the top of their My Reservations page."
               min={1}
+              allowDecimal={false}
               value={recipientUserId}
               onChange={setRecipientUserId}
               required
