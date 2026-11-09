@@ -63,6 +63,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 35 | [35-mutation-gaps-tests.md](35-mutation-gaps-tests.md) | Tests for the 5 gaps mutation testing (PIT) found in my code | #182 |
 | 36 | [36-desk-sort-ascending.md](36-desk-sort-ascending.md) | Reservations desk: earliest bookings first, on every page | #194 |
 | 37 | [37-contract-security-rules.md](37-contract-security-rules.md) | All security rules in the API contract, SSM arrow fixed in the AWS diagram | #195 |
+| 38 | [38-project-assistant-design.md](38-project-assistant-design.md) | Projects feature (#140): design and plan, who builds which part | (in review) |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
