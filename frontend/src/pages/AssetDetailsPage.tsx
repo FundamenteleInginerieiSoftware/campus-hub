@@ -152,19 +152,33 @@ export default function AssetDetailsPage() {
           Back to Catalog
         </Button>
 
-        {isAdmin && asset.status !== 'RETIRED' ? (
-          <Button
-            variant="light"
-            color="red"
-            leftSection={<IconTrash size={16} />}
-            onClick={() => {
-              setRetireError(null)
-              openRetire()
-            }}
-          >
-            Retire Equipment
-          </Button>
-        ) : null}
+        <Group gap="xs">
+          {asset.status !== 'RETIRED' && (
+            <Button
+              component={Link}
+              to={`/incidents?assetId=${asset.id}`}
+              variant="light"
+              color="yellow"
+              leftSection={<IconAlertTriangle size={16} />}
+            >
+              Report a problem
+            </Button>
+          )}
+
+          {isAdmin && asset.status !== 'RETIRED' ? (
+            <Button
+              variant="light"
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              onClick={() => {
+                setRetireError(null)
+                openRetire()
+              }}
+            >
+              Retire Equipment
+            </Button>
+          ) : null}
+        </Group>
       </Group>
 
       {error ? <ErrorAlert error={error} /> : null}
