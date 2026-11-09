@@ -182,11 +182,17 @@ campus-hub/
 | `docs/diagrams/deployment-aws.puml` + `.png` | How the app will run on AWS (planned, weeks 7–9): CloudFront, one server with Docker, the database, photos, e-mails, passwords. |
 | `docs/diagrams/README.md` | The list of all diagrams in the folder, one line each. |
 
-### `docs/superpowers/`: Projects feature design (`38-project-assistant-design.md`)
+### `docs/superpowers/` and `project/`: Projects feature (`38-project-assistant-design.md`, `39-project-engine.md`)
 | File | What it does |
 |---|---|
 | `docs/superpowers/specs/2026-11-09-project-assistant-design.md` | The design of the Projects feature: a student describes a project and gets the equipment, steps, mistakes and a "Reserve all" button. Who builds which part, how search works, which endpoints exist. |
 | `docs/superpowers/plans/2026-11-09-project-assistant.md` | The step-by-step plan for the first two code PRs of that feature, with the exact tests to write. |
+| `com/campus/project/domain/*` | The shape of a project in memory: Romanian + English texts, difficulty, equipment list, what to bring from home, steps and common mistakes. |
+| `ProjectLibrary.java` + `resources/projects/*.json` | Reads the project `.json` files when the server starts and stops startup with the file and field name if anything is missing or mistyped. |
+| `ProjectSearch.java` | Matches a student's search in Romanian or English (ignoring diacritics, filler words, and singular/plural endings) and scores each project. |
+| `ProjectService.java` | Builds the project list and details, asking Liviu's catalog and Calin's reservation module how many units of each model are free. |
+| `ProjectController.java` + `com/campus/project/web/*` | The two endpoints `GET /api/v1/projects` (list/search) and `GET /api/v1/projects/{slug}` (details + availability). |
+| `ProjectLibraryTest`, `ProjectSearchTest`, `ProjectServiceTest`, `ProjectControllerTest` | Tests for broken project files, Romanian/English search rules, live availability counts, and the HTTP endpoints. |
 
 ### Frontend: Reservations desk (`26-reservations-desk-page.md`)
 | File | What it does |
@@ -302,11 +308,16 @@ campus-hub/
 | `deployment-aws.puml` | Planned prod: CloudFront :443 → EC2 `t3.small` :8080 → Docker → container (`app.jar`, `prod`) → RDS :5432; S3/SES over HTTPS with the instance role; SSM (secrets + Run Command), ECR pull, CloudWatch Logs; deploy from GitHub Actions (OIDC). Same pieces as `aws-architecture.drawio` |
 | Render | `java -jar plantuml-1.2026.9.jar -tpng docs/diagrams/<file>.puml` from the repo root (Graphviz needed); details in `32-component-deployment-diagrams.md` |
 
-### `docs/superpowers/` (Projects design)
+### `docs/superpowers/` and `com/campus/project/` (Projects feature)
 | File | Key points |
 |---|---|
 | `specs/2026-11-09-project-assistant-design.md` | Module `com.campus.project` (domain/service/web, no `api`, no tables). JSON in `resources/projects/`, validated at startup (unknown fields, both languages, unique slug, one row per model, ≤ 5 units). Search: NFD + strip marks, stop words, +3 exact / +2 prefix ≥ 5 / +1 title word, ambiguity gap 1. `GET /api/v1/projects`, `GET /api/v1/projects/{slug}` (availability via `CatalogApi.findAvailableByModel` + `ReservationApi.isAssetFree`), `POST …/reserve` via Calin's `bookBundle` (later). Details in `38-project-assistant-design.md` |
 | `plans/2026-11-09-project-assistant.md` | 6 tasks for PR 1 + PR 2, interfaces per task, test names, review focus |
+| `ProjectLibrary` | `@Component`, loads `classpath*:projects/*.json` via `PathMatchingResourcePatternResolver` + `getInputStream()` (works inside `bootJar`) and Jackson 3 `JsonMapper` with `DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES`. Validates slug `[a-z0-9-]+`, unique slugs, non-blank RO/EN texts, non-empty keywords/components/steps/mistakes, unique models per project, and `sum(quantity) <= 5` (Calin's bundle cap). Details in `39-project-engine.md` |
+| `ProjectSearch` | Pure Java: `normalize` (`Locale.ROOT` + NFD + strip `\p{M}+`), `tokens` (split `[^\p{L}\p{N}]+`, len ≥ 2, RO/EN stop words removed, distinct), scores each project (`EXACT = 3`, `PREFIX = 2` at `MIN_PREFIX = 5`, `TITLE = 1`), ranks by score desc then EN title asc, sets `ambiguous = true` when top two hits are within `AMBIGUITY_GAP = 1`. Details in `39-project-engine.md` |
+| `ProjectService` | `@Service`, `@Transactional(readOnly = true)` on `search` and `details`. `details` checks half-slot and `end <= start` (`400 VALIDATION_FAILED`), counts operational units via `CatalogApi.findAvailableByModel(model, null)` and free units in slot via `ReservationApi.isAssetFree(id, start, end, null)` |
+| `ProjectController` | `GET /api/v1/projects?q=&lang=` (`@Size(max = 200)` on `q`) and `GET /api/v1/projects/{slug}?lang=&start=&end=`; protected by `/api/v1/**` in `SecurityConfig` |
+| `ProjectLibraryTest`, `ProjectSearchTest`, `ProjectServiceTest`, `ProjectControllerTest` | 10 invalid JSON fixture directories + classpath loader & field validation tests (17), 17 bilingual search rule tests, 11 Mockito service tests, and 7 `@WebMvcTest` + `@Import(SecurityConfig.class)` slice tests |
 
 ### Frontend: Reservations desk
 | File | Key points |

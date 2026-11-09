@@ -1,0 +1,111 @@
+{
+  "slug": "oscilloscope-pwm",
+  "difficulty": "INTERMEDIATE",
+  "estimatedHours": 2,
+  "title": {
+    "ro": "Măsurarea unui semnal PWM cu osciloscopul",
+    "en": "Measuring a PWM signal with the oscilloscope"
+  },
+  "summary": {
+    "ro": "Generează un semnal PWM cu un timer hardware pe placa STM32F4-Discovery și măsoară frecvența, factorul de umplere și timpii de creștere cu osciloscopul Rigol DS1054Z.",
+    "en": "Generate a hardware timer PWM signal on the STM32F4-Discovery board and measure frequency, duty cycle, and rise time with the Rigol DS1054Z oscilloscope."
+  },
+  "keywords": {
+    "ro": ["osciloscop", "pwm", "semnal", "masurare"],
+    "en": ["oscilloscope", "pwm", "signal", "measure"]
+  },
+  "components": [
+    {
+      "model": "STM32F407G-DISC1",
+      "quantity": 1,
+      "why": {
+        "ro": "Generează semnalul PWM precis pe pinul PD12 (TIM4_CH1, conectat și la LED-ul verde de pe placă).",
+        "en": "Generates a clean hardware PWM waveform on pin PD12 (TIM4_CH1, also wired to the on-board green LED)."
+      }
+    },
+    {
+      "model": "DS1054Z",
+      "quantity": 1,
+      "why": {
+        "ro": "Vizualizează forma de undă și calculează automat frecvența, perioada și factorul de umplere (+Duty).",
+        "en": "Captures the waveform and automatically measures frequency, period, and positive duty cycle (+Duty)."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Cablu Mini-USB pentru programarea debuggerului ST-LINK de pe STM32F4-Discovery",
+      "en": "Mini-USB cable for the on-board ST-LINK debugger on the STM32F4-Discovery"
+    },
+    {
+      "ro": "2 fire jumper mamă-tată pentru conectarea ușoară a sondei la pinii PD12 și GND",
+      "en": "2 female-to-male jumper wires to clip the oscilloscope probe safely onto PD12 and GND"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Configurează sonda osciloscopului pe 10x",
+        "en": "Set the oscilloscope probe to 10x attenuation"
+      },
+      "text": {
+        "ro": "Comută glisorul de pe sonda canalului CH1 pe poziția 10X, conectează sonda la mufa BNC CH1 a osciloscopului DS1054Z și setează în meniul CH1 -> Probe raportul la 10X.",
+        "en": "Slide the switch on the CH1 probe to 10X, attach it to the CH1 BNC jack on the DS1054Z, and set CH1 -> Probe ratio to 10X on the screen."
+      }
+    },
+    {
+      "title": {
+        "ro": "Verifică compensarea sondei",
+        "en": "Verify probe compensation"
+      },
+      "text": {
+        "ro": "Prinde cârligul sondei pe borna de test de 1 kHz a osciloscopului și clema de masă pe borna GND. Apasă AUTO: palierele semnalului dreptunghiular trebuie să fie perfect orizontale.",
+        "en": "Hook the probe tip onto the scope's 1 kHz compensation terminal and the ground clip to the ground lug. Press AUTO: the square-wave tops should be flat."
+      }
+    },
+    {
+      "title": {
+        "ro": "Pornește semnalul PWM pe STM32F407G-DISC1",
+        "en": "Start the PWM output on the STM32F407G-DISC1"
+      },
+      "text": {
+        "ro": "Configurează TIM4 Canalul 1 (pinul PD12) pentru PWM la 1 kHz cu factor de umplere de 25% (de exemplu PSC = 83, ARR = 999, CCR1 = 250 la ceas de 84 MHz) și încarcă firmware-ul.",
+        "en": "Configure TIM4 Channel 1 (pin PD12) for 1 kHz PWM at 25% duty cycle (e.g. PSC = 83, ARR = 999, CCR1 = 250 at 84 MHz timer clock) and flash the board."
+      }
+    },
+    {
+      "title": {
+        "ro": "Conectează sonda la pinul PD12 și la GND",
+        "en": "Connect the probe to PD12 and board GND"
+      },
+      "text": {
+        "ro": "Prinde clema crocodil a sondei la un pin GND al plăcii STM32 și vârful sondei la pinul PD12 folosind firele jumper, astfel încât să nu scurtcircuitezi pinii alăturați.",
+        "en": "Clip the probe ground lead to a GND pin on the STM32 board and hook the probe tip to PD12 via jumper wires so adjacent header pins cannot short."
+      }
+    },
+    {
+      "title": {
+        "ro": "Reglează baza de timp, trigger-ul și măsurătorile automate",
+        "en": "Adjust timebase, trigger, and automated measurements"
+      },
+      "text": {
+        "ro": "Setează scala verticală la 1 V/div, baza de timp la 500 µs/div și nivelul de trigger (Edge, front crescător) la 1,65 V. Activează din coloana stângă măsurătorile Freq, Period și +Duty.",
+        "en": "Set the vertical scale to 1 V/div, timebase to 500 µs/div, and rising-edge trigger level to 1.65 V. Enable Freq, Period, and +Duty from the left-side measurement menu."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Clema de masă a sondei lăsată neconectată: semnalul afișat este dominat de zgomotul de rețea de 50 Hz și forma de undă plutește.",
+      "en": "Leaving the probe ground clip disconnected: the trace is swamped by 50 Hz mains hum and the waveform floats."
+    },
+    {
+      "ro": "Sonda comutată pe 10X dar canalul osciloscopului lăsat pe 1X: osciloscopul afișează 0,33 V în loc de 3,3 V.",
+      "en": "Probe switch on 10X while the oscilloscope channel is set to 1X: voltage readings appear 10 times smaller (0.33 V instead of 3.3 V)."
+    },
+    {
+      "ro": "Nivelul de trigger setat în afara intervalului 0–3,3 V: imaginea nu se sincronizează și semnalul fuge continuu pe ecran.",
+      "en": "Trigger level set outside the 0–3.3 V signal swing: the scope never triggers and the waveform scrolls continuously across the screen."
+    }
+  ]
+}

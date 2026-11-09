@@ -191,6 +191,10 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 `INCIDENT_NOT_FOUND` 404 · `PHOTO_NOT_FOUND` 404 · `INVALID_PHOTO_TYPE` 400 · `INVALID_INCIDENT_STATUS_TRANSITION` 409 (+ `ASSET_NOT_FOUND`, `ASSET_RETIRED` and `PHOTO_TOO_LARGE` above)
 
+### Projects (Matei)
+
+`PROJECT_NOT_FOUND` 404 (+ `VALIDATION_FAILED` 400 and `INVALID_PARAMETER` 400 above)
+
 Owners: check the status codes above when you implement them, and fix this list if yours differ.
 
 ---
@@ -205,6 +209,7 @@ Each owner adds their endpoints here (method + path, access, request/response JS
 | Catalog / Shared | Liviu | `/api/v1/assets`, `/api/v1/categories`, `/api/v1/lab-rooms`, `/api/v1/admin/assets`, `/api/v1/admin/categories`, `/api/v1/admin/lab-rooms`, `/api/v1/admin/audit-logs` |
 | Reservations | Calin | `/api/v1/reservations/**`, `/api/v1/admin/reservations/**`, `/api/v1/admin/reassignments` |
 | Incidents | Stefania | `/api/v1/incidents/**`, `/api/v1/admin/incidents/**` |
+| Projects | Matei | `/api/v1/projects/**` |
 
 ### User admin endpoints (Stefania)
 
@@ -383,6 +388,76 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 }
 
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE` or `RETIRED`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).
+```
+
+---
+
+### Project endpoints (Matei)
+
+All endpoints below require a valid token (`401 UNAUTHORIZED`) and are open to both `STUDENT` and `ADMIN` (covered by `SecurityConfig`'s `/api/v1/**` rule).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/projects?q=&lang=` | `STUDENT`, `ADMIN` | `200` `ProjectSearchResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED` |
+| `GET /api/v1/projects/{slug}?lang=&start=&end=` | `STUDENT`, `ADMIN` | `200` `ProjectDetailsResponse` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 PROJECT_NOT_FOUND` |
+
+Query parameters:
+- `q` (`GET /api/v1/projects`, optional, max 200 characters): search text matched against both RO and EN keywords/titles (diacritics stripped, prefix matching ≥ 5 characters). Empty or stop-words-only returns all projects sorted by English title (`ambiguous: false`, `score: 0`). Over 200 characters → `400 VALIDATION_FAILED`. Not paginated (~10 projects in the library); no catalog/reservation calls on the list view.
+- `lang` (both endpoints, optional, default `en`): `ro` or `en` (case-insensitive). Any other value → `400 VALIDATION_FAILED`.
+- `start`, `end` (`GET /api/v1/projects/{slug}`, optional, ISO-8601 local date-time without offset e.g. `2026-11-16T10:00:00`):
+  - Without `start`/`end`: `available` counts units of that `model` with status `AVAILABLE` (`CatalogApi.findAvailableByModel(model, null)`); `slotChecked: false`.
+  - With both `start` and `end`: `available` counts `AVAILABLE` units that are also free in the slot (`ReservationApi.isAssetFree(id, start, end, null)`); `slotChecked: true`.
+  - Providing only one of `start`/`end`, or `end` not after `start` → `400 VALIDATION_FAILED`. Malformed date-time → `400 INVALID_PARAMETER`.
+  - `reservable` is `true` when every component has `available >= quantity`.
+
+```json
+// ProjectSearchResponse (returned by GET /api/v1/projects?q=termometru&lang=ro)
+{
+  "ambiguous": false,
+  "items": [
+    {
+      "slug": "thermometer",
+      "title": "Termometru digital",
+      "summary": "Masoara temperatura ambientala cu un senzor DS18B20 si afiseaza valoarea pe un ecran LCD.",
+      "difficulty": "BEGINNER",
+      "estimatedHours": 3,
+      "componentCount": 4,
+      "score": 4
+    }
+  ]
+}
+
+// ProjectDetailsResponse (returned by GET /api/v1/projects/thermometer?lang=en&start=2026-11-16T10:00:00&end=2026-11-16T12:00:00)
+{
+  "slug": "thermometer",
+  "title": "Digital thermometer",
+  "summary": "Measure ambient temperature with a DS18B20 sensor and display it on an I2C LCD screen.",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 3,
+  "components": [
+    {
+      "model": "Arduino Uno R3",
+      "quantity": 1,
+      "why": "Reads the 1-Wire sensor and drives the I2C display.",
+      "available": 2
+    }
+  ],
+  "bringYourself": [
+    "USB-B cable",
+    "4.7 kOhm resistor"
+  ],
+  "steps": [
+    {
+      "title": "Wire the DS18B20 sensor",
+      "text": "Connect VDD to 5V, GND to GND, and DQ to digital pin D2 with a 4.7 kOhm pull-up resistor to 5V."
+    }
+  ],
+  "mistakes": [
+    "Forgetting the 4.7 kOhm pull-up resistor on the data line (reads -127 C)."
+  ],
+  "slotChecked": true,
+  "reservable": true
+}
 ```
 
 ---

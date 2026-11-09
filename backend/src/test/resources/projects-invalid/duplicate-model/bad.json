@@ -1,0 +1,19 @@
+{
+  "slug": "bad-project",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 1,
+  "title": { "ro": "Termometru", "en": "Thermometer" },
+  "summary": { "ro": "Sumar", "en": "Summary" },
+  "keywords": { "ro": ["test"], "en": ["test"] },
+  "components": [
+    { "model": "Arduino Uno R3", "quantity": 1, "why": { "ro": "De ce", "en": "Why" } },
+    { "model": "Arduino Uno R3", "quantity": 1, "why": { "ro": "Din nou", "en": "Again" } }
+  ],
+  "bringYourself": [],
+  "steps": [
+    { "title": { "ro": "Pas 1", "en": "Step 1" }, "text": { "ro": "Text", "en": "Text" } }
+  ],
+  "mistakes": [
+    { "ro": "Greșeală", "en": "Mistake" }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "slug": "thermometer",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 3,
+  "title": {
+    "ro": "Termometru digital",
+    "en": "Digital thermometer"
+  },
+  "summary": {
+    "ro": "Măsoară temperatura ambientală cu senzorul digital 1-Wire DS18B20 și afișează valoarea în timp real pe un ecran LCD 16x2 conectat prin I2C la Arduino Uno.",
+    "en": "Measure ambient temperature with a DS18B20 1-Wire digital sensor and display real-time readings on a 16x2 I2C LCD driven by an Arduino Uno."
+  },
+  "keywords": {
+    "ro": ["termometru", "temperatura", "senzor", "grade"],
+    "en": ["thermometer", "temperature", "sensor", "degrees"]
+  },
+  "components": [
+    {
+      "model": "Arduino Uno R3",
+      "quantity": 1,
+      "why": {
+        "ro": "Citește protocolul 1-Wire de la senzor și trimite temperatura către ecranul LCD prin magistrala I2C.",
+        "en": "Reads the 1-Wire protocol from the sensor and sends the formatted temperature to the LCD over I2C."
+      }
+    },
+    {
+      "model": "DS18B20 temperature sensor kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Senzor digital de temperatură cu precizie de ±0,5 °C și comunicare pe un singur fir de date.",
+        "en": "Digital temperature sensor with ±0.5 °C accuracy and single-wire data communication."
+      }
+    },
+    {
+      "model": "16x2 I2C LCD module kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Afișează temperatura în grade Celsius și Fahrenheit folosind doar doi pini de date (SDA și SCL).",
+        "en": "Displays the temperature in Celsius and Fahrenheit using only two data pins (SDA and SCL)."
+      }
+    },
+    {
+      "model": "Breadboard + jumper wire kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Interconectează alimentarea de 5 V, masa comună și rezistorul pull-up fără lipire.",
+        "en": "Connects the 5 V rail, common ground, and pull-up resistor without soldering."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Cablu USB-B pentru programarea și alimentarea plăcii Arduino Uno",
+      "en": "USB-B cable to program and power the Arduino Uno"
+    },
+    {
+      "ro": "Rezistor pull-up de 4,7 kΩ (dacă senzorul DS18B20 nu este pe un modul cu rezistor integrat)",
+      "en": "4.7 kΩ pull-up resistor (if the DS18B20 is a bare probe without an on-board resistor)"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Conectează alimentarea pe breadboard",
+        "en": "Wire power rails on the breadboard"
+      },
+      "text": {
+        "ro": "Cu placa Arduino deconectată de la USB, leagă pinul 5V la șina roșie (+) și pinul GND la șina albastră (-) a breadboard-ului.",
+        "en": "With the Arduino unplugged from USB, connect the 5V pin to the red (+) rail and the GND pin to the blue (-) rail of the breadboard."
+      }
+    },
+    {
+      "title": {
+        "ro": "Montează senzorul DS18B20 și rezistorul pull-up",
+        "en": "Connect the DS18B20 sensor and pull-up resistor"
+      },
+      "text": {
+        "ro": "Conectează GND la masă, VDD la 5 V și pinul DATA la pinul digital D2 al plăcii Arduino. Montează rezistorul de 4,7 kΩ între pinul DATA și 5 V.",
+        "en": "Connect GND to ground, VDD to 5 V, and the DATA pin to digital pin D2 on the Arduino. Place the 4.7 kΩ resistor between DATA and 5 V."
+      }
+    },
+    {
+      "title": {
+        "ro": "Leagă ecranul LCD 16x2 pe I2C",
+        "en": "Connect the 16x2 I2C LCD module"
+      },
+      "text": {
+        "ro": "Conectează GND și VCC de pe adaptorul I2C la șinele de alimentare, apoi SDA la pinul A4 și SCL la pinul A5 pe Arduino Uno.",
+        "en": "Connect GND and VCC on the I2C backpack to the power rails, then wire SDA to pin A4 and SCL to pin A5 on the Arduino Uno."
+      }
+    },
+    {
+      "title": {
+        "ro": "Instalează bibliotecile și încarcă codul",
+        "en": "Install libraries and upload the sketch"
+      },
+      "text": {
+        "ro": "În Arduino IDE, instalează OneWire, DallasTemperature și LiquidCrystal_I2C. Inițializează senzorul pe pinul 2 și LCD-ul la adresa 0x27 (sau 0x3F), apoi încarcă programul.",
+        "en": "In Arduino IDE, install OneWire, DallasTemperature, and LiquidCrystal_I2C. Initialize the sensor on pin 2 and the LCD at address 0x27 (or 0x3F), then upload the sketch."
+      }
+    },
+    {
+      "title": {
+        "ro": "Reglează contrastul și verifică citirile",
+        "en": "Adjust contrast and verify readings"
+      },
+      "text": {
+        "ro": "Dacă ecranul se aprinde dar nu afișează caractere, rotește ușor potențiometrul albastru de pe spatele modulului I2C. Ține senzorul între degete și urmărește creșterea temperaturii.",
+        "en": "If the backlight turns on but no characters appear, gently turn the blue trimmer pot on the back of the I2C module. Hold the sensor between your fingers and watch the temperature rise."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Lipsa rezistorului pull-up de 4,7 kΩ între DATA și 5 V: linia 1-Wire rămâne flotantă și senzorul returnează constant -127 °C.",
+      "en": "Omitting the 4.7 kΩ pull-up resistor between DATA and 5 V: the 1-Wire line floats and the sensor constantly reports -127 °C."
+    },
+    {
+      "ro": "Inversarea pinilor VDD și GND la capsula TO-92 a senzorului DS18B20: senzorul se încinge rapid și se poate arde.",
+      "en": "Swapping VDD and GND on the TO-92 package of the DS18B20: the sensor quickly overheats and can be permanently damaged."
+    },
+    {
+      "ro": "Citirea senzorului în buclă fără pauză: conversia pe 12 biți durează până la 750 ms, deci citește la intervale de cel puțin 1 secundă.",
+      "en": "Polling the sensor in a tight loop without delay: a 12-bit conversion takes up to 750 ms, so sample at most once per second."
+    }
+  ]
+}
