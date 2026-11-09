@@ -9,14 +9,20 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.optimal.OptimalReassignmentSolver;
+import com.campus.reassignment.web.OptimalReassignmentPlanResponse;
+import com.campus.reassignment.web.ReassignmentActionItem;
 import com.campus.reassignment.web.ReassignmentLogResponse;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +46,7 @@ public class ReassignmentService {
     private final NotificationService notificationService;
     private final ReassignmentBookingProcessor bookingProcessor;
     private final ReassignmentLogRepository reassignmentLogRepository;
+    private final OptimalReassignmentSolver optimalReassignmentSolver;
     private final Clock clock;
 
     /**
@@ -121,5 +128,88 @@ public class ReassignmentService {
         Pageable pageable = PageRequest.of(page, size);
         Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);
+    }
+
+    /**
+     * Computes the global optimal reassignment plan using Min-Cost Max-Flow (MCMF) for all upcoming
+     * reservations of a damaged asset, with optional dry-run simulation.
+     */
+    public OptimalReassignmentPlanResponse solveOptimalPlan(Long damagedAssetId, Long incidentId, boolean dryRun) {
+        AssetSummary damaged = catalogApi.getAsset(damagedAssetId);
+        LocalDateTime now = now();
+        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(damagedAssetId, now);
+
+        // Gather all candidate substitute assets from the same model and same category
+        List<AssetSummary> sameModel = catalogApi.findAvailableByModel(damaged.model(), damagedAssetId);
+        List<AssetSummary> sameCategory = catalogApi.findAvailableByCategory(damaged.categoryId(), damagedAssetId);
+
+        Map<Long, AssetSummary> candidatesById = new HashMap<>();
+        for (AssetSummary a : sameModel) {
+            candidatesById.put(a.id(), a);
+        }
+        for (AssetSummary a : sameCategory) {
+            candidatesById.put(a.id(), a);
+        }
+        List<AssetSummary> candidateList = new ArrayList<>(candidatesById.values());
+
+        OptimalReassignmentPlanResponse plan = optimalReassignmentSolver.solve(
+                damagedAssetId,
+                damaged.name(),
+                upcoming,
+                damaged,
+                candidateList,
+                (candidateId, booking) ->
+                        reservationApi.isAssetFree(candidateId, booking.start(), booking.end(), booking.id()));
+
+        if (dryRun) {
+            return plan;
+        }
+
+        // Execute optimal actions
+        for (ReassignmentActionItem action : plan.actions()) {
+            if (action.assignedAssetId() != null) {
+                boolean moved = reservationApi.moveToAsset(
+                        action.reservationId(),
+                        action.assignedAssetId(),
+                        "Optimal Reassignment" + (incidentId != null ? " incident #" + incidentId : ""));
+                if (moved) {
+                    reassignmentLogRepository.save(new ReassignmentLog(
+                            incidentId,
+                            action.reservationId(),
+                            damagedAssetId,
+                            action.assignedAssetId(),
+                            ReassignmentOutcome.REASSIGNED,
+                            action.strategyName(),
+                            now()));
+                }
+            } else {
+                boolean cancelled = reservationApi.forceCancel(
+                        action.reservationId(),
+                        "Optimal Reassignment: no viable substitute"
+                                + (incidentId != null ? " (incident #" + incidentId + ")" : ""));
+                if (cancelled) {
+                    reassignmentLogRepository.save(new ReassignmentLog(
+                            incidentId,
+                            action.reservationId(),
+                            damagedAssetId,
+                            null,
+                            ReassignmentOutcome.FORCE_CANCELLED,
+                            null,
+                            now()));
+                }
+            }
+        }
+
+        return new OptimalReassignmentPlanResponse(
+                plan.damagedAssetId(),
+                plan.damagedAssetName(),
+                plan.totalReservations(),
+                plan.rescuedReservations(),
+                plan.forceCancelledReservations(),
+                plan.sameModelCount(),
+                plan.sameCategoryCount(),
+                true,
+                plan.actions(),
+                plan.comparison());
     }
 }

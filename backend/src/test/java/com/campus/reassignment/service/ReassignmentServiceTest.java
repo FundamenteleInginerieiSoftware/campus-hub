@@ -25,6 +25,7 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.optimal.OptimalReassignmentSolver;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
@@ -80,6 +81,9 @@ class ReassignmentServiceTest {
     @Mock
     private SubstituteStrategy secondaryStrategy;
 
+    @Mock
+    private OptimalReassignmentSolver optimalReassignmentSolver;
+
     private ReassignmentService reassignmentService;
 
     private final AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, 999L, Instant.now());
@@ -98,7 +102,13 @@ class ReassignmentServiceTest {
                 clock,
                 transactionManager);
         reassignmentService = new ReassignmentService(
-                catalogApi, reservationApi, notificationService, bookingProcessor, reassignmentLogRepository, clock);
+                catalogApi,
+                reservationApi,
+                notificationService,
+                bookingProcessor,
+                reassignmentLogRepository,
+                optimalReassignmentSolver,
+                clock);
     }
 
     @Test
@@ -351,7 +361,13 @@ class ReassignmentServiceTest {
 
         ReassignmentBookingProcessor mockProcessor = mock(ReassignmentBookingProcessor.class);
         ReassignmentService service = new ReassignmentService(
-                catalogApi, reservationApi, notificationService, mockProcessor, reassignmentLogRepository, clock);
+                catalogApi,
+                reservationApi,
+                notificationService,
+                mockProcessor,
+                reassignmentLogRepository,
+                optimalReassignmentSolver,
+                clock);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
         when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))

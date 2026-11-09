@@ -286,6 +286,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `POST /api/v1/admin/reassignments/solve-optimal?damagedAssetId=1&dryRun=true` | Admin | – | `200` + `OptimalReassignmentPlanResponse` | `400 MISSING_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND` |
 
 ```json
 // CreateReservationRequest
@@ -385,6 +386,40 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "outcome": "REASSIGNED",
   "strategy": "SameModelStrategy",
   "createdAt": "2026-11-03T14:00:00"
+}
+
+// OptimalReassignmentPlanResponse (returned by POST /api/v1/admin/reassignments/solve-optimal)
+{
+  "damagedAssetId": 1,
+  "damagedAssetName": "Rigol DS1054Z Scope",
+  "totalReservations": 5,
+  "rescuedReservations": 5,
+  "forceCancelledReservations": 0,
+  "sameModelSubstitutions": 4,
+  "sameCategorySubstitutions": 1,
+  "applied": false,
+  "actions": [
+    {
+      "reservationId": 101,
+      "startTime": "2026-11-15T10:00:00",
+      "endTime": "2026-11-15T12:00:00",
+      "fromAssetId": 1,
+      "assignedAssetId": 10,
+      "assignedAssetName": "Rigol DS1054Z Scope #2",
+      "strategyName": "SameModel",
+      "penaltyCost": 10
+    }
+  ],
+  "comparison": {
+    "mcmfRescuedCount": 5,
+    "greedyRescuedCount": 3,
+    "mcmfCancelledCount": 0,
+    "greedyCancelledCount": 2,
+    "mcmfTotalCost": 60,
+    "greedyTotalCost": 2040,
+    "optimalStrictlyBetter": true,
+    "explanation": "MCMF rescued 5/5 reservations (cost 60) vs Greedy 3/5 (cost 2040). Global optimization strictly saved more reservations or reduced model degradation."
+  }
 }
 
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE` or `RETIRED`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).
