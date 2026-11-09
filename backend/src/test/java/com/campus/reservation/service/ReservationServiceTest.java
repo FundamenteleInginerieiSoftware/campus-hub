@@ -52,6 +52,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -883,30 +884,45 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("isAssetFree: returns true when asset has no overlapping reservations or active holds")
-    void isAssetFree_returnsTrueWhenFreeOfReservationsAndHolds() {
+    @DisplayName("isAssetFree: returns true when asset has no overlapping reservations")
+    void isAssetFree_returnsTrueWhenFreeOfReservations() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationHoldRepository.existsActiveOverlap(
-                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
-                .thenReturn(false);
 
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
                 .as(
-                        "availability: asset must be reported free when neither reservations nor holds overlap; see ReservationService.isAssetFree")
+                        "availability: asset must be reported free when no reservations overlap; see ReservationService.isAssetFree")
                 .isTrue();
     }
 
     @Test
-    @DisplayName("isAssetFree: returns false when hold overlap exists for another user")
-    void isAssetFree_returnsFalseWhenHoldOverlapExistsForAnotherUser() {
+    @DisplayName(
+            "isAssetFree: holds do not block isAssetFree so confirmed bookings take precedence on reassignment (#228 point 8)")
+    void isAssetFree_holdsDoNotBlockReassignment() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
+                .as(
+                        "reassignment priority: browsing holds must not block isAssetFree; see ReservationService.isAssetFree")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("checkAvailability: returns false when asset has an active hold by another student (#228 point 8)")
+    void checkAvailabilityReturnsFalseWhenAssetHeldByAnotherStudent() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(catalogApi.getAsset(ASSET_ID))
+                .thenReturn(new com.campus.catalog.api.AssetSummary(
+                        ASSET_ID, "Oscilloscope", "Tektronix", 1L, 101L, com.campus.catalog.api.AssetStatus.AVAILABLE));
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
         when(currentUser.id()).thenReturn(USER_ID);
@@ -914,29 +930,10 @@ class ReservationServiceTest {
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(true);
 
-        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
-                .as(
-                        "availability: active hold by another user must mark the asset busy; see ReservationService.isAssetFree")
-                .isFalse();
-    }
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
 
-    @Test
-    @DisplayName("isAssetFree: safely checks holds without logged-in user (reassignment async listener)")
-    void isAssetFree_safeWhenUnauthenticated() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
-        // In asynchronous listeners (e.g. ReassignmentListener), there is no security context / JWT
-        when(currentUser.id()).thenThrow(new RuntimeException("no auth"));
-        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
-                .thenReturn(false);
-
-        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
-                .as(
-                        "availability: unauthenticated callers (e.g. async reassignment engine) must check holds against all users; see ReservationService.isAssetFree")
-                .isTrue();
+        assertThat(response.available()).isFalse();
+        assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
     }
 
     @Test
@@ -2924,5 +2921,466 @@ class ReservationServiceTest {
                 .as(
                         "busy assets: unauthenticated queries must include all held asset IDs; see ReservationService.findBusyAssetIds")
                 .containsExactly(10L, 20L);
+    }
+
+    @Test
+    @DisplayName("cancelBundle: admin cancellation notifies the student owner, not the admin (#228 point 12)")
+    void cancelBundle_adminCancels_notifiesItemOwnerNotAdmin() {
+        UUID bundleId = UUID.randomUUID();
+        Long studentId = 55L;
+        Reservation r1 = new Reservation(
+                studentId,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID); // Admin ID
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+
+        reservationService.cancelBundle(bundleId, "Lab maintenance");
+
+        assertThat(r1.getStatus())
+                .as("bundle cancel: item status must transition to CANCELLED; see ReservationService.cancelBundle")
+                .isEqualTo(ReservationStatus.CANCELLED);
+        verify(notificationService).notifyUser(eq(studentId), eq("Reservation Bundle Cancelled"), any());
+        verify(notificationService, never()).notifyUser(eq(USER_ID), eq("Reservation Bundle Cancelled"), any());
+    }
+
+    @Test
+    @DisplayName("cancelBundle: auto-cancels pending transfers on bundle items (#228 point 6, 12)")
+    void cancelBundle_autoCancelsPendingTransfersOnBundleItems() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(101L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+        when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(transfer));
+
+        reservationService.cancelBundle(bundleId, "Cancelled");
+
+        assertThat(transfer.getStatus())
+                .as(
+                        "bundle cancel: pending transfer on bundle item must transition to CANCELLED; see ReservationService.cancelBundle")
+                .isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+        verify(notificationService).notifyUser(eq(99L), eq("Reservation Transfer Cancelled"), any());
+    }
+
+    @Test
+    @DisplayName("initiateTransfer: rejects transfer of individual items belonging to a bundle (#228 point 1)")
+    void initiateTransfer_rejectsBundleItems() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+        r.assignBundle(UUID.randomUUID());
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
+                .as(
+                        "bundle security: bundle items cannot be transferred individually; see ReservationService.initiateTransfer")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Items part of a bundle cannot be transferred individually");
+    }
+
+    @Test
+    @DisplayName("initiateTransfer: rejects recipient who is not a student (e.g. ADMIN) (#228 point 2)")
+    void initiateTransfer_rejectsNonStudentRecipient() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.ADMIN)); // Admin recipient
+
+        assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
+                .as("anti-probing: transfers can only be offered to students; see ReservationService.initiateTransfer")
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Recipient student not found or inactive");
+    }
+
+    @Test
+    @DisplayName("initiateTransfer: admin-initiated transfer records reservation owner as fromUserId (#228 point 5)")
+    void initiateTransfer_byAdmin_setsFromUserIdToReservationOwner() {
+        Long studentOwnerId = 77L;
+        Reservation r = new Reservation(
+                studentOwnerId,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID); // Admin ID
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(reservationRepository.countByUserIdAndStatusIn(99L, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> {
+            ReservationTransfer t = inv.getArgument(0);
+            ReflectionTestUtils.setField(t, "id", 500L);
+            return t;
+        });
+
+        ReservationTransferResponse response =
+                reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L));
+
+        assertThat(response.fromUserId())
+                .as(
+                        "admin transfer: fromUserId must match student owner, not admin; see ReservationService.initiateTransfer")
+                .isEqualTo(studentOwnerId);
+    }
+
+    @Test
+    @DisplayName("forceCancel: auto-cancels pending transfer offer (#228 point 6)")
+    void forceCancel_autoCancelsPendingTransfer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(transfer));
+
+        boolean cancelled = reservationService.forceCancel(100L, "Asset broken");
+
+        assertThat(cancelled)
+                .as("force cancel: method must return true on success; see ReservationService.forceCancel")
+                .isTrue();
+        assertThat(transfer.getStatus())
+                .as("force cancel: pending transfer must transition to CANCELLED; see ReservationService.forceCancel")
+                .isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+        verify(notificationService).notifyUser(eq(99L), eq("Reservation Transfer Cancelled"), any());
+    }
+
+    @Test
+    @DisplayName("markNoShow: auto-cancels pending transfer offer (#228 point 6)")
+    void markNoShow_autoCancelsPendingTransfer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(transfer));
+
+        boolean marked = reservationService.markNoShow(100L);
+
+        assertThat(marked)
+                .as("mark no-show: method must return true on success; see ReservationService.markNoShow")
+                .isTrue();
+        assertThat(transfer.getStatus())
+                .as("mark no-show: pending transfer must transition to CANCELLED; see ReservationService.markNoShow")
+                .isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+    }
+
+    @Test
+    @DisplayName("moveToAsset: auto-cancels pending transfer offer (#228 point 6)")
+    void moveToAsset_autoCancelsPendingTransfer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(200L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+                .thenReturn(false);
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(transfer));
+
+        boolean moved = reservationService.moveToAsset(100L, 200L, "Reassigned");
+
+        assertThat(moved)
+                .as("move to asset: method must return true on success; see ReservationService.moveToAsset")
+                .isTrue();
+        assertThat(transfer.getStatus())
+                .as("move to asset: pending transfer must transition to CANCELLED; see ReservationService.moveToAsset")
+                .isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+    }
+
+    @Test
+    @DisplayName("moveToAsset: reassignment succeeds even if substitute asset has a browsing hold (#228 point 8)")
+    void moveToAsset_succeedsEvenIfSubstituteAssetHasActiveHold() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(200L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+                .thenReturn(false);
+
+        boolean moved = reservationService.moveToAsset(100L, 200L, "Reassigned");
+
+        assertThat(moved)
+                .as(
+                        "reassignment priority: confirmed booking takes precedence over browsing holds; see ReservationService.moveToAsset")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: auto-cancels pending transfer offer (#228 point 6)")
+    void checkOutReservation_autoCancelsPendingTransfer() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 8, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 9, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
+                .thenReturn(Optional.empty());
+        when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(transfer));
+
+        ReservationResponse response = reservationService.checkOutReservation(100L);
+
+        assertThat(response.status())
+                .as("check-out: reservation status must be CHECKED_OUT; see ReservationService.checkOutReservation")
+                .isEqualTo(ReservationStatus.CHECKED_OUT);
+        assertThat(transfer.getStatus())
+                .as(
+                        "check-out: pending transfer must transition to CANCELLED; see ReservationService.checkOutReservation")
+                .isEqualTo(TransferStatus.CANCELLED);
+        verify(reservationTransferRepository).save(transfer);
+    }
+
+    @Test
+    @DisplayName("getBundle: non-admin only sees items they own in the bundle (#228 point 1)")
+    void getBundle_nonAdmin_returnsOnlyOwnItems() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        Reservation r2 = new Reservation(
+                999L,
+                20L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+        r2.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1, r2));
+
+        MultiAssetReservationResponse response = reservationService.getBundle(bundleId);
+
+        assertThat(response.reservations())
+                .as("bundle isolation: non-admin must only see their own items; see ReservationService.getBundle")
+                .hasSize(1);
+        assertThat(response.reservations().getFirst().id())
+                .as(
+                        "bundle isolation: visible item must match current user's reservation; see ReservationService.getBundle")
+                .isEqualTo(101L);
+    }
+
+    @Test
+    @DisplayName("getBundle: non-admin throws BUNDLE_NOT_FOUND when they own no items in the bundle (#228 point 1)")
+    void getBundle_nonAdmin_throwsNotFoundWhenNoItemsOwned() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                999L,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+
+        assertThatThrownBy(() -> reservationService.getBundle(bundleId))
+                .as("bundle isolation: non-admin gets 404 when no items are owned; see ReservationService.getBundle")
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Reservation bundle not found");
+    }
+
+    @Test
+    @DisplayName("cancelBundle: non-admin only cancels items they own in the bundle (#228 point 1)")
+    void cancelBundle_nonAdmin_cancelsOnlyOwnItems() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        r1.assignBundle(bundleId);
+
+        Reservation r2 = new Reservation(
+                999L,
+                20L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+        r2.assignBundle(bundleId);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1, r2));
+
+        List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Changed plans");
+
+        assertThat(responses)
+                .as("bundle cancellation: non-admin only cancels their own items; see ReservationService.cancelBundle")
+                .hasSize(1);
+        assertThat(r1.getStatus())
+                .as("bundle cancellation: owned item status must be CANCELLED; see ReservationService.cancelBundle")
+                .isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r2.getStatus())
+                .as("bundle cancellation: unowned item must remain CONFIRMED; see ReservationService.cancelBundle")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects creation if an asset has an active hold by another student (#228 point 7)")
+    void createMultiAssetReservation_rejectsIfAssetHeldByAnotherStudent() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), any(), eq(-1L)))
+                .thenReturn(false);
+        // Asset 10 is free from holds, but Asset 20 is held by another user
+        when(reservationHoldRepository.existsActiveOverlap(eq(10L), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(20L), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .as(
+                        "bundle hold check: active hold on any asset by another student must reject bundle creation; see ReservationService.createMultiAssetReservation")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Asset 20 is temporarily held by another student");
+    }
+
+    @Test
+    @DisplayName("Bundle: rejects null element in assetIds (#228 point 11)")
+    void createMultiAssetReservation_rejectsNullElementInAssetIds() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Set<Long> idsWithNull = new HashSet<>();
+        idsWithNull.add(10L);
+        idsWithNull.add(null);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(idsWithNull, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .as(
+                        "bundle validation: null asset ID in bundle must throw INVALID_BUNDLE_SIZE; see ReservationService.createMultiAssetReservation")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Multi-asset booking must include between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("extendReservation: rejects if extension slot is held by another student (#228 point 7)")
+    void extendReservation_rejectsIfSlotHeldByAnotherStudent() {
+        LocalDateTime oldStart = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 17, 0);
+
+        Reservation r = new Reservation(USER_ID, ASSET_ID, oldStart, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, oldEnd, newEnd, ReservationStatus.ACTIVE_STATUSES, 100L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .as(
+                        "extension hold check: hold on subsequent slot must prevent extension; see ReservationService.extendReservation")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("temporarily held by another student");
     }
 }

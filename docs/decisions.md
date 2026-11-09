@@ -65,6 +65,7 @@ All 🟡: proposed in the plan, **confirm at the next meeting** (Calin leads).
 | Rule | Proposed value | Owner |
 |---|---|---|
 | Max active reservations per student | 2 | Calin |
+| Multi-asset bundle quota | Bundle counts as 1 lab session slot towards the max 2 limit (#140, #228) | Calin |
 | Max booking horizon | 14 days ahead | Calin |
 | Min / max reservation length | 30 min / 4 h | Calin |
 | Slot granularity | start/end on :00 or :30 | Calin |

@@ -43,6 +43,7 @@ Each document is structured in two parts:
 | 20 | [`20-my-reservations-management-and-incident-shortcut.md`](./20-my-reservations-management-and-incident-shortcut.md) | My Reservations Management, P2P Transfer & Identity | Self-service extension modal, P2P transfer with student identity card, bundle badge, incident reporting shortcut |
 | 21 | [`21-reservation-slot-hold-countdown-and-release.md`](./21-reservation-slot-hold-countdown-and-release.md) | Booking Calendar Slot Hold & Countdown | Interactive 1-min slot hold, live countdown timer bar, manual release, unmount leak safety |
 | 22 | [`22-catalog-quick-book-and-asset-details-report-button.md`](./22-catalog-quick-book-and-asset-details-report-button.md) | Catalog Quick Book Modal & Asset Details Report | Overlay booking calendar directly on catalog cards, non-retired asset problem report button |
+| 23 | [`23-bundle-transfer-hold-security-hardening.md`](./23-bundle-transfer-hold-security-hardening.md) | Bundle, Transfer & Hold Security Hardening | Multi-asset bundle privacy, P2P transfer unique index & role checks, hold overlap verification, cascade transfer cancellation |
 
 
 

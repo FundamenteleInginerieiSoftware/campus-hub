@@ -17,7 +17,7 @@ public record CreateMultiAssetReservationRequest(
         @NotEmpty(message = "assetIds must not be empty")
         @Size(min = 2, max = 5, message = "assetIds must contain between 2 and 5 assets")
         @Schema(description = "Set of asset IDs to reserve together", example = "[1, 2, 3]")
-        Set<Long> assetIds,
+        Set<@NotNull(message = "assetId must not be null") Long> assetIds,
 
         @NotNull(message = "startTime must not be null")
         @Schema(description = "Start date-time of the reservation window", example = "2026-11-09T14:00:00")
