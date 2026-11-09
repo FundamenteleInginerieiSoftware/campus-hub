@@ -9,3 +9,9 @@ variable "vpc_cidr" {
   type        = string
   default     = "10.0.0.0/16"
 }
+
+variable "db_enabled" {
+  description = "Create the RDS database (costs money while it exists). false until the first deploy in W7; see rds.tf."
+  type        = bool
+  default     = false
+}
