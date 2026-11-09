@@ -16,7 +16,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 **Where to start:**
 - **Not a programmer (or the professor):** read only Part 1 of `01` (how the project was set up), `09` (the AWS plan), `13` (register and login), `19` (the Docker image) and `02` (what every file does).
 - **A teammate who needs the login details:** `04` (passwords, tokens, roles), `05` (401/403 errors), `13` (register/login), `17` (`/users/me`), `07` + `11` (`UserApi`), `20` (old tokens), `22` (blocked accounts), `31` (security chapter).
-- **A teammate who needs the AWS details:** `09` (architecture + ADRs), `19` (Dockerfile), `18` (first admin on AWS), `23` + `29` (S3 + SES), `32` (deployment diagrams).
+- **A teammate who needs the AWS details:** `09` (architecture + ADRs), `19` (Dockerfile), `18` (first admin on AWS), `23` + `29` (S3 + SES), `32` (deployment diagrams), `44` (Terraform network).
 
 ## Part 2: Technical details
 
@@ -68,6 +68,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 40 | [40-project-content.md](40-project-content.md) | Projects content (#140): seven more project guides in Romanian and English | #239 |
 | 41 | [41-projects-pages.md](41-projects-pages.md) | Projects pages (#140): search list, project details, slot availability check | #238 |
 | 42 | [42-project-reserve-all.md](42-project-reserve-all.md) | Projects "Reserve all" (#140): book every item of a project kit in one go | #243 |
+| 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | (in review) |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
