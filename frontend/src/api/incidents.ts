@@ -13,6 +13,12 @@ export const SEVERITIES: { value: IncidentSeverity; label: string; hint: string 
   { value: 'CRITICAL', label: 'Critical', hint: 'Dangerous (smoke, sparks, exposed wires)' },
 ]
 
+// Same rule as IncidentSeverity.takesAssetOutOfUseAtOnce() in the backend (#229): only these two take the
+// equipment out of use as soon as they are reported. LOW and MEDIUM wait until an admin starts the repair.
+export function takesOutOfUseAtOnce(severity: IncidentSeverity): boolean {
+  return severity === 'HIGH' || severity === 'CRITICAL'
+}
+
 // Shape of IncidentResponse.java. Dates are campus local time without offset: "2026-11-03T14:00:00".
 export type Incident = {
   id: number
@@ -74,7 +80,10 @@ export function fetchAdminIncidents(status: IncidentStatus | null, page = 0, siz
   return apiFetch<PageResponse<Incident>>(`/api/v1/admin/incidents?${params.toString()}`)
 }
 
-/** OPEN → IN_REPAIR; the equipment stays out of use (POST /api/v1/admin/incidents/{id}/start-repair). */
+/**
+ * OPEN → IN_REPAIR (POST /api/v1/admin/incidents/{id}/start-repair). For a LOW/MEDIUM report this is when the
+ * equipment goes out of use and its bookings are moved; a HIGH/CRITICAL one already is.
+ */
 export function startRepair(incidentId: number) {
   return apiFetch<Incident>(`/api/v1/admin/incidents/${incidentId}/start-repair`, { method: 'POST' })
 }

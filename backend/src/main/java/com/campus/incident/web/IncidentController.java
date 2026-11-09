@@ -45,17 +45,22 @@ public class IncidentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Report an incident on an asset; the asset goes UNDER_MAINTENANCE")
+    @Operation(summary = "Report an incident on an asset; HIGH and CRITICAL take the asset out of use at once")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Incident saved as OPEN; the asset is now UNDER_MAINTENANCE"),
+        @ApiResponse(
+                responseCode = "201",
+                description = "Incident saved as OPEN; HIGH/CRITICAL also make the asset UNDER_MAINTENANCE (#229)"),
         @ApiResponse(
                 responseCode = "400",
                 description = "VALIDATION_FAILED (assetId, description 1-2000 chars, severity) or MALFORMED_REQUEST"),
         @ApiResponse(responseCode = "404", description = "ASSET_NOT_FOUND"),
-        @ApiResponse(responseCode = "409", description = "ASSET_RETIRED: nothing is saved")
+        @ApiResponse(
+                responseCode = "409",
+                description = "ASSET_RETIRED, or TOO_MANY_OPEN_INCIDENTS (a student already has 3 OPEN reports): "
+                        + "nothing is saved")
     })
     public IncidentResponse reportIncident(@Valid @RequestBody CreateIncidentRequest request) {
-        return incidentService.reportIncident(request, currentUser.id());
+        return incidentService.reportIncident(request, currentUser.id(), currentUser.isAdmin());
     }
 
     // "/me" is a fixed path, so Spring picks it before "/{id}".

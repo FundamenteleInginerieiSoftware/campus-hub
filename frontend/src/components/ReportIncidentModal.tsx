@@ -7,6 +7,7 @@ import {
   MAX_PHOTO_BYTES,
   PHOTO_TYPES,
   SEVERITIES,
+  takesOutOfUseAtOnce,
   reportIncident,
   searchAssets,
   uploadIncidentPhoto,
@@ -172,8 +173,9 @@ export default function ReportIncidentModal({ onClose, onReported, initialAssetI
       <Stack>
         {savedIncident && (
           <Alert color="green" icon={<IconCheck size={18} />}>
-            Incident #{savedIncident.id} was reported and the equipment is now out of use. Only the photo was not
-            saved: pick another one and try again, or close without a photo.
+            Incident #{savedIncident.id} was reported
+            {takesOutOfUseAtOnce(savedIncident.severity) ? ' and the equipment is now out of use' : ''}. Only the
+            photo was not saved: pick another one and try again, or close without a photo.
           </Alert>
         )}
         <ErrorAlert error={error} />
@@ -233,8 +235,11 @@ export default function ReportIncidentModal({ onClose, onReported, initialAssetI
         />
 
         <Text size="sm" c="dimmed">
-          The equipment is taken out of use as soon as you report it. Students with a booking on it are moved to
-          another one automatically, if one is free.
+          {severity === null
+            ? 'High and Critical take the equipment out of use at once; Low and Medium are checked by an admin first.'
+            : takesOutOfUseAtOnce(severity)
+              ? 'The equipment is taken out of use as soon as you report it. Students with a booking on it are moved to another one automatically, if one is free.'
+              : 'The equipment stays in use for now. An admin checks it and takes it out of use only if it is really broken.'}
         </Text>
 
         <Group justify="flex-end">

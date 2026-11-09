@@ -11,6 +11,7 @@ import {
   startRepair,
   statusColor,
   statusLabel,
+  takesOutOfUseAtOnce,
   type Incident,
   type IncidentStatus,
 } from '../api/incidents.ts'
@@ -126,7 +127,11 @@ export default function IncidentQueuePage() {
     setError(null)
     try {
       await startRepair(incident.id)
-      setNotice(`Incident #${incident.id} is now in repair.`)
+      setNotice(
+        takesOutOfUseAtOnce(incident.severity)
+          ? `Incident #${incident.id} is now in repair.`
+          : `Incident #${incident.id} is now in repair. The equipment is out of use and its bookings are being moved.`,
+      )
       reload()
     } catch (err) {
       setError(err)
@@ -234,15 +239,20 @@ export default function IncidentQueuePage() {
         return (
           <Group gap="xs" wrap="nowrap">
             {i.status === 'OPEN' && (
-              <Button
-                size="xs"
-                variant="light"
-                leftSection={<IconTool size={14} />}
-                loading={startingId === i.id}
-                onClick={() => handleStartRepair(i)}
+              <Tooltip
+                label="Takes the equipment out of use now and moves its bookings"
+                disabled={takesOutOfUseAtOnce(i.severity)}
               >
-                Start repair
-              </Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconTool size={14} />}
+                  loading={startingId === i.id}
+                  onClick={() => handleStartRepair(i)}
+                >
+                  Start repair
+                </Button>
+              </Tooltip>
             )}
             <Button
               size="xs"
@@ -275,7 +285,7 @@ export default function IncidentQueuePage() {
     <>
       <PageHeader
         title="Incident queue"
-        description="Reported problems, newest first. Equipment with an open incident is out of use; resolving or rejecting the last one makes it available again."
+        description="Reported problems, newest first. High/Critical reports and repairs in progress keep the equipment out of use; Low/Medium stay in use until you start the repair. Closing the last one makes it available again."
       />
 
       <SegmentedControl data={FILTERS} value={filter} onChange={handleFilterChange} mb="md" />

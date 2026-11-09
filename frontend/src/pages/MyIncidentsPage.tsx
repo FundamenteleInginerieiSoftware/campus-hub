@@ -10,6 +10,7 @@ import {
   SEVERITIES,
   statusColor,
   statusLabel,
+  takesOutOfUseAtOnce,
   type Incident,
 } from '../api/incidents.ts'
 import { fetchAssetSummary, type AssetSummary } from '../api/reservations.ts'
@@ -89,7 +90,12 @@ export default function MyIncidentsPage() {
     handleCloseForm()
     setNotice(
       photoSaved
-        ? { color: 'green', text: `Incident #${incident.id} was reported. The equipment is out of use until an admin closes it.` }
+        ? {
+            color: 'green',
+            text: takesOutOfUseAtOnce(incident.severity)
+              ? `Incident #${incident.id} was reported. The equipment is out of use until an admin closes it.`
+              : `Incident #${incident.id} was reported. An admin will check the equipment; it stays in use meanwhile.`,
+          }
         : { color: 'yellow', text: `Incident #${incident.id} was reported without a photo.` },
     )
     // The new incident is the newest one, so it is first on page 0.
@@ -174,7 +180,7 @@ export default function MyIncidentsPage() {
     <>
       <PageHeader
         title="My incidents"
-        description="Problems you reported and where they are now. Equipment you report is taken out of use until an admin closes the incident."
+        description="Problems you reported and where they are now. High and Critical reports take the equipment out of use until an admin closes them; Low and Medium are checked first. You can have at most 3 open reports."
         actions={
           <Button leftSection={<IconPlus size={16} />} onClick={openForm}>
             Report a problem
