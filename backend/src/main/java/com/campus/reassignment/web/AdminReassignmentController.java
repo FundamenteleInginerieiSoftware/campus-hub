@@ -86,8 +86,10 @@ public class AdminReassignmentController {
             @Parameter(description = "Optional incident report ID linking to this maintenance event")
                     @RequestParam(required = false)
                     Long incidentId,
-            @Parameter(description = "If true, simulates the optimal moves without mutating database state")
-                    @RequestParam(defaultValue = "true")
+            @Parameter(
+                            description =
+                                    "If true, simulates the optimal moves without mutating database state; defaults to false (production execution)")
+                    @RequestParam(defaultValue = "false")
                     boolean dryRun) {
         return ResponseEntity.ok(reassignmentService.solveOptimalPlan(assetId, incidentId, dryRun));
     }

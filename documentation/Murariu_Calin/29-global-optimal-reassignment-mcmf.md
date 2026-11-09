@@ -75,7 +75,7 @@ Class: `com.campus.reassignment.service.optimal.MinCostMaxFlow`
 `POST /api/v1/admin/reassignments/solve-optimal`
 - Query parameters:
   - `damagedAssetId` (Long, required): ID of the malfunctioning equipment.
-  - `dryRun` (Boolean, default `true`): When true, computes the global optimal plan and side-by-side comparison without altering the database. When false, executes reassignments and logs actions to `reassignment_log`.
+  - `dryRun` (Boolean, default `false`): Defaults to `false` for production execution (executes reassignments and logs actions to `reassignment_log`). Set `dryRun=true` to simulate the plan without altering database state.
 
 ### 4. Verification & Mutation Testing
 

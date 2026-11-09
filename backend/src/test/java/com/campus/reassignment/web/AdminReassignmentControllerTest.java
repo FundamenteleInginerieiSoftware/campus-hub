@@ -1,5 +1,6 @@
 package com.campus.reassignment.web;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -160,5 +161,36 @@ class AdminReassignmentControllerTest {
                 .andExpect(jsonPath("$.rescuedReservations").value(2))
                 .andExpect(jsonPath("$.forceCancelledReservations").value(0))
                 .andExpect(jsonPath("$.comparison.optimalStrictlyBetter").value(true));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/solve-optimal defaults dryRun to false for production execution")
+    void solveOptimalDefaultsToProductionExecution() throws Exception {
+        OptimalReassignmentPlanResponse response = new OptimalReassignmentPlanResponse(
+                10L,
+                "Rigol DS1054Z",
+                2,
+                2,
+                0,
+                1,
+                1,
+                false,
+                List.of(new ReassignmentActionItem(
+                        101L,
+                        LocalDateTime.of(2026, 11, 15, 10, 0),
+                        LocalDateTime.of(2026, 11, 15, 12, 0),
+                        10L,
+                        20L,
+                        "Substitute Scope",
+                        "SameModel",
+                        10)),
+                new GreedyComparisonSummary(2, 1, 0, 1, 60, 1010, true, "Optimal saved strictly more"));
+
+        when(reassignmentService.solveOptimalPlan(eq(10L), any(), eq(false))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/admin/reassignments/solve-optimal").param("assetId", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.damagedAssetId").value(10));
     }
 }
