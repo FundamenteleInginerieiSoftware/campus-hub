@@ -68,6 +68,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 40 | [40-project-content.md](40-project-content.md) | Projects content (#140): seven more project guides in Romanian and English | #239 |
 | 41 | [41-projects-pages.md](41-projects-pages.md) | Projects pages (#140): search list, project details, slot availability check | #238 |
 | 42 | [42-project-reserve-all.md](42-project-reserve-all.md) | Projects "Reserve all" (#140): book every item of a project kit in one go | #243 |
+| 43 | [43-project-bundle-banner.md](43-project-bundle-banner.md) | Projects: "Bundle booking confirmed!" banner after Reserve all (passes the bundle id to Calin's #246 banner) | (in review) |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
