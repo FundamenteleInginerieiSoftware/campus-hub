@@ -1823,6 +1823,116 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("bookBundle facade: successfully books multi-asset kit returning UUID bundleId (#140)")
+    void bookBundle_success_multipleAssets() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        List<Long> assetIds = List.of(20L, 10L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 100L + r.getAssetId());
+            return r;
+        });
+
+        UUID bundleId = reservationService.bookBundle(USER_ID, assetIds, start, end);
+
+        assertThat(bundleId)
+                .as("bundle booking: facade must return a non-null bundle UUID; see ReservationService.bookBundle")
+                .isNotNull();
+
+        // Verify deterministic ascending lock order: 10L locked before 20L
+        InOrder inOrder = inOrder(catalogApi);
+        inOrder.verify(catalogApi).lockForBooking(10L);
+        inOrder.verify(catalogApi).lockForBooking(20L);
+
+        verify(auditService)
+                .record(eq(USER_ID), eq("CREATE_BUNDLE_RESERVATION"), eq("ReservationBundle"), eq(10L), any());
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Confirmed"), any());
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: successfully books 1-item kit (#140)")
+    void bookBundle_success_singleAsset() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        List<Long> assetIds = List.of(10L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 110L);
+            return r;
+        });
+
+        UUID bundleId = reservationService.bookBundle(USER_ID, assetIds, start, end);
+
+        assertThat(bundleId)
+                .as(
+                        "single-asset kit: 1-item kit must be accepted and return a bundle UUID; see ReservationService.bookBundle")
+                .isNotNull();
+
+        verify(catalogApi).lockForBooking(10L);
+        verify(reservationRepository).save(any(Reservation.class));
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: rejects empty list or more than 5 assets (#140)")
+    void bookBundle_rejectsInvalidSize() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(), start, end))
+                .as("empty bundle: empty asset list must throw INVALID_BUNDLE_SIZE; see ReservationService.bookBundle")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 1 and 5 assets");
+
+        List<Long> sixAssets = List.of(1L, 2L, 3L, 4L, 5L, 6L);
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, sixAssets, start, end))
+                .as("overflow bundle: > 5 assets must throw INVALID_BUNDLE_SIZE; see ReservationService.bookBundle")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("between 1 and 5 assets");
+    }
+
+    @Test
+    @DisplayName("bookBundle facade: admin bypasses student active reservation quota limit (#140)")
+    void bookBundle_adminBypassesQuota() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        List<Long> assetIds = List.of(10L, 20L);
+
+        when(currentUser.id()).thenReturn(999L);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(catalogApi.isBookable(anyLong())).thenReturn(true);
+        when(reservationRepository.existsOverlap(
+                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UUID bundleId = reservationService.bookBundle(999L, assetIds, start, end);
+
+        assertThat(bundleId).isNotNull();
+        verify(reservationRepository, never()).lockUserQuota(anyLong());
+        verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+    }
+
+    @Test
     @DisplayName("Extend: successfully extends active reservation when slot is free")
     void extendReservation_success() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);

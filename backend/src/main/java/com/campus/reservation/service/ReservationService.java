@@ -35,6 +35,7 @@ import com.campus.reservation.web.ReservationHoldResponse;
 import com.campus.reservation.web.ReservationResponse;
 import com.campus.reservation.web.ReservationSummaryResponse;
 import com.campus.reservation.web.ReservationTransferResponse;
+import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
@@ -45,6 +46,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -311,7 +313,39 @@ public class ReservationService implements ReservationApi {
                     "INVALID_BUNDLE_SIZE", "Multi-asset booking must include between 2 and 5 assets");
         }
 
-        List<Long> sortedAssetIds = req.assetIds().stream().sorted().toList();
+        return executeBundleBooking(userId, req.assetIds(), req.startTime(), req.endTime(), now);
+    }
+
+    /**
+     * In-process facade implementation for atomically booking a kit of 1 to 5 assets (all-or-nothing).
+     * Used by the Project Assistant engine (#140) and other cross-module integrations.
+     */
+    @Override
+    @Transactional
+    public UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end) {
+        LocalDateTime now = now();
+        validateSlotRules(start, end, now);
+
+        boolean containsNull = false;
+        if (assetIds != null) {
+            for (Long id : assetIds) {
+                if (id == null) {
+                    containsNull = true;
+                    break;
+                }
+            }
+        }
+        if (assetIds == null || assetIds.isEmpty() || assetIds.size() > 5 || containsNull) {
+            throw new BusinessRuleException(
+                    "INVALID_BUNDLE_SIZE", "Multi-asset booking must include between 1 and 5 assets");
+        }
+
+        return executeBundleBooking(userId, assetIds, start, end, now).bundleId();
+    }
+
+    private MultiAssetReservationResponse executeBundleBooking(
+            Long userId, Collection<Long> assetIds, LocalDateTime start, LocalDateTime end, LocalDateTime now) {
+        List<Long> sortedAssetIds = assetIds.stream().sorted().toList();
 
         // 1. Pessimistic lock on all assets in deterministic ID order (deadlock-free)
         for (Long assetId : sortedAssetIds) {
@@ -326,7 +360,20 @@ public class ReservationService implements ReservationApi {
         }
 
         // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
-        if (!currentUser.isAdmin()) {
+        boolean isAdmin = false;
+        if (currentUser != null) {
+            try {
+                if (currentUser.id().equals(userId) && currentUser.isAdmin()) {
+                    isAdmin = true;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (!isAdmin && userApi != null) {
+            isAdmin = userApi.findActiveRole(userId).map(r -> r == Role.ADMIN).orElse(false);
+        }
+
+        if (!isAdmin) {
             reservationRepository.lockUserQuota(userId);
             long activeCount =
                     reservationRepository.countByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES);
@@ -338,15 +385,13 @@ public class ReservationService implements ReservationApi {
 
         // 4. Overlap check on all assets (all-or-nothing atomicity against reservations and holds, #228 point 7)
         for (Long assetId : sortedAssetIds) {
-            if (reservationRepository.existsOverlap(
-                    assetId, req.startTime(), req.endTime(), ReservationStatus.ACTIVE_STATUSES, -1L)) {
+            if (reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, -1L)) {
                 throw new ConflictException(
                         "RESERVATION_CONFLICT",
                         "Asset " + assetId + " overlaps with an existing reservation in the requested window");
             }
             if (reservationHoldRepository != null
-                    && reservationHoldRepository.existsActiveOverlap(
-                            assetId, req.startTime(), req.endTime(), now, null, userId)) {
+                    && reservationHoldRepository.existsActiveOverlap(assetId, start, end, now, null, userId)) {
                 throw new ConflictException(
                         "SLOT_HELD", "Asset " + assetId + " is temporarily held by another student");
             }
@@ -356,7 +401,7 @@ public class ReservationService implements ReservationApi {
         UUID bundleId = UUID.randomUUID();
         List<Reservation> savedList = new ArrayList<>();
         for (Long assetId : sortedAssetIds) {
-            Reservation r = new Reservation(userId, assetId, req.startTime(), req.endTime(), now);
+            Reservation r = new Reservation(userId, assetId, start, end, now);
             r.assignBundle(bundleId);
             savedList.add(reservationRepository.save(r));
         }
@@ -375,7 +420,7 @@ public class ReservationService implements ReservationApi {
 
         List<ReservationResponse> responses =
                 savedList.stream().map(ReservationResponse::from).toList();
-        return new MultiAssetReservationResponse(bundleId, req.startTime(), req.endTime(), responses.size(), responses);
+        return new MultiAssetReservationResponse(bundleId, start, end, responses.size(), responses);
     }
 
     /**
