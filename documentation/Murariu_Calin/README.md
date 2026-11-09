@@ -44,6 +44,7 @@ Each document is structured in two parts:
 | 21 | [`21-reservation-slot-hold-countdown-and-release.md`](./21-reservation-slot-hold-countdown-and-release.md) | Booking Calendar Slot Hold & Countdown | Interactive 1-min slot hold, live countdown timer bar, manual release, unmount leak safety |
 | 22 | [`22-catalog-quick-book-and-asset-details-report-button.md`](./22-catalog-quick-book-and-asset-details-report-button.md) | Catalog Quick Book Modal & Asset Details Report | Overlay booking calendar directly on catalog cards, non-retired asset problem report button |
 | 23 | [`23-bundle-transfer-hold-security-hardening.md`](./23-bundle-transfer-hold-security-hardening.md) | Bundle, Transfer & Hold Security Hardening | Multi-asset bundle privacy, P2P transfer unique index & role checks, hold overlap verification, cascade transfer cancellation |
+| 24 | [`24-reservation-api-book-bundle-facade-and-project-architecture.md`](./24-reservation-api-book-bundle-facade-and-project-architecture.md) | ReservationApi bookBundle Facade & Project Assistant | In-process atomic booking facade (1..5 assets) for project assistant, ArchUnit leaf module rule for project |
 
 
 

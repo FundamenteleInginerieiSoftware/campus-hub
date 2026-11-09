@@ -29,7 +29,7 @@ import com.tngtech.archunit.lang.ArchRule;
 class ModuleBoundaryArchitectureTest {
 
     private static final String[] FEATURE_MODULES = {
-        "catalog", "incident", "notification", "reassignment", "reservation", "storage", "user"
+        "catalog", "incident", "notification", "project", "reassignment", "reservation", "storage", "user"
     };
 
     // Rule 1: Cross-module communication must go through public api facades or events.
@@ -52,6 +52,7 @@ class ModuleBoundaryArchitectureTest {
                             .because(String.format(
                                     "Module '%s' must not access internal packages of module '%s'; use '%s.api' instead",
                                     sourceModule, targetModule, targetModule))
+                            .allowEmptyShould(true)
                             .check(classes);
                 }
             }
@@ -117,4 +118,22 @@ class ModuleBoundaryArchitectureTest {
             .should()
             .beFreeOfCycles()
             .because("The modular monolith must maintain a clean acyclic dependency structure");
+
+    // Rule 6: Project assistant is a leaf module (nothing depends on it; AGENTS.md §5).
+    @ArchTest
+    static final ArchRule nothing_depends_on_project = noClasses()
+            .that()
+            .resideInAnyPackage(
+                    "com.campus.catalog..",
+                    "com.campus.reservation..",
+                    "com.campus.incident..",
+                    "com.campus.reassignment..",
+                    "com.campus.user..",
+                    "com.campus.storage..",
+                    "com.campus.notification..",
+                    "com.campus.common..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage("com.campus.project..")
+            .because("Project assistant is a leaf module (AGENTS.md §5); no module may depend on it");
 }

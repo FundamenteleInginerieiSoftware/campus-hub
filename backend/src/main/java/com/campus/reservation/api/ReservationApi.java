@@ -3,6 +3,7 @@ package com.campus.reservation.api;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Public contract for reservation queries and mutations accessed across modules.
@@ -59,4 +60,19 @@ public interface ReservationApi {
      * @return optional containing the active reservation summary if found
      */
     Optional<ReservationSummary> findCurrentCheckout(Long assetId);
+
+    /**
+     * Atomically books a kit of 1 to 5 assets for the given time slot (all-or-nothing).
+     * Used in-process by the project assistant engine (#140) and other cross-module workflows.
+     *
+     * <p>Deadlock prevention & concurrency order: Asset rows are sorted in ascending ID order
+     * before acquiring pessimistic row locks.
+     *
+     * @param userId the user ID on whose behalf the bundle is booked
+     * @param assetIds the list of asset IDs to reserve (1 to 5 items)
+     * @param start start of the reservation time slot
+     * @param end end of the reservation time slot
+     * @return the unique bundle identifier assigned to all reservations in the kit
+     */
+    UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end);
 }
