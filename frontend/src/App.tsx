@@ -5,6 +5,7 @@ import AppLayout from './layout/AppLayout.tsx'
 import AdminInventoryPage from './pages/AdminInventoryPage.tsx'
 import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
 import CatalogPage from './pages/CatalogPage.tsx'
+import IncidentQueuePage from './pages/IncidentQueuePage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
@@ -41,12 +42,7 @@ export default function App() {
         <Route path="admin" element={<RequireAdmin />}>
           <Route index element={<Navigate to="reservations" replace />} />
           <Route path="reservations" element={<ReservationsDeskPage />} />
-          <Route
-            path="incidents"
-            element={
-              <PlaceholderPage title="Incident queue" description="Reported problems to triage and resolve." owner="Stefania" />
-            }
-          />
+          <Route path="incidents" element={<IncidentQueuePage />} />
           <Route
             path="reassignments"
             element={
