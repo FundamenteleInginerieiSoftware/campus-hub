@@ -482,7 +482,10 @@ class ReservationLifecycleServiceTest {
 
         int swept = lifecycleService.sweepExpiredHolds();
 
-        assertThat(swept).isEqualTo(5);
+        assertThat(swept)
+                .as(
+                        "sweep expired holds: lifecycle scheduled runner must return count of holds swept; see ReservationLifecycleService.sweepExpiredHolds")
+                .isEqualTo(5);
         verify(reservationService).sweepExpiredHolds(expectedNow);
     }
 }

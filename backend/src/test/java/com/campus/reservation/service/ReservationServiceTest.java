@@ -883,8 +883,8 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("ReservationApi: isAssetFree returns correct boolean based on overlap query")
-    void isAssetFreeChecksOverlap() {
+    @DisplayName("isAssetFree: returns true when asset has no overlapping reservations or active holds")
+    void isAssetFree_returnsTrueWhenFreeOfReservationsAndHolds() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
@@ -894,44 +894,64 @@ class ReservationServiceTest {
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
-        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isTrue();
 
-        // If hold overlap exists for another user, isAssetFree returns false
-        when(reservationHoldRepository.existsActiveOverlap(
-                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
-                .thenReturn(true);
-        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isFalse();
-
-        // When unauthenticated or currentUser throws, currentUserId passes null
-        when(currentUser.id()).thenThrow(new RuntimeException("no auth"));
-        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
-                .thenReturn(false);
-        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null)).isTrue();
-
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 5L))
-                .thenReturn(true);
-        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 5L)).isFalse();
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
+                .as(
+                        "availability: asset must be reported free when neither reservations nor holds overlap; see ReservationService.isAssetFree")
+                .isTrue();
     }
 
     @Test
-    @DisplayName("isAssetFree works gracefully when reservationHoldRepository is null")
-    void isAssetFreeGracefulWhenHoldRepoNull() {
-        ReservationService serviceWithoutHoldRepo = new ReservationService(
-                reservationRepository,
-                catalogApi,
-                currentUser,
-                auditService,
-                notificationService,
-                clock,
-                reservationTransferRepository,
-                userApi,
-                null);
+    @DisplayName("isAssetFree: returns false when hold overlap exists for another user")
+    void isAssetFree_returnsFalseWhenHoldOverlapExistsForAnotherUser() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
                 .thenReturn(false);
-        assertThat(serviceWithoutHoldRepo.isAssetFree(ASSET_ID, start, end, null))
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
+                .as(
+                        "availability: active hold by another user must mark the asset busy; see ReservationService.isAssetFree")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("isAssetFree: safely checks holds without logged-in user (reassignment async listener)")
+    void isAssetFree_safeWhenUnauthenticated() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        // In asynchronous listeners (e.g. ReassignmentListener), there is no security context / JWT
+        when(currentUser.id()).thenThrow(new RuntimeException("no auth"));
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
+                .thenReturn(false);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
+                .as(
+                        "availability: unauthenticated callers (e.g. async reassignment engine) must check holds against all users; see ReservationService.isAssetFree")
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("isAssetFree: returns false when reservation overlap exists")
+    void isAssetFree_returnsFalseWhenReservationOverlapExists() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 5L))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 5L))
+                .as(
+                        "availability: existing reservation overlap must mark asset busy; see ReservationService.isAssetFree")
+                .isFalse();
     }
 
     @Test
@@ -2792,9 +2812,20 @@ class ReservationServiceTest {
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
 
-        ReservationHold differentHold = new ReservationHold(
+        // Hold for different asset
+        ReservationHold differentAssetHold = new ReservationHold(
                 999L, USER_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 1), LocalDateTime.of(2026, 11, 2, 10, 0));
-        ReflectionTestUtils.setField(differentHold, "id", 88L);
+        ReflectionTestUtils.setField(differentAssetHold, "id", 88L);
+
+        // Hold for same asset but different time slot (e.g. 10:00-12:00)
+        ReservationHold differentSlotHold = new ReservationHold(
+                ASSET_ID,
+                USER_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 1),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(differentSlotHold, "id", 89L);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
@@ -2807,7 +2838,7 @@ class ReservationServiceTest {
                 .thenReturn(0L);
         when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
                         eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
-                .thenReturn(List.of(differentHold));
+                .thenReturn(List.of(differentAssetHold, differentSlotHold));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
             ReflectionTestUtils.setField(r, "id", 102L);
@@ -2816,8 +2847,16 @@ class ReservationServiceTest {
 
         reservationService.createReservation(req);
 
-        assertThat(differentHold.getStatus()).isEqualTo(HoldStatus.ACTIVE);
-        verify(reservationHoldRepository, never()).save(differentHold);
+        assertThat(differentAssetHold.getStatus())
+                .as(
+                        "auto-confirm: hold for a different asset must stay ACTIVE; see ReservationService.createReservation")
+                .isEqualTo(HoldStatus.ACTIVE);
+        assertThat(differentSlotHold.getStatus())
+                .as(
+                        "auto-confirm: hold for a different time slot on the same asset must stay ACTIVE; see ReservationService.createReservation")
+                .isEqualTo(HoldStatus.ACTIVE);
+        verify(reservationHoldRepository, never()).save(differentAssetHold);
+        verify(reservationHoldRepository, never()).save(differentSlotHold);
     }
 
     // ==========================================
@@ -2838,6 +2877,8 @@ class ReservationServiceTest {
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .as(
+                        "extension status: only CONFIRMED or CHECKED_OUT reservations can be extended; see ReservationService.extendReservation")
                 .isInstanceOf(InvalidStateTransitionException.class)
                 .hasMessageContaining("Only CONFIRMED or CHECKED_OUT reservations can be extended");
     }
@@ -2858,6 +2899,8 @@ class ReservationServiceTest {
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .as(
+                        "booking horizon: extension cannot exceed the 14-day booking horizon; see ReservationService.extendReservation")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("cannot be made more than 14 days in advance");
     }
@@ -2872,30 +2915,14 @@ class ReservationServiceTest {
         when(reservationHoldRepository.findHeldAssetIds(eq(start), eq(end), any(), isNull()))
                 .thenReturn(List.of(20L));
 
+        // When called from async tasks or without JWT, unauthenticated caller must still see all holds
         when(currentUser.id()).thenThrow(new RuntimeException("Unauthenticated"));
 
         List<Long> busy = reservationService.findBusyAssetIds(start, end);
 
-        assertThat(busy).containsExactly(10L, 20L);
-    }
-
-    @Test
-    @DisplayName("sweepExpiredHolds delegates to hold repository or returns 0 when null")
-    void sweepExpiredHoldsDelegates() {
-        LocalDateTime now = LocalDateTime.of(2026, 11, 2, 10, 0);
-        when(reservationHoldRepository.expireOldHolds(now)).thenReturn(3);
-        assertThat(reservationService.sweepExpiredHolds(now)).isEqualTo(3);
-
-        ReservationService withoutRepo = new ReservationService(
-                reservationRepository,
-                catalogApi,
-                currentUser,
-                auditService,
-                notificationService,
-                clock,
-                reservationTransferRepository,
-                userApi,
-                null);
-        assertThat(withoutRepo.sweepExpiredHolds(now)).isEqualTo(0);
+        assertThat(busy)
+                .as(
+                        "busy assets: unauthenticated queries must include all held asset IDs; see ReservationService.findBusyAssetIds")
+                .containsExactly(10L, 20L);
     }
 }

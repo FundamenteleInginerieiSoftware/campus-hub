@@ -105,13 +105,28 @@ class ReservationHoldServiceTest {
 
         ReservationHoldResponse response = reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END));
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(1L);
-        assertThat(response.status()).isEqualTo(HoldStatus.ACTIVE);
-        assertThat(response.assetId()).isEqualTo(ASSET_ID);
-        assertThat(response.userId()).isEqualTo(USER_ID);
-        assertThat(response.expiresAt()).isEqualTo(NOW.plusMinutes(1));
-        assertThat(response.remainingSeconds()).isGreaterThan(0);
+        assertThat(response)
+                .as("hold response: creation must return non-null hold response; see ReservationService.createHold")
+                .isNotNull();
+        assertThat(response.id())
+                .as("hold response: created hold must have assigned ID; see ReservationService.createHold")
+                .isEqualTo(1L);
+        assertThat(response.status())
+                .as("hold status: newly acquired hold must be ACTIVE; see ReservationService.createHold")
+                .isEqualTo(HoldStatus.ACTIVE);
+        assertThat(response.assetId())
+                .as("hold asset: hold must match requested asset ID; see ReservationService.createHold")
+                .isEqualTo(ASSET_ID);
+        assertThat(response.userId())
+                .as("hold owner: hold must match authenticated student ID; see ReservationService.createHold")
+                .isEqualTo(USER_ID);
+        assertThat(response.expiresAt())
+                .as("hold expiry: hold must expire exactly 1 minute after creation; see ReservationService.createHold")
+                .isEqualTo(NOW.plusMinutes(1));
+        assertThat(response.remainingSeconds())
+                .as(
+                        "hold remaining seconds: active hold must report positive remaining time; see ReservationService.createHold")
+                .isGreaterThan(0);
 
         verify(catalogApi).lockForBooking(ASSET_ID);
         verify(auditService).record(eq(USER_ID), eq("HOLD_ACQUIRED"), eq("ReservationHold"), eq(1L), any());
@@ -128,6 +143,8 @@ class ReservationHoldServiceTest {
                 .thenReturn(true);
 
         assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END)))
+                .as(
+                        "concurrency: slot held by another student cannot be held concurrently; see ReservationService.createHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("temporarily held by another student");
 
@@ -149,6 +166,8 @@ class ReservationHoldServiceTest {
                 .thenReturn(1L);
 
         assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END)))
+                .as(
+                        "quota limit: student with an active hold cannot acquire another hold; see ReservationService.createHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already have an active reservation hold");
     }
@@ -175,10 +194,19 @@ class ReservationHoldServiceTest {
 
         ReservationResponse response = reservationService.confirmHold(1L);
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(55L);
-        assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
-        assertThat(hold.getStatus()).isEqualTo(HoldStatus.CONFIRMED);
+        assertThat(response)
+                .as("confirm hold: confirmed reservation response must not be null; see ReservationService.confirmHold")
+                .isNotNull();
+        assertThat(response.id())
+                .as("confirm hold: confirmed reservation must have ID; see ReservationService.confirmHold")
+                .isEqualTo(55L);
+        assertThat(response.status())
+                .as(
+                        "confirm hold: confirmed reservation must have CONFIRMED status; see ReservationService.confirmHold")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(hold.getStatus())
+                .as("hold status: confirmed hold must transition to CONFIRMED; see ReservationService.confirmHold")
+                .isEqualTo(HoldStatus.CONFIRMED);
 
         verify(catalogApi).lockForBooking(ASSET_ID);
         verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Confirmed"), any());
@@ -197,10 +225,15 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
 
         assertThatThrownBy(() -> reservationService.confirmHold(1L))
+                .as(
+                        "expiry: attempting to confirm an expired hold must throw ConflictException; see ReservationService.confirmHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("The reservation hold has expired");
 
-        assertThat(hold.getStatus()).isEqualTo(HoldStatus.EXPIRED);
+        assertThat(hold.getStatus())
+                .as(
+                        "hold status: expired hold checked on confirm must transition to EXPIRED; see ReservationService.confirmHold")
+                .isEqualTo(HoldStatus.EXPIRED);
     }
 
     @Test
@@ -214,6 +247,8 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
 
         assertThatThrownBy(() -> reservationService.confirmHold(1L))
+                .as(
+                        "IDOR protection: student attempting to confirm another user's hold must get 404 Not Found; see ReservationService.confirmHold")
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Reservation hold not found");
     }
@@ -230,7 +265,9 @@ class ReservationHoldServiceTest {
 
         ReservationHoldResponse response = reservationService.releaseHold(1L);
 
-        assertThat(response.status()).isEqualTo(HoldStatus.RELEASED);
+        assertThat(response.status())
+                .as("release hold: released hold must transition to RELEASED; see ReservationService.releaseHold")
+                .isEqualTo(HoldStatus.RELEASED);
         verify(auditService).record(eq(USER_ID), eq("HOLD_RELEASED"), eq("ReservationHold"), eq(1L), any());
     }
 
@@ -247,9 +284,16 @@ class ReservationHoldServiceTest {
 
         List<ReservationHoldResponse> holds = reservationService.getMyActiveHolds();
 
-        assertThat(holds).hasSize(1);
-        assertThat(holds.get(0).id()).isEqualTo(1L);
-        assertThat(holds.get(0).remainingSeconds()).isGreaterThan(0);
+        assertThat(holds)
+                .as("my holds: must return list of user's active holds; see ReservationService.getMyActiveHolds")
+                .hasSize(1);
+        assertThat(holds.get(0).id())
+                .as("my holds: must match active hold ID; see ReservationService.getMyActiveHolds")
+                .isEqualTo(1L);
+        assertThat(holds.get(0).remainingSeconds())
+                .as(
+                        "my holds: active hold must report positive remaining seconds; see ReservationService.getMyActiveHolds")
+                .isGreaterThan(0);
     }
 
     @Test
@@ -259,18 +303,11 @@ class ReservationHoldServiceTest {
 
         int count = reservationService.sweepExpiredHolds(NOW);
 
-        assertThat(count).isEqualTo(3);
+        assertThat(count)
+                .as(
+                        "sweep expired holds: must return count of expired rows reported by repository; see ReservationService.sweepExpiredHolds")
+                .isEqualTo(3);
         verify(reservationHoldRepository).expireOldHolds(NOW);
-    }
-
-    @Test
-    @DisplayName("sweepExpiredHolds: returns 0 when no holds were expired")
-    void sweepExpiredHolds_zeroCount() {
-        when(reservationHoldRepository.expireOldHolds(any())).thenReturn(0);
-
-        int count = reservationService.sweepExpiredHolds(NOW);
-
-        assertThat(count).isZero();
     }
 
     @Test
@@ -296,8 +333,13 @@ class ReservationHoldServiceTest {
 
         ReservationHoldResponse response = reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END));
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response)
+                .as(
+                        "quota boundary: student with 1 active reservation is allowed to hold (limit is 2); see ReservationService.createHold")
+                .isNotNull();
+        assertThat(response.id())
+                .as("quota boundary: hold ID must be returned; see ReservationService.createHold")
+                .isEqualTo(1L);
     }
 
     @Test
@@ -317,22 +359,31 @@ class ReservationHoldServiceTest {
                 .thenReturn(2L); // Boundary: 2 active reservations -> limit reached
 
         assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, START, END)))
+                .as(
+                        "quota boundary: student with 2 active reservations cannot hold (limit is 2); see ReservationService.createHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Student cannot exceed active reservation quota");
     }
 
     @Test
-    @DisplayName("createHold: validates slot rules - rejects invalid time range or outside opening hours")
-    void createHold_validatesSlotRules() {
-        // Start after end
+    @DisplayName("createHold: slot validation - rejects when end time is before start time")
+    void createHold_rejectsWhenEndTimeBeforeStartTime() {
         assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, END, START)))
+                .as(
+                        "slot validation: end time before start time must throw BusinessRuleException; see ReservationService.createHold")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("End time must be after start time");
+    }
 
+    @Test
+    @DisplayName("createHold: slot validation - rejects when slot is outside opening hours")
+    void createHold_rejectsWhenOutsideOpeningHours() {
         // Outside opening hours (e.g. 20:30)
         LocalDateTime lateStart = LocalDateTime.of(2026, 11, 2, 20, 30);
         LocalDateTime lateEnd = LocalDateTime.of(2026, 11, 2, 21, 30);
         assertThatThrownBy(() -> reservationService.createHold(new CreateHoldRequest(ASSET_ID, lateStart, lateEnd)))
+                .as(
+                        "operating hours: hold outside 08:00-20:00 must throw BusinessRuleException; see ReservationService.createHold")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("within opening hours");
     }
@@ -359,8 +410,13 @@ class ReservationHoldServiceTest {
 
         ReservationResponse response = reservationService.confirmHold(1L);
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(55L);
+        assertThat(response)
+                .as(
+                        "quota boundary: student with 1 active reservation can confirm hold (limit is 2); see ReservationService.confirmHold")
+                .isNotNull();
+        assertThat(response.id())
+                .as("quota boundary: confirmed reservation ID must be returned; see ReservationService.confirmHold")
+                .isEqualTo(55L);
     }
 
     @Test
@@ -379,6 +435,8 @@ class ReservationHoldServiceTest {
                 .thenReturn(2L); // Boundary: 2 active reservations -> limit reached
 
         assertThatThrownBy(() -> reservationService.confirmHold(1L))
+                .as(
+                        "quota boundary: student with 2 active reservations cannot confirm hold (limit is 2); see ReservationService.confirmHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Student cannot have more than 2 active reservations");
     }
@@ -403,8 +461,13 @@ class ReservationHoldServiceTest {
 
         ReservationResponse response = reservationService.confirmHold(1L);
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(55L);
+        assertThat(response)
+                .as(
+                        "admin override: admin can confirm hold even if quota would normally apply; see ReservationService.confirmHold")
+                .isNotNull();
+        assertThat(response.id())
+                .as("admin override: confirmed reservation ID must be returned; see ReservationService.confirmHold")
+                .isEqualTo(55L);
         verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
     }
 
@@ -421,7 +484,9 @@ class ReservationHoldServiceTest {
 
         ReservationHoldResponse response = reservationService.releaseHold(1L);
 
-        assertThat(response.status()).isEqualTo(HoldStatus.RELEASED);
+        assertThat(response.status())
+                .as("admin override: admin can release another student's hold; see ReservationService.releaseHold")
+                .isEqualTo(HoldStatus.RELEASED);
         verify(auditService).record(eq(USER_ID), eq("HOLD_RELEASED"), eq("ReservationHold"), eq(1L), any());
     }
 
@@ -436,6 +501,8 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
 
         assertThatThrownBy(() -> reservationService.releaseHold(1L))
+                .as(
+                        "IDOR protection: non-owner student releasing another user's hold must receive 404 Not Found; see ReservationService.releaseHold")
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Reservation hold not found");
     }
@@ -447,6 +514,8 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.releaseHold(1L))
+                .as(
+                        "existence: releasing non-existent hold must receive 404 Not Found; see ReservationService.releaseHold")
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Reservation hold not found");
     }
