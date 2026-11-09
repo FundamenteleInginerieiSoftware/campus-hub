@@ -61,7 +61,14 @@ Located in package `com.campus.reservation.idempotency`:
     - On success: saves response status code and JSON serialized body, updates status to `COMPLETED` via `Propagation.REQUIRES_NEW`.
     - On runtime exception: updates status to `FAILED` or deletes record so that future retries are not permanently locked out.
 
-### 3. Controller Integration
+### 3. Autonomous Purge Job (Every 2 Days)
+- Configured in `IdempotencyService.sweepExpiredRecords()`:
+  - Runs automatically via `@Scheduled(fixedDelayString = "${app.reservation.idempotency-cleanup-ms:172800000}", initialDelayString = "${app.reservation.idempotency-cleanup-initial-delay-ms:600000}")`.
+  - Fixed delay of 172,800,000 ms (48 hours = 2 days).
+  - Uses PostgreSQL index `idx_idempotency_expires_at` to efficiently delete stale records older than current time (`expiresAt < now()`).
+  - Guaranteed transactional cleanup via `@Transactional` without blocking concurrent bookings.
+
+### 4. Controller Integration
 Integrated into `ReservationController.java`:
 - `POST /api/v1/reservations`: accepts `@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey`.
 - `POST /api/v1/reservations/bundle`: accepts `@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey`.

@@ -193,4 +193,16 @@ class IdempotencyServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("currently being processed");
     }
+
+    @Test
+    @DisplayName("Autonomous purge sweeps expired idempotency records older than current time")
+    void sweepExpiredRecords_purgesExpiredRecords() {
+        LocalDateTime now = LocalDateTime.now(fixedClock);
+        when(repository.deleteExpiredRecords(now)).thenReturn(7);
+
+        int deleted = service.sweepExpiredRecords();
+
+        assertThat(deleted).isEqualTo(7);
+        verify(repository).deleteExpiredRecords(now);
+    }
 }
