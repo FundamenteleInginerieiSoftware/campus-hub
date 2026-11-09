@@ -1,0 +1,149 @@
+{
+  "slug": "esp32-weather-station",
+  "difficulty": "INTERMEDIATE",
+  "estimatedHours": 4,
+  "title": {
+    "ro": "Stație meteo cu ESP32",
+    "en": "ESP32 weather station"
+  },
+  "summary": {
+    "ro": "O stație meteo Wi-Fi: placa ESP32-S3 citește temperatura de la un senzor DS18B20, o afișează pe un LCD 16x2 și o publică pe o pagină web pe care o deschizi de pe telefon.",
+    "en": "A Wi-Fi weather station: the ESP32-S3 board reads the temperature from a DS18B20 sensor, shows it on a 16x2 LCD and serves it on a web page you open from your phone."
+  },
+  "keywords": {
+    "ro": ["stație meteo", "stația", "stații", "meteo", "vreme", "vremea", "temperatura", "wifi", "esp32", "pagină web", "server"],
+    "en": ["weather station", "weather", "station", "temperature", "wifi", "esp32", "web page", "server"]
+  },
+  "components": [
+    {
+      "model": "ESP32-S3-DevKitC-1",
+      "quantity": 1,
+      "why": {
+        "ro": "Microcontroler cu Wi-Fi integrat: citește senzorul, scrie pe LCD și rulează serverul web. Pinii lui lucrează la 3,3 V și nu suportă 5 V.",
+        "en": "Microcontroller with built-in Wi-Fi: reads the sensor, writes to the LCD and runs the web server. Its pins work at 3.3 V and are not 5 V tolerant."
+      }
+    },
+    {
+      "model": "DS18B20 temperature sensor kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Senzor digital 1-Wire care funcționează între 3,0 și 5,5 V, deci poate fi legat direct la 3,3 V de pe ESP32.",
+        "en": "1-Wire digital sensor that works from 3.0 to 5.5 V, so it can run straight from the ESP32's 3.3 V."
+      }
+    },
+    {
+      "model": "16x2 I2C LCD module kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Afișează temperatura și adresa IP a stației fără să ai nevoie de laptop.",
+        "en": "Shows the temperature and the station's IP address without needing a laptop."
+      }
+    },
+    {
+      "model": "Breadboard + jumper wire kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Ține placa, senzorul și convertorul de nivel logic și separă șina de 3,3 V de cea de 5 V.",
+        "en": "Holds the board, the sensor and the logic level shifter and keeps the 3.3 V rail apart from the 5 V rail."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Cablu USB potrivit plăcii (USB-C la plăcile noi, Micro-USB la cele vechi)",
+      "en": "USB cable that fits the board (USB-C on newer boards, Micro-USB on older ones)"
+    },
+    {
+      "ro": "Rezistor de 4,7 kΩ pentru linia de date a senzorului DS18B20",
+      "en": "4.7 kΩ resistor for the DS18B20 data line"
+    },
+    {
+      "ro": "Convertor de nivel logic bidirecțional 3,3 V ↔ 5 V (de exemplu un modul cu BSS138) pentru SDA și SCL",
+      "en": "Bidirectional 3.3 V ↔ 5 V logic level shifter (for example a BSS138 module) for SDA and SCL"
+    },
+    {
+      "ro": "Telefon cu hotspot Wi-Fi pe 2,4 GHz",
+      "en": "Phone with a 2.4 GHz Wi-Fi hotspot"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Conectează senzorul DS18B20",
+        "en": "Wire the DS18B20 sensor"
+      },
+      "text": {
+        "ro": "Leagă VDD la pinul 3V3, GND la GND și DATA la GPIO4. Pune rezistorul de 4,7 kΩ între DATA și 3V3, nu la 5 V, ca linia de date să nu urce peste 3,3 V.",
+        "en": "Connect VDD to the 3V3 pin, GND to GND and DATA to GPIO4. Put the 4.7 kΩ resistor between DATA and 3V3, not 5 V, so the data line never rises above 3.3 V."
+      }
+    },
+    {
+      "title": {
+        "ro": "Leagă LCD-ul prin convertorul de nivel",
+        "en": "Connect the LCD through the level shifter"
+      },
+      "text": {
+        "ro": "LCD-ul are nevoie de 5 V pentru contrast, iar modulul I2C trage SDA și SCL la tensiunea lui. Alimentează LCD-ul din pinul 5V, partea LV a convertorului din 3V3 și partea HV din 5V, apoi trece SDA (GPIO8) și SCL (GPIO9) prin convertor.",
+        "en": "The LCD needs 5 V for contrast, and its I2C backpack pulls SDA and SCL up to its own supply. Power the LCD from the 5V pin, the shifter's LV side from 3V3 and its HV side from 5V, then route SDA (GPIO8) and SCL (GPIO9) through the shifter."
+      }
+    },
+    {
+      "title": {
+        "ro": "Pregătește Arduino IDE pentru ESP32",
+        "en": "Set up Arduino IDE for the ESP32"
+      },
+      "text": {
+        "ro": "Instalează pachetul de plăci „esp32” de la Espressif și alege „ESP32S3 Dev Module”. Instalează bibliotecile OneWire, DallasTemperature și LiquidCrystal_I2C, apoi pornește magistrala cu Wire.begin(8, 9) și LCD-ul la adresa 0x27 (sau 0x3F).",
+        "en": "Install the Espressif \"esp32\" board package and choose \"ESP32S3 Dev Module\". Install the OneWire, DallasTemperature and LiquidCrystal_I2C libraries, then start the bus with Wire.begin(8, 9) and the LCD at address 0x27 (or 0x3F)."
+      }
+    },
+    {
+      "title": {
+        "ro": "Conectează-te la Wi-Fi și pornește serverul web",
+        "en": "Join Wi-Fi and start the web server"
+      },
+      "text": {
+        "ro": "Cu WiFi.begin(ssid, parola) intră în hotspotul telefonului, apoi creează un WebServer pe portul 80 care răspunde la „/” cu o pagină HTML ce conține temperatura. Afișează WiFi.localIP() pe al doilea rând al LCD-ului.",
+        "en": "Use WiFi.begin(ssid, password) to join the phone hotspot, then create a WebServer on port 80 that answers \"/\" with an HTML page containing the temperature. Show WiFi.localIP() on the LCD's second line."
+      }
+    },
+    {
+      "title": {
+        "ro": "Citește periodic fără să blochezi serverul",
+        "en": "Read periodically without blocking the server"
+      },
+      "text": {
+        "ro": "În loop() apelează server.handleClient() la fiecare trecere și citește senzorul o dată la 10 secunde folosind millis(), nu delay(). Păstrează și minimul și maximul zilei.",
+        "en": "In loop() call server.handleClient() on every pass and read the sensor once every 10 seconds using millis(), not delay(). Also keep the day's minimum and maximum."
+      }
+    },
+    {
+      "title": {
+        "ro": "Testează de pe telefon",
+        "en": "Test from your phone"
+      },
+      "text": {
+        "ro": "Deschide în browserul telefonului adresa IP de pe LCD. Încălzește senzorul în palmă și reîncarcă pagina: valoarea trebuie să crească în câteva secunde.",
+        "en": "Open the IP address shown on the LCD in your phone's browser. Warm the sensor in your hand and reload the page: the value should rise within a few seconds."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Legarea directă a modulului LCD alimentat la 5 V pe pinii ESP32: rezistoarele pull-up ale modulului pun 5 V pe GPIO8/GPIO9, iar ESP32 nu suportă 5 V.",
+      "en": "Wiring the 5 V-powered LCD backpack straight to the ESP32: the backpack's pull-up resistors put 5 V on GPIO8/GPIO9, and the ESP32 is not 5 V tolerant."
+    },
+    {
+      "ro": "Conectarea la eduroam sau la o rețea doar pe 5 GHz: ESP32 merge numai pe 2,4 GHz și nu se descurcă ușor cu WPA2-Enterprise. Folosește hotspotul telefonului.",
+      "en": "Joining eduroam or a 5 GHz-only network: the ESP32 only works on 2.4 GHz and does not handle WPA2-Enterprise easily. Use the phone hotspot."
+    },
+    {
+      "ro": "delay(10000) în loop(): serverul nu răspunde 10 secunde, iar pagina pare blocată în browser.",
+      "en": "delay(10000) in loop(): the server stops answering for 10 seconds and the page looks frozen in the browser."
+    },
+    {
+      "ro": "Senzorul legat pe GPIO0, GPIO45 sau GPIO46: sunt pini de configurare la pornire, iar placa poate să nu mai pornească normal.",
+      "en": "Wiring the sensor to GPIO0, GPIO45 or GPIO46: they are boot strapping pins, so the board may no longer start normally."
+    }
+  ]
+}

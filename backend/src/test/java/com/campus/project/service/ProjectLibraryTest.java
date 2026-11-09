@@ -28,7 +28,17 @@ class ProjectLibraryTest {
         assertThat(library.all())
                 .as("shipped classpath*:projects/*.json must load in ascending slug order; see ProjectLibrary.<init>")
                 .extracting(Project::slug)
-                .containsExactly("multimeter-basics", "oscilloscope-pwm", "thermometer");
+                .containsExactly(
+                        "bench-motor-test",
+                        "esp32-weather-station",
+                        "lcd-digital-clock",
+                        "line-follower-robot",
+                        "multimeter-basics",
+                        "oscilloscope-pwm",
+                        "parking-sensor",
+                        "printed-enclosure",
+                        "stm32-blinky-debugger",
+                        "thermometer");
     }
 
     @Test

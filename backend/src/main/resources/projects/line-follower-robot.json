@@ -1,0 +1,141 @@
+{
+  "slug": "line-follower-robot",
+  "difficulty": "INTERMEDIATE",
+  "estimatedHours": 5,
+  "title": {
+    "ro": "Robot urmăritor de linie",
+    "en": "Line follower robot"
+  },
+  "summary": {
+    "ro": "Construiește un robot cu două roți care urmărește o linie neagră pe o suprafață albă, folosind doi senzori infraroșu, o placă Arduino Uno și driverul de motoare L298N.",
+    "en": "Build a two-wheeled robot that follows a black line on a white surface, using two infrared sensors, an Arduino Uno and the L298N motor driver."
+  },
+  "keywords": {
+    "ro": ["robot", "roboți", "robotul", "urmăritor de linie", "urmărire", "linie", "linii", "mașinuță", "șasiu", "infraroșu", "l298n"],
+    "en": ["robot", "robots", "line follower", "following", "line", "car", "chassis", "infrared", "l298n"]
+  },
+  "components": [
+    {
+      "model": "2WD robot chassis + L298N kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Șasiul cu două motoare DC și roată liberă, plus puntea H L298N care permite Arduino-ului să controleze sensul și viteza fiecărui motor.",
+        "en": "The chassis with two DC gear motors and a caster wheel, plus the L298N H-bridge that lets the Arduino control the direction and speed of each motor."
+      }
+    },
+    {
+      "model": "Arduino Uno R3",
+      "quantity": 1,
+      "why": {
+        "ro": "Citește cei doi senzori de linie și decide în fiecare moment dacă robotul merge înainte sau virează.",
+        "en": "Reads the two line sensors and decides at every moment whether the robot drives straight or turns."
+      }
+    },
+    {
+      "model": "Breadboard + jumper wire kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Un breadboard mic lipit pe șasiu distribuie 5 V și masa comună către senzori, iar firele leagă driverul de Arduino.",
+        "en": "A small breadboard stuck on the chassis shares 5 V and common ground with the sensors, and the wires connect the driver to the Arduino."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "2 module senzor infraroșu de linie TCRT5000 (cu ieșire digitală DO și potențiometru)",
+      "en": "2 TCRT5000 infrared line sensor modules (with a digital DO output and a trimmer pot)"
+    },
+    {
+      "ro": "Suport cu 2 acumulatori 18650 (7,4 V) sau 6 baterii AA, cu întrerupător",
+      "en": "Battery holder with 2 × 18650 cells (7.4 V) or 6 × AA batteries, with a switch"
+    },
+    {
+      "ro": "Bandă izolatoare neagră (lată de 1,5–2 cm) și o coală mare de carton alb pentru traseu",
+      "en": "Black electrical tape (1.5–2 cm wide) and a large sheet of white cardboard for the track"
+    },
+    {
+      "ro": "Cablu USB-B pentru programarea plăcii Arduino Uno",
+      "en": "USB-B cable to program the Arduino Uno"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Asamblează șasiul",
+        "en": "Assemble the chassis"
+      },
+      "text": {
+        "ro": "Prinde cele două motoare cu roți și roata liberă pe placa șasiului, apoi fixează driverul L298N, suportul de baterii și placa Arduino cu șuruburi sau bandă dublu adezivă.",
+        "en": "Mount both geared motors with wheels and the caster on the chassis plate, then fix the L298N driver, the battery holder and the Arduino with screws or double-sided tape."
+      }
+    },
+    {
+      "title": {
+        "ro": "Leagă motoarele și alimentarea la L298N",
+        "en": "Wire the motors and power to the L298N"
+      },
+      "text": {
+        "ro": "Motorul stâng merge la OUT1/OUT2, cel drept la OUT3/OUT4. Plusul bateriei intră în borna 12V, minusul în GND. Leagă GND-ul driverului și la GND-ul Arduino: fără masă comună, semnalele de comandă nu au referință.",
+        "en": "The left motor goes to OUT1/OUT2, the right one to OUT3/OUT4. Battery plus goes to the 12V terminal, minus to GND. Also connect the driver's GND to the Arduino's GND: without a common ground the control signals have no reference."
+      }
+    },
+    {
+      "title": {
+        "ro": "Conectează comenzile driverului la Arduino",
+        "en": "Connect the driver inputs to the Arduino"
+      },
+      "text": {
+        "ro": "Scoate jumperii de pe ENA și ENB, apoi leagă ENA la D5 și ENB la D6 (pini PWM pentru viteză), IN1 la D7, IN2 la D8, IN3 la D9 și IN4 la D10 (sensul de rotație).",
+        "en": "Remove the jumpers from ENA and ENB, then wire ENA to D5 and ENB to D6 (PWM pins for speed), IN1 to D7, IN2 to D8, IN3 to D9 and IN4 to D10 (direction)."
+      }
+    },
+    {
+      "title": {
+        "ro": "Montează și reglează senzorii de linie",
+        "en": "Mount and tune the line sensors"
+      },
+      "text": {
+        "ro": "Fixează cei doi senzori în fața robotului, la 1–2 cm de podea și la o distanță puțin mai mare decât lățimea liniei. Alimentează-i din 5 V, leagă DO-ul stâng la D2 și pe cel drept la D3, apoi rotește potențiometrul până când LED-ul modulului se stinge doar deasupra benzii negre.",
+        "en": "Fix both sensors at the front, 1–2 cm above the floor and slightly further apart than the line is wide. Power them from 5 V, wire the left DO to D2 and the right DO to D3, then turn the trimmer until the module LED goes off only above the black tape."
+      }
+    },
+    {
+      "title": {
+        "ro": "Scrie logica de urmărire",
+        "en": "Write the following logic"
+      },
+      "text": {
+        "ro": "Ieșirea DO este HIGH deasupra liniei negre (lumina infraroșie nu se reflectă). Ambii senzori pe alb: înainte. Senzorul stâng pe negru: încetinește roata stângă ca robotul să vireze la stânga. Senzorul drept pe negru: virează la dreapta. Pornește cu analogWrite în jur de 150 din 255.",
+        "en": "DO is HIGH above the black line (the infrared light is not reflected). Both sensors on white: go straight. Left sensor on black: slow the left wheel so the robot turns left. Right sensor on black: turn right. Start with analogWrite around 150 out of 255."
+      }
+    },
+    {
+      "title": {
+        "ro": "Testează pe traseu și ajustează viteza",
+        "en": "Test on the track and tune the speed"
+      },
+      "text": {
+        "ro": "Lipește un traseu închis cu curbe largi pe carton și pune robotul pe linie. Dacă iese din curbe, scade viteza; dacă oscilează mult pe linia dreaptă, apropie senzorii unul de altul.",
+        "en": "Tape a closed track with wide curves on the cardboard and put the robot on the line. If it leaves the curves, lower the speed; if it wobbles a lot on straight parts, move the sensors closer together."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Jumperii ENA/ENB lăsați pe placă: motoarele merg mereu la viteză maximă și analogWrite nu are niciun efect.",
+      "en": "Leaving the ENA/ENB jumpers on: the motors always run at full speed and analogWrite has no effect."
+    },
+    {
+      "ro": "Alimentarea motoarelor din pinul 5V al Arduino: curentul de pornire resetează placa. Motoarele se alimentează doar din baterie, prin L298N.",
+      "en": "Powering the motors from the Arduino's 5V pin: the start-up current resets the board. Motors are powered only from the battery, through the L298N."
+    },
+    {
+      "ro": "Uitarea căderii de tensiune a L298N (aproximativ 2 V): cu 4 baterii AA (6 V) motoarele primesc doar ~4 V și abia se mișcă.",
+      "en": "Forgetting the L298N voltage drop (about 2 V): with 4 AA batteries (6 V) the motors only get ~4 V and barely move."
+    },
+    {
+      "ro": "Senzori montați prea sus sau testați în lumină puternică de soare: infraroșul ambiental face ca linia să nu mai fie văzută.",
+      "en": "Sensors mounted too high or tested in strong sunlight: ambient infrared hides the line from them."
+    }
+  ]
+}

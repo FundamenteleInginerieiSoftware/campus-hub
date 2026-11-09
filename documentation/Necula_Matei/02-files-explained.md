@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`) and the Projects pages (`41-projects-pages.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the ten project guides (`40-project-content.md`) and the Projects pages (`41-projects-pages.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -42,12 +42,14 @@ campus-hub/
         ├── main/resources/  application.yml  application-dev.yml  application-prod.yml
         │                    db/migration/V2026_10_21_1500__platform_init.sql
         │                    db/migration/V2026_10_21_1528__user_create_users.sql
+        │                    projects/*.json  (10 project guides, RO + EN: 39 + 40)
         ├── test/java/com/campus/  CampusHubApplicationTests, SecurityConfigTest, AuthControllerTest,
         │                          UserRepositoryTest, AsyncConfigTest, AuthRequestsTest, UserServiceTest,
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
         │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest, S3StorageServiceTest,
         │                          SesNotificationServiceTest, ProdProfileStartupTest, SecurityPassIT,
-        │                          UserControllerTest, SpaConfigTest, DemoFlowIT, OpenApiDocsIT
+        │                          UserControllerTest, SpaConfigTest, DemoFlowIT, OpenApiDocsIT,
+        │                          project/service/ShippedProjectsTest
         └── test/resources/application-test.yml  static/index.html
 ```
 
@@ -183,7 +185,7 @@ campus-hub/
 | `docs/diagrams/deployment-aws.puml` + `.png` | How the app will run on AWS (planned, weeks 7–9): CloudFront, one server with Docker, the database, photos, e-mails, passwords. |
 | `docs/diagrams/README.md` | The list of all diagrams in the folder, one line each. |
 
-### `docs/superpowers/` and `project/`: Projects feature (`38-project-assistant-design.md`, `39-project-engine.md`)
+### `docs/superpowers/` and `project/`: Projects feature (`38-project-assistant-design.md`, `39-project-engine.md`, `40-project-content.md`)
 | File | What it does |
 |---|---|
 | `docs/superpowers/specs/2026-11-09-project-assistant-design.md` | The design of the Projects feature: a student describes a project and gets the equipment, steps, mistakes and a "Reserve all" button. Who builds which part, how search works, which endpoints exist. |
@@ -193,6 +195,8 @@ campus-hub/
 | `ProjectSearch.java` | Matches a student's search in Romanian or English (ignoring diacritics, filler words, and singular/plural endings) and scores each project. |
 | `ProjectService.java` | Builds the project list and details, asking Liviu's catalog and Calin's reservation module how many units of each model are free. |
 | `ProjectController.java` + `com/campus/project/web/*` | The two endpoints `GET /api/v1/projects` (list/search) and `GET /api/v1/projects/{slug}` (details + availability). |
+| `resources/projects/<slug>.json` (10 files) | The ten project guides in Romanian and English: thermometer, line follower robot, parking sensor, ESP32 weather station, LCD clock, PWM with the oscilloscope, multimeter basics, 3D-printed case, STM32 blinky with the debugger, motor on the bench supply. |
+| `ShippedProjectsTest` | Checks the real guides: typical searches ("senzor parcare", "weather station", …) find the right project first, and every piece of equipment is a model the catalog knows. |
 | `ProjectLibraryTest`, `ProjectSearchTest`, `ProjectServiceTest`, `ProjectControllerTest` | Tests for broken project files, Romanian/English search rules, live availability counts, and the HTTP endpoints. |
 
 ### Frontend: Reservations desk (`26-reservations-desk-page.md`)
@@ -326,6 +330,8 @@ campus-hub/
 | `ProjectSearch` | Pure Java: `normalize` (`Locale.ROOT` + NFD + strip `\p{M}+`), `tokens` (split `[^\p{L}\p{N}]+`, len ≥ 2, RO/EN stop words removed, distinct), scores each project (`EXACT = 3`, `PREFIX = 2` at `MIN_PREFIX = 5`, `TITLE = 1`), ranks by score desc then EN title asc, sets `ambiguous = true` when top two hits are within `AMBIGUITY_GAP = 1`. Details in `39-project-engine.md` |
 | `ProjectService` | `@Service`, `@Transactional(readOnly = true)` on `search` and `details`. `details` checks half-slot and `end <= start` (`400 VALIDATION_FAILED`), counts operational units via `CatalogApi.findAvailableByModel(model, null)` and free units in slot via `ReservationApi.isAssetFree(id, start, end, null)` |
 | `ProjectController` | `GET /api/v1/projects?q=&lang=` (`@Size(max = 200)` on `q`) and `GET /api/v1/projects/{slug}?lang=&start=&end=`; protected by `/api/v1/**` in `SecurityConfig` |
+| `resources/projects/*.json` | 10 projects, one file each, slug = file name: `thermometer`, `oscilloscope-pwm`, `multimeter-basics` (#236), `line-follower-robot`, `parking-sensor`, `esp32-weather-station`, `lcd-digital-clock`, `printed-enclosure`, `stm32-blinky-debugger`, `bench-motor-test` (doc 40). Only spec §5.3 models, ≤ 5 units each, 5–6 steps, 4 mistakes |
+| `ShippedProjectsTest` | 18 parameterized queries (RO + EN, the 3 old projects too) must rank their slug first; `componentsUseOnlyAgreedModels` checks every model against the §5.3 list. Fails with the ranking (`slug=score`) so you know which keywords to change. Details in `40-project-content.md` |
 | `ProjectLibraryTest`, `ProjectSearchTest`, `ProjectServiceTest`, `ProjectControllerTest` | 10 invalid JSON fixture directories + classpath loader & field validation tests (17), 17 bilingual search rule tests, 11 Mockito service tests, and 7 `@WebMvcTest` + `@Import(SecurityConfig.class)` slice tests |
 
 ### Frontend: Reservations desk

@@ -1,0 +1,123 @@
+{
+  "slug": "printed-enclosure",
+  "difficulty": "INTERMEDIATE",
+  "estimatedHours": 6,
+  "title": {
+    "ro": "Carcasă printată 3D pentru Arduino",
+    "en": "3D-printed enclosure for an Arduino"
+  },
+  "summary": {
+    "ro": "Proiectează o carcasă pentru placa Arduino Uno, cu decupaje pentru mufele USB și de alimentare, și print-o pe imprimanta 3D Prusa i3 MK3S+ din laborator.",
+    "en": "Design a case for the Arduino Uno with cut-outs for the USB and power jacks, and print it on the lab's Prusa i3 MK3S+ 3D printer."
+  },
+  "keywords": {
+    "ro": ["carcasă", "carcase", "carcasa printată", "cutie", "printare 3d", "printat", "imprimantă 3d", "imprimare", "prusa", "pla", "proiectare", "cad"],
+    "en": ["enclosure", "case", "box", "3d print", "printed", "printing", "3d printer", "prusa", "pla", "design", "cad"]
+  },
+  "components": [
+    {
+      "model": "Prusa i3 MK3S+",
+      "quantity": 1,
+      "why": {
+        "ro": "Imprimantă FDM cu nivelare automată și placă PEI magnetică, potrivită pentru piese din PLA de până la 25 × 21 cm.",
+        "en": "FDM printer with automatic mesh bed levelling and a magnetic PEI sheet, good for PLA parts up to 25 × 21 cm."
+      }
+    },
+    {
+      "model": "Arduino Uno R3",
+      "quantity": 1,
+      "why": {
+        "ro": "Placa reală pe care o măsori și cu care probezi carcasa: găurile de prindere și mufele trebuie să se potrivească pe ea, nu doar pe desen.",
+        "en": "The real board you measure and test-fit: the mounting holes and jack cut-outs must match it, not just the drawing."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Șubler (digital sau clasic) pentru măsurarea plăcii",
+      "en": "Caliper (digital or vernier) to measure the board"
+    },
+    {
+      "ro": "Card SD pentru fișierul G-code (imprimanta citește de pe card)",
+      "en": "SD card for the G-code file (the printer reads from the card)"
+    },
+    {
+      "ro": "4 șuruburi M3 de 6–8 mm și distanțiere, plus filament PLA de 1,75 mm dacă laboratorul nu are",
+      "en": "4 × M3 screws of 6–8 mm and standoffs, plus 1.75 mm PLA filament if the lab has none"
+    },
+    {
+      "ro": "Alcool izopropilic și o lavetă pentru curățarea plăcii de printare",
+      "en": "Isopropyl alcohol and a cloth to clean the print sheet"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Măsoară placa",
+        "en": "Measure the board"
+      },
+      "text": {
+        "ro": "Placa Uno are 68,6 × 53,4 mm. Ia pozițiile celor 4 găuri de prindere din desenul oficial Arduino, apoi verifică-le cu șublerul, împreună cu poziția și înălțimea mufei USB-B și a mufei de alimentare.",
+        "en": "The Uno is 68.6 × 53.4 mm. Take the positions of the 4 mounting holes from the official Arduino drawing, then check them with the caliper, together with the position and height of the USB-B and power jacks."
+      }
+    },
+    {
+      "title": {
+        "ro": "Desenează carcasa în CAD",
+        "en": "Draw the case in CAD"
+      },
+      "text": {
+        "ro": "În Fusion, FreeCAD sau Tinkercad desenează o cutie cu pereți de 2 mm (multiplu al duzei de 0,4 mm), cu 0,3–0,5 mm joc în jurul plăcii, suporturi pentru șuruburi M3 și decupaje pentru cele două mufe. Capacul se face ca piesă separată.",
+        "en": "In Fusion, FreeCAD or Tinkercad draw a box with 2 mm walls (a multiple of the 0.4 mm nozzle), 0.3–0.5 mm of clearance around the board, posts for M3 screws and cut-outs for both jacks. Make the lid a separate part."
+      }
+    },
+    {
+      "title": {
+        "ro": "Pregătește fișierul în PrusaSlicer",
+        "en": "Slice the model in PrusaSlicer"
+      },
+      "text": {
+        "ro": "Exportă fiecare piesă ca STL, alege profilul Original Prusa i3 MK3S+ și PLA, înălțimea stratului de 0,2 mm și umplere de 15–20%. Așază piesele cu fața mare pe placă, ca să nu ai nevoie de suporturi, și salvează G-code-ul pe card.",
+        "en": "Export each part as STL, choose the Original Prusa i3 MK3S+ profile and PLA, a 0.2 mm layer height and 15–20% infill. Lay the parts with their largest face on the sheet so no supports are needed, and save the G-code to the card."
+      }
+    },
+    {
+      "title": {
+        "ro": "Printează",
+        "en": "Print"
+      },
+      "text": {
+        "ro": "Curăță placa PEI cu alcool izopropilic, introdu cardul și pornește printarea. Urmărește primul strat: trebuie să fie uniform și ușor turtit. Dacă liniile nu se lipesc, oprește și cere ajutor pentru reglajul Live Z.",
+        "en": "Clean the PEI sheet with isopropyl alcohol, insert the card and start the print. Watch the first layer: it must be even and slightly squished. If the lines do not stick, stop and ask for help with the Live Z adjustment."
+      }
+    },
+    {
+      "title": {
+        "ro": "Scoate piesa și probeaz-o",
+        "en": "Remove the part and test-fit it"
+      },
+      "text": {
+        "ro": "Lasă placa să se răcească, scoate-o și îndoaie-o ușor ca piesa să se desprindă. Pune placa Uno în carcasă, prinde-o cu șuruburile și verifică dacă intră cablul USB și mufa de alimentare.",
+        "en": "Let the sheet cool, take it off and flex it gently so the part pops off. Put the Uno into the case, fix it with the screws and check that the USB cable and the power plug fit."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Carcasă desenată fără joc: plasticul se contractă, iar placa nu mai intră. Lasă cel puțin 0,3 mm pe fiecare parte.",
+      "en": "Designing the case with no clearance: the plastic shrinks and the board no longer fits. Leave at least 0.3 mm on each side."
+    },
+    {
+      "ro": "Găurile ies mai mici decât în desen: la FDM, o gaură de 3 mm iese de obicei în jur de 2,8 mm. Desenează-le la 3,2–3,4 mm pentru M3.",
+      "en": "Holes print smaller than drawn: with FDM a 3 mm hole usually comes out around 2.8 mm. Draw them at 3.2–3.4 mm for M3."
+    },
+    {
+      "ro": "Porțiuni în consolă la mai mult de 45° fără suport: plasticul cade în gol și decupajele ies deformate.",
+      "en": "Overhangs steeper than 45° without support: the plastic droops into the air and the cut-outs come out deformed."
+    },
+    {
+      "ro": "Atingerea plăcii PEI cu degetele: grăsimea lasă urme, iar primul strat nu mai aderă. Curăță cu alcool înainte de fiecare printare.",
+      "en": "Touching the PEI sheet with your fingers: skin grease leaves marks and the first layer no longer sticks. Clean with alcohol before every print."
+    }
+  ]
+}

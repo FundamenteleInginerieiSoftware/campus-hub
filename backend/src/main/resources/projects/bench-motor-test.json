@@ -1,0 +1,123 @@
+{
+  "slug": "bench-motor-test",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 2,
+  "title": {
+    "ro": "Testarea unui motor cu sursa de laborator",
+    "en": "Bench power supply motor test"
+  },
+  "summary": {
+    "ro": "Alimentează un motor DC cu reductor de la sursa programabilă Rigol DP832, observă cum variază consumul cu tensiunea și cu sarcina, apoi măsoară cu multimetrul cât pierde driverul L298N.",
+    "en": "Power a geared DC motor from the Rigol DP832 programmable supply, see how its draw changes with voltage and load, then measure with the multimeter how much the L298N driver loses."
+  },
+  "keywords": {
+    "ro": ["motor", "motoare", "motorul", "test", "testare", "sursă de laborator", "sursa", "alimentare", "limitare", "turație", "consum", "dp832"],
+    "en": ["motor", "motors", "test", "testing", "bench", "power supply", "dc motor", "current limit", "speed", "dp832"]
+  },
+  "components": [
+    {
+      "model": "DP832",
+      "quantity": 1,
+      "why": {
+        "ro": "Sursă de laborator cu trei canale (CH1 și CH2 până la 30 V / 3 A) care afișează curentul consumat și îl limitează la valoarea setată.",
+        "en": "Three-channel bench supply (CH1 and CH2 up to 30 V / 3 A) that shows the current drawn and limits it to the value you set."
+      }
+    },
+    {
+      "model": "2WD robot chassis + L298N kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Din kit folosești un motor DC cu reductor (3–6 V) și driverul L298N, ca să compari motorul alimentat direct cu motorul alimentat prin driver.",
+        "en": "From the kit you use one geared DC motor (3–6 V) and the L298N driver, to compare the motor powered directly with the motor powered through the driver."
+      }
+    },
+    {
+      "model": "Fluke 115",
+      "quantity": 1,
+      "why": {
+        "ro": "Măsoară tensiunea care ajunge efectiv la bornele motorului după driver.",
+        "en": "Measures the voltage that actually reaches the motor terminals after the driver."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Cabluri cu banană la crocodil (2 roșii, 2 negre) pentru ieșirile sursei",
+      "en": "Banana-to-alligator test leads (2 red, 2 black) for the supply outputs"
+    },
+    {
+      "ro": "Caiet sau foaie de calcul pentru tabelul tensiune – curent",
+      "en": "Notebook or spreadsheet for the voltage–current table"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Setează sursa înainte de a lega ceva",
+        "en": "Set up the supply before connecting anything"
+      },
+      "text": {
+        "ro": "Cu ieșirile oprite, selectează CH1 și setează 3,000 V și limita de curent la 0,500 A. Limita protejează motorul și firele dacă apare un scurtcircuit.",
+        "en": "With the outputs off, select CH1 and set 3.000 V and a current limit of 0.500 A. The limit protects the motor and the wires if something is shorted."
+      }
+    },
+    {
+      "title": {
+        "ro": "Pornește motorul direct de la sursă",
+        "en": "Run the motor straight from the supply"
+      },
+      "text": {
+        "ro": "Leagă firele motorului la + și − de pe CH1 și pornește ieșirea. Fără sarcină, un astfel de motor consumă de obicei între 0,1 și 0,2 A. Inversează firele: motorul se rotește în sens opus.",
+        "en": "Connect the motor wires to CH1 + and − and turn the output on. With no load such a motor usually draws between 0.1 and 0.2 A. Swap the wires: the motor spins the other way."
+      }
+    },
+    {
+      "title": {
+        "ro": "Notează curentul la mai multe tensiuni",
+        "en": "Record the current at several voltages"
+      },
+      "text": {
+        "ro": "Treci prin 3 V, 4,5 V și 6 V și notează pentru fiecare curentul afișat și cât de repede se rotește roata. Nu depăși 6 V, tensiunea nominală a motorului.",
+        "en": "Step through 3 V, 4.5 V and 6 V and write down the displayed current and how fast the wheel turns at each one. Do not go above 6 V, the motor's rated voltage."
+      }
+    },
+    {
+      "title": {
+        "ro": "Pune motorul în sarcină",
+        "en": "Load the motor"
+      },
+      "text": {
+        "ro": "La 6 V frânează ușor roata cu degetele, doar o secundă-două. Curentul crește; dacă atinge limita, pe ecran apare CC și tensiunea scade, adică sursa a trecut în modul curent constant.",
+        "en": "At 6 V brake the wheel gently with your fingers, just for a second or two. The current rises; if it reaches the limit the display shows CC and the voltage drops, which means the supply switched to constant current mode."
+      }
+    },
+    {
+      "title": {
+        "ro": "Măsoară pierderea din driverul L298N",
+        "en": "Measure the loss in the L298N driver"
+      },
+      "text": {
+        "ro": "Oprește ieșirea. Leagă CH1 la borna 12V și GND a driverului, motorul la OUT1/OUT2, lasă jumperul ENA pus, iar IN1 la pinul 5V al driverului și IN2 la GND. Setează 8 V și limita la 1 A, pornește ieșirea și măsoară cu Fluke 115 tensiunea pe OUT1–OUT2: va fi cu aproximativ 2 V mai mică.",
+        "en": "Turn the output off. Connect CH1 to the driver's 12V and GND terminals, the motor to OUT1/OUT2, keep the ENA jumper on, and wire IN1 to the driver's 5V pin and IN2 to GND. Set 8 V and a 1 A limit, turn the output on and measure OUT1–OUT2 with the Fluke 115: it will be about 2 V lower."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Limită de curent prea mică: la pornire motorul cere mai mult curent decât în mers, sursa intră în CC și motorul doar bâzâie fără să pornească.",
+      "en": "A current limit that is too low: the motor draws more current when starting than when running, so the supply goes into CC and the motor just hums without starting."
+    },
+    {
+      "ro": "Măsurarea tensiunii cu firul roșu al multimetrului lăsat în mufa A: multimetrul face scurtcircuit pe sursă și siguranța lui se poate arde. Pentru volți, firul roșu stă în mufa V.",
+      "en": "Measuring voltage with the multimeter's red lead still in the A jack: the meter shorts the supply and its fuse can blow. For volts the red lead goes in the V jack."
+    },
+    {
+      "ro": "Motorul ținut blocat mai multe secunde: tot curentul se transformă în căldură în bobinaj și motorul se poate arde.",
+      "en": "Keeping the motor stalled for several seconds: all the current turns into heat in the winding and the motor can burn out."
+    },
+    {
+      "ro": "Mutarea firelor cu ieșirea pornită: scântei la contacte și risc de scurtcircuit. Apasă întâi butonul On/Off al canalului.",
+      "en": "Moving wires with the output on: sparks at the contacts and a risk of a short. Press the channel's On/Off button first."
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "slug": "lcd-digital-clock",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 3,
+  "title": {
+    "ro": "Ceas digital cu LCD 16x2",
+    "en": "Digital clock with 16x2 LCD"
+  },
+  "summary": {
+    "ro": "Un ceas care afișează ora, minutul, secunda și data pe un ecran LCD 16x2 cu I2C. Un modul RTC DS3231 cu baterie păstrează ora exactă și când placa Arduino Uno este oprită.",
+    "en": "A clock that shows hours, minutes, seconds and the date on a 16x2 I2C LCD. A battery-backed DS3231 RTC module keeps accurate time even while the Arduino Uno is off."
+  },
+  "keywords": {
+    "ro": ["ceas", "ceasul", "ceasuri", "oră", "ora exactă", "timp", "dată", "calendar", "afișaj", "ecran", "lcd", "rtc", "ds3231"],
+    "en": ["clock", "watch", "time", "date", "calendar", "display", "screen", "lcd", "rtc", "ds3231"]
+  },
+  "components": [
+    {
+      "model": "Arduino Uno R3",
+      "quantity": 1,
+      "why": {
+        "ro": "Citește ora de la modulul RTC o dată pe secundă și o scrie pe ecran; ambele module stau pe aceeași magistrală I2C (A4/A5).",
+        "en": "Reads the time from the RTC module once a second and writes it to the screen; both modules share the same I2C bus (A4/A5)."
+      }
+    },
+    {
+      "model": "16x2 I2C LCD module kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Rândul 1 afișează ora (HH:MM:SS), rândul 2 data (ZZ.LL.AAAA), folosind doar pinii SDA și SCL.",
+        "en": "Line 1 shows the time (HH:MM:SS), line 2 the date (DD.MM.YYYY), using only the SDA and SCL pins."
+      }
+    },
+    {
+      "model": "Breadboard + jumper wire kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Leagă ecranul și modulul RTC în paralel la 5 V, masă, SDA și SCL.",
+        "en": "Connects the screen and the RTC module in parallel to 5 V, ground, SDA and SCL."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Modul RTC DS3231 cu baterie de rezervă (LIR2032 reîncărcabilă sau CR2032, vezi greșelile frecvente)",
+      "en": "DS3231 RTC module with a backup cell (rechargeable LIR2032 or CR2032, see the common mistakes)"
+    },
+    {
+      "ro": "Cablu USB-B pentru programarea și alimentarea plăcii Arduino Uno",
+      "en": "USB-B cable to program and power the Arduino Uno"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Conectează magistrala I2C",
+        "en": "Wire the I2C bus"
+      },
+      "text": {
+        "ro": "Leagă VCC și GND ale LCD-ului și ale modulului RTC la 5V și GND, apoi ambele SDA la A4 și ambele SCL la A5. Cele două module au adrese diferite (LCD 0x27 sau 0x3F, RTC 0x68), deci pot sta pe aceleași fire.",
+        "en": "Connect VCC and GND of both the LCD and the RTC module to 5V and GND, then both SDA pins to A4 and both SCL pins to A5. The two modules have different addresses (LCD 0x27 or 0x3F, RTC 0x68), so they can share the same wires."
+      }
+    },
+    {
+      "title": {
+        "ro": "Găsește adresele cu un scanner I2C",
+        "en": "Find the addresses with an I2C scanner"
+      },
+      "text": {
+        "ro": "Încarcă exemplul i2c_scanner și deschide Serial Monitor. Trebuie să vezi două adrese: 0x68 pentru RTC și 0x27 sau 0x3F pentru LCD. Dacă lipsește una, verifică firele înainte să scrii cod.",
+        "en": "Upload the i2c_scanner example and open the Serial Monitor. You should see two addresses: 0x68 for the RTC and 0x27 or 0x3F for the LCD. If one is missing, check the wires before writing any code."
+      }
+    },
+    {
+      "title": {
+        "ro": "Setează ora o singură dată",
+        "en": "Set the time once"
+      },
+      "text": {
+        "ro": "Instalează bibliotecile RTClib și LiquidCrystal_I2C. În setup(), dacă rtc.lostPower() este adevărat, apelează rtc.adjust(DateTime(F(__DATE__), F(__TIME__))) ca ceasul să preia ora compilării.",
+        "en": "Install the RTClib and LiquidCrystal_I2C libraries. In setup(), if rtc.lostPower() is true, call rtc.adjust(DateTime(F(__DATE__), F(__TIME__))) so the clock takes the compile time."
+      }
+    },
+    {
+      "title": {
+        "ro": "Afișează ora și data",
+        "en": "Display the time and date"
+      },
+      "text": {
+        "ro": "O dată pe secundă citește rtc.now() și formatează cu sprintf și %02d, ca 9:05 să apară „09:05”. Mută cursorul cu lcd.setCursor(0, 0) și scrie peste textul vechi în loc să ștergi ecranul.",
+        "en": "Once a second read rtc.now() and format it with sprintf and %02d so 9:05 shows as \"09:05\". Move the cursor with lcd.setCursor(0, 0) and write over the old text instead of clearing the screen."
+      }
+    },
+    {
+      "title": {
+        "ro": "Testează pierderea alimentării",
+        "en": "Test a power loss"
+      },
+      "text": {
+        "ro": "Scoate cablul USB pentru un minut și pune-l la loc. Ora trebuie să fie în continuare corectă, pentru că modulul RTC a mers pe baterie.",
+        "en": "Unplug the USB cable for a minute and plug it back in. The time must still be correct, because the RTC module kept running on its battery."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "rtc.adjust() apelat la fiecare pornire: după orice reset, ceasul revine la ora la care a fost compilat programul.",
+      "en": "Calling rtc.adjust() on every start: after any reset the clock jumps back to the time the sketch was compiled."
+    },
+    {
+      "ro": "lcd.clear() la fiecare secundă: ecranul pâlpâie. Suprascrie doar caracterele care se schimbă.",
+      "en": "Calling lcd.clear() every second: the screen flickers. Overwrite only the characters that change."
+    },
+    {
+      "ro": "Folosirea millis() în loc de RTC: ora se pierde la fiecare oprire, iar oscilatorul plăcii Uno poate avea o abatere de câteva secunde pe zi.",
+      "en": "Using millis() instead of the RTC: the time is lost at every power-off, and the Uno's oscillator can drift by several seconds a day."
+    },
+    {
+      "ro": "Baterie CR2032 nereîncărcabilă pe un modul DS3231 cu circuit de încărcare (de exemplu ZS-042) alimentat la 5 V: modulul încearcă să o încarce. Folosește LIR2032 sau scoate rezistorul de încărcare.",
+      "en": "A non-rechargeable CR2032 on a DS3231 module with a charging circuit (for example the ZS-042) powered at 5 V: the module tries to charge it. Use an LIR2032 or remove the charging resistor."
+    }
+  ]
+}

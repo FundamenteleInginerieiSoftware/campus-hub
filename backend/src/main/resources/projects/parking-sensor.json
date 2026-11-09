@@ -1,0 +1,127 @@
+{
+  "slug": "parking-sensor",
+  "difficulty": "BEGINNER",
+  "estimatedHours": 2,
+  "title": {
+    "ro": "Senzor de parcare",
+    "en": "Parking sensor"
+  },
+  "summary": {
+    "ro": "Măsoară distanța până la un obstacol cu senzorul ultrasonic HC-SR04 și avertizează cu un buzzer care piuie tot mai des pe măsură ce obiectul se apropie, ca la senzorii de parcare ai mașinilor.",
+    "en": "Measure the distance to an obstacle with the HC-SR04 ultrasonic sensor and warn with a buzzer that beeps faster as the object gets closer, like a car's parking sensor."
+  },
+  "keywords": {
+    "ro": ["senzor de parcare", "senzorul", "parcare", "parcarea", "parcat", "distanță", "ultrasunete", "ultrasonic", "obstacol", "avertizare", "buzzer", "hc-sr04"],
+    "en": ["parking", "sensor", "distance", "ultrasonic", "obstacle", "warning", "buzzer", "hc-sr04"]
+  },
+  "components": [
+    {
+      "model": "Arduino Uno R3",
+      "quantity": 1,
+      "why": {
+        "ro": "Trimite impulsul de declanșare, cronometrează ecoul și comandă buzzerul și LED-urile; lucrează la 5 V, ca și senzorul.",
+        "en": "Sends the trigger pulse, times the echo and drives the buzzer and LEDs; it runs at 5 V, like the sensor."
+      }
+    },
+    {
+      "model": "HC-SR04 ultrasonic sensor kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Emite ultrasunete la 40 kHz și măsoară timpul până la întoarcerea ecoului, pentru distanțe între aproximativ 2 cm și 4 m.",
+        "en": "Emits 40 kHz ultrasound and measures how long the echo takes to come back, for distances from about 2 cm to 4 m."
+      }
+    },
+    {
+      "model": "Breadboard + jumper wire kit",
+      "quantity": 1,
+      "why": {
+        "ro": "Ține senzorul, buzzerul și LED-urile și le leagă la 5 V și masă fără lipire.",
+        "en": "Holds the sensor, buzzer and LEDs and connects them to 5 V and ground without soldering."
+      }
+    }
+  ],
+  "bringYourself": [
+    {
+      "ro": "Buzzer activ de 5 V",
+      "en": "Active 5 V buzzer"
+    },
+    {
+      "ro": "3 LED-uri (verde, galben, roșu) și 3 rezistoare de 220 Ω",
+      "en": "3 LEDs (green, yellow, red) and 3 × 220 Ω resistors"
+    },
+    {
+      "ro": "Cablu USB-B pentru programarea și alimentarea plăcii Arduino Uno",
+      "en": "USB-B cable to program and power the Arduino Uno"
+    }
+  ],
+  "steps": [
+    {
+      "title": {
+        "ro": "Conectează senzorul HC-SR04",
+        "en": "Wire the HC-SR04 sensor"
+      },
+      "text": {
+        "ro": "Cu placa deconectată, leagă VCC la 5V, GND la GND, Trig la D9 și Echo la D10. Senzorul are nevoie de 5 V; la 3,3 V măsoară greșit sau deloc.",
+        "en": "With the board unplugged, connect VCC to 5V, GND to GND, Trig to D9 and Echo to D10. The sensor needs 5 V; at 3.3 V it measures wrong or not at all."
+      }
+    },
+    {
+      "title": {
+        "ro": "Adaugă buzzerul și LED-urile",
+        "en": "Add the buzzer and LEDs"
+      },
+      "text": {
+        "ro": "Plusul buzzerului merge la D8, minusul la GND. Fiecare LED se leagă printr-un rezistor de 220 Ω: verde la D5, galben la D6, roșu la D7, cu piciorul scurt (catodul) la GND.",
+        "en": "The buzzer's plus goes to D8, its minus to GND. Each LED goes through a 220 Ω resistor: green to D5, yellow to D6, red to D7, with the short leg (cathode) to GND."
+      }
+    },
+    {
+      "title": {
+        "ro": "Măsoară distanța",
+        "en": "Measure the distance"
+      },
+      "text": {
+        "ro": "Pune Trig pe HIGH 10 µs, apoi citește durata ecoului cu pulseIn(10, HIGH, 30000). Distanța în centimetri este durata în microsecunde împărțită la 58 (sunetul face drumul dus-întors).",
+        "en": "Set Trig HIGH for 10 µs, then read the echo length with pulseIn(10, HIGH, 30000). The distance in centimetres is the duration in microseconds divided by 58 (the sound travels there and back)."
+      }
+    },
+    {
+      "title": {
+        "ro": "Transformă distanța în avertizare",
+        "en": "Turn the distance into a warning"
+      },
+      "text": {
+        "ro": "Peste 50 cm: LED verde, fără sunet. Între 20 și 50 cm: LED galben și un bip la fiecare jumătate de secundă. Sub 20 cm: LED roșu și pauza dintre bipuri scade odată cu distanța; sub 5 cm sunetul devine continuu.",
+        "en": "Above 50 cm: green LED, no sound. Between 20 and 50 cm: yellow LED and one beep every half second. Below 20 cm: red LED and the pause between beeps shrinks with the distance; below 5 cm the sound becomes continuous."
+      }
+    },
+    {
+      "title": {
+        "ro": "Verifică pe Serial Monitor",
+        "en": "Check it on the Serial Monitor"
+      },
+      "text": {
+        "ro": "Afișează distanța la 9600 baud și apropie o carte de senzor. Compară valoarea cu o riglă: o diferență de 1–2 cm este normală.",
+        "en": "Print the distance at 9600 baud and move a book towards the sensor. Compare the value with a ruler: a 1–2 cm difference is normal."
+      }
+    }
+  ],
+  "mistakes": [
+    {
+      "ro": "Tratarea rezultatului 0 ca distanță: cu timeout, pulseIn întoarce 0 când nu a primit ecou, deci 0 înseamnă „nimic în raza senzorului”, nu „obstacol lipit”, altfel buzzerul sună continuu.",
+      "en": "Treating a result of 0 as a distance: with a timeout, pulseIn returns 0 when no echo arrived, so 0 means \"nothing in range\", not \"touching an obstacle\", or the buzzer beeps non-stop."
+    },
+    {
+      "ro": "Măsurători prea dese (sub 60 ms între ele): ecoul impulsului anterior este citit ca obstacol apropiat.",
+      "en": "Measuring too often (less than 60 ms apart): the echo of the previous ping is read as a close obstacle."
+    },
+    {
+      "ro": "Obiecte moi sau înclinate (haine, burete, perete în unghi) absorb sau deviază sunetul, iar senzorul raportează distanța maximă.",
+      "en": "Soft or angled objects (clothes, foam, a wall at an angle) absorb or deflect the sound, so the sensor reports the maximum distance."
+    },
+    {
+      "ro": "Mutarea montajului pe ESP32 fără divizor de tensiune: pinul Echo dă 5 V, iar ESP32 acceptă doar 3,3 V. Pune un divizor de 1 kΩ și 2 kΩ pe Echo.",
+      "en": "Moving the circuit to an ESP32 without a voltage divider: the Echo pin outputs 5 V and the ESP32 only takes 3.3 V. Put a 1 kΩ / 2 kΩ divider on Echo."
+    }
+  ]
+}
