@@ -3,6 +3,7 @@ package com.campus.reservation.web;
 import com.campus.common.paging.PageResponse;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.retry.TransientFaultRetryExecutor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -38,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final TransientFaultRetryExecutor retryExecutor;
 
     @Operation(
             summary = "Create a reservation",
@@ -53,7 +55,8 @@ public class ReservationController {
     })
     @PostMapping
     public ResponseEntity<ReservationResponse> create(@Valid @RequestBody CreateReservationRequest request) {
-        ReservationResponse response = reservationService.createReservation(request);
+        ReservationResponse response = retryExecutor.executeWithRetry(
+                () -> reservationService.createReservation(request), "createReservation");
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -165,7 +168,9 @@ public class ReservationController {
     @PostMapping("/bundle")
     public ResponseEntity<MultiAssetReservationResponse> createBundle(
             @Valid @RequestBody CreateMultiAssetReservationRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createMultiAssetReservation(request));
+        MultiAssetReservationResponse response = retryExecutor.executeWithRetry(
+                () -> reservationService.createMultiAssetReservation(request), "createBundle");
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @Operation(
@@ -210,7 +215,9 @@ public class ReservationController {
     @PostMapping("/{id}/extend")
     public ResponseEntity<ReservationResponse> extend(
             @PathVariable Long id, @Valid @RequestBody ExtendReservationRequest request) {
-        return ResponseEntity.ok(reservationService.extendReservation(id, request));
+        ReservationResponse response = retryExecutor.executeWithRetry(
+                () -> reservationService.extendReservation(id, request), "extendReservation");
+        return ResponseEntity.ok(response);
     }
 
     @Operation(
@@ -252,7 +259,9 @@ public class ReservationController {
     })
     @PostMapping("/transfers/{transferId}/accept")
     public ResponseEntity<ReservationTransferResponse> acceptTransfer(@PathVariable Long transferId) {
-        return ResponseEntity.ok(reservationService.acceptTransfer(transferId));
+        ReservationTransferResponse response =
+                retryExecutor.executeWithRetry(() -> reservationService.acceptTransfer(transferId), "acceptTransfer");
+        return ResponseEntity.ok(response);
     }
 
     @Operation(summary = "Reject reservation transfer", description = "Declines an incoming reservation transfer offer")

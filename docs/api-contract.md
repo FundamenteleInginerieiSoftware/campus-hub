@@ -284,6 +284,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `GET /api/v1/admin/reservations/retry-metrics` | Admin | – | `200` + `RetryMetricsResponse` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
@@ -355,6 +356,13 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "markedOverdueCount": 1,
   "preventivelyReassignedCount": 1,
   "preventivelyReassignedReservationIds": [33]
+}
+
+// RetryMetricsResponse (returned by GET /api/v1/admin/reservations/retry-metrics)
+{
+  "totalRetries": 14,
+  "successfulRecoveries": 6,
+  "exhaustedRetries": 0
 }
 
 // AvailabilityResponse (returned by GET /api/v1/reservations/availability)
