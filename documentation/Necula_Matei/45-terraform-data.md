@@ -131,7 +131,16 @@ Same as part 1 (`44-terraform-network.md`), from `infra/`:
 | `terraform fmt -check -recursive` (in `infra/`) | No output, exit 0 |
 | `terraform validate` (in `infra/`) | `Success! The configuration is valid.` (Terraform 1.16.7, aws 6.72.0, random 3.9.1) |
 
-<!-- TODO Claude: plan/apply results -->
+Run on 9 Nov 2026 against the real account (plan by Claude, apply run by Matei from the saved plan file):
+
+| Step | Result |
+|---|---|
+| `terraform plan -out=part2.tfplan` → `terraform apply part2.tfplan` | 20 added, 0 changed, 0 destroyed. RDS not created (`db_enabled = false`). Photo bucket `campus-hub-photos-b07078e0`, ECR `campus-hub`, role + instance profile `campus-hub-app` |
+| `terraform plan -var db_enabled=true` (not applied) | 2 more to add: `aws_db_instance.main[0]` + `/campus/DB_URL`. The W7 switch works |
+| `terraform plan` again | `No changes.` |
+| `aws ssm describe-parameters` | `AWS_REGION`, `DB_USERNAME`, `PHOTO_BUCKET` (String), `DB_PASSWORD`, `JWT_SECRET` (SecureString) |
+| `aws s3api get-public-access-block` on the photo bucket | All four blocks `True` |
+| `aws iam simulate-principal-policy` for `campus-hub-app` | `s3:PutObject` on the photo bucket: allowed; on the state bucket: denied; `s3:ListBucket` on the photo bucket: allowed; `ssm:GetParametersByPath` on `parameter/campus`: allowed |
 
 ### Problems and open points
 
@@ -140,4 +149,5 @@ Same as part 1 (`44-terraform-network.md`), from `infra/`:
 | `MAIL_FROM` before the first deploy | The app refuses to start without it. Needs a verified SES identity, which the plan put in W9 |
 | `db_enabled` must be passed on every apply once on | Otherwise Terraform plans to delete the database (see the warning above) |
 | No admin on a fresh RDS | Until `ADMIN_EMAIL` / `ADMIN_PASSWORD` exist in SSM, `AdminBootstrap` does nothing (doc 18) |
+| SSM core policy reads any parameter | The AWS-managed `AmazonSSMManagedInstanceCore` allows `ssm:GetParameter(s)` on `*`, so the role could read parameters outside `/campus/` too (the simulator says allowed). Today `/campus/*` are the only parameters in the account. Tighter option if a professor asks: a custom Session-Manager-only policy instead of the managed one |
 | Two `random_id "suffix"` | One in `bootstrap/` (state bucket), one in `storage.tf` (photo bucket). Separate configs, so two different suffixes; that's fine |
