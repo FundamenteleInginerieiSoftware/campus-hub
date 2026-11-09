@@ -78,6 +78,22 @@ class ReservationHoldControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/reservations/holds with Z offset returns 400 MALFORMED_REQUEST")
+    void createHold_withZOffsetReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations/holds")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "assetId": 10,
+                            "startTime": "2026-11-02T14:00:00Z",
+                            "endTime": "2026-11-02T16:00:00Z"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/reservations/holds/{id}/confirm returns 200 OK and reservation response")
     void confirmHold_returns200() throws Exception {
         ReservationResponse res = new ReservationResponse(

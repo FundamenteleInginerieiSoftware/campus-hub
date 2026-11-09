@@ -77,6 +77,68 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/reservations with Z offset returns 400 MALFORMED_REQUEST")
+    void createWithZOffsetReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "assetId": 10,
+                            "startTime": "2026-11-02T14:00:00Z",
+                            "endTime": "2026-11-02T16:00:00Z"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations with +05:00 offset returns 400 MALFORMED_REQUEST")
+    void createWithOffsetReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "assetId": 10,
+                            "startTime": "2026-11-02T14:00:00+05:00",
+                            "endTime": "2026-11-02T16:00:00+05:00"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/bundle with Z offset returns 400 MALFORMED_REQUEST")
+    void createMultiAssetWithZOffsetReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations/bundle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "assetIds": [10, 20],
+                            "startTime": "2026-11-02T14:00:00Z",
+                            "endTime": "2026-11-02T16:00:00Z"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/{id}/extend with Z offset returns 400 MALFORMED_REQUEST")
+    void extendReservationWithZOffsetReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations/1/extend")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "newEndTime": "2026-11-02T17:00:00Z"
+                        }
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
     @DisplayName("GET /api/v1/reservations/me returns 200 OK with PageResponse")
     void getMyReservationsReturns200() throws Exception {
         PageResponse<ReservationResponse> page = new PageResponse<>(List.of(sampleResponse), 0, 20, 1L, 1);
@@ -203,11 +265,49 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/reservations/availability with Z offset returns 400 INVALID_PARAMETER")
+    void checkAvailabilityWithZOffsetReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/availability")
+                        .param("assetId", "10")
+                        .param("startTime", "2026-11-02T14:00:00Z")
+                        .param("endTime", "2026-11-02T16:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/availability with +05:00 offset returns 400 INVALID_PARAMETER")
+    void checkAvailabilityWithOffsetReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/availability")
+                        .param("assetId", "10")
+                        .param("startTime", "2026-11-02T14:00:00+05:00")
+                        .param("endTime", "2026-11-02T16:00:00+05:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/reservations with malformed JSON body returns 400 MALFORMED_REQUEST")
     void createWithMalformedJsonReturns400() throws Exception {
         mockMvc.perform(post("/api/v1/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{malformed-json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations with invalid calendar date (e.g. Nov 31) returns 400 MALFORMED_REQUEST")
+    void createWithInvalidCalendarDateReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                        {
+                            "assetId": 10,
+                            "startTime": "2026-11-31T14:00:00",
+                            "endTime": "2026-11-31T16:00:00"
+                        }
+                        """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
     }
