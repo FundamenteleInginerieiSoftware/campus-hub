@@ -290,9 +290,10 @@ What is on `main` and what is still in review, per member. **As of 9 Nov 2026**;
 | Security chapter of the report + JWT sequence diagram; UML component + deployment diagrams | #185, #186 |
 | All security rules in `docs/api-contract.md` §2; SSM arrow fixed in the AWS diagram | #195 |
 | README quick start (run, open, test) at the top | #200 |
-| Personal docs 01-37 + README index of them | #14 + each PR above, #137 |
+| Projects feature (#140): design + plan; engine with bilingual search and free units per model (`GET /api/v1/projects`, `/projects/{slug}`) | #232, #236 |
+| Personal docs 01-39 + README index of them | #14 + each PR above, #137 |
 
-**Next:** Terraform parts 1 + 2, push the image to ECR (W6); run the M1 flow and tag `v0.1.0`; EC2 + CloudFront, first AWS deploy (W7). Full list: `docs/whats-left.md` §4.
+**Next:** run the M1 flow and tag `v0.1.0`; Projects PRs 3-5 (content, pages, "Reserve all"); Terraform parts 1 + 2, push the image to ECR (W6); EC2 + CloudFront, first AWS deploy (W7). Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -361,16 +362,14 @@ What is on `main` and what is still in review, per member. **As of 9 Nov 2026**;
 | Observer pattern doc | #207 |
 | New (not in the original plan): multi-asset bundle booking, extend an active booking, transfer a booking to a classmate, 1-minute slot hold | #212, #213, #214, #219 |
 | Frontend: quick-book modal on the catalog and asset details, report-incident button | #226 |
-
-| In review | PRs |
-|---|---|
 | Extend + transfer in My reservations; hold countdown in the calendar view; tests for the remaining PIT survivors | #224, #225, #227 |
+| Time-zone offsets rejected; bundle/transfer/hold security fixes (#228); `ReservationApi.bookBundle` for Projects | #233, #234, #235 |
 
 | Parked (draft, after M1) | PRs |
 |---|---|
 | Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
 
-**Next:** finish #224, #225, #227; `AssetRetiredEvent` listener if the team picks it (W7); test lead from W10. Full list: `docs/whats-left.md` §6.
+**Next:** no new features until the team agrees which off-plan ones stay; `AssetRetiredEvent` listener if the team picks it (W7); test lead from W10. Full list: `docs/whats-left.md` §6.
 
 ### Stefania: incidents, users & frontend lead
 

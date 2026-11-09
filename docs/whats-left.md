@@ -30,12 +30,11 @@
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
-| #224 | Calin | Extend + transfer a booking from My reservations (frontend for #213/#214) | In review |
-| #225 | Calin | 1-minute slot hold countdown in the calendar booking view (frontend for #219) | In review |
-| #227 | Calin | Tests for the remaining PIT survivors in reservation | In review |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
-Open issues: **#140** (project assistant design questions: Calin agreed to the kit = one booking design via the bundle endpoints #212; the rest waits for the team).
+Merged since the last update: Calin #224, #225, #227, #233, #234 (closes #228), #235 (`bookBundle`); Matei #232, #236 (Projects engine).
+
+Open issues: **#140** (Projects: engine on `main`; left: 9 more projects, student-kit models in the catalog seed (Liviu), pages, "Reserve all"), **#229** (Stefania + team decision), **#230** (Liviu).
 
 ---
 
@@ -47,6 +46,7 @@ Open issues: **#140** (project assistant design questions: Calin agreed to the k
 | W6 | **Terraform part 2**: RDS PostgreSQL 18 (`db.t4g.micro`, private, encrypted), S3 photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`; first `apply`, stop RDS when idle | Part 1 |
 | W6 | ~~Dockerfile~~ (✅ #114) · ~~run the image locally with `prod`~~ (✅ smoke test, #129) · push to ECR | Terraform part 2 (ECR) |
 | W6 | ~~Swagger check~~ (✅ #184) · run the M1 flow · tag `v0.1.0` · status update | Section 2 |
+| W6–W8 | **Projects (#140)**: ~~design + plan~~ (✅ #232) · ~~engine: library, search, details endpoints~~ (✅ #236) · 9 more projects (PR 3) · `/projects` pages with RO/EN switch (PR 4) · `POST /projects/{slug}/reserve` + "Reserve all" (PR 5, uses `bookBundle` ✅ #235) | Liviu: student-kit models in the seed; Stefania: whole-app i18n choice |
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront | Dockerfile, Terraform |
 | W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · ~~`S3StorageService`~~ (✅ #129, #177) · first live deploy **by the end of W8** | – |
 | W9 | ~~`SesNotificationService`~~ (✅ #129, #177) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
@@ -72,7 +72,8 @@ Open issues: **#140** (project assistant design questions: Calin agreed to the k
 |---|---|---|
 | ~~W6~~ | ~~Align `ReservationSeeder` with `CatalogSeeder`~~: ✅ it books asset 1, a DS1054Z with 2 more units of the same model (#193) | – |
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
-| **W6 (now)** | Finish #224, #225, #227; then **no new features** until the team agrees which off-plan ones stay for the demo | – |
+| ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
+| **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo | – |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |

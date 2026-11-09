@@ -64,7 +64,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 36 | [36-desk-sort-ascending.md](36-desk-sort-ascending.md) | Reservations desk: earliest bookings first, on every page | #194 |
 | 37 | [37-contract-security-rules.md](37-contract-security-rules.md) | All security rules in the API contract, SSM arrow fixed in the AWS diagram | #195 |
 | 38 | [38-project-assistant-design.md](38-project-assistant-design.md) | Projects feature (#140): design and plan, who builds which part | #232 |
-| 39 | [39-project-engine.md](39-project-engine.md) | Projects engine (#140): startup loader, bilingual search, live availability endpoints | (in review) |
+| 39 | [39-project-engine.md](39-project-engine.md) | Projects engine (#140): startup loader, bilingual search, live availability endpoints | #236 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
