@@ -165,10 +165,16 @@ export default function MyReservationsPage() {
 
   const location = useLocation()
   const [actionNotice, setActionNotice] = useState<string | null>(() => {
-    const state = location.state as { bookedId?: number } | null
+    const state = location.state as { bookedId?: number; bookedBundleId?: string; bundleItemCount?: number } | null
     if (state?.bookedId) {
       window.history.replaceState({}, document.title)
       return `Booking confirmed! Reservation #${state.bookedId} has been added to your upcoming bookings.`
+    }
+    if (state?.bookedBundleId) {
+      window.history.replaceState({}, document.title)
+      return state.bundleItemCount
+        ? `Bundle booking confirmed! ${state.bundleItemCount} items have been added to your upcoming bookings.`
+        : 'Bundle booking confirmed! Your kit items have been added to your upcoming bookings.'
     }
     return null
   })
