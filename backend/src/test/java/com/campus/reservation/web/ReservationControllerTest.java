@@ -416,4 +416,42 @@ class ReservationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/transfers/{id}/reject returns 200 OK")
+    void rejectTransferReturns200() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L,
+                100L,
+                42L,
+                99L,
+                TransferStatus.REJECTED,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 15));
+
+        when(reservationService.rejectTransfer(500L)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/reservations/transfers/500/reject"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/reservations/transfers/{id}/cancel returns 200 OK")
+    void cancelTransferReturns200() throws Exception {
+        ReservationTransferResponse response = new ReservationTransferResponse(
+                500L,
+                100L,
+                42L,
+                99L,
+                TransferStatus.CANCELLED,
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 15));
+
+        when(reservationService.cancelTransfer(500L)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/reservations/transfers/500/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
 }
