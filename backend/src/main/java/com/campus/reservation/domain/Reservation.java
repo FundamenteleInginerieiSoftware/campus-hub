@@ -153,6 +153,8 @@ public class Reservation {
     public void transferOwnership(Long newUserId) {
         requireStatus(ReservationStatus.CONFIRMED);
         this.userId = Objects.requireNonNull(newUserId, "newUserId must not be null");
+        // Clear bundle association on transfer to isolate item from original multi-asset kit (#228 point 1)
+        this.bundleId = null;
     }
 
     private void requireStatus(ReservationStatus expected) {

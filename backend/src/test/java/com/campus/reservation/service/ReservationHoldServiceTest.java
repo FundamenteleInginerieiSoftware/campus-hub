@@ -442,7 +442,7 @@ class ReservationHoldServiceTest {
     }
 
     @Test
-    @DisplayName("confirmHold: admin bypasses quota check")
+    @DisplayName("confirmHold: admin bypasses quota check for own hold")
     void confirmHold_adminBypassesQuota() {
         ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
         ReflectionTestUtils.setField(hold, "id", 1L);
@@ -469,6 +469,75 @@ class ReservationHoldServiceTest {
                 .as("admin override: confirmed reservation ID must be returned; see ReservationService.confirmHold")
                 .isEqualTo(55L);
         verify(reservationRepository, never()).countByUserIdAndStatusIn(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("confirmHold: rejects if slot start time has already passed (#228 point 9)")
+    void confirmHold_rejectsIfStartTimeHasPassed() {
+        LocalDateTime pastStart = NOW.minusMinutes(10);
+        LocalDateTime pastEnd = NOW.plusHours(1);
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, pastStart, pastEnd, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+
+        assertThatThrownBy(() -> reservationService.confirmHold(1L))
+                .as(
+                        "start time check: hold cannot be confirmed after slot start time; see ReservationService.confirmHold")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Cannot book a reservation in the past");
+    }
+
+    @Test
+    @DisplayName("confirmHold: admin confirming notifies student owner, not admin (#228 point 9)")
+    void confirmHold_adminConfirmingNotifiesStudentOwner() {
+        Long studentId = 55L;
+        ReservationHold hold = new ReservationHold(ASSET_ID, studentId, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID); // Admin ID
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 999L);
+            return r;
+        });
+
+        ReservationResponse response = reservationService.confirmHold(1L);
+
+        assertThat(response)
+                .as("admin confirmation: returns created reservation response; see ReservationService.confirmHold")
+                .isNotNull();
+        verify(notificationService).notifyUser(eq(studentId), eq("Reservation Confirmed"), any());
+        verify(notificationService, never()).notifyUser(eq(USER_ID), eq("Reservation Confirmed"), any());
+    }
+
+    @Test
+    @DisplayName("confirmHold: admin confirming student hold rejects when student quota exceeded (#228 point 9)")
+    void confirmHold_adminConfirmingStudentHoldRejectsWhenStudentQuotaExceeded() {
+        Long studentId = 55L;
+        ReservationHold hold = new ReservationHold(ASSET_ID, studentId, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID); // Admin ID
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationRepository.countByUserIdAndStatusIn(studentId, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.confirmHold(1L))
+                .as(
+                        "quota limit: student cannot exceed 2 active reservations even on admin confirmation; see ReservationService.confirmHold")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Student cannot have more than 2 active reservations");
     }
 
     @Test
