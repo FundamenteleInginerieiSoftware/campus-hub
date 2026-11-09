@@ -15,12 +15,15 @@ import com.campus.common.error.ConflictException;
 import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
+import com.campus.common.security.CurrentUser;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
+import com.campus.reservation.idempotency.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +44,19 @@ class ReservationControllerTest {
 
     @MockitoBean
     private ReservationService reservationService;
+
+    @MockitoBean
+    private CurrentUser currentUser;
+
+    @MockitoBean
+    private IdempotencyService idempotencyService;
+
+    @BeforeEach
+    void setUpIdempotency() {
+        when(currentUser.id()).thenReturn(42L);
+        when(idempotencyService.execute(any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(6)).get());
+    }
 
     private final ReservationResponse sampleResponse = new ReservationResponse(
             1L,
