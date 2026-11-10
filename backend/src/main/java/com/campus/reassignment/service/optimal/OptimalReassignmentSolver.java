@@ -5,16 +5,12 @@ import com.campus.reassignment.web.GreedyComparisonSummary;
 import com.campus.reassignment.web.OptimalReassignmentPlanResponse;
 import com.campus.reassignment.web.ReassignmentActionItem;
 import com.campus.reservation.api.ReservationSummary;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiPredicate;
 import org.springframework.stereotype.Component;
 
@@ -129,7 +125,13 @@ public class OptimalReassignmentSolver {
     }
 
     /**
-     * Builds and solves the Min-Cost Max-Flow graph using interval conflict tracks.
+     * Solves the reassignment problem globally to strict optimality by modeling availability
+     * at the individual reservation and interval level.
+     *
+     * <p>Unlike rigid track-clustering heuristics (which force all non-overlapping bookings in a track
+     * to share a single substitute asset), this solver models interval constraints per candidate asset,
+     * allowing non-overlapping bookings within the same time cluster to utilize different substitutes
+     * while guaranteeing that no substitute is ever double-booked across overlapping intervals.
      */
     public Solution solveMcmf(
             List<ReservationSummary> bookings,
@@ -142,183 +144,181 @@ public class OptimalReassignmentSolver {
             return new Solution(List.of(), 0, 0, 0, 0, 0);
         }
 
-        // Step 1: Decompose bookings into minimal conflict tracks using interval graph coloring.
-        // Within each track, bookings are strictly pairwise non-overlapping.
-        int[] trackAssignment = computeIntervalTracks(bookings);
-        int numTracks = 0;
-        for (int t : trackAssignment) {
-            if (t + 1 > numTracks) {
-                numTracks = t + 1;
+        // Sort bookings chronologically by start time
+        List<ReservationSummary> sorted = bookings.stream()
+                .sorted(Comparator.comparing(ReservationSummary::start))
+                .toList();
+
+        // 1. Initial heuristic solution via greedy to establish a strong upper bound for branch-and-bound pruning
+        Solution greedyBaseline = solveGreedy(sorted, damagedAsset, candidateSubstitutes, isAssetFreeChecker);
+
+        OptimalSearchState best = new OptimalSearchState(greedyBaseline.totalCost(), greedyBaseline.actions());
+
+        // 2. Precompute compatible candidate choices and suffix lower bounds
+        Map<Integer, List<CandidateChoice>> compatibleChoices = new HashMap<>();
+        int[] minRemainingCost = new int[n + 1];
+
+        for (int i = 0; i < n; i++) {
+            ReservationSummary b = sorted.get(i);
+            List<CandidateChoice> choices = new ArrayList<>();
+
+            for (AssetSummary candidate : candidateSubstitutes) {
+                boolean isSameModel = candidate.model().equals(damagedAsset.model());
+                boolean isSameCategory = candidate.categoryId().equals(damagedAsset.categoryId());
+                if (!isSameModel && !isSameCategory) {
+                    continue;
+                }
+                if (isAssetFreeChecker.test(candidate.id(), b)) {
+                    int cost = isSameModel ? COST_SAME_MODEL : COST_SAME_CATEGORY;
+                    String strategy = isSameModel ? "SameModel" : "SameCategory";
+                    choices.add(new CandidateChoice(candidate, strategy, cost));
+                }
+            }
+            // Prioritize SameModel (cost 10) over SameCategory (cost 50)
+            choices.sort(Comparator.comparingInt(CandidateChoice::cost));
+            compatibleChoices.put(i, choices);
+        }
+
+        for (int i = n - 1; i >= 0; i--) {
+            int minCost = compatibleChoices.get(i).isEmpty()
+                    ? COST_FORCE_CANCEL
+                    : compatibleChoices.get(i).get(0).cost();
+            minRemainingCost[i] = minRemainingCost[i + 1] + minCost;
+        }
+
+        // 3. Branch and bound search over reservation-interval assignments
+        Map<Long, List<ReservationSummary>> assetAssignments = new HashMap<>();
+        List<PlannedAction> currentActions = new ArrayList<>();
+
+        branchAndBound(0, sorted, compatibleChoices, minRemainingCost, assetAssignments, currentActions, 0, best);
+
+        // 4. Summarize final optimal metrics
+        int totalCost = 0;
+        int rescuedCount = 0;
+        int cancelledCount = 0;
+        int sameModelCount = 0;
+        int sameCategoryCount = 0;
+
+        for (PlannedAction pa : best.actions) {
+            totalCost += pa.penaltyCost();
+            if (pa.assignedAsset() != null) {
+                rescuedCount++;
+                if ("SameModel".equals(pa.strategyName())) {
+                    sameModelCount++;
+                } else {
+                    sameCategoryCount++;
+                }
+            } else {
+                cancelledCount++;
             }
         }
-        int[] trackSizes = new int[numTracks];
-        List<List<ReservationSummary>> trackBookings = new ArrayList<>(numTracks);
-        for (int t = 0; t < numTracks; t++) {
-            trackBookings.add(new ArrayList<>());
+
+        return new Solution(best.actions, totalCost, rescuedCount, cancelledCount, sameModelCount, sameCategoryCount);
+    }
+
+    private static class OptimalSearchState {
+        int bestCost;
+        List<PlannedAction> actions;
+
+        OptimalSearchState(int bestCost, List<PlannedAction> actions) {
+            this.bestCost = bestCost;
+            this.actions = new ArrayList<>(actions);
         }
-        for (int i = 0; i < n; i++) {
-            int t = trackAssignment[i];
-            trackSizes[t]++;
-            trackBookings.get(t).add(bookings.get(i));
-        }
+    }
 
-        int m = candidateSubstitutes.size();
+    private record CandidateChoice(AssetSummary candidate, String strategy, int cost) {}
 
-        // Node indexing:
-        // 0: Source S
-        // 1..numTracks: Track nodes Track_t (for t in 0..numTracks-1)
-        // (numTracks + 1)..(numTracks + m): Candidate Asset nodes Asset_j (for j in 0..m-1)
-        // Sink T: numTracks + m + 1
-        int source = 0;
-        int trackBase = 1;
-        int candidateBase = numTracks + 1;
-        int sink = numTracks + m + 1;
-        int totalNodes = sink + 1;
+    private void branchAndBound(
+            int idx,
+            List<ReservationSummary> sorted,
+            Map<Integer, List<CandidateChoice>> compatibleChoices,
+            int[] minRemainingCost,
+            Map<Long, List<ReservationSummary>> assetAssignments,
+            List<PlannedAction> currentActions,
+            int currentCost,
+            OptimalSearchState best) {
 
-        MinCostMaxFlow mcmf = new MinCostMaxFlow(totalNodes);
-
-        record CandidateTrackEdge(
-                MinCostMaxFlow.Edge edge, AssetSummary candidate, int trackId, String strategy, int unitCost) {}
-        record FallbackTrackEdge(MinCostMaxFlow.Edge edge, int trackId) {}
-
-        List<CandidateTrackEdge> candidateTrackEdges = new ArrayList<>();
-        List<FallbackTrackEdge> fallbackTrackEdges = new ArrayList<>();
-
-        // 1. Source -> Track nodes (capacity 1 per track, cost 0)
-        for (int t = 0; t < numTracks; t++) {
-            mcmf.addEdge(source, trackBase + t, 1, 0);
-
-            // Fallback: Track_t -> Sink with cost = trackSizes[t] * COST_FORCE_CANCEL
-            MinCostMaxFlow.Edge fb = mcmf.addEdge(trackBase + t, sink, 1, trackSizes[t] * COST_FORCE_CANCEL);
-            fallbackTrackEdges.add(new FallbackTrackEdge(fb, t));
+        if (idx == sorted.size()) {
+            if (currentCost < best.bestCost) {
+                best.bestCost = currentCost;
+                best.actions = new ArrayList<>(currentActions);
+            }
+            return;
         }
 
-        // 2. Candidate Asset nodes -> Sink (capacity 1 per candidate, cost 0)
-        // This strictly guarantees that each candidate asset is assigned to AT MOST ONE track,
-        // preventing cross-track double-booking across overlapping intervals.
-        for (int j = 0; j < m; j++) {
-            mcmf.addEdge(candidateBase + j, sink, 1, 0);
+        // Pruning via admissible lower bound: if currentCost + minRemaining >= bestCost, prune!
+        if (currentCost + minRemainingCost[idx] >= best.bestCost) {
+            return;
         }
 
-        // 3. Connect Track nodes -> Compatible Candidate Asset nodes
-        for (int j = 0; j < m; j++) {
-            AssetSummary candidate = candidateSubstitutes.get(j);
+        ReservationSummary currentBooking = sorted.get(idx);
+        List<CandidateChoice> choices = compatibleChoices.get(idx);
 
-            boolean isSameModel = candidate.model().equals(damagedAsset.model());
-            boolean isSameCategory = candidate.categoryId().equals(damagedAsset.categoryId());
-
-            if (!isSameModel && !isSameCategory) {
+        // 1. Try compatible candidate assets (SameModel first, then SameCategory)
+        for (CandidateChoice choice : choices) {
+            if (currentCost + choice.cost() + minRemainingCost[idx + 1] >= best.bestCost) {
                 continue;
             }
 
-            int unitCost = isSameModel ? COST_SAME_MODEL : COST_SAME_CATEGORY;
-            String strategy = isSameModel ? "SameModel" : "SameCategory";
-
-            for (int t = 0; t < numTracks; t++) {
-                List<ReservationSummary> bList = trackBookings.get(t);
-                int compatibleCount = 0;
-                int incompatibleCount = 0;
-
-                for (ReservationSummary b : bList) {
-                    if (isAssetFreeChecker.test(candidate.id(), b)) {
-                        compatibleCount++;
-                    } else {
-                        incompatibleCount++;
-                    }
-                }
-
-                if (compatibleCount > 0) {
-                    int cost = (compatibleCount * unitCost) + (incompatibleCount * COST_FORCE_CANCEL);
-                    MinCostMaxFlow.Edge edge = mcmf.addEdge(trackBase + t, candidateBase + j, 1, cost);
-                    candidateTrackEdges.add(new CandidateTrackEdge(edge, candidate, t, strategy, unitCost));
-                }
+            // Check if candidate asset has any overlapping assignment in this branch
+            if (hasIntervalOverlap(choice.candidate().id(), currentBooking, assetAssignments)) {
+                continue;
             }
+
+            // Assign to candidate
+            assetAssignments
+                    .computeIfAbsent(choice.candidate().id(), k -> new ArrayList<>())
+                    .add(currentBooking);
+            currentActions.add(new PlannedAction(currentBooking, choice.candidate(), choice.strategy(), choice.cost()));
+
+            branchAndBound(
+                    idx + 1,
+                    sorted,
+                    compatibleChoices,
+                    minRemainingCost,
+                    assetAssignments,
+                    currentActions,
+                    currentCost + choice.cost(),
+                    best);
+
+            // Backtrack
+            currentActions.remove(currentActions.size() - 1);
+            List<ReservationSummary> assigned =
+                    assetAssignments.get(choice.candidate().id());
+            assigned.remove(assigned.size() - 1);
         }
 
-        // Solve for targetFlow = numTracks (each track receives flow from a candidate or fallback)
-        MinCostMaxFlow.Result result = mcmf.solve(source, sink, numTracks);
+        // 2. Try ForceCancel fallback
+        int cancelCost = COST_FORCE_CANCEL;
+        if (currentCost + cancelCost + minRemainingCost[idx + 1] < best.bestCost) {
+            currentActions.add(new PlannedAction(currentBooking, null, "ForceCancel", cancelCost));
 
-        // Decode matched actions
-        List<PlannedAction> actions = new ArrayList<>();
-        Set<Integer> matchedTracks = new HashSet<>();
-        int sameModelCount = 0;
-        int sameCategoryCount = 0;
-        int rescuedCount = 0;
-        int cancelledCount = 0;
+            branchAndBound(
+                    idx + 1,
+                    sorted,
+                    compatibleChoices,
+                    minRemainingCost,
+                    assetAssignments,
+                    currentActions,
+                    currentCost + cancelCost,
+                    best);
 
-        for (CandidateTrackEdge cte : candidateTrackEdges) {
-            if (cte.edge.flow > 0) {
-                matchedTracks.add(cte.trackId);
-                List<ReservationSummary> bList = trackBookings.get(cte.trackId);
-                for (ReservationSummary b : bList) {
-                    if (isAssetFreeChecker.test(cte.candidate.id(), b)) {
-                        actions.add(new PlannedAction(b, cte.candidate, cte.strategy, cte.unitCost));
-                        rescuedCount++;
-                        if ("SameModel".equals(cte.strategy)) {
-                            sameModelCount++;
-                        } else {
-                            sameCategoryCount++;
-                        }
-                    } else {
-                        actions.add(new PlannedAction(b, null, "ForceCancel", COST_FORCE_CANCEL));
-                        cancelledCount++;
-                    }
-                }
-            }
+            currentActions.remove(currentActions.size() - 1);
         }
-
-        for (FallbackTrackEdge fte : fallbackTrackEdges) {
-            if (fte.edge.flow > 0 && !matchedTracks.contains(fte.trackId)) {
-                List<ReservationSummary> bList = trackBookings.get(fte.trackId);
-                for (ReservationSummary b : bList) {
-                    actions.add(new PlannedAction(b, null, "ForceCancel", COST_FORCE_CANCEL));
-                    cancelledCount++;
-                }
-            }
-        }
-
-        actions.sort(Comparator.comparing(pa -> pa.booking().start()));
-
-        return new Solution(
-                actions, result.totalCost(), rescuedCount, cancelledCount, sameModelCount, sameCategoryCount);
     }
 
-    /**
-     * Decomposes the reservation set into minimal conflict tracks using greedy interval coloring.
-     * Within each track, reservations are strictly pairwise non-overlapping, enabling a substitute
-     * asset assigned to that track to fulfill all non-overlapping reservations in the track.
-     */
-    private int[] computeIntervalTracks(List<ReservationSummary> bookings) {
-        int n = bookings.size();
-        if (n == 0) {
-            return new int[0];
+    private static boolean hasIntervalOverlap(
+            Long assetId, ReservationSummary candidateBooking, Map<Long, List<ReservationSummary>> assetAssignments) {
+        List<ReservationSummary> assigned = assetAssignments.get(assetId);
+        if (assigned == null || assigned.isEmpty()) {
+            return false;
         }
-        int[] trackAssignment = new int[n];
-        Integer[] order = new Integer[n];
-        for (int i = 0; i < n; i++) {
-            order[i] = i;
-        }
-        Arrays.sort(order, Comparator.comparing((Integer i) -> bookings.get(i).start()));
-
-        List<LocalDateTime> trackEndTimes = new ArrayList<>();
-        for (int idx : order) {
-            ReservationSummary b = bookings.get(idx);
-            int assignedTrack = -1;
-            for (int t = 0; t < trackEndTimes.size(); t++) {
-                if (!b.start().isBefore(trackEndTimes.get(t))) {
-                    assignedTrack = t;
-                    trackEndTimes.set(t, b.end());
-                    break;
-                }
+        for (ReservationSummary existing : assigned) {
+            if (overlaps(existing, candidateBooking)) {
+                return true;
             }
-            if (assignedTrack == -1) {
-                assignedTrack = trackEndTimes.size();
-                trackEndTimes.add(b.end());
-            }
-            trackAssignment[idx] = assignedTrack;
         }
-
-        return trackAssignment;
+        return false;
     }
 
     private static boolean overlaps(ReservationSummary a, ReservationSummary b) {

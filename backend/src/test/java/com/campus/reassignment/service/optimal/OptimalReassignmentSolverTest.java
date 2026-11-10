@@ -202,4 +202,52 @@ class OptimalReassignmentSolverTest {
         assertThat(actionC.assignedAssetId()).isEqualTo(10L);
         assertThat(actionB.assignedAssetId()).isNull(); // force-cancelled
     }
+
+    @Test
+    @DisplayName(
+            "Reviewer counterexample: non-overlapping bookings in same track can be allocated to different candidate assets")
+    void solve_allocatesNonOverlappingBookingsToDifferentCandidates() {
+        LocalDateTime base = LocalDateTime.of(2026, 11, 15, 8, 0);
+        AssetSummary damaged = new AssetSummary(1L, "Scope Damaged", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
+
+        // A: 08:00 - 09:00
+        ReservationSummary rA =
+                new ReservationSummary(101L, 42L, 1L, base, base.plusHours(1), ReservationStatus.CONFIRMED);
+        // B: 10:00 - 11:00 (strictly non-overlapping with A, would have shared Track 0)
+        ReservationSummary rB = new ReservationSummary(
+                102L, 43L, 1L, base.plusHours(2), base.plusHours(3), ReservationStatus.CONFIRMED);
+
+        // Asset X: only free for A (not B)
+        AssetSummary assetX = new AssetSummary(10L, "Scope X", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        // Asset Y: only free for B (not A)
+        AssetSummary assetY = new AssetSummary(20L, "Scope Y", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+
+        OptimalReassignmentPlanResponse response = solver.solve(
+                1L, "Scope Damaged", List.of(rA, rB), damaged, List.of(assetX, assetY), (candidateId, booking) -> {
+                    if (candidateId == 10L) return booking.id() == 101L; // X only free for A
+                    if (candidateId == 20L) return booking.id() == 102L; // Y only free for B
+                    return false;
+                });
+
+        assertThat(response.rescuedReservations())
+                .as(
+                        "Both non-overlapping reservations must be rescued using different candidate assets; see OptimalReassignmentSolver.solve")
+                .isEqualTo(2);
+        assertThat(response.forceCancelledReservations())
+                .as("Zero force-cancellations when both can be satisfied by different candidate assets")
+                .isZero();
+
+        List<ReassignmentActionItem> actions = response.actions();
+        ReassignmentActionItem actionA = actions.stream()
+                .filter(a -> a.reservationId() == 101L)
+                .findFirst()
+                .orElseThrow();
+        ReassignmentActionItem actionB = actions.stream()
+                .filter(a -> a.reservationId() == 102L)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(actionA.assignedAssetId()).isEqualTo(10L);
+        assertThat(actionB.assignedAssetId()).isEqualTo(20L);
+    }
 }
