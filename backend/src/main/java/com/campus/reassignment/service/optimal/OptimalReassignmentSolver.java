@@ -143,7 +143,7 @@ public class OptimalReassignmentSolver {
         }
 
         // Step 1: Decompose bookings into minimal conflict tracks using interval graph coloring.
-        // Bookings in the same track are pairwise non-overlapping and can be fulfilled by the same substitute asset.
+        // Within each track, bookings are strictly pairwise non-overlapping.
         int[] trackAssignment = computeIntervalTracks(bookings);
         int numTracks = 0;
         for (int t : trackAssignment) {
@@ -152,56 +152,55 @@ public class OptimalReassignmentSolver {
             }
         }
         int[] trackSizes = new int[numTracks];
-        for (int t : trackAssignment) {
+        List<List<ReservationSummary>> trackBookings = new ArrayList<>(numTracks);
+        for (int t = 0; t < numTracks; t++) {
+            trackBookings.add(new ArrayList<>());
+        }
+        for (int i = 0; i < n; i++) {
+            int t = trackAssignment[i];
             trackSizes[t]++;
+            trackBookings.get(t).add(bookings.get(i));
         }
 
         int m = candidateSubstitutes.size();
 
         // Node indexing:
         // 0: Source S
-        // 1..n: Reservation nodes R_i (for i in 0..n-1)
-        // For each candidate j (0..m-1) and track t (0..numTracks-1):
-        //   Asset-Track slot node: n + 1 + j * numTracks + t
-        // Sink T: n + 1 + m * numTracks
+        // 1..numTracks: Track nodes Track_t (for t in 0..numTracks-1)
+        // (numTracks + 1)..(numTracks + m): Candidate Asset nodes Asset_j (for j in 0..m-1)
+        // Sink T: numTracks + m + 1
         int source = 0;
-        int reservationBase = 1;
-        int assetSlotBase = n + 1;
-        int sink = n + 1 + m * numTracks;
+        int trackBase = 1;
+        int candidateBase = numTracks + 1;
+        int sink = numTracks + m + 1;
         int totalNodes = sink + 1;
 
         MinCostMaxFlow mcmf = new MinCostMaxFlow(totalNodes);
 
-        record CandidateEdge(
-                MinCostMaxFlow.Edge edge,
-                ReservationSummary booking,
-                AssetSummary candidate,
-                String strategy,
-                int cost) {}
-        record FallbackEdge(MinCostMaxFlow.Edge edge, ReservationSummary booking) {}
+        record CandidateTrackEdge(
+                MinCostMaxFlow.Edge edge, AssetSummary candidate, int trackId, String strategy, int unitCost) {}
+        record FallbackTrackEdge(MinCostMaxFlow.Edge edge, int trackId) {}
 
-        List<CandidateEdge> candidateEdges = new ArrayList<>();
-        List<FallbackEdge> fallbackEdges = new ArrayList<>();
+        List<CandidateTrackEdge> candidateTrackEdges = new ArrayList<>();
+        List<FallbackTrackEdge> fallbackTrackEdges = new ArrayList<>();
 
-        // 1. Source -> Reservation nodes & Fallback edges
-        for (int i = 0; i < n; i++) {
-            mcmf.addEdge(source, reservationBase + i, 1, 0);
+        // 1. Source -> Track nodes (capacity 1 per track, cost 0)
+        for (int t = 0; t < numTracks; t++) {
+            mcmf.addEdge(source, trackBase + t, 1, 0);
 
-            // Fallback: R_i -> Sink (cap 1, cost 1000 for force cancel)
-            MinCostMaxFlow.Edge fb = mcmf.addEdge(reservationBase + i, sink, 1, COST_FORCE_CANCEL);
-            fallbackEdges.add(new FallbackEdge(fb, bookings.get(i)));
+            // Fallback: Track_t -> Sink with cost = trackSizes[t] * COST_FORCE_CANCEL
+            MinCostMaxFlow.Edge fb = mcmf.addEdge(trackBase + t, sink, 1, trackSizes[t] * COST_FORCE_CANCEL);
+            fallbackTrackEdges.add(new FallbackTrackEdge(fb, t));
         }
 
-        // 2. Candidate Asset-Track slot nodes -> Sink
-        // A candidate asset assigned to a track can fulfill up to the total non-overlapping bookings in that track.
+        // 2. Candidate Asset nodes -> Sink (capacity 1 per candidate, cost 0)
+        // This strictly guarantees that each candidate asset is assigned to AT MOST ONE track,
+        // preventing cross-track double-booking across overlapping intervals.
         for (int j = 0; j < m; j++) {
-            for (int t = 0; t < numTracks; t++) {
-                int slotNode = assetSlotBase + j * numTracks + t;
-                mcmf.addEdge(slotNode, sink, trackSizes[t], 0);
-            }
+            mcmf.addEdge(candidateBase + j, sink, 1, 0);
         }
 
-        // 3. Connect Compatible Reservations -> Candidate Asset-Track slots
+        // 3. Connect Track nodes -> Compatible Candidate Asset nodes
         for (int j = 0; j < m; j++) {
             AssetSummary candidate = candidateSubstitutes.get(j);
 
@@ -212,49 +211,69 @@ public class OptimalReassignmentSolver {
                 continue;
             }
 
-            int cost = isSameModel ? COST_SAME_MODEL : COST_SAME_CATEGORY;
+            int unitCost = isSameModel ? COST_SAME_MODEL : COST_SAME_CATEGORY;
             String strategy = isSameModel ? "SameModel" : "SameCategory";
 
-            for (int i = 0; i < n; i++) {
-                ReservationSummary booking = bookings.get(i);
-                if (isAssetFreeChecker.test(candidate.id(), booking)) {
-                    int trackId = trackAssignment[i];
-                    int slotNode = assetSlotBase + j * numTracks + trackId;
+            for (int t = 0; t < numTracks; t++) {
+                List<ReservationSummary> bList = trackBookings.get(t);
+                int compatibleCount = 0;
+                int incompatibleCount = 0;
 
-                    MinCostMaxFlow.Edge edge = mcmf.addEdge(reservationBase + i, slotNode, 1, cost);
-                    candidateEdges.add(new CandidateEdge(edge, booking, candidate, strategy, cost));
+                for (ReservationSummary b : bList) {
+                    if (isAssetFreeChecker.test(candidate.id(), b)) {
+                        compatibleCount++;
+                    } else {
+                        incompatibleCount++;
+                    }
+                }
+
+                if (compatibleCount > 0) {
+                    int cost = (compatibleCount * unitCost) + (incompatibleCount * COST_FORCE_CANCEL);
+                    MinCostMaxFlow.Edge edge = mcmf.addEdge(trackBase + t, candidateBase + j, 1, cost);
+                    candidateTrackEdges.add(new CandidateTrackEdge(edge, candidate, t, strategy, unitCost));
                 }
             }
         }
 
-        // Solve for targetFlow = n (every reservation must be matched or force cancelled)
-        MinCostMaxFlow.Result result = mcmf.solve(source, sink, n);
+        // Solve for targetFlow = numTracks (each track receives flow from a candidate or fallback)
+        MinCostMaxFlow.Result result = mcmf.solve(source, sink, numTracks);
 
         // Decode matched actions
         List<PlannedAction> actions = new ArrayList<>();
-        Set<Long> matchedBookingIds = new HashSet<>();
+        Set<Integer> matchedTracks = new HashSet<>();
         int sameModelCount = 0;
         int sameCategoryCount = 0;
         int rescuedCount = 0;
         int cancelledCount = 0;
 
-        for (CandidateEdge ce : candidateEdges) {
-            if (ce.edge.flow > 0) {
-                matchedBookingIds.add(ce.booking.id());
-                actions.add(new PlannedAction(ce.booking, ce.candidate, ce.strategy, ce.cost));
-                rescuedCount++;
-                if ("SameModel".equals(ce.strategy)) {
-                    sameModelCount++;
-                } else {
-                    sameCategoryCount++;
+        for (CandidateTrackEdge cte : candidateTrackEdges) {
+            if (cte.edge.flow > 0) {
+                matchedTracks.add(cte.trackId);
+                List<ReservationSummary> bList = trackBookings.get(cte.trackId);
+                for (ReservationSummary b : bList) {
+                    if (isAssetFreeChecker.test(cte.candidate.id(), b)) {
+                        actions.add(new PlannedAction(b, cte.candidate, cte.strategy, cte.unitCost));
+                        rescuedCount++;
+                        if ("SameModel".equals(cte.strategy)) {
+                            sameModelCount++;
+                        } else {
+                            sameCategoryCount++;
+                        }
+                    } else {
+                        actions.add(new PlannedAction(b, null, "ForceCancel", COST_FORCE_CANCEL));
+                        cancelledCount++;
+                    }
                 }
             }
         }
 
-        for (FallbackEdge fe : fallbackEdges) {
-            if (fe.edge.flow > 0 && !matchedBookingIds.contains(fe.booking.id())) {
-                actions.add(new PlannedAction(fe.booking, null, "ForceCancel", COST_FORCE_CANCEL));
-                cancelledCount++;
+        for (FallbackTrackEdge fte : fallbackTrackEdges) {
+            if (fte.edge.flow > 0 && !matchedTracks.contains(fte.trackId)) {
+                List<ReservationSummary> bList = trackBookings.get(fte.trackId);
+                for (ReservationSummary b : bList) {
+                    actions.add(new PlannedAction(b, null, "ForceCancel", COST_FORCE_CANCEL));
+                    cancelledCount++;
+                }
             }
         }
 

@@ -170,6 +170,11 @@ public class ReassignmentService {
         Map<Long, ReservationSummary> bookingMap =
                 upcoming.stream().collect(Collectors.toMap(ReservationSummary::id, b -> b));
 
+        int executedRescued = 0;
+        int executedCancelled = 0;
+        int executedSameModel = 0;
+        int executedSameCategory = 0;
+
         for (ReassignmentActionItem action : plan.actions()) {
             ReservationSummary booking = bookingMap.get(action.reservationId());
             Long studentUserId = booking != null ? booking.userId() : null;
@@ -180,6 +185,12 @@ public class ReassignmentService {
                         action.assignedAssetId(),
                         "Optimal Reassignment" + (incidentId != null ? " incident #" + incidentId : ""));
                 if (moved) {
+                    executedRescued++;
+                    if ("SameModel".equals(action.strategyName())) {
+                        executedSameModel++;
+                    } else {
+                        executedSameCategory++;
+                    }
                     reassignmentLogRepository.save(new ReassignmentLog(
                             incidentId,
                             action.reservationId(),
@@ -203,6 +214,7 @@ public class ReassignmentService {
                         "Optimal Reassignment: no viable substitute"
                                 + (incidentId != null ? " (incident #" + incidentId + ")" : ""));
                 if (cancelled) {
+                    executedCancelled++;
                     reassignmentLogRepository.save(new ReassignmentLog(
                             incidentId,
                             action.reservationId(),
@@ -226,10 +238,10 @@ public class ReassignmentService {
                 plan.damagedAssetId(),
                 plan.damagedAssetName(),
                 plan.totalReservations(),
-                plan.rescuedReservations(),
-                plan.forceCancelledReservations(),
-                plan.sameModelCount(),
-                plan.sameCategoryCount(),
+                executedRescued,
+                executedCancelled,
+                executedSameModel,
+                executedSameCategory,
                 true,
                 plan.actions(),
                 plan.comparison());

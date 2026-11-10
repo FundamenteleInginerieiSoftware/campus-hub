@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.reassignment.web.OptimalReassignmentPlanResponse;
+import com.campus.reassignment.web.ReassignmentActionItem;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.LocalDateTime;
@@ -150,5 +151,55 @@ class OptimalReassignmentSolverTest {
                 .as("All 3 reservations must be rescued since A and C don't overlap on sub1 and B can use sub2")
                 .isEqualTo(3);
         assertThat(response.forceCancelledReservations()).isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "Reviewer counterexample: 1 substitute with A (08-10), B (09-11), C (10-12) must rescue A and C, and cancel B, with zero overlapping assignments")
+    void solve_reviewerCounterexampleSingleSubstituteCannotDoubleBook() {
+        LocalDateTime base = LocalDateTime.of(2026, 11, 15, 8, 0);
+        AssetSummary damaged = new AssetSummary(1L, "Scope Damaged", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
+
+        // A: 08:00 - 10:00
+        ReservationSummary rA =
+                new ReservationSummary(101L, 42L, 1L, base, base.plusHours(2), ReservationStatus.CONFIRMED);
+        // B: 09:00 - 11:00 (overlaps A and C)
+        ReservationSummary rB = new ReservationSummary(
+                102L, 43L, 1L, base.plusHours(1), base.plusHours(3), ReservationStatus.CONFIRMED);
+        // C: 10:00 - 12:00 (overlaps B, but NOT A)
+        ReservationSummary rC = new ReservationSummary(
+                103L, 44L, 1L, base.plusHours(2), base.plusHours(4), ReservationStatus.CONFIRMED);
+
+        // Only ONE substitute asset available
+        AssetSummary sub1 = new AssetSummary(10L, "Scope 1", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+
+        OptimalReassignmentPlanResponse response =
+                solver.solve(1L, "Scope Damaged", List.of(rA, rB, rC), damaged, List.of(sub1), (c, b) -> true);
+
+        assertThat(response.rescuedReservations())
+                .as("Must rescue exactly 2 reservations (A and C) on sub1 without double-booking B")
+                .isEqualTo(2);
+        assertThat(response.forceCancelledReservations())
+                .as("B must be force-cancelled")
+                .isEqualTo(1);
+
+        // Verify that sub1 is assigned to A and C, and B is force-cancelled
+        List<ReassignmentActionItem> actions = response.actions();
+        ReassignmentActionItem actionA = actions.stream()
+                .filter(a -> a.reservationId() == 101L)
+                .findFirst()
+                .orElseThrow();
+        ReassignmentActionItem actionB = actions.stream()
+                .filter(a -> a.reservationId() == 102L)
+                .findFirst()
+                .orElseThrow();
+        ReassignmentActionItem actionC = actions.stream()
+                .filter(a -> a.reservationId() == 103L)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(actionA.assignedAssetId()).isEqualTo(10L);
+        assertThat(actionC.assignedAssetId()).isEqualTo(10L);
+        assertThat(actionB.assignedAssetId()).isNull(); // force-cancelled
     }
 }
