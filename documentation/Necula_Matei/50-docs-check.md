@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-10
-**Branch / PR:** `docs/agents-end-of-task-docs` (#277), `ci/docs-check` (#278)
+**Branch / PR:** `docs/agents-end-of-task-docs` (#277), `ci/docs-check` (#279)
 **See also:** `AGENTS.md` §4 "End of every task", `.github/workflows/docs-check.yml`
 
 ---
@@ -12,7 +12,7 @@
 1. **Problem:** almost all the updates to the project status (what is done, what is left) were written by me: 24 of the 25 changes to those files. Teammates' AI assistants did the work but did not write it down, so I spent time and tokens writing up their progress.
 2. **The rule (#277):** the shared instructions every AI reads (`AGENTS.md`) now say: at the end of every task, in the same pull request, update your personal notes, your part of the "what's left" list, and your line in the project status.
 3. **Why a rule is not enough:** an AI can skip it, and some tools never read `AGENTS.md` at all (Gemini reads `GEMINI.md`, Copilot reads its own file).
-4. **The check (#278):** a small robot on GitHub looks at every pull request. If it changes the app but not those three documents, it turns red and lists what is missing. It does not care which AI (or person) wrote the code.
+4. **The check (#279):** a small robot on GitHub looks at every pull request. If it changes the app but not those three documents, it turns red and lists what is missing. It does not care which AI (or person) wrote the code.
 5. **Pointer files:** `GEMINI.md` and `.github/copilot-instructions.md` tell those two tools to follow `AGENTS.md`.
 6. **Exceptions:** a teammate can add the label `no-docs` to a pull request that really needs no notes (a one-line fix, a library update).
 
