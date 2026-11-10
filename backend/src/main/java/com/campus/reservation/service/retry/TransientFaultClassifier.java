@@ -6,8 +6,6 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.PessimisticLockingFailureException;
-import org.springframework.dao.QueryTimeoutException;
-import org.springframework.dao.TransientDataAccessException;
 
 /**
  * Classifies exceptions to identify transient PostgreSQL concurrency faults
@@ -19,8 +17,7 @@ public final class TransientFaultClassifier {
     private static final Set<String> RETRYABLE_SQL_STATES = Set.of(
             "40P01", // PostgreSQL deadlock_detected
             "55P03", // PostgreSQL lock_not_available
-            "40001", // PostgreSQL serialization_failure
-            "57014" // PostgreSQL query_canceled (statement_timeout)
+            "40001" // PostgreSQL serialization_failure
             );
 
     private TransientFaultClassifier() {}
@@ -34,8 +31,7 @@ public final class TransientFaultClassifier {
         if (throwable instanceof CannotAcquireLockException
                 || throwable instanceof DeadlockLoserDataAccessException
                 || throwable instanceof PessimisticLockingFailureException
-                || throwable instanceof QueryTimeoutException
-                || throwable instanceof TransientDataAccessException) {
+                || throwable instanceof ConcurrencyFailureException) {
             return true;
         }
 

@@ -199,7 +199,7 @@ class TransientFaultRetryExecutorTest {
                         new RuntimeException(new SQLException("serialization failure", "40001"))))
                 .isTrue();
         assertThat(TransientFaultClassifier.isTransientFault(
-                        new RuntimeException(new SQLException("statement timeout", "57014"))))
-                .isTrue();
+                        new RuntimeException(new SQLException("query canceled", "57014"))))
+                .isFalse();
     }
 }
