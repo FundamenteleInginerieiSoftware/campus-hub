@@ -81,52 +81,93 @@ public class IdempotencyService {
         if (existingOpt.isPresent()) {
             IdempotencyRecord record = existingOpt.get();
 
-            if (!record.getRequestFingerprint().equals(fingerprint)) {
-                throw new BadRequestException(
-                        "IDEMPOTENCY_KEY_PAYLOAD_MISMATCH",
-                        "Idempotency key has already been used with a different request payload.");
-            }
+            // Check if record is expired: if expired, purge it so fresh request can proceed
+            if (record.isExpired(now)) {
+                requiresNewTx.executeWithoutResult(status -> {
+                    repository
+                            .findByIdempotencyKeyAndUserId(idempotencyKey, userId)
+                            .ifPresent(repository::delete);
+                });
+            } else {
+                if (!record.getRequestFingerprint().equals(fingerprint)) {
+                    throw new BadRequestException(
+                            "IDEMPOTENCY_KEY_PAYLOAD_MISMATCH",
+                            "Idempotency key has already been used with a different request payload.");
+                }
 
-            if (record.getStatus() == IdempotencyStatus.IN_PROGRESS) {
-                throw new ConflictException(
-                        "CONCURRENT_IDEMPOTENT_REQUEST",
-                        "A request with this idempotency key is currently being processed.");
-            }
+                if (record.getStatus() == IdempotencyStatus.IN_PROGRESS) {
+                    throw new ConflictException(
+                            "CONCURRENT_IDEMPOTENT_REQUEST",
+                            "A request with this idempotency key is currently being processed.");
+                }
 
-            if (record.getStatus() == IdempotencyStatus.COMPLETED && record.getResponseBody() != null) {
-                try {
-                    T cachedBody = objectMapper.readValue(record.getResponseBody(), responseType);
-                    return ResponseEntity.status(record.getResponseStatus())
-                            .header("Idempotency-Replayed", "true")
-                            .body(cachedBody);
-                } catch (Exception e) {
-                    log.error("Failed to deserialize cached idempotency response: {}", e.getMessage());
+                if (record.getStatus() == IdempotencyStatus.COMPLETED && record.getResponseBody() != null) {
+                    try {
+                        T cachedBody = objectMapper.readValue(record.getResponseBody(), responseType);
+                        return ResponseEntity.status(record.getResponseStatus())
+                                .header("Idempotency-Replayed", "true")
+                                .body(cachedBody);
+                    } catch (Exception e) {
+                        log.error("Failed to deserialize cached idempotency response: {}", e.getMessage());
+                    }
                 }
             }
         }
 
-        // 2. Reserve the key in an isolated REQUIRES_NEW transaction
-        IdempotencyRecord reserved = requiresNewTx.execute(status -> {
-            Optional<IdempotencyRecord> locked = repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId);
-            if (locked.isPresent()) {
-                return locked.get();
-            }
-            IdempotencyRecord fresh = new IdempotencyRecord(
-                    idempotencyKey, userId, fingerprint, IdempotencyStatus.IN_PROGRESS, now, now.plusHours(24));
-            return repository.save(fresh);
-        });
+        // 2. Atomically reserve the key in an isolated REQUIRES_NEW transaction
+        record ReservationResult<T>(boolean newlyCreated, ResponseEntity<T> cachedResponse) {}
 
-        if (reserved != null
-                && reserved.getStatus() == IdempotencyStatus.COMPLETED
-                && reserved.getResponseBody() != null) {
-            try {
-                T cachedBody = objectMapper.readValue(reserved.getResponseBody(), responseType);
-                return ResponseEntity.status(reserved.getResponseStatus())
-                        .header("Idempotency-Replayed", "true")
-                        .body(cachedBody);
-            } catch (Exception e) {
-                log.error("Failed to deserialize cached response: {}", e.getMessage());
-            }
+        ReservationResult<T> reservationResult;
+        try {
+            reservationResult = requiresNewTx.execute(status -> {
+                Optional<IdempotencyRecord> locked = repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId);
+                if (locked.isPresent()) {
+                    IdempotencyRecord existing = locked.get();
+                    if (existing.isExpired(now)) {
+                        repository.delete(existing);
+                    } else {
+                        if (!existing.getRequestFingerprint().equals(fingerprint)) {
+                            throw new BadRequestException(
+                                    "IDEMPOTENCY_KEY_PAYLOAD_MISMATCH",
+                                    "Idempotency key has already been used with a different request payload.");
+                        }
+                        if (existing.getStatus() == IdempotencyStatus.IN_PROGRESS) {
+                            throw new ConflictException(
+                                    "CONCURRENT_IDEMPOTENT_REQUEST",
+                                    "A request with this idempotency key is currently being processed.");
+                        }
+                        if (existing.getStatus() == IdempotencyStatus.COMPLETED && existing.getResponseBody() != null) {
+                            try {
+                                T cachedBody = objectMapper.readValue(existing.getResponseBody(), responseType);
+                                ResponseEntity<T> replayed = ResponseEntity.status(existing.getResponseStatus())
+                                        .header("Idempotency-Replayed", "true")
+                                        .body(cachedBody);
+                                return new ReservationResult<>(false, replayed);
+                            } catch (Exception e) {
+                                log.error("Failed to deserialize cached response: {}", e.getMessage());
+                            }
+                        }
+                        // If record was FAILED, delete and allow fresh attempt
+                        repository.delete(existing);
+                    }
+                }
+
+                IdempotencyRecord fresh = new IdempotencyRecord(
+                        idempotencyKey, userId, fingerprint, IdempotencyStatus.IN_PROGRESS, now, now.plusHours(24));
+                repository.save(fresh);
+                return new ReservationResult<>(true, null);
+            });
+        } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+            // Concurrent insert hit unique constraint on (idempotency_key, user_id)
+            throw new ConflictException(
+                    "CONCURRENT_IDEMPOTENT_REQUEST",
+                    "A request with this idempotency key is currently being processed.");
+        }
+
+        if (reservationResult != null
+                && !reservationResult.newlyCreated()
+                && reservationResult.cachedResponse() != null) {
+            return reservationResult.cachedResponse();
         }
 
         // 3. Execute business logic
@@ -134,9 +175,12 @@ public class IdempotencyService {
         try {
             response = action.get();
         } catch (RuntimeException e) {
-            // Delete the in-progress reservation so subsequent corrected attempts can proceed
+            // Mark failed or delete reservation so subsequent corrected attempts can proceed
             requiresNewTx.executeWithoutResult(status -> {
-                repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId).ifPresent(repository::delete);
+                repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId).ifPresent(rec -> {
+                    rec.markFailed();
+                    repository.save(rec);
+                });
             });
             throw e;
         }
@@ -151,6 +195,8 @@ public class IdempotencyService {
                     repository.save(rec);
                 } catch (Exception e) {
                     log.error("Failed to serialize response body for idempotency: {}", e.getMessage());
+                    rec.markFailed();
+                    repository.save(rec);
                 }
             });
         });

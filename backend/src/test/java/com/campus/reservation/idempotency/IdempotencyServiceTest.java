@@ -205,4 +205,94 @@ class IdempotencyServiceTest {
         assertThat(deleted).isEqualTo(7);
         verify(repository).deleteExpiredRecords(now);
     }
+
+    @Test
+    @DisplayName("In-progress in isolated transaction: rejects concurrent attempt with ConflictException")
+    void execute_rejectsConcurrentInProgressInsideTx() {
+        SamplePayload payload = new SamplePayload(10L, "Booking A");
+        String fingerprint = service.computeFingerprint(userId, method, path, payload);
+
+        // Outside tx: empty (simulating simultaneous arrival)
+        when(repository.findByIdempotencyKeyAndUserId(key, userId)).thenReturn(Optional.empty());
+
+        // Inside tx: already created by concurrent thread
+        IdempotencyRecord inProgressRecord = new IdempotencyRecord(
+                key,
+                userId,
+                fingerprint,
+                IdempotencyStatus.IN_PROGRESS,
+                LocalDateTime.now(fixedClock),
+                LocalDateTime.now(fixedClock).plusHours(24));
+        when(repository.findByIdempotencyKeyAndUserId(key, userId))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(inProgressRecord));
+
+        assertThatThrownBy(() -> service.execute(
+                        key,
+                        userId,
+                        method,
+                        path,
+                        payload,
+                        SampleResponse.class,
+                        () -> ResponseEntity.ok(new SampleResponse(1L, "OK"))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("currently being processed");
+    }
+
+    @Test
+    @DisplayName("Unique constraint violation: translates DataIntegrityViolationException to ConflictException")
+    void execute_translatesDataIntegrityViolationException() {
+        SamplePayload payload = new SamplePayload(10L, "Booking A");
+        when(repository.findByIdempotencyKeyAndUserId(key, userId)).thenReturn(Optional.empty());
+        when(repository.save(any()))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique_violation"));
+
+        assertThatThrownBy(() -> service.execute(
+                        key,
+                        userId,
+                        method,
+                        path,
+                        payload,
+                        SampleResponse.class,
+                        () -> ResponseEntity.ok(new SampleResponse(1L, "OK"))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("currently being processed");
+    }
+
+    @Test
+    @DisplayName("Expired record: purges expired entry and allows fresh execution")
+    void execute_purgesExpiredRecordAndAllowsFresh() {
+        SamplePayload payload = new SamplePayload(10L, "Booking A");
+        String fingerprint = service.computeFingerprint(userId, method, path, payload);
+
+        IdempotencyRecord expiredRecord = new IdempotencyRecord(
+                key,
+                userId,
+                fingerprint,
+                IdempotencyStatus.COMPLETED,
+                LocalDateTime.now(fixedClock).minusDays(3),
+                LocalDateTime.now(fixedClock).minusDays(1)); // Expired yesterday
+
+        when(repository.findByIdempotencyKeyAndUserId(key, userId)).thenReturn(Optional.of(expiredRecord));
+
+        IdempotencyRecord freshRecord = new IdempotencyRecord(
+                key,
+                userId,
+                fingerprint,
+                IdempotencyStatus.IN_PROGRESS,
+                LocalDateTime.now(fixedClock),
+                LocalDateTime.now(fixedClock).plusHours(24));
+        when(repository.save(any())).thenReturn(freshRecord);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        ResponseEntity<SampleResponse> res =
+                service.execute(key, userId, method, path, payload, SampleResponse.class, () -> {
+                    callCount.incrementAndGet();
+                    return ResponseEntity.status(HttpStatus.CREATED).body(new SampleResponse(300L, "FRESH"));
+                });
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(res.getBody().id()).isEqualTo(300L);
+        assertThat(callCount.get()).isEqualTo(1);
+    }
 }
