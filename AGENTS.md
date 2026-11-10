@@ -137,7 +137,7 @@ void lockForBooking(Long assetId);
 7. **Squash merge after 1 approval** from any teammate. Branch auto-deletes.
 8. **Sync daily:** `git fetch && git rebase origin/main`, then `git push --force-with-lease` (**only on your own branch**, never on `main` or someone else's branch).
 
-**PR checklist:** linked issue · `./gradlew build` passes · new logic has tests (happy path + at least one failure case) · Swagger annotations on new endpoints · migration version checked against `main` · no entity returned from a controller · `docs/api-contract.md` updated if the API changed · screenshots for frontend PRs.
+**PR checklist:** linked issue · `./gradlew build` passes · new logic has tests (happy path + at least one failure case) · Swagger annotations on new endpoints · migration version checked against `main` · no entity returned from a controller · `docs/api-contract.md` updated if the API changed · personal doc + your lines in `docs/whats-left.md` and section 7 updated · screenshots for frontend PRs.
 
 **Flyway migrations** (`backend/src/main/resources/db/migration/`):
 - Name: `V<YYYY_MM_DD_HHMM>__<module>_<desc>.sql`, e.g. `V2026_10_20_1430__catalog_create_assets.sql` (confirm in `docs/decisions.md`).
@@ -146,7 +146,16 @@ void lockForBooking(Long assetId);
 - One migration = one logical change, one author. Ship it in the same PR as the entity change.
 - After switching branches, if Flyway complains locally: reset the local database (section 10).
 
-**Definition of Done:** on `main` via a reviewed PR · CI green · tests for the logic · endpoint visible and documented in Swagger · works from a fresh database · API contract/docs updated · issue closed.
+**End of every task (the agent does this, in the same PR, before asking for review):** the docs travel with the code, so `main` always says what is really done and nobody has to write the status for you.
+1. **Personal doc:** add `documentation/<Surname_Name>/NN-<topic>.md` (Part 1 + Part 2, section 6), or update this PR's doc if it already has one.
+2. **Your section of `docs/whats-left.md`** (the one with your name): mark what this PR finishes, add what it leaves open or what it now waits for.
+3. **Your area in section 7 (Status) of this file:** append `<what, in a few words> (#PR)` to the bullet of your module. Add the PR number with a second push right after `gh pr create`.
+4. **Shared docs this change touches:** `docs/api-contract.md` (API changed), `docs/modules/<module>.md` (public API or how to test changed), `docs/diagrams/` (entity or migration changed), `docs/decisions.md` (a team decision was made).
+
+Edit only the lines of your own area. The shared lines (the date line of section 7, the "Open PRs" table and milestones in `whats-left.md`, the README status) are refreshed by Matei once a week: those are the lines every open PR would fight over in merge conflicts.
+**Done when** `git diff origin/main --stat` lists your personal doc, `docs/whats-left.md` and `AGENTS.md`, plus every shared doc from step 4 that applies. Reviews and PR comments alone need no doc.
+
+**Definition of Done:** on `main` via a reviewed PR · CI green · tests for the logic · endpoint visible and documented in Swagger · works from a fresh database · API contract/docs updated · personal doc + your status lines updated (End of every task) · issue closed.
 
 ---
 
@@ -205,7 +214,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 
 ## 6. Documentation rules
 
-- **Personal docs:** each member keeps `documentation/<Surname_Name>/`. Files are numbered `NN-topic.md` (`01-week1-project-setup.md`). Every doc has **Part 1: In simple terms** (for non-programmers), then **Part 2: Technical details**. Short, tables preferred. Suggest a new entry after each milestone of the user's work; it feeds their report section.
+- **Personal docs:** each member keeps `documentation/<Surname_Name>/`. Files are numbered `NN-topic.md` (`01-week1-project-setup.md`). Every doc has **Part 1: In simple terms** (for non-programmers), then **Part 2: Technical details**. Short, tables preferred. One doc per PR, written in the same PR (section 4, End of every task); it feeds their report section.
 - **Shared docs in `docs/`:**
 
   | Path | Content |
@@ -397,4 +406,4 @@ The backend commands work once the Gradle skeleton is on `main`.
 
 ## 11. Keeping this file current
 
-Matei owns `AGENTS.md` (and `CLAUDE.md`, which just imports it). Update section 7 (Status) when milestones land: skeleton, CI, entity freeze, each facade (stub -> real), M1, M2, feature freeze. Teammates who notice something outdated: tell Matei or open a small `docs/` PR for him to review. Never let an AI edit this file on its own initiative.
+Matei owns `AGENTS.md` (and `CLAUDE.md`, which just imports it). Update section 7 (Status) when milestones land: skeleton, CI, entity freeze, each facade (stub -> real), M1, M2, feature freeze. Every member appends their own lines to section 7 in their feature PRs (section 4, End of every task). Anything else outdated: tell Matei or open a small `docs/` PR for him to review. Apart from those section 7 lines, never let an AI edit this file on its own initiative.

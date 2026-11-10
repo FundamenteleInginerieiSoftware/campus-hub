@@ -23,5 +23,6 @@ Closes #
 - [ ] New migration file? Version number checked against `main` (CONTRIBUTING §4)
 - [ ] No entity returned from a controller (DTOs only)
 - [ ] `docs/api-contract.md` updated if the API changed
+- [ ] Personal doc added/updated, my section of `docs/whats-left.md` and my area in AGENTS.md §7 updated (AGENTS.md §4, End of every task)
 - [ ] Screenshots (frontend PRs)
 - [ ] I can explain every line of this PR (AI-assisted code included)
