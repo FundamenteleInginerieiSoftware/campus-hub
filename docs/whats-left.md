@@ -60,7 +60,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W9 | ~~Frontend: **admin reservations desk page**~~ (✅ #138, #194) | – |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
 | W10 | ~~Security pass~~ (✅ `SecurityPassIT`, #139) · ~~PIT survivors in my code~~ (✅ #182) · load smoke test · restore an RDS snapshot once · cost check | – |
-| W6–W10 | **Proposed, not agreed (section 7a):** build the four new features in this order: 1 pickup pass, 2 calendar feed, 3 live notifications, 4 equipment reliability | Teammate asks in section 7a |
+| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`) · small asks from teammates' features: the `SecurityConfig` rule for Calin's calendar feed (land it first), the live push call in `SesNotificationService` for Liviu's live notifications, maybe one async-dispatch line in `SecurityConfig` | Section 7a |
 | W11–W12 | ~~Deployment + component diagrams~~ (✅ #186; update the AWS one after the deploy) · ~~security chapter~~ (✅ #185) · CI/CD description · runbook · demo on AWS + local fallback + video · `terraform destroy` after grading | – |
 
 ## 5. Liviu Nedelcu: catalog + shared services
@@ -72,7 +72,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | ~~Audit date filters~~ (✅ #244) · work through #268 (lost updates on edit, retired asset by id, duplicated paging checks) | – |
 | W7 | **Retire flow**: agree with Calin + Stefania what happens to a retired asset's future bookings (recommended: `AssetRetiredEvent`, handled by Calin's engine) | Team decision |
 | ~~W7–W8~~ | ~~`STALE_VERSION` test~~ (✅ #220) · ~~audit log endpoint + page~~ (✅ #217, #221) · ~~class + ER diagrams, report chapter~~ (✅ #222, keep them current) | – |
-| Proposed, not agreed | Liviu: publish an event in `notification.api` whenever a user is notified (live notifications; proposed `UserNotifiedEvent`) · optional: add `PICKUP_PASS_VERIFIED` to the audit page's action filter | Section 7a |
+| Proposed, not agreed | Build **live notifications** in your `notification` module (spec + plan `docs/superpowers/*/2026-11-10-live-notifications*`) · optional: add `PICKUP_PASS_VERIFIED` to the audit page's action filter (Matei's pickup pass) | Section 7a |
 | W8 | Help Calin with substitute-query edge cases (none, several, retired excluded) | – |
 | W10–W12 | Coverage ≥ 70% (`catalog.service`, `common.audit`, `storage`, handler) · final class, ER and Asset state diagrams · report section · demo part (admin adds an asset, student filters, audit log) | – |
 
@@ -87,7 +87,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | Review and merge **#270** (fixes for #267) and **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
-| Proposed, not agreed | Calin: add one read method on `ReservationApi` for a user's reservations in a time range, any status (calendar feed; proposed `findByUserBetween`) · a read method for the minutes each asset was really in use (reliability; proposed `usedMinutesByAsset`) · add the new modules `calendar`, `reliability`, `messaging` to the ArchUnit module list | Section 7a |
+| Proposed, not agreed | Build the **calendar feed** in your `reservation` module (spec + plan `docs/superpowers/*/2026-11-10-calendar-feed*`) · for Stefania's reliability page: a read method on `ReservationApi` for the minutes each asset was really in use (proposed `usedMinutesByAsset`) | Section 7a |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |
 | W10–W12 | **Test lead**: keep `docs/testing/test-plan.md` current (#101, #199), JaCoCo results, **test report** · full-flow integration tests · ~~PIT survivors~~ (✅ #201) · reservation state diagram · ~~booking sequence diagram~~ (✅ #204) · ~~**Strategy pattern doc**~~ (✅ #205) · ~~report section~~ (✅ #203, keep it current) · demo part | – |
 
@@ -99,7 +99,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Report-incident form + My incidents page~~ (✅ #216) | – |
 | W6 | Merge **#263** (approved) · work through #269 (concurrency tests, `ci.yml` guards, small incident fixes) | – |
 | W6 | Wire all M1 pages together · run the full M1 flow with the team · workload retro (re-split the frontend if it is behind) | Section 2 |
-| Proposed, not agreed | Stefania: add a read method in `incident.api` for incidents created since a date (reliability) · mount `<LiveToasts />` once in `AppLayout.tsx` (live notifications) · OK for the new routes and menu entries `pickup-pass`, `calendar-sync`, `admin/reliability` · add two QR libraries to `package.json` for the last pickup-pass PR | Section 7a |
+| Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · two QR libraries in `package.json` for Matei's last pickup-pass PR | Section 7a |
 | W7 | **Incident details** page · ~~admin incident queue~~ (✅ #223) | – |
 | W8 | **Reassignment log page** · optional admin users page (endpoints on `main`, #206) · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |
@@ -107,14 +107,14 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 
 ## 7a. Proposed new features (not agreed yet)
 
-Matei proposes four more features, built by him in this order. **Proposed only:** the specs and plans (written on 10 Nov) are not on `main` yet, nothing is started, and the asks to teammates below are **not agreed**: raise them at the next meeting. All four must be done before the feature freeze (Mon 7 Dec) and must not delay M1 or the W7 deploy. If a teammate part is not on `main` by **30 Nov**, the cut line in the table applies.
+Matei proposes four more features, **one per member**: each goes to the member who owns the data it reads, so every member has a feature beyond CRUD to defend and the asks between members stay small. Specs and plans: `docs/superpowers/specs/2026-11-10-*` and `docs/superpowers/plans/2026-11-10-*` (written by Matei; each owner reads, changes and writes the code of their own). **Proposed only:** nothing is started and the split is **not agreed**: raise it at the next meeting. The four can be built in parallel. All four must be done before the feature freeze (Mon 7 Dec) and must not delay M1 or the W7 deploy. If a teammate part is not on `main` by **30 Nov**, the cut line in the table applies.
 
 | # | Feature | What it is | Owner | Needs from | Cut line |
 |---|---|---|---|---|---|
-| 1 | Pickup pass | A rotating 6-digit code (and QR) a student shows at the lab desk; the desk page verifies it | Matei | Stefania: OK for the route and menu entry; later two QR libraries. Liviu: optional audit filter entry | PRs 1 and 2 are the feature; drop the QR PR 3 if the libraries are not in by 30 Nov |
-| 2 | Calendar feed | A private link a student subscribes to in Google/Apple/Outlook calendar; bookings, cancels and reassignments show up by themselves | Matei | Calin: one read method on `ReservationApi`. Stefania: OK for the route and menu entry | All three PRs are needed; the `.ics` writer can be built before Calin's method exists |
-| 3 | Live notifications | A message on screen the moment a booking is moved | Matei | Liviu: an event in `notification.api`. Stefania: mount `<LiveToasts />` once. Calin: ArchUnit list | Without Liviu's event nothing is pushed: dropped from the demo if it is not on `main` by 30 Nov |
-| 4 | Equipment reliability | "Which units keep breaking?" admin page | Matei | Stefania: a read method in `incident.api`. Calin: a read method on `ReservationApi`. Stefania: OK for the route | First to drop: if either method is not on `main` by 30 Nov, stop after PR 1 |
+| 1 | Pickup pass | A rotating 6-digit code (and QR) a student shows at the lab desk; the desk page verifies it | **Matei** (`user/`, his desk page) | Stefania: OK for the route and menu entry; later two QR libraries. Liviu: optional audit filter entry | PRs 1 and 2 are the feature; drop the QR PR 3 if the libraries are not in by 30 Nov |
+| 2 | Calendar feed | A private link a student subscribes to in Google/Apple/Outlook calendar; bookings, cancels and reassignments show up by themselves | **Calin** (`reservation/`, new table `calendar_feeds`) | Matei: one `SecurityConfig` rule (public feed path). Stefania: OK for the route and menu entry | All three PRs and Matei's rule are needed; Matei's rule lands first |
+| 3 | Live notifications | A message on screen the moment a booking is moved | **Liviu** (`notification/`, no event needed) | Stefania: mount `<LiveToasts />` once. Matei: the same push call in `SesNotificationService` (prod), maybe one `SecurityConfig` line | Works locally without Matei's line; on AWS only with it. Dropped from the AWS demo if it is not in by 30 Nov |
+| 4 | Equipment reliability | "Which units keep breaking?" admin page | **Stefania** (`incident/`, reads her own incidents) | Calin: a read method on `ReservationApi` (used minutes per asset) | First to drop: if Calin's method is not on `main` by 30 Nov, stop after PR 1 |
 
 ---
 
