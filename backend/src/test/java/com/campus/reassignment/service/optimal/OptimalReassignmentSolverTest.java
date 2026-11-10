@@ -120,4 +120,35 @@ class OptimalReassignmentSolverTest {
         assertThat(response.rescuedReservations()).isZero();
         assertThat(response.actions()).isEmpty();
     }
+
+    @Test
+    @DisplayName(
+            "Non-overlapping transitive cluster: A (08-09) and C (09:30-10:30) can share an asset while B (08:30-10:00) uses another")
+    void solve_allocatesNonOverlappingReservationsWithinSameCluster() {
+        LocalDateTime base = LocalDateTime.of(2026, 11, 15, 8, 0);
+
+        AssetSummary damaged = new AssetSummary(1L, "Scope Damaged", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
+
+        // A: 08:00 - 09:00
+        ReservationSummary rA =
+                new ReservationSummary(101L, 42L, 1L, base, base.plusHours(1), ReservationStatus.CONFIRMED);
+        // B: 08:30 - 10:00 (overlaps A and C)
+        ReservationSummary rB = new ReservationSummary(
+                102L, 43L, 1L, base.plusMinutes(30), base.plusHours(2), ReservationStatus.CONFIRMED);
+        // C: 09:30 - 10:30 (overlaps B, but NOT A)
+        ReservationSummary rC = new ReservationSummary(
+                103L, 44L, 1L, base.plusMinutes(90), base.plusMinutes(150), ReservationStatus.CONFIRMED);
+
+        // Two available candidate substitutes
+        AssetSummary sub1 = new AssetSummary(10L, "Scope 1", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        AssetSummary sub2 = new AssetSummary(20L, "Scope 2", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+
+        OptimalReassignmentPlanResponse response =
+                solver.solve(1L, "Scope Damaged", List.of(rA, rB, rC), damaged, List.of(sub1, sub2), (c, b) -> true);
+
+        assertThat(response.rescuedReservations())
+                .as("All 3 reservations must be rescued since A and C don't overlap on sub1 and B can use sub2")
+                .isEqualTo(3);
+        assertThat(response.forceCancelledReservations()).isZero();
+    }
 }

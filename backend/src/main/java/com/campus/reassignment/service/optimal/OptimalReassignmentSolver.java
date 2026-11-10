@@ -5,15 +5,15 @@ import com.campus.reassignment.web.GreedyComparisonSummary;
 import com.campus.reassignment.web.OptimalReassignmentPlanResponse;
 import com.campus.reassignment.web.ReassignmentActionItem;
 import com.campus.reservation.api.ReservationSummary;
-import java.util.ArrayDeque;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import org.springframework.stereotype.Component;
@@ -129,7 +129,7 @@ public class OptimalReassignmentSolver {
     }
 
     /**
-     * Builds and solves the Min-Cost Max-Flow graph using interval conflict clusters.
+     * Builds and solves the Min-Cost Max-Flow graph using interval conflict tracks.
      */
     public Solution solveMcmf(
             List<ReservationSummary> bookings,
@@ -138,15 +138,22 @@ public class OptimalReassignmentSolver {
             BiPredicate<Long, ReservationSummary> isAssetFreeChecker) {
 
         int n = bookings.size();
+        if (n == 0) {
+            return new Solution(List.of(), 0, 0, 0, 0, 0);
+        }
 
-        // Step 1: Group bookings into connected overlap conflict clusters.
-        // Bookings in separate clusters do not overlap in time and can share the same substitute asset.
-        int[] clusterAssignment = computeOverlapClusters(bookings);
-        int numClusters = 0;
-        for (int c : clusterAssignment) {
-            if (c + 1 > numClusters) {
-                numClusters = c + 1;
+        // Step 1: Decompose bookings into minimal conflict tracks using interval graph coloring.
+        // Bookings in the same track are pairwise non-overlapping and can be fulfilled by the same substitute asset.
+        int[] trackAssignment = computeIntervalTracks(bookings);
+        int numTracks = 0;
+        for (int t : trackAssignment) {
+            if (t + 1 > numTracks) {
+                numTracks = t + 1;
             }
+        }
+        int[] trackSizes = new int[numTracks];
+        for (int t : trackAssignment) {
+            trackSizes[t]++;
         }
 
         int m = candidateSubstitutes.size();
@@ -154,13 +161,13 @@ public class OptimalReassignmentSolver {
         // Node indexing:
         // 0: Source S
         // 1..n: Reservation nodes R_i (for i in 0..n-1)
-        // For each candidate j (0..m-1) and cluster c (0..numClusters-1):
-        //   Asset-Cluster slot node: n + 1 + j * numClusters + c
-        // Sink T: n + 1 + m * numClusters
+        // For each candidate j (0..m-1) and track t (0..numTracks-1):
+        //   Asset-Track slot node: n + 1 + j * numTracks + t
+        // Sink T: n + 1 + m * numTracks
         int source = 0;
         int reservationBase = 1;
         int assetSlotBase = n + 1;
-        int sink = n + 1 + m * numClusters;
+        int sink = n + 1 + m * numTracks;
         int totalNodes = sink + 1;
 
         MinCostMaxFlow mcmf = new MinCostMaxFlow(totalNodes);
@@ -185,16 +192,16 @@ public class OptimalReassignmentSolver {
             fallbackEdges.add(new FallbackEdge(fb, bookings.get(i)));
         }
 
-        // 2. Candidate Asset-Cluster slot nodes -> Sink
-        // For each candidate asset and cluster, at most 1 reservation in that cluster can occupy the asset.
+        // 2. Candidate Asset-Track slot nodes -> Sink
+        // A candidate asset assigned to a track can fulfill up to the total non-overlapping bookings in that track.
         for (int j = 0; j < m; j++) {
-            for (int c = 0; c < numClusters; c++) {
-                int slotNode = assetSlotBase + j * numClusters + c;
-                mcmf.addEdge(slotNode, sink, 1, 0);
+            for (int t = 0; t < numTracks; t++) {
+                int slotNode = assetSlotBase + j * numTracks + t;
+                mcmf.addEdge(slotNode, sink, trackSizes[t], 0);
             }
         }
 
-        // 3. Connect Compatible Reservations -> Candidate Asset-Cluster slots
+        // 3. Connect Compatible Reservations -> Candidate Asset-Track slots
         for (int j = 0; j < m; j++) {
             AssetSummary candidate = candidateSubstitutes.get(j);
 
@@ -211,8 +218,8 @@ public class OptimalReassignmentSolver {
             for (int i = 0; i < n; i++) {
                 ReservationSummary booking = bookings.get(i);
                 if (isAssetFreeChecker.test(candidate.id(), booking)) {
-                    int clusterId = clusterAssignment[i];
-                    int slotNode = assetSlotBase + j * numClusters + clusterId;
+                    int trackId = trackAssignment[i];
+                    int slotNode = assetSlotBase + j * numTracks + trackId;
 
                     MinCostMaxFlow.Edge edge = mcmf.addEdge(reservationBase + i, slotNode, 1, cost);
                     candidateEdges.add(new CandidateEdge(edge, booking, candidate, strategy, cost));
@@ -258,44 +265,41 @@ public class OptimalReassignmentSolver {
     }
 
     /**
-     * Groups reservations into connected overlap conflict clusters.
-     * Two reservations are in the same cluster if their time windows overlap.
+     * Decomposes the reservation set into minimal conflict tracks using greedy interval coloring.
+     * Within each track, reservations are strictly pairwise non-overlapping, enabling a substitute
+     * asset assigned to that track to fulfill all non-overlapping reservations in the track.
      */
-    private int[] computeOverlapClusters(List<ReservationSummary> bookings) {
+    private int[] computeIntervalTracks(List<ReservationSummary> bookings) {
         int n = bookings.size();
-        int[] clusterAssignment = new int[n];
-        boolean[] visited = new boolean[n];
-        int currentCluster = 0;
-
+        if (n == 0) {
+            return new int[0];
+        }
+        int[] trackAssignment = new int[n];
+        Integer[] order = new Integer[n];
         for (int i = 0; i < n; i++) {
-            if (visited[i]) {
-                continue;
-            }
+            order[i] = i;
+        }
+        Arrays.sort(order, Comparator.comparing((Integer i) -> bookings.get(i).start()));
 
-            Queue<Integer> queue = new ArrayDeque<>();
-            queue.add(i);
-            visited[i] = true;
-            clusterAssignment[i] = currentCluster;
-
-            while (!queue.isEmpty()) {
-                int curr = queue.poll();
-                ReservationSummary b1 = bookings.get(curr);
-
-                for (int next = 0; next < n; next++) {
-                    if (!visited[next]) {
-                        ReservationSummary b2 = bookings.get(next);
-                        if (overlaps(b1, b2)) {
-                            visited[next] = true;
-                            clusterAssignment[next] = currentCluster;
-                            queue.add(next);
-                        }
-                    }
+        List<LocalDateTime> trackEndTimes = new ArrayList<>();
+        for (int idx : order) {
+            ReservationSummary b = bookings.get(idx);
+            int assignedTrack = -1;
+            for (int t = 0; t < trackEndTimes.size(); t++) {
+                if (!b.start().isBefore(trackEndTimes.get(t))) {
+                    assignedTrack = t;
+                    trackEndTimes.set(t, b.end());
+                    break;
                 }
             }
-            currentCluster++;
+            if (assignedTrack == -1) {
+                assignedTrack = trackEndTimes.size();
+                trackEndTimes.add(b.end());
+            }
+            trackAssignment[idx] = assignedTrack;
         }
 
-        return clusterAssignment;
+        return trackAssignment;
     }
 
     private static boolean overlaps(ReservationSummary a, ReservationSummary b) {

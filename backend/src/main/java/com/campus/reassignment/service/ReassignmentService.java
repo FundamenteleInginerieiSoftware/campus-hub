@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -166,7 +167,13 @@ public class ReassignmentService {
         }
 
         // Execute optimal actions
+        Map<Long, ReservationSummary> bookingMap =
+                upcoming.stream().collect(Collectors.toMap(ReservationSummary::id, b -> b));
+
         for (ReassignmentActionItem action : plan.actions()) {
+            ReservationSummary booking = bookingMap.get(action.reservationId());
+            Long studentUserId = booking != null ? booking.userId() : null;
+
             if (action.assignedAssetId() != null) {
                 boolean moved = reservationApi.moveToAsset(
                         action.reservationId(),
@@ -181,6 +188,14 @@ public class ReassignmentService {
                             ReassignmentOutcome.REASSIGNED,
                             action.strategyName(),
                             now()));
+                    if (studentUserId != null) {
+                        sendNotificationSafely(
+                                studentUserId,
+                                "Equipment Reassigned",
+                                "Your reservation #" + action.reservationId() + " has been reassigned to asset #"
+                                        + action.assignedAssetId() + " (" + action.assignedAssetName() + ") via "
+                                        + action.strategyName() + ".");
+                    }
                 }
             } else {
                 boolean cancelled = reservationApi.forceCancel(
@@ -196,6 +211,13 @@ public class ReassignmentService {
                             ReassignmentOutcome.FORCE_CANCELLED,
                             null,
                             now()));
+                    if (studentUserId != null) {
+                        sendNotificationSafely(
+                                studentUserId,
+                                "Reservation Cancelled",
+                                "Your reservation #" + action.reservationId()
+                                        + " has been force-cancelled due to equipment maintenance (no viable substitute available).");
+                    }
                 }
             }
         }
