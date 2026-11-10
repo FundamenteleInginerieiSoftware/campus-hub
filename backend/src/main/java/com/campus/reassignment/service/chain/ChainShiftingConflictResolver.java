@@ -52,7 +52,12 @@ public class ChainShiftingConflictResolver {
                 .toList();
 
         if (directBlockers.isEmpty()) {
-            return new ChainShiftPlan(true, List.of(), "Target equipment has no overlapping active reservations.");
+            return new ChainShiftPlan(
+                    false,
+                    List.of(),
+                    String.format(
+                            "Target equipment '%s' is not free during the requested window, but has no shiftable confirmed reservations (it may be in use: CHECKED_OUT or OVERDUE).",
+                            targetAsset.name()));
         }
 
         List<ChainShiftStep> combinedExecutionSteps = new ArrayList<>();

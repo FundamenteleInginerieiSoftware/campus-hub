@@ -168,4 +168,32 @@ class ChainShiftingConflictResolverTest {
         assertThat(plan.steps()).isEmpty();
         assertThat(plan.explanation()).contains("Unable to find an augmenting shift chain");
     }
+
+    @Test
+    @DisplayName(
+            "Target not free but no shiftable CONFIRMED reservations: returns resolved false instead of phantom success")
+    void planChainShift_targetOccupiedByInUseReservationFailsGracefully() {
+        when(reservationApi.isAssetFree(1L, t10, t12, null)).thenReturn(false);
+        when(clock.instant())
+                .thenReturn(
+                        fixedNow.atZone(java.time.ZoneId.of("Europe/Bucharest")).toInstant());
+        when(clock.getZone()).thenReturn(java.time.ZoneId.of("Europe/Bucharest"));
+
+        AssetSummary assetX = new AssetSummary(1L, "Scope X", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(1L)).thenReturn(assetX);
+
+        // findUpcomingActiveByAsset returns only CONFIRMED reservations; if asset is occupied by OVERDUE or
+        // CHECKED_OUT, list is empty
+        when(reservationApi.findUpcomingActiveByAsset(eq(1L), any())).thenReturn(List.of());
+
+        ChainShiftPlan plan = resolver.planChainShift(1L, t10, t12);
+
+        assertThat(plan.resolved())
+                .as(
+                        "occupied asset without shiftable confirmed reservations cannot be resolved; see ChainShiftingConflictResolver.planChainShift")
+                .isFalse();
+        assertThat(plan.steps()).isEmpty();
+        assertThat(plan.explanation())
+                .contains("is not free during the requested window, but has no shiftable confirmed reservations");
+    }
 }
