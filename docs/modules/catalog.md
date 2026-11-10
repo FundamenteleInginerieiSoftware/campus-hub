@@ -24,6 +24,12 @@ Other modules (`reservation`, `incident`, `reassignment`) interact with the cata
 | `markAvailable(Long assetId)` | `incident` (when resolved) | Moves asset back to `AVAILABLE` (rejects `RETIRED` assets with `409 ASSET_RETIRED`) |
 | `lockForBooking(Long assetId)` | `reservation` | Acquires a `PESSIMISTIC_WRITE` (`SELECT ... FOR UPDATE`) lock inside the caller's `@Transactional` booking method |
 
+### Domain Events (`com.campus.catalog.api`)
+
+| Event | Published when | Consumed by | Description |
+|---|---|---|---|
+| `AssetRetiredEvent(Long assetId, LocalDateTime retiredAt, Long actorId)` | Admin retires an asset (`POST /api/v1/admin/assets/{id}/retire`) | `reassignment` (Calin's engine) | Triggers automatic reassignment (or force-cancellation) of future bookings of the decommissioned asset (#245) |
+
 ## REST Endpoints (`com.campus.catalog.web`)
 
 - `GET /api/v1/categories`, `POST|PUT|DELETE /api/v1/admin/categories/**`: category list and admin CRUD (`409 CATEGORY_NAME_TAKEN`, `409 CATEGORY_IN_USE`).
