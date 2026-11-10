@@ -295,4 +295,47 @@ class IdempotencyServiceTest {
         assertThat(res.getBody().id()).isEqualTo(300L);
         assertThat(callCount.get()).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName(
+            "Serialization failure on response body: preserves COMPLETED status with null body, preventing duplicate execution")
+    void execute_serializationFailurePreservesCompletedStatus() {
+        SamplePayload payload = new SamplePayload(10L, "Booking A");
+
+        ObjectMapper brokenMapper = mock(ObjectMapper.class);
+        when(brokenMapper.writeValueAsString(any(SamplePayload.class))).thenReturn("{\"assetId\":10}");
+        when(brokenMapper.writeValueAsString(any(SampleResponse.class)))
+                .thenThrow(new RuntimeException("Serialization boom"));
+        IdempotencyService fragileService =
+                new IdempotencyService(repository, brokenMapper, fixedClock, transactionManager);
+
+        String fingerprint = fragileService.computeFingerprint(userId, method, path, payload);
+
+        IdempotencyRecord savedRecord = new IdempotencyRecord(
+                key,
+                userId,
+                fingerprint,
+                IdempotencyStatus.IN_PROGRESS,
+                LocalDateTime.now(fixedClock),
+                LocalDateTime.now(fixedClock).plusHours(24));
+        when(repository.findByIdempotencyKeyAndUserId(key, userId))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(savedRecord));
+        when(repository.save(any())).thenReturn(savedRecord);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        ResponseEntity<SampleResponse> res =
+                fragileService.execute(key, userId, method, path, payload, SampleResponse.class, () -> {
+                    callCount.incrementAndGet();
+                    return ResponseEntity.status(HttpStatus.CREATED).body(new SampleResponse(400L, "OK"));
+                });
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(callCount.get()).isEqualTo(1);
+        assertThat(savedRecord.getStatus())
+                .as("Status must be COMPLETED even if body serialization failed, avoiding duplicate executions")
+                .isEqualTo(IdempotencyStatus.COMPLETED);
+        assertThat(savedRecord.getResponseBody()).isNull();
+    }
 }

@@ -2,6 +2,7 @@ package com.campus.reservation.idempotency;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campus.common.error.ConflictException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -94,8 +95,10 @@ class IdempotencyConcurrencyIT {
                     } else {
                         outcomes.add("ORIGINAL");
                     }
+                } catch (ConflictException ce) {
+                    outcomes.add("CONFLICT_409");
                 } catch (Exception e) {
-                    outcomes.add("REJECTED_" + e.getClass().getSimpleName());
+                    outcomes.add("UNEXPECTED_" + e.getClass().getSimpleName());
                 } finally {
                     doneLatch.countDown();
                 }
@@ -115,7 +118,8 @@ class IdempotencyConcurrencyIT {
                 .isEqualTo(1);
         assertThat(outcomes).hasSize(threadCount);
         assertThat(outcomes).contains("ORIGINAL");
-        // All other 9 threads either got a REPLAYED response or were REJECTED with ConflictException (409)
+        // All threads must strictly resolve to ORIGINAL (1), REPLAYED, or CONFLICT_409 without leaking unexpected 500s
         assertThat(outcomes.stream().filter(o -> o.equals("ORIGINAL")).count()).isEqualTo(1);
+        assertThat(outcomes).allSatisfy(outcome -> assertThat(outcome).isIn("ORIGINAL", "REPLAYED", "CONFLICT_409"));
     }
 }

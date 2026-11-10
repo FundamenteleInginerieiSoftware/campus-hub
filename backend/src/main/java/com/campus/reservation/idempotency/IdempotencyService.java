@@ -101,14 +101,20 @@ public class IdempotencyService {
                             "A request with this idempotency key is currently being processed.");
                 }
 
-                if (record.getStatus() == IdempotencyStatus.COMPLETED && record.getResponseBody() != null) {
-                    try {
-                        T cachedBody = objectMapper.readValue(record.getResponseBody(), responseType);
+                if (record.getStatus() == IdempotencyStatus.COMPLETED) {
+                    if (record.getResponseBody() != null) {
+                        try {
+                            T cachedBody = objectMapper.readValue(record.getResponseBody(), responseType);
+                            return ResponseEntity.status(record.getResponseStatus())
+                                    .header("Idempotency-Replayed", "true")
+                                    .body(cachedBody);
+                        } catch (Exception e) {
+                            log.error("Failed to deserialize cached idempotency response: {}", e.getMessage());
+                        }
+                    } else {
                         return ResponseEntity.status(record.getResponseStatus())
                                 .header("Idempotency-Replayed", "true")
-                                .body(cachedBody);
-                    } catch (Exception e) {
-                        log.error("Failed to deserialize cached idempotency response: {}", e.getMessage());
+                                .build();
                     }
                 }
             }
@@ -136,15 +142,22 @@ public class IdempotencyService {
                                     "CONCURRENT_IDEMPOTENT_REQUEST",
                                     "A request with this idempotency key is currently being processed.");
                         }
-                        if (existing.getStatus() == IdempotencyStatus.COMPLETED && existing.getResponseBody() != null) {
-                            try {
-                                T cachedBody = objectMapper.readValue(existing.getResponseBody(), responseType);
+                        if (existing.getStatus() == IdempotencyStatus.COMPLETED) {
+                            if (existing.getResponseBody() != null) {
+                                try {
+                                    T cachedBody = objectMapper.readValue(existing.getResponseBody(), responseType);
+                                    ResponseEntity<T> replayed = ResponseEntity.status(existing.getResponseStatus())
+                                            .header("Idempotency-Replayed", "true")
+                                            .body(cachedBody);
+                                    return new ReservationResult<>(false, replayed);
+                                } catch (Exception e) {
+                                    log.error("Failed to deserialize cached response: {}", e.getMessage());
+                                }
+                            } else {
                                 ResponseEntity<T> replayed = ResponseEntity.status(existing.getResponseStatus())
                                         .header("Idempotency-Replayed", "true")
-                                        .body(cachedBody);
+                                        .build();
                                 return new ReservationResult<>(false, replayed);
-                            } catch (Exception e) {
-                                log.error("Failed to deserialize cached response: {}", e.getMessage());
                             }
                         }
                         // If record was FAILED, delete and allow fresh attempt
@@ -190,12 +203,16 @@ public class IdempotencyService {
         requiresNewTx.executeWithoutResult(status -> {
             repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId).ifPresent(rec -> {
                 try {
-                    String json = objectMapper.writeValueAsString(finalResponse.getBody());
+                    String json = finalResponse.getBody() != null
+                            ? objectMapper.writeValueAsString(finalResponse.getBody())
+                            : null;
                     rec.markCompleted(finalResponse.getStatusCode().value(), json);
                     repository.save(rec);
                 } catch (Exception e) {
                     log.error("Failed to serialize response body for idempotency: {}", e.getMessage());
-                    rec.markFailed();
+                    // Operation succeeded: do not mark FAILED (which would permit duplicate execution).
+                    // Instead, mark COMPLETED with null body so replay returns original status.
+                    rec.markCompleted(finalResponse.getStatusCode().value(), null);
                     repository.save(rec);
                 }
             });
