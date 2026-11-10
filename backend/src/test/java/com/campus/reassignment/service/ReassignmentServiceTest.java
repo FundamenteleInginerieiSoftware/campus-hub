@@ -523,7 +523,8 @@ class ReassignmentServiceTest {
         assertThat(result.rescuedReservations())
                 .as("counts come from what the engine did")
                 .isEqualTo(1);
-        verify(reassignmentLogRepository).save(argThat(entry -> entry.getStrategy().equals("SameModelStrategy")));
+        verify(reassignmentLogRepository)
+                .save(argThat(entry -> entry.getStrategy().equals("SameModelStrategy")));
     }
 
     private OptimalReassignmentPlan stubPlanForOneBooking() {

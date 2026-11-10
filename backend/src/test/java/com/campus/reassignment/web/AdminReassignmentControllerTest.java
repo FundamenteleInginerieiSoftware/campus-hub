@@ -169,7 +169,8 @@ class AdminReassignmentControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    @DisplayName("POST /api/v1/admin/reassignments/solve-optimal defaults dryRun to true so a bare call changes nothing")
+    @DisplayName(
+            "POST /api/v1/admin/reassignments/solve-optimal defaults dryRun to true so a bare call changes nothing")
     void solveOptimalDefaultsToDryRun() throws Exception {
         OptimalReassignmentPlan response = new OptimalReassignmentPlan(
                 10L,

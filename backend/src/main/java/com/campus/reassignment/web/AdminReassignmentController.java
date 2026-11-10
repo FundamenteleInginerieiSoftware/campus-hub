@@ -95,7 +95,7 @@ public class AdminReassignmentController {
                                     "If true (default), only returns the plan and changes nothing. Set false to execute it.")
                     @RequestParam(defaultValue = "true")
                     boolean dryRun) {
-        return ResponseEntity.ok(
-                OptimalReassignmentPlanResponse.from(reassignmentService.solveOptimalPlan(assetId, incidentId, dryRun)));
+        return ResponseEntity.ok(OptimalReassignmentPlanResponse.from(
+                reassignmentService.solveOptimalPlan(assetId, incidentId, dryRun)));
     }
 }
