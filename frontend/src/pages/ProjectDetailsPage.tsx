@@ -185,6 +185,20 @@ export default function ProjectDetailsPage() {
   // Shown inside the "Book the kit" card, next to the button that caused it.
   const [reserveError, setReserveError] = useState<unknown>(null)
 
+  // Bug fixed: when the URL switched to another project while this page stayed open, the old project
+  // (and its checked slot and errors) stayed on screen until the new one loaded. Fix: reset them during
+  // render when the slug changes (React's "reset state on prop change" pattern), so the loader shows instead.
+  const [shownSlug, setShownSlug] = useState(slug)
+  if (slug !== shownSlug) {
+    setShownSlug(slug)
+    setProject(null)
+    setLoading(true)
+    setError(null)
+    setSlotToCheck(null)
+    setCheckedSlot(null)
+    setReserveError(null)
+  }
+
   useEffect(() => {
     let ignore = false
     fetchProject(slug, lang, slotToCheck ?? undefined)

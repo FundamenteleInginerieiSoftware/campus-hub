@@ -30,7 +30,7 @@
 
 - The Reserve all error (`reserveError`) is still kept on a 409 so the student reads it while the table reloads; `checkAvailability` clears it as before.
 - Reuses Calin's `nowInBucharest()` from `api/reservations.ts`; no new helper.
-- Not fixed, only noted: when the route `slug` changes without leaving the page, the old `project` stays visible until the new one loads (the effect doesn't reset it).
+- Third fix: when the route `slug` changes without leaving the page, the old `project` stayed visible until the new one loaded. Now a `shownSlug` state is compared during render; on a new slug the page resets the project, the checked slot and both errors, so the loader shows (React's "reset state when a prop changes" pattern, no extra effect).
 
 **Tests:** `cd frontend && npm run lint` (0 warnings, 0 errors) and `npm run build` (OK, only the usual chunk-size warning).
 
