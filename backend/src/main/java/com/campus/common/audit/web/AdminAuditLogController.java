@@ -51,13 +51,17 @@ public class AdminAuditLogController {
                     @RequestParam(required = false)
                     String entityType,
             @Parameter(description = "ID of the affected entity") @RequestParam(required = false) Long entityId,
-            @Parameter(description = "Start timestamp (ISO-8601, inclusive)")
+            @Parameter(
+                            description = "Start timestamp (ISO-8601 local time without offset, inclusive)",
+                            example = "2026-11-01T00:00:00")
                     @RequestParam(required = false)
-                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
                     LocalDateTime from,
-            @Parameter(description = "End timestamp (ISO-8601, inclusive)")
+            @Parameter(
+                            description = "End timestamp (ISO-8601 local time without offset, inclusive)",
+                            example = "2026-11-08T23:59:59")
                     @RequestParam(required = false)
-                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
                     LocalDateTime to,
             @Parameter(description = "Zero-based page index") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size (1 to 100)") @RequestParam(defaultValue = "20") int size,
