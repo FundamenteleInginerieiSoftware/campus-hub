@@ -32,6 +32,7 @@
 |---|---|---|---|
 | #247 | Calin | Fixes for #240 (bundle quota, after-commit emails, edge-case guards) | Changes requested: hold cooldown only matches the exact same slot |
 | #244 | Liviu | Audit log date filters reject time-zone offsets (#241) | Approved, behind `main`: update branch, then merge |
+| #258 | Calin | Global optimal reassignment planner (greedy + branch and bound), `POST /api/v1/admin/reassignments/solve-optimal` | Review fixes pushed (dryRun default true, 409 guard, live run uses the standard engine); off-plan: raise at the next meeting; migration shared with #260 waits on #245 |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 Merged since the last update: Matei #239, #238, #243, #248 (Projects content, pages, Reserve all, bundle banner), #249, #250 (Terraform parts 1 and 2); Calin #246 (bundle banner in My reservations); Liviu #242 (closes #230).
@@ -78,6 +79,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo | – |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
+| W6 | **#258** (global optimal planner): off-plan, get the team's OK at the next meeting; decide the order with #260 (same files and migration) and rebase | Team decision, #245 |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |
 | W10–W12 | **Test lead**: keep `docs/testing/test-plan.md` current (#101, #199), JaCoCo results, **test report** · full-flow integration tests · ~~PIT survivors~~ (✅ #201) · reservation state diagram · ~~booking sequence diagram~~ (✅ #204) · ~~**Strategy pattern doc**~~ (✅ #205) · ~~report section~~ (✅ #203, keep it current) · demo part | – |
 
