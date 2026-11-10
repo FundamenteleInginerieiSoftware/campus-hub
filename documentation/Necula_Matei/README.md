@@ -75,6 +75,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 47 | [47-login-hardening.md](47-login-hardening.md) | Login: passwords over 72 bytes get 401 (BCrypt cut them silently); no transaction held during BCrypt | #271 |
 | 48 | [48-project-search-fixes.md](48-project-search-fixes.md) | Projects: search no longer matches words that only share their first 5 letters ("multiplexer" ≠ "multimeter"); `ProjectService` clean-up | #272 |
 | 49 | [49-project-details-error-fix.md](49-project-details-error-fix.md) | Project details: error cleared after a good reload, campus clock read when needed | #273 |
+| 50 | [50-docs-check.md](50-docs-check.md) | End-of-task docs rule (AGENTS.md §4) + `docs-check` CI job + Gemini/Copilot pointer files | #277, #279 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
