@@ -138,8 +138,7 @@ public class ReassignmentService {
      */
     public ChainShiftPlanResponse resolveChainShift(
             Long targetAssetId, LocalDateTime startTime, LocalDateTime endTime, boolean dryRun) {
-        ChainShiftPlan plan =
-                chainShiftingConflictResolver.planChainShift(targetAssetId, startTime, endTime);
+        ChainShiftPlan plan = chainShiftingConflictResolver.planChainShift(targetAssetId, startTime, endTime);
 
         boolean applied = false;
         if (plan.resolved() && !dryRun && !plan.steps().isEmpty()) {

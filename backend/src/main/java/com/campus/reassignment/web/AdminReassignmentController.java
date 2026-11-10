@@ -58,7 +58,9 @@ public class AdminReassignmentController {
                     "Discovers an augmenting path chain shifting existing bookings to idle substitute assets to free the target asset.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Chain shift plan calculated and optionally applied"),
-        @ApiResponse(responseCode = "400", description = "Bad parameters (startTime not before endTime, or a time with a Z/offset)"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "Bad parameters (startTime not before endTime, or a time with a Z/offset)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)"),
         @ApiResponse(responseCode = "404", description = "Target asset not found")
