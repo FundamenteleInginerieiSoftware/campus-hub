@@ -53,6 +53,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | ~~Dockerfile~~ (✅ #114) · ~~run the image locally with `prod`~~ (✅ smoke test, #129) · ~~push to ECR~~ (✅ 9 Nov, tagged with the commit SHA) | Terraform part 2 (ECR) |
 | W6 | ~~Swagger check~~ (✅ #184) · run the M1 flow · tag `v0.1.0` · status update | Section 2 |
 | W6–W8 | **Projects (#140)**: ~~design + plan~~ (✅ #232) · ~~engine: library, search, details endpoints~~ (✅ #236) · ~~10 projects~~ (✅ #239) · ~~`/projects` pages with RO/EN switch~~ (✅ #238) · ~~`POST /projects/{slug}/reserve` + "Reserve all"~~ (✅ #243, #248) | Liviu: student-kit models in the seed; Stefania: whole-app i18n choice |
+| W6 | ~~End-of-task docs: AGENTS §4 rule + `docs-check` job, required check on `main`~~ (✅ #277, #279, ruleset 10 Nov) | – |
 | W6 | ~~Login password length~~ (✅ #271) · open PRs #272, #273 (the other fixes from the code read-through) | Reviews |
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + Elastic IP + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront · flip `db_enabled` to true (creates RDS) · `MAIL_FROM` with a verified SES sender (the app does not start without it) · `ADMIN_EMAIL` / `ADMIN_PASSWORD` in SSM | Dockerfile, Terraform ✅ |
 | W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · ~~`S3StorageService`~~ (✅ #129, #177) · first live deploy **by the end of W8** | – |

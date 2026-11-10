@@ -47,7 +47,7 @@
 - **Three-dot diff (`base...head`):** only what this PR changed since it left `main`, not what `main` gained meanwhile.
 - **PR data through `env`:** the author name and SHAs are read from environment variables, never pasted into the script, so a strange branch name or title cannot run as shell code.
 - **Only own lines:** the shared status lines (§7 date line, "Open PRs" table, README status) stay with the weekly refresh. If every PR edited them, every open PR would conflict on the same lines (as the doc 02 header and README index rows did in November).
-- **Not a required check yet:** for the first week it shows red but does not block merging. After that, `docs-check` can be added to the required checks of the `protect-main` ruleset.
+- **Required since 10 Nov 2026:** at first it only showed red without blocking. Matei then added `docs-check` to the required checks of the `protect-main` ruleset (next to `ci`), so a PR that changes app code without its end-of-task docs can't be merged. The job runs on every PR (no path filter) and passes at once when no app code changed, so docs-only PRs are never stuck waiting for it. PRs opened before #279 never ran it: the next push or "Update branch" starts it.
 
 ### How it was tested
 
