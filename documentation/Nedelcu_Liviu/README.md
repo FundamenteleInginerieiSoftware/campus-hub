@@ -27,3 +27,6 @@
 | 14 | [14-diagrams-and-report-chapter.md](14-diagrams-and-report-chapter.md) | Final UML/ER diagrams (`asset-lifecycle`, `catalog-and-common-class`, `database-er`) and FIS report chapter (`catalog-and-shared-services.md`, #222) |
 | 15 | [15-catalog-spinner-audit-filters-and-seeder-fixes.md](15-catalog-spinner-audit-filters-and-seeder-fixes.md) | Bug fixes: Catalog debounce spinner, audit filter actions/entities, and seeder asset 14 status (#230) |
 | 16 | [16-audit-log-timezone-offset-rejection.md](16-audit-log-timezone-offset-rejection.md) | Reject timezone offsets in audit log date filters with 400 `INVALID_PARAMETER` (#241) |
+| 17 | [17-project-kit-models-seeder.md](17-project-kit-models-seeder.md) | Development seeder for student hardware kit models (18 units across 8 models in 2 new categories, PR #275) |
+| 18 | [18-optimistic-locking-retired-visibility-and-audit-diff.md](18-optimistic-locking-retired-visibility-and-audit-diff.md) | Optimistic locking on asset update, hiding retired assets at getById, and field-level audit diffs (PR #278) |
+| 19 | [19-asset-retired-event-w7.md](19-asset-retired-event-w7.md) | Domain event `AssetRetiredEvent` for W7 decommissioning and auto-reassignment flow (Refs #245) |

@@ -1,5 +1,6 @@
 package com.campus.catalog.service;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.domain.Asset;
 import com.campus.catalog.domain.Category;
@@ -24,6 +25,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,6 +46,7 @@ public class AssetService {
     private final CategoryRepository categoryRepository;
     private final LabRoomRepository labRoomRepository;
     private final AuditService auditService;
+    private final ApplicationEventPublisher eventPublisher;
     private final CurrentUser currentUser;
     private final Clock clock;
 
@@ -144,7 +147,8 @@ public class AssetService {
                 .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
 
-        asset.retire(now());
+        LocalDateTime retiredAt = now();
+        asset.retire(retiredAt);
         Asset saved = assetRepository.saveAndFlush(asset);
         auditService.record(
                 currentUser.id(),
@@ -152,6 +156,10 @@ public class AssetService {
                 "ASSET",
                 saved.getId(),
                 "Retired asset " + saved.getName() + " (S/N " + saved.getSerialNumber() + ")");
+
+        // Publishes domain event for Calin's reassignment engine (Observer pattern, #245).
+        eventPublisher.publishEvent(new AssetRetiredEvent(saved.getId(), retiredAt, currentUser.id()));
+
         return AssetResponse.from(saved);
     }
 

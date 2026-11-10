@@ -70,7 +70,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | ~~**`CatalogSeeder`**~~ (✅ #193) | – |
 | ~~W6~~ | ~~Catalog, asset details, admin inventory pages~~ (✅ #196) · ~~`docs/modules/common.md`~~ (✅ #197) · ~~Swagger error codes + PIT survivors~~ (✅ #220, closes #187) | – |
 | W6 | ~~Audit date filters~~ (✅ #244) · work through #268 (lost updates on edit, retired asset by id, duplicated paging checks) | – |
-| W7 | **Retire flow**: agree with Calin + Stefania what happens to a retired asset's future bookings (recommended: `AssetRetiredEvent`, handled by Calin's engine) | Team decision |
+| W7 | **Retire flow**: agree with Calin + Stefania (✅ agreed in #245) · publish `AssetRetiredEvent` in `catalog.api` for reassignment flow (#245) | Calin's listener in reassignment |
 | ~~W7–W8~~ | ~~`STALE_VERSION` test~~ (✅ #220) · ~~audit log endpoint + page~~ (✅ #217, #221) · ~~class + ER diagrams, report chapter~~ (✅ #222, keep them current) | – |
 | Proposed, not agreed | Build **live notifications** in your `notification` module (spec + plan `docs/superpowers/*/2026-11-10-live-notifications*`) · optional: add `PICKUP_PASS_VERIFIED` to the audit page's action filter (Matei's pickup pass) | Section 7a |
 | W8 | Help Calin with substitute-query edge cases (none, several, retired excluded) | – |
