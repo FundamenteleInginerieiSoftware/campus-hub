@@ -41,6 +41,7 @@ export type Asset = {
   labRoomId: number
   labRoomCode: string
   labRoomName: string
+  version?: number
   createdAt: string
   updatedAt: string
 }
@@ -70,6 +71,7 @@ export type UpdateAssetRequest = {
   description?: string
   categoryId: number
   labRoomId: number
+  version?: number
 }
 
 // ----------------------------------------------------------------------
