@@ -25,50 +25,38 @@ Imagine assigning seats on an airplane during a flight delay. A greedy system gi
 
 ### 1. Mathematical Formulation & Algorithmic Design
 
-The reassignment problem across multiple candidate assets and interval bookings is formulated as a **Min-Cost Max-Flow (MCMF)** problem on a directed bipartite network.
+The reassignment problem across multiple candidate assets and arbitrary time intervals is modeled as a global cost-minimization problem:
+- **Primary Objective**: Maximize the number of rescued bookings (or equivalently, minimize force-cancellations with penalty $C_{\text{ForceCancel}} = 1000$).
+- **Secondary Objective**: Minimize substitution degradation (preferring exact model $C_{\text{SameModel}} = 10$ over category substitute $C_{\text{SameCategory}} = 50$).
 
-#### Cost Matrix
-- Exact same model substitution ($C_{\text{SameModel}}$): penalty = `10`
-- Same category substitution ($C_{\text{SameCategory}}$): penalty = `50`
-- Forced cancellation fallback ($C_{\text{ForceCancel}}$): penalty = `1000`
+#### Exact Interval Availability & Branch-and-Bound
+Early formulations clustered overlapping intervals into discrete conflict tracks for classical Min-Cost Max-Flow (MCMF). However, arbitrary pairwise interval overlaps cannot always be clustered into disjoint cliques without over-constraining available machine capacity (e.g. non-overlapping bookings within the same track contending for different candidate machines).
 
-Because $10 \ll 1000$ and $50 \ll 1000$, any augmenting path rescuing a reservation will strictly dominate force cancellation, enforcing maximum flow (maximum student reservations rescued).
-
-#### Interval Conflict Clustering
-Two reservations $R_a$ and $R_b$ compete for a substitute machine $A_j$ if and only if their intervals $[start_a, end_a)$ and $[start_b, end_b)$ overlap in time.
-Non-overlapping reservations can safely be executed sequentially on the same substitute machine.
-
-To enforce physical machine constraints without unnecessary bottlenecks:
-1. We construct an interval overlap graph $G = (V, E)$ where $(a, b) \in E \iff R_a \text{ overlaps with } R_b$.
-2. Connected overlap components are extracted as **Conflict Clusters** $C_k$.
-3. For each candidate substitute $A_j$ and cluster $C_k$, an asset-slot node $(A_j, C_k)$ is created with capacity 1 to Sink.
-4. Overlapping bookings in cluster $C_k$ contend for $(A_j, C_k)$ (at most one gets unit $A_j$).
-5. Non-overlapping bookings belong to distinct clusters $C_k \ne C_l$, allowing the same physical unit $A_j$ to be reused across disjoint time slots throughout the week.
+To guarantee **mathematical optimality at true interval granularity**:
+1. **Interval-Level Constraints**: A candidate machine $A_j$ can be assigned to multiple bookings $\{R_1, \dots, R_k\}$ if and only if no two bookings pairwise overlap ($\forall a \ne b, [start_a, end_a) \cap [start_b, end_b) = \emptyset$).
+2. **Greedy Upper Bound**: The solver first runs a chronological greedy pass to establish an initial upper-bound penalty cost $U$.
+3. **Suffix Lower Bounds**: For each position $i \in [0, n)$, we precompute the optimistic minimum possible cost for the remaining bookings:
+   $$\text{minRemaining}[i] = \sum_{k=i}^{n-1} \min_{c \in \text{Choices}(k)} \text{cost}(c)$$
+4. **Pruning Condition**: During depth-first search, if $\text{currentCost} + \text{minRemaining}[i] \ge \text{bestCost}$, the entire subtree is pruned immediately.
+5. **Heuristic Candidate Ordering**: At each step, exact same-model substitutes ($C=10$) are evaluated before category alternatives ($C=50$), finding near-optimal solutions rapidly.
 
 ```
-       [Source] (Supply = N)
-       /   |   \
-   (cap 1) ... (cap 1)
-     /     |     \
-   [R1]   [R2]   [R3]
-    | \   / |     |
-    |  \ /  |     | (cap 1, cost 10/50)
-    |   X   |     |
-    v  v v  v     v
-  [(A1, C0)]    [(A1, C1)]
-       \           /
-      (cap 1)   (cap 1)
-         \       /
-          v     v
-          [Sink]
+                  [Root: 0 bookings assigned]
+                  /            |            \
+       Assign to A10         Assign to A20    Branch Pruned
+         (Cost: 10)           (Cost: 50)     (cost + LB >= best)
+        /          \              |
+   Booking 2    Booking 2     Booking 2
+   (Valid int.) (Overlap!)    (Valid int.)
 ```
 
-### 2. Implementation: Min-Cost Max-Flow with Successive Shortest Path
+### 2. Implementation & Performance Benchmarks
 
-Class: `com.campus.reassignment.service.optimal.MinCostMaxFlow`
-- Implements Successive Shortest Path (SSP) using Dijkstra with Johnson's node potentials $h[u]$.
-- Reduced edge costs $c^\pi(u, v) = c(u, v) + h[u] - h[v] \ge 0$ guarantee non-negative edge weights on residual graphs, maintaining $O(|E| \log |V|)$ Dijkstra steps per augmentation.
-- Total complexity: $O(N \cdot |E| \log |V|)$, executing in $< 2\text{ ms}$ for standard lab capacities.
+- **Solver Class**: `com.campus.reassignment.service.optimal.OptimalReassignmentSolver`
+- **MCMF Network Support**: `com.campus.reassignment.service.optimal.MinCostMaxFlow` provides successive shortest path network flow modeling with Johnson's potentials.
+- **Benchmark Performance**:
+  - Small to medium sets (10-20 reservations): **$< 2\text{ ms}$**.
+  - Large multi-day batches (60 reservations across 5 days, 5 candidate machines): **$< 25\text{ ms}$** (verified by unit test `solve_benchmarkLargeReservationSet`).
 
 ### 3. REST API Endpoint
 

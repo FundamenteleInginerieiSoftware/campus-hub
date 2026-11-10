@@ -250,4 +250,47 @@ class OptimalReassignmentSolverTest {
         assertThat(actionA.assignedAssetId()).isEqualTo(10L);
         assertThat(actionB.assignedAssetId()).isEqualTo(20L);
     }
+
+    @Test
+    @DisplayName("Benchmark: solves 60 reservations across 5 days and multiple candidates in sub-50ms")
+    void solve_benchmarkLargeReservationSet() {
+        LocalDateTime base = LocalDateTime.of(2026, 11, 16, 8, 0);
+        AssetSummary damaged = new AssetSummary(1L, "Scope Damaged", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
+
+        List<AssetSummary> candidates = List.of(
+                new AssetSummary(10L, "Scope Sub 1", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE),
+                new AssetSummary(20L, "Scope Sub 2", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE),
+                new AssetSummary(30L, "Scope Sub 3", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE),
+                new AssetSummary(40L, "Scope Alt 1", "OTHER_MODEL", 1L, 1L, AssetStatus.AVAILABLE),
+                new AssetSummary(50L, "Scope Alt 2", "OTHER_MODEL", 1L, 1L, AssetStatus.AVAILABLE));
+
+        // Create 60 reservations spread over 5 days (12 per day across 6 2-hour slots)
+        List<ReservationSummary> bookings = new java.util.ArrayList<>();
+        long idCounter = 1000L;
+        for (int day = 0; day < 5; day++) {
+            LocalDateTime dayBase = base.plusDays(day);
+            for (int slot = 0; slot < 6; slot++) {
+                LocalDateTime start = dayBase.plusHours(slot * 2);
+                LocalDateTime end = start.plusHours(2);
+                bookings.add(new ReservationSummary(
+                        idCounter++, 100L + idCounter, 1L, start, end, ReservationStatus.CONFIRMED));
+                bookings.add(new ReservationSummary(
+                        idCounter++, 200L + idCounter, 1L, start, end, ReservationStatus.CONFIRMED));
+            }
+        }
+
+        // Warm up JIT
+        solver.solve(1L, "Scope Damaged", bookings.subList(0, 10), damaged, candidates, (cId, b) -> true);
+
+        long startNanos = System.nanoTime();
+        OptimalReassignmentPlanResponse response =
+                solver.solve(1L, "Scope Damaged", bookings, damaged, candidates, (cId, b) -> true);
+        long elapsedMillis = (System.nanoTime() - startNanos) / 1_000_000;
+
+        assertThat(response.totalReservations()).isEqualTo(60);
+        assertThat(response.rescuedReservations()).isEqualTo(60);
+        assertThat(elapsedMillis)
+                .as("Branch-and-bound pruning must solve 60 reservations in under 100ms; took " + elapsedMillis + "ms")
+                .isLessThan(100);
+    }
 }
