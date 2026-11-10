@@ -72,6 +72,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | #249 |
 | 45 | [45-terraform-data.md](45-terraform-data.md) | Terraform part 2: RDS (off until W7), photo bucket, ECR, server role, secrets in SSM | #250 |
 | 46 | [46-docker-os-patches.md](46-docker-os-patches.md) | First image in ECR; OS security updates in the Docker image (ECR scan found a critical zlib CVE) | #252 |
+| 47 | [47-login-hardening.md](47-login-hardening.md) | Login: passwords over 72 bytes get 401 (BCrypt cut them silently); no transaction held during BCrypt | #271 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
