@@ -261,6 +261,11 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     return `${selectedDay}T${endTimeStr}:00`
   }, [selectedDay, selectedStartTime, effectiveDuration])
 
+  const selectionRef = useRef({ startIso, endIso })
+  useEffect(() => {
+    selectionRef.current = { startIso, endIso }
+  }, [startIso, endIso])
+
   // Check availability when slot changes
   useEffect(() => {
     let cancelled = false
@@ -394,9 +399,17 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
         releaseHold(hold.id).catch(() => {})
         return
       }
-      // Bug fixed (#267 point 2): if the user changed slot/duration while the request was in-flight,
-      // release the hold immediately so the screen doesn't show one slot while holding another.
-      if (startIso !== reqStart || endIso !== reqEnd) {
+      // Bug fixed (#267 point 2, #270 review 2): verify the response matches the requested parameters
+      // (hold.assetId, hold.startTime, hold.endTime) AND ensure user hasn't changed selection while request was in-flight.
+      const matchesServer =
+        hold.assetId === asset.id &&
+        hold.startTime === reqStart &&
+        hold.endTime === reqEnd
+      const matchesCurrentSelection =
+        selectionRef.current.startIso === reqStart &&
+        selectionRef.current.endIso === reqEnd
+
+      if (!matchesServer || !matchesCurrentSelection) {
         releaseHold(hold.id).catch(() => {})
         return
       }

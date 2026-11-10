@@ -8,6 +8,7 @@ import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -18,6 +19,8 @@ import java.util.Set;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -115,16 +118,28 @@ class ReassignmentBookingProcessor {
                     log.warn(
                             "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
                             candidate.id(),
-                            booking.id());
-                } catch (RuntimeException e) {
-                    // Bug fixed (#267 point 1): catching RuntimeException ensures an unexpected error (e.g.
-                    // optimistic lock conflict on candidate) does not skip the remaining candidates or force-cancel
-                    // fallback.
-                    log.warn(
-                            "Unexpected error moving reservation #{} to candidate asset {}: {}, trying next candidate",
                             booking.id(),
-                            candidate.id(),
-                            e.getMessage());
+                            e);
+                } catch (RuntimeException e) {
+                    if (isConcurrencyConflict(e)) {
+                        // Bug fixed (#267 point 1, #270 review 3): catching known concurrency conflicts ensures
+                        // that transient lock/version contention tries the remaining candidates before fallback.
+                        log.warn(
+                                "Concurrency conflict moving reservation #{} to candidate asset {}: {}, trying next candidate",
+                                booking.id(),
+                                candidate.id(),
+                                e.getMessage(),
+                                e);
+                    } else {
+                        // Bug fixed (#270 review 3): do NOT swallow unexpected system/logic errors, because doing so
+                        // would cause the engine to mistakenly force-cancel student bookings due to software bugs.
+                        log.error(
+                                "Unexpected system error attempting reassignment of reservation #{} to candidate asset {}",
+                                booking.id(),
+                                candidate.id(),
+                                e);
+                        throw e;
+                    }
                 }
             }
         }
@@ -154,5 +169,29 @@ class ReassignmentBookingProcessor {
 
     private <T> T inRequiresNewTransaction(Supplier<T> action) {
         return requiresNewTx.execute(status -> action.get());
+    }
+
+    private static boolean isConcurrencyConflict(Throwable t) {
+        if (t instanceof SubstituteNoLongerFreeException
+                || t instanceof ConcurrencyFailureException
+                || t instanceof TransientDataAccessException) {
+            return true;
+        }
+        Throwable cause = t.getCause();
+        while (cause != null) {
+            if (cause instanceof ConcurrencyFailureException
+                    || cause instanceof TransientDataAccessException
+                    || cause instanceof SubstituteNoLongerFreeException) {
+                return true;
+            }
+            if (cause instanceof SQLException sqlEx) {
+                String sqlState = sqlEx.getSQLState();
+                if ("40P01".equals(sqlState) || "55P03".equals(sqlState) || "40001".equals(sqlState)) {
+                    return true;
+                }
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }

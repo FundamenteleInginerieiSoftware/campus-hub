@@ -1383,12 +1383,13 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public ReservationResponse returnReservation(Long id) {
+        // Bug fixed (#267 point 7, #270 review 1): serialize desk returns against the background overdue sweep.
+        // We acquire a pessimistic write lock on the reservation row (SELECT ... FOR UPDATE) so concurrent
+        // status transitions wait at the database level and reload the latest committed version.
         Reservation reservation = reservationRepository
-                .findById(id)
+                .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        // Bug fixed (#267 point 7): acquire pessimistic lock on the physical asset row (matching check-out)
-        // so a desk return racing the background overdue sweep serializes cleanly without optimistic lock failures.
         catalogApi.lockForBooking(reservation.getAssetId());
 
         LocalDateTime now = now();
@@ -1483,10 +1484,13 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public boolean markOverdue(Long reservationId) {
-        Reservation r = reservationRepository.findById(reservationId).orElse(null);
+        // Bug fixed (#267 point 7, #270 review 1): acquire the same pessimistic lock strategy as returnReservation
+        // so a scheduled sweep racing a physical desk return serializes cleanly and reads the freshly committed state.
+        Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
         if (r == null || r.getStatus() != ReservationStatus.CHECKED_OUT) {
             return false;
         }
+        catalogApi.lockForBooking(r.getAssetId());
         r.markOverdue();
         auditService.record(null, "MARK_OVERDUE", "Reservation", r.getId(), "Equipment not returned by endTime");
         return true;
