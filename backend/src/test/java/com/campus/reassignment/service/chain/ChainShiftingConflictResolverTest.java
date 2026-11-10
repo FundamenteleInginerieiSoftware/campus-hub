@@ -14,6 +14,7 @@ import com.campus.reservation.api.ReservationSummary;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -195,5 +196,69 @@ class ChainShiftingConflictResolverTest {
         assertThat(plan.steps()).isEmpty();
         assertThat(plan.explanation())
                 .contains("is not free during the requested window, but has no shiftable confirmed reservations");
+    }
+
+    @Test
+    @DisplayName("Target has a CONFIRMED blocker and an overlapping checkout: resolved false, nothing planned")
+    void planChainShift_targetAlsoCheckedOutIsNotResolved() {
+        LocalDateTime t0930 = t10.minusMinutes(30);
+        LocalDateTime t1400 = t12.plusHours(2);
+        when(reservationApi.isAssetFree(1L, t0930, t1400, null)).thenReturn(false);
+        when(clock.instant())
+                .thenReturn(
+                        fixedNow.atZone(java.time.ZoneId.of("Europe/Bucharest")).toInstant());
+        when(clock.getZone()).thenReturn(java.time.ZoneId.of("Europe/Bucharest"));
+
+        AssetSummary assetX = new AssetSummary(1L, "Scope X", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(1L)).thenReturn(assetX);
+
+        // 12:00-14:00 CONFIRMED (shiftable) and 08:00-10:00 CHECKED_OUT (not shiftable, overlaps 09:30)
+        ReservationSummary confirmed =
+                new ReservationSummary(601L, 42L, 1L, t12, t1400, ReservationStatus.CONFIRMED);
+        when(reservationApi.findUpcomingActiveByAsset(eq(1L), any())).thenReturn(List.of(confirmed));
+        ReservationSummary checkout = new ReservationSummary(
+                600L, 41L, 1L, t10.minusHours(2), t10, ReservationStatus.CHECKED_OUT);
+        when(reservationApi.findCurrentCheckout(1L)).thenReturn(Optional.of(checkout));
+
+        ChainShiftPlan plan = resolver.planChainShift(1L, t0930, t1400);
+
+        assertThat(plan.resolved())
+                .as("moving the CONFIRMED booking cannot free X while it is checked out; see isHeldByCheckout")
+                .isFalse();
+        assertThat(plan.steps()).as("no student may be moved for nothing").isEmpty();
+        assertThat(plan.explanation()).contains("in use");
+    }
+
+    @Test
+    @DisplayName("Candidate Y has one CONFIRMED blocker and is OVERDUE: not used as a chain link")
+    void planChainShift_candidateHeldByCheckoutIsSkipped() {
+        when(reservationApi.isAssetFree(1L, t10, t12, null)).thenReturn(false);
+        when(clock.instant())
+                .thenReturn(
+                        fixedNow.atZone(java.time.ZoneId.of("Europe/Bucharest")).toInstant());
+        when(clock.getZone()).thenReturn(java.time.ZoneId.of("Europe/Bucharest"));
+
+        AssetSummary assetX = new AssetSummary(1L, "Scope X", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        AssetSummary assetY = new AssetSummary(2L, "Scope Y", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(1L)).thenReturn(assetX);
+
+        ReservationSummary resA = new ReservationSummary(101L, 42L, 1L, t10, t12, ReservationStatus.CONFIRMED);
+        when(reservationApi.findUpcomingActiveByAsset(eq(1L), any())).thenReturn(List.of(resA));
+        when(catalogApi.findAvailableByModel("DS1054Z", 1L)).thenReturn(List.of(assetY));
+        when(catalogApi.findAvailableByCategory(1L, 1L)).thenReturn(List.of(assetY));
+
+        when(reservationApi.isAssetFree(2L, t10, t12, null)).thenReturn(false);
+        ReservationSummary resB = new ReservationSummary(102L, 43L, 2L, t10, t12, ReservationStatus.CONFIRMED);
+        when(reservationApi.findUpcomingActiveByAsset(eq(2L), any())).thenReturn(List.of(resB));
+        ReservationSummary overdue = new ReservationSummary(
+                99L, 44L, 2L, t10.minusDays(1), t12.minusDays(1), ReservationStatus.OVERDUE);
+        when(reservationApi.findCurrentCheckout(2L)).thenReturn(Optional.of(overdue));
+
+        ChainShiftPlan plan = resolver.planChainShift(1L, t10, t12);
+
+        assertThat(plan.resolved())
+                .as("an OVERDUE unit stays busy even if its CONFIRMED booking is shifted")
+                .isFalse();
+        assertThat(plan.steps()).isEmpty();
     }
 }

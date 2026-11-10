@@ -6,6 +6,7 @@ import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationApi;
+import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -47,7 +48,7 @@ public class ChainShiftExecutor {
             try {
                 moved = reservationApi.moveToAsset(
                         step.reservationId(), step.toAssetId(), "CHAIN_SHIFT: " + step.strategyName());
-            } catch (Exception e) {
+            } catch (SubstituteNoLongerFreeException e) {
                 log.warn(
                         "Chain shift step failed to move reservation #{} to asset #{}: {}",
                         step.reservationId(),

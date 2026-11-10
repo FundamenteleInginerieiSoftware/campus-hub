@@ -17,51 +17,43 @@ Instead of rejecting Student C, the system performs a domino-like **chain shift*
 2. Now Oscilloscope #2 is free, so it shifts Student A from Oscilloscope #1 to Oscilloscope #2.
 3. Now Oscilloscope #1 is completely free for Student C!
 
-**Result:** All three students get to work on the exact equipment model they need. Nobody was cancelled or compromised, and idle capacity was utilized.
+**Result:** Nobody is cancelled. Each moved student gets a unit of the same model when one is free; if not, the search may use a unit of the same category, which can be a **different model**. The endpoint only frees X; it does not book it for Student C.
+
+If X is in use right now (checked out or overdue), moving its future bookings would not free it, so the system answers "not resolved" and moves nobody.
 
 ---
 
 ## Part 2: Technical details
 
-### 1. Graph Matching & Augmenting Paths
+### 1. Search (`ChainShiftingConflictResolver.planChainShift`)
 
-In graph theory and bipartite matching, finding a sequence of shifts that resolves a conflict and accommodates a new entity is equivalent to discovering an **Augmenting Path**:
+| Step | What the code does |
+|---|---|
+| 1 | Target already free (`isAssetFree`) → resolved, 0 steps |
+| 2 | Blockers = CONFIRMED bookings on the target that overlap the window (`findUpcomingActiveByAsset`) |
+| 3 | Target has a CHECKED_OUT booking overlapping the window, or is OVERDUE (`findCurrentCheckout`) → not resolved |
+| 4 | For each blocker: BFS over candidate units (same model first, then same category). A free candidate ends the chain. A candidate blocked by exactly one CONFIRMED booking and no checkout becomes the next link |
+| 5 | Depth limit `MAX_CHAIN_DEPTH = 3`; each path keeps its own visited set (no A → B → A) |
+| 6 | Units used by one chain are not offered to the next blocker on the same target (conservative, never two steps on one unit) |
 
-$$\text{TargetAsset } A_0 \xrightarrow{\text{Res } R_0} \text{Asset } A_1 \xrightarrow{\text{Res } R_1} \dots \xrightarrow{\text{Res } R_k} \text{Idle Asset } A_{k+1}$$
+BFS finds the chain with the fewest moves. Steps are returned in reverse order: the last booking moves to the idle unit first, so every move lands on a unit that is already free.
 
-#### Search Algorithm: Breadth-First Search (BFS)
-Class: `com.campus.reassignment.service.chain.ChainShiftingConflictResolver`
-- Shortest path BFS guarantees finding the **minimum number of relocations**, preventing unnecessary student disruption.
-- `visitedAssets` prevents cyclic shifts (e.g., $A \to B \to A$).
-- `MAX_CHAIN_DEPTH = 3` bounds computational complexity, ensuring execution completes in under 5 ms.
+### 2. Execution (`ChainShiftExecutor.executeChainShift`)
 
-#### Execution Order (Reverse Topological Order)
-When applying an augmenting path:
-1. Shift terminal booking $R_k \to A_{k+1}$ (which is idle).
-2. Now $A_k$ is idle; shift $R_{k-1} \to A_k$.
-3. Continue in reverse until $R_0 \to A_1$.
-4. $A_0$ is now completely free with zero transient database collision.
+- One `@Transactional` method for the whole chain. If `moveToAsset` returns false or throws `SubstituteNoLongerFreeException`, it throws `409 CHAIN_SHIFT_EXECUTION_FAILED` and everything rolls back (moves and `reassignment_log` rows).
+- Emails are sent in `afterCommit`, so a rolled-back chain sends none.
 
-### 2. REST API Endpoint
+### 3. REST API
 
-`POST /api/v1/admin/reassignments/chain-shift`
-- Query parameters:
-  - `targetAssetId` (Long, required): The equipment item to free.
-  - `startTime` (ISO-8601, required): Start of the needed time slot.
-  - `endTime` (ISO-8601, required): End of the needed time slot.
-  - `dryRun` (Boolean, default `false`): Defaults to `false` for production execution (atomically executes all relocations and logs to `reassignment_log`). Pass `dryRun=true` to simulate the plan without database modifications.
+`POST /api/v1/admin/reassignments/chain-shift?targetAssetId=&startTime=&endTime=&dryRun=`
+- Times are local (`2026-11-15T10:00:00`); a `Z` or offset is rejected with 400, like the reservation endpoints (#233). `startTime` must be before `endTime` (400 `VALIDATION_FAILED`).
+- `dryRun` defaults to `true` (plan only). `dryRun=false` applies the plan.
 
-### 3. Verification & Architecture
+### 4. Tests
 
-- Unit tests (`ChainShiftingConflictResolverTest`):
-  - `planChainShift_targetAlreadyFree`: Verifies immediate exit when no blockers exist.
-  - `planChainShift_singleStepAugmentingPath`: Tests direct 1-step reallocation.
-  - `planChainShift_twoStepAugmentingPathChain`: Tests 2-step chain and reverse execution order.
-  - `planChainShift_noAugmentingPathFailsGracefully`: Tests clean failure when all substitutes are occupied.
-- Controller integration tests (`AdminReassignmentControllerTest`):
-  - 401 unauthenticated guard.
-  - 403 student authorization guard.
-  - 200 admin plan response.
-- Architecture rules:
-  - Resides strictly in `reassignment/`, accessing `reservationApi` and `catalogApi`.
-  - Zero cyclic dependencies, ArchUnit compliant.
+| Test | Checks |
+|---|---|
+| `ChainShiftingConflictResolverTest` | already free, 1-step, 2-step + reverse order, no path, target only in use, target checked out + CONFIRMED blocker, candidate OVERDUE skipped |
+| `ChainShiftRollbackIT` (PostgreSQL) | 2-step chain, step 2 fails → step 1 undone, no log rows, no emails |
+| `ChainShiftExecutorTest` | step order, failure → 409 (Mockito, no transaction) |
+| `AdminReassignmentControllerTest` | 401, 403, 200, default `dryRun=true`, 400 for start ≥ end and for `Z` |

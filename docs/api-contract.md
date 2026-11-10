@@ -286,7 +286,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
-| `POST /api/v1/admin/reassignments/chain-shift?targetAssetId=1&startTime=...&endTime=...&dryRun=false` | Admin | – | `200` + `ChainShiftPlanResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND` (dryRun defaults to false for production execution; pass dryRun=true for simulation) |
+| `POST /api/v1/admin/reassignments/chain-shift?targetAssetId=1&startTime=...&endTime=...&dryRun=true` | Admin | – | `200` + `ChainShiftPlanResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND` (`dryRun` defaults to `true`: the plan is only computed; pass `dryRun=false` to apply it. `startTime` must be before `endTime`, local time without `Z`/offset, else 400) |
 
 ```json
 // CreateReservationRequest

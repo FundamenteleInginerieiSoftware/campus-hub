@@ -3,6 +3,7 @@ package com.campus.reassignment.service.chain;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.reservation.api.ReservationApi;
+import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -22,7 +23,8 @@ import org.springframework.stereotype.Service;
  *
  * <p>When a student desires asset X but X is already booked, this engine finds a valid
  * chain of relocations (e.g. Res A on X -> Y, Res B on Y -> Z where Z is idle) such that
- * every student retains an identical model substitute and asset X is freed without cancellations.
+ * asset X is freed without cancellations. Each moved booking goes to a unit of the same model
+ * when one exists, otherwise to a unit of the same category (possibly a different model).
  */
 @Slf4j
 @Service
@@ -60,7 +62,20 @@ public class ChainShiftingConflictResolver {
                             targetAsset.name()));
         }
 
+        // findUpcomingActiveByAsset returns only CONFIRMED bookings. A CHECKED_OUT/OVERDUE booking on the
+        // target cannot be shifted, so moving the CONFIRMED ones would not free it.
+        if (isHeldByCheckout(targetAssetId, startTime, endTime)) {
+            return new ChainShiftPlan(
+                    false,
+                    List.of(),
+                    String.format(
+                            "Target equipment '%s' is in use (CHECKED_OUT or OVERDUE) during the requested window.",
+                            targetAsset.name()));
+        }
+
         List<ChainShiftStep> combinedExecutionSteps = new ArrayList<>();
+        // Shared across all blockers on the target: an asset used by one chain is not offered to another,
+        // even for a non-overlapping blocker. Conservative but safe (no two steps compete for one unit).
         Set<Long> lockedAssetsInChain = new HashSet<>();
         lockedAssetsInChain.add(targetAssetId);
 
@@ -171,7 +186,10 @@ public class ChainShiftingConflictResolver {
                                 .toList();
 
                 // If candidate is blocked by exactly 1 reservation, explore shifting that reservation in chain
-                if (subBlockers.size() == 1) {
+                // A checkout on the candidate cannot be shifted, so the candidate is a dead end.
+                if (subBlockers.size() == 1
+                        && !isHeldByCheckout(
+                                candidate.id(), curr.reservation().start(), curr.reservation().end())) {
                     ReservationSummary nextRes = subBlockers.get(0);
                     Set<Long> nextVisited = new HashSet<>(curr.visitedAssets());
                     nextVisited.add(candidate.id());
@@ -185,6 +203,13 @@ public class ChainShiftingConflictResolver {
         }
 
         return null; // No augmenting path within MAX_CHAIN_DEPTH
+    }
+
+    private boolean isHeldByCheckout(Long assetId, LocalDateTime start, LocalDateTime end) {
+        return reservationApi
+                .findCurrentCheckout(assetId)
+                .filter(c -> c.status() == ReservationStatus.OVERDUE || overlaps(c.start(), c.end(), start, end))
+                .isPresent();
     }
 
     private static boolean overlaps(LocalDateTime s1, LocalDateTime e1, LocalDateTime s2, LocalDateTime e2) {

@@ -183,4 +183,27 @@ class AdminReassignmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applied").value(false));
     }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 400 when startTime is not before endTime")
+    void resolveChainShiftRejectsEmptyWindow() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T12:00:00")
+                        .param("endTime", "2026-11-15T10:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 400 for a time with a Z offset (#233)")
+    void resolveChainShiftRejectsZoneOffset() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00Z")
+                        .param("endTime", "2026-11-15T12:00:00Z"))
+                .andExpect(status().isBadRequest());
+    }
 }

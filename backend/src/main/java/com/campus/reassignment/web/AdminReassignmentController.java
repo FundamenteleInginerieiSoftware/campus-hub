@@ -1,5 +1,6 @@
 package com.campus.reassignment.web;
 
+import com.campus.common.error.BadRequestException;
 import com.campus.common.paging.PageResponse;
 import com.campus.reassignment.service.ReassignmentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -57,16 +58,20 @@ public class AdminReassignmentController {
                     "Discovers an augmenting path chain shifting existing bookings to idle substitute assets to free the target asset.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Chain shift plan calculated and optionally applied"),
-        @ApiResponse(responseCode = "400", description = "Validation failed on parameters"),
+        @ApiResponse(responseCode = "400", description = "Bad parameters (startTime not before endTime, or a time with a Z/offset)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)"),
         @ApiResponse(responseCode = "404", description = "Target asset not found")
     })
     public ResponseEntity<ChainShiftPlanResponse> resolveChainShift(
             @RequestParam Long targetAssetId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            // Same pattern as the reservation endpoints (#233): campus local time, a Z or offset is rejected.
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime startTime,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime endTime,
             @RequestParam(defaultValue = "true") boolean dryRun) {
+        if (!startTime.isBefore(endTime)) {
+            throw new BadRequestException("VALIDATION_FAILED", "startTime must be before endTime");
+        }
         return ResponseEntity.ok(reassignmentService.resolveChainShift(targetAssetId, startTime, endTime, dryRun));
     }
 }
