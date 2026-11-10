@@ -15,7 +15,7 @@
 2. **How search finds "termometre".** When a student types `"vreau să construiesc două termometre"`, the search engine:
    - turns everything to lowercase and strips Romanian diacritics (`ă â î ș ț`, including the older cedilla letters `ş ţ`);
    - removes common filler words (`vreau`, `sa`, `un`, `i`, `want`, `to`, `build`, …);
-   - compares each remaining word against both the Romanian and English keywords and titles of every project. Even though the project keyword is singular (`"termometru"`) and the student typed the plural (`"termometre"`), both words are at least 5 letters long and start with the same 5 letters (`"termo"`), so the project gets **+2 points** and comes back first.
+   - compares each remaining word against both the Romanian and English keywords and titles of every project. Even though the project keyword is singular (`"termometru"`) and the student typed the plural (`"termometre"`), the two words share their first 9 letters (`"termometr"`) and differ only in the last letter, so they count as the same word with another ending: the project gets **+2 points** and comes back first. (Rule tightened in doc 48: sharing only the first 5 letters, like `multiplexer`/`multimeter`, is no longer enough.)
 3. **Mistakes in project files are caught when the server starts.** The projects live as `.json` files inside the backend. When Spring Boot starts, `ProjectLibrary` checks every file: if a field name has a typo (`"titel"`), a translation is missing, a model is listed twice, or a project needs more than 5 items (Calin's bundle limit), the server refuses to start and prints the exact file and field name.
 4. **How availability works without touching other modules' tables.** For each component in a project, `ProjectService` asks Liviu's `CatalogApi` for the operational (`AVAILABLE`) units of that model. If the student also picked a time slot, it asks Calin's `ReservationApi` which of those units have no conflicting booking or hold in that slot.
 
@@ -46,9 +46,10 @@
 | Constant | Value | Why |
 |---|---|---|
 | `EXACT` | `3` | An exact keyword match is the strongest signal and outranks a prefix match (`2`) plus a title match (`1` alone) |
-| `PREFIX` | `2` | Connects Romanian/English inflections (`termometre` ↔ `termometru`, `termometrul` ↔ `termometru`, `osciloscoape` ↔ `osciloscop`) without a full stemmer |
+| `PREFIX` | `2` | Same-stem match: connects Romanian/English inflections (`termometre` ↔ `termometru`, `termometrul` ↔ `termometru`, `osciloscoape` ↔ `osciloscop`) without a full stemmer |
 | `TITLE` | `1` | Breaks ties in favor of projects that also name the token in their RO or EN title |
-| `MIN_PREFIX` | `5` | Words shorter than 5 characters (`pwm`, `led`, `usb`) must match exactly so short acronyms don't false-match unrelated words |
+| `MIN_PREFIX` | `5` | Two words must share at least their first 5 letters; words shorter than 5 characters (`pwm`, `led`, `usb`) must match exactly so short acronyms don't false-match unrelated words |
+| `MAX_ENDING` | `2` | Added in doc 48: the shared start may leave out at most the last 2 letters of the shorter word, so `multiplexer` no longer matches `multimeter` |
 | `AMBIGUITY_GAP` | `1` | When at least 2 projects match and `top.score - second.score <= 1`, `ambiguous = true` so the UI can show "Did you mean …" chips |
 
 ### Startup validation (`ProjectLibrary`)
