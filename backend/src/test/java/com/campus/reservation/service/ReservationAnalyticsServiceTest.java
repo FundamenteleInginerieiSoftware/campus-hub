@@ -93,11 +93,11 @@ class ReservationAnalyticsServiceTest {
                 .isEqualTo(6);
         assertThat(response.totalCapacityHours())
                 .as(
-                        "total capacity hours must be 4 working days * 12h * 2 assets = 96.0; see ReservationAnalyticsService.getUtilization")
-                .isEqualTo(96.0);
+                        "capacity is counted only up to now (Mon 10:00): (3 full days * 12h + 2h) * 2 assets = 76.0; see ReservationAnalyticsService.getUtilization")
+                .isEqualTo(76.0);
         assertThat(response.averageUtilizationPercent())
-                .as("average utilization must be 2.0 / 96.0 = 2.1%; see ReservationAnalyticsService.getUtilization")
-                .isEqualTo(2.1);
+                .as("average utilization must be 2.0 / 76.0 = 2.6%; see ReservationAnalyticsService.getUtilization")
+                .isEqualTo(2.6);
         assertThat(response.totalBookedHours())
                 .as("total realized booked hours must equal 2.0; see ReservationAnalyticsService.getUtilization")
                 .isEqualTo(2.0);
@@ -281,7 +281,8 @@ class ReservationAnalyticsServiceTest {
     @DisplayName("getUtilization: sorts assets by realized booked hours in descending order")
     void getUtilization_sortsAssetsByBookedHoursDescending() {
         LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime from = now.minusDays(2);
+        // Thursday 10:00, so the bookings below fall on a weekday inside open hours.
+        LocalDateTime from = now.minusDays(4);
         LocalDateTime to = now;
 
         // Asset 10: 2 hours
@@ -542,9 +543,9 @@ class ReservationAnalyticsServiceTest {
     @Test
     @DisplayName("getUtilization: computes exact operating hours for partial day windows")
     void getUtilization_calculatesPartialDayOperatingHoursAccurately() {
-        // Wednesday 14:00 to 18:00 (4 hours within lab operating window 08:00-20:00)
-        LocalDateTime from = LocalDateTime.of(2026, 11, 4, 14, 0);
-        LocalDateTime to = LocalDateTime.of(2026, 11, 4, 18, 0);
+        // Wednesday 14:00 to 18:00 (4 hours within lab operating window 08:00-20:00), before the fixed clock
+        LocalDateTime from = LocalDateTime.of(2026, 10, 28, 14, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 10, 28, 18, 0);
 
         Reservation r = new Reservation(42L, 10L, from, from.plusHours(2), from.minusDays(1));
         ReflectionTestUtils.setField(r, "id", 201L);
@@ -566,5 +567,72 @@ class ReservationAnalyticsServiceTest {
         assertThat(response.averageUtilizationPercent())
                 .as("2.0 / 4.0 must equal 50.0% utilization")
                 .isEqualTo(50.0);
+    }
+
+    @Test
+    @DisplayName("getUtilization: counts only booked hours inside open hours (Mon-Fri 08:00-20:00) and up to now")
+    void getUtilization_countsOnlyOpenHoursUpToNow() {
+        LocalDateTime now = LocalDateTime.now(clock); // Monday 2026-11-02 10:00
+        LocalDateTime from = LocalDateTime.of(2026, 10, 30, 8, 0); // Friday
+        LocalDateTime to = LocalDateTime.of(2026, 11, 2, 20, 0); // Monday evening, after now
+
+        // Friday 18:00-22:00: only 18:00-20:00 is inside open hours -> 2h
+        Reservation evening = new Reservation(
+                42L, 10L, LocalDateTime.of(2026, 10, 30, 18, 0), LocalDateTime.of(2026, 10, 30, 22, 0), from);
+        ReflectionTestUtils.setField(evening, "id", 301L);
+        ReflectionTestUtils.setField(evening, "status", ReservationStatus.RETURNED);
+        // Saturday 10:00-14:00: the lab is closed -> 0h
+        Reservation saturday = new Reservation(
+                43L, 10L, LocalDateTime.of(2026, 10, 31, 10, 0), LocalDateTime.of(2026, 10, 31, 14, 0), from);
+        ReflectionTestUtils.setField(saturday, "id", 302L);
+        ReflectionTestUtils.setField(saturday, "status", ReservationStatus.RETURNED);
+        // Monday 09:00-12:00, checked out right now: only 09:00-10:00 has happened -> 1h
+        Reservation today = new Reservation(
+                44L, 10L, LocalDateTime.of(2026, 11, 2, 9, 0), LocalDateTime.of(2026, 11, 2, 12, 0), from);
+        ReflectionTestUtils.setField(today, "id", 303L);
+        ReflectionTestUtils.setField(today, "status", ReservationStatus.CHECKED_OUT);
+
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of(evening, saturday, today));
+        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L));
+        when(catalogApi.getAsset(10L))
+                .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
+
+        UtilizationAnalyticsResponse response = analyticsService.getUtilization(from, to);
+
+        assertThat(response.totalBookedHours())
+                .as("2h Friday evening + 0h Saturday + 1h Monday until now = 3.0")
+                .isEqualTo(3.0);
+        assertThat(response.totalCapacityHours())
+                .as("Friday 12h + Monday 08:00-10:00 (now) 2h = 14.0")
+                .isEqualTo(14.0);
+        assertThat(now).as("fixed clock sanity check").isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
+    }
+
+    @Test
+    @DisplayName("getUtilization and getHeatmap: reject a window longer than 366 days with INVALID_PARAMETER")
+    void rejectsWindowLongerThan366Days() {
+        LocalDateTime to = LocalDateTime.of(2026, 11, 1, 10, 0);
+        LocalDateTime from = to.minusDays(367);
+
+        assertThatThrownBy(() -> analyticsService.getUtilization(from, to))
+                .as("367-day window must be rejected before any query runs")
+                .isInstanceOf(InvalidParameterException.class)
+                .hasMessageContaining("366 days");
+        assertThatThrownBy(() -> analyticsService.getHeatmap(from, to, null))
+                .as("the heatmap must apply the same cap")
+                .isInstanceOf(InvalidParameterException.class);
+    }
+
+    @Test
+    @DisplayName("getUtilization: accepts a window of exactly 366 days")
+    void acceptsWindowOfExactly366Days() {
+        LocalDateTime to = LocalDateTime.of(2026, 11, 1, 10, 0);
+        LocalDateTime from = to.minusDays(366);
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of());
+        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of());
+
+        assertThat(analyticsService.getUtilization(from, to).from())
+                .as("366 days is the limit itself, so it must still pass")
+                .isEqualTo(from);
     }
 }

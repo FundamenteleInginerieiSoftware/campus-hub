@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
         name = "Admin Analytics",
         description = "Equipment utilization analytics, bottleneck identification, and booking demand heatmap")
-@Validated
 @RestController
 @RequestMapping("/api/v1/admin/analytics")
 @RequiredArgsConstructor
@@ -47,7 +45,7 @@ public class AdminAnalyticsController {
                 content = @Content(schema = @Schema(implementation = UtilizationAnalyticsResponse.class))),
         @ApiResponse(
                 responseCode = "400",
-                description = "Invalid date range parameters (from is after to, or contains invalid timezone offset)",
+                description = "Invalid date range parameters (from is after to, window longer than 366 days, or a timezone offset)",
                 content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -86,7 +84,7 @@ public class AdminAnalyticsController {
                 content = @Content(schema = @Schema(implementation = HeatmapResponse.class))),
         @ApiResponse(
                 responseCode = "400",
-                description = "Invalid date range parameters (from is after to, or contains invalid timezone offset)",
+                description = "Invalid date range parameters (from is after to, window longer than 366 days, or a timezone offset)",
                 content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
         @ApiResponse(
                 responseCode = "401",

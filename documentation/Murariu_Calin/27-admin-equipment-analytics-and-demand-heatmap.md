@@ -37,19 +37,25 @@ All endpoints are strictly restricted to administrators (`/api/v1/admin/analytic
 | `/api/v1/admin/analytics/heatmap` | `GET` | `ADMIN` | Computes a 7x12 (84 cells) weekly demand intensity matrix (08:00–20:00), optionally filtered by `assetId`. |
 
 - **Timezone Safety (AGENTS §5):** Both endpoints accept optional `from` and `to` parameters using `@DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")`. Any timestamp containing explicit timezone offsets (`Z` or `+05:00`) is rejected with HTTP `400 Bad Request` and ProblemDetail code `INVALID_PARAMETER`.
-- **Validation:** If `from` is after `to`, the service throws `InvalidParameterException("from", "from must not be after to")`, converted to `400 INVALID_PARAMETER`.
+- **Validation:** If `from` is after `to`, the service throws `InvalidParameterException("from must not be after to")`, converted to `400 INVALID_PARAMETER`.
+- **Window cap:** the window may be at most 366 days, otherwise `400 INVALID_PARAMETER`. Without it, `from=1900-01-01` would load every reservation into memory and loop over ~45k days.
+
+### Known limitation: which assets are counted
+
+The asset list comes from the assets that appear in `reservations` (`findDistinctAssetIds`), not from the catalog. So an asset that was **never booked does not appear**: it is not counted as idle, and it is not counted as a unit of its model in the bottleneck check (a model with 5 units of which 2 were booked shows "2 of 2 units"). The fix is to read the fleet from the catalog, but `CatalogApi` has no "list non-retired assets" method yet. That is Liviu's facade, so he has to add it (AGENTS §3); until then this gap stays.
 
 ### 3. Algorithms & Mathematical Formulas
 
-- **Operating Hours Base:** Campus labs operate 12 hours/day (08:00 to 20:00).
+- **Open hours:** Monday to Friday, 08:00 to 20:00. Capacity counts only these hours, and **booked hours are clipped to the same hours**, so a Saturday or 21:00 booking adds nothing (before, it added booked hours with no capacity behind them).
+- **Measured until now:** if `to` is in the future, both capacity and booked hours stop at the current time. A CONFIRMED booking later today hasn't happened yet, so it is not "realized" use.
 - **Per-Asset Utilization:**
-  $$\text{Utilization} = \min\left(100.0, \frac{\text{Realized Booked Hours}}{\text{Days} \times 12\text{h}} \times 100\right)$$
+  $$\text{Utilization} = \min\left(100.0, \frac{\text{Booked open hours until now}}{\text{Open hours from } from \text{ until } \min(to, now)} \times 100\right)$$
 - **Cancellation & No-Show Rates:**
   $$\text{Cancellation Rate} = \frac{\text{CANCELLED} + \text{FORCE\_CANCELLED}}{\text{Total Intersecting Bookings}} \times 100$$
   $$\text{No-Show Rate} = \frac{\text{NO\_SHOW}}{\text{Total Intersecting Bookings}} \times 100$$
 - **Sweep-Line Capacity Bottlenecks:**
   - Evaluates concurrency over time points `(+1 at startTime, -1 at endTime)` for all units sharing a model.
-  - If $\text{PeakDemand} \ge \text{TotalUnits}$, computes required surplus: $\text{Deficit} = \text{PeakDemand} - \text{TotalUnits} + 1$.
+  - If $\text{PeakDemand} \ge \text{TotalUnits}$, computes required surplus: $\text{Deficit} = \text{PeakDemand} - \text{TotalUnits}$ (only when demand is above the unit count; at exactly 100% it says "monitor demand"). The sweep uses the whole `from..to` window, future bookings included, because a future clash is still demand.
 - **Heatmap Cell Normalization:**
   $$\text{IntensityScore} = \frac{\text{Cell Booking Count}}{\max(\text{All Cell Counts})}$$
 
@@ -61,7 +67,11 @@ All endpoints are strictly restricted to administrators (`/api/v1/admin/analytic
   - `getUtilization_rejectsWhenFromAfterTo`
   - `getHeatmap_populatesGridWithCorrectIntensity`
   - `getHeatmap_filtersByAssetId`
+  - `getUtilization_countsOnlyOpenHoursUpToNow` (evening, Saturday and "later today" parts are not counted)
+  - `rejectsWindowLongerThan366Days`, `acceptsWindowOfExactly366Days`
 - Controller tests in `AdminAnalyticsControllerTest`:
   - 401 unauthenticated, 403 student, 200 admin
   - 400 rejection on timezone offsets (`Z`, numeric)
   - 400 rejection on `from > to`
+  - 400 `INVALID_PARAMETER` on `Z` / `+02:00` for both endpoints (the `@DateTimeFormat` pattern fails → `MethodArgumentTypeMismatchException` → `INVALID_PARAMETER` in `GlobalExceptionHandler`)
+  - 400 on a window over 366 days

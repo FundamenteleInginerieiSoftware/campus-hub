@@ -78,6 +78,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo | – |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
+| Meeting | Analytics backend #255 (off-plan): get a team decision · ask Liviu for a `CatalogApi` "list non-retired assets" method so never-booked assets count as idle | Team decision, Liviu |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |
 | W10–W12 | **Test lead**: keep `docs/testing/test-plan.md` current (#101, #199), JaCoCo results, **test report** · full-flow integration tests · ~~PIT survivors~~ (✅ #201) · reservation state diagram · ~~booking sequence diagram~~ (✅ #204) · ~~**Strategy pattern doc**~~ (✅ #205) · ~~report section~~ (✅ #203, keep it current) · demo part | – |
 

@@ -150,4 +150,33 @@ class AdminAnalyticsControllerTest {
                 .andExpect(jsonPath("$.cells[0].hour").value(10))
                 .andExpect(jsonPath("$.cells[0].intensityScore").value(1.0));
     }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/analytics/heatmap returns 400 INVALID_PARAMETER for a Z or numeric offset")
+    void getHeatmap_rejectsTimezoneOffset() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/analytics/heatmap").param("from", "2026-10-01T08:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+
+        mockMvc.perform(get("/api/v1/admin/analytics/heatmap").param("to", "2026-10-31T20:00:00+02:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+
+        verifyNoInteractions(analyticsService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/analytics/utilization returns 400 INVALID_PARAMETER for a window over 366 days")
+    void getUtilization_returns400WhenWindowTooLong() throws Exception {
+        when(analyticsService.getUtilization(any(), any()))
+                .thenThrow(new InvalidParameterException("the window must not be longer than 366 days"));
+
+        mockMvc.perform(get("/api/v1/admin/analytics/utilization")
+                        .param("from", "1900-01-01T08:00:00")
+                        .param("to", "2026-11-01T10:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
 }

@@ -1,8 +1,10 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.error.InvalidParameterException;
+import com.campus.common.error.NotFoundException;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
@@ -38,9 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ReservationAnalyticsService {
 
-    private static final double LAB_DAILY_OPEN_HOURS = 12.0; // 08:00 to 20:00 (Monday-Friday)
     private static final int HEATMAP_START_HOUR = 8;
     private static final int HEATMAP_END_HOUR = 20;
+    // Without a cap, from=1900-01-01 would load every reservation and loop over ~45k days.
+    private static final int MAX_WINDOW_DAYS = 366;
 
     private static final Set<ReservationStatus> REALIZED_STATUSES = Set.of(
             ReservationStatus.CONFIRMED,
@@ -65,32 +68,17 @@ public class ReservationAnalyticsService {
      */
     public UtilizationAnalyticsResponse getUtilization(LocalDateTime from, LocalDateTime to) {
         LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime resolvedTo = (to != null) ? to : now;
-        LocalDateTime resolvedFrom = (from != null) ? from : resolvedTo.minusDays(30);
-
-        if (resolvedFrom.isAfter(resolvedTo)) {
-            throw new InvalidParameterException("from must not be after to");
-        }
+        LocalDateTime[] window = resolveWindow(from, to, now);
+        LocalDateTime resolvedFrom = window[0];
+        LocalDateTime resolvedTo = window[1];
 
         int reportingDays =
                 Math.max(1, (int) ChronoUnit.DAYS.between(resolvedFrom.toLocalDate(), resolvedTo.toLocalDate()) + 1);
 
-        long openMinutes = 0;
-        LocalDate curr = resolvedFrom.toLocalDate();
-        LocalDate last = resolvedTo.toLocalDate();
-        while (!curr.isAfter(last)) {
-            if (curr.getDayOfWeek() != DayOfWeek.SATURDAY && curr.getDayOfWeek() != DayOfWeek.SUNDAY) {
-                LocalDateTime dayOpen = curr.atTime(HEATMAP_START_HOUR, 0);
-                LocalDateTime dayClose = curr.atTime(HEATMAP_END_HOUR, 0);
-                LocalDateTime windowStart = resolvedFrom.isAfter(dayOpen) ? resolvedFrom : dayOpen;
-                LocalDateTime windowEnd = resolvedTo.isBefore(dayClose) ? resolvedTo : dayClose;
-                if (windowStart.isBefore(windowEnd)) {
-                    openMinutes += Duration.between(windowStart, windowEnd).toMinutes();
-                }
-            }
-            curr = curr.plusDays(1);
-        }
-        double openHoursPerAsset = openMinutes / 60.0;
+        // Utilization is measured only up to now: a CONFIRMED booking later today hasn't happened yet,
+        // so counting it would inflate the "realized" hours. Capacity uses the same end, so both sides match.
+        LocalDateTime measuredUntil = resolvedTo.isBefore(now) ? resolvedTo : now;
+        double openHoursPerAsset = openMinutesBetween(resolvedFrom, measuredUntil) / 60.0;
 
         List<Reservation> allIntersecting = reservationRepository.findIntersecting(resolvedFrom, resolvedTo);
 
@@ -114,9 +102,11 @@ public class ReservationAnalyticsService {
 
         for (Reservation r : allIntersecting) {
             if (REALIZED_STATUSES.contains(r.getStatus())) {
+                // Only the part inside open hours (Mon-Fri 08:00-20:00) counts, the same hours capacity counts.
+                // A Saturday or 21:00 booking used to add booked hours with no capacity behind them.
                 LocalDateTime start = r.getStartTime().isBefore(resolvedFrom) ? resolvedFrom : r.getStartTime();
-                LocalDateTime end = r.getEndTime().isAfter(resolvedTo) ? resolvedTo : r.getEndTime();
-                double hours = Math.max(0.0, Duration.between(start, end).toMinutes() / 60.0);
+                LocalDateTime end = r.getEndTime().isAfter(measuredUntil) ? measuredUntil : r.getEndTime();
+                double hours = openMinutesBetween(start, end) / 60.0;
 
                 assetBookedHoursMap.merge(r.getAssetId(), hours, Double::sum);
                 assetBookingCountMap.merge(r.getAssetId(), 1, Integer::sum);
@@ -133,7 +123,7 @@ public class ReservationAnalyticsService {
             try {
                 AssetSummary asset = catalogApi.getAsset(assetId);
                 // Exclude retired equipment from active utilization metrics
-                if (asset.status() == com.campus.catalog.api.AssetStatus.RETIRED) {
+                if (asset.status() == AssetStatus.RETIRED) {
                     continue;
                 }
                 double bookedHours = assetBookedHoursMap.getOrDefault(assetId, 0.0);
@@ -157,7 +147,7 @@ public class ReservationAnalyticsService {
                 modelToAssetIds
                         .computeIfAbsent(asset.model(), k -> new ArrayList<>())
                         .add(assetId);
-            } catch (Exception e) {
+            } catch (NotFoundException e) {
                 log.warn("Could not retrieve asset #{} from catalog: {}", assetId, e.getMessage());
             }
         }
@@ -199,13 +189,9 @@ public class ReservationAnalyticsService {
      * Builds a 7-day by 12-hour (08:00 to 20:00) demand heatmap grid.
      */
     public HeatmapResponse getHeatmap(LocalDateTime from, LocalDateTime to, Long assetId) {
-        LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime resolvedTo = (to != null) ? to : now;
-        LocalDateTime resolvedFrom = (from != null) ? from : resolvedTo.minusDays(30);
-
-        if (resolvedFrom.isAfter(resolvedTo)) {
-            throw new InvalidParameterException("from must not be after to");
-        }
+        LocalDateTime[] window = resolveWindow(from, to, LocalDateTime.now(clock));
+        LocalDateTime resolvedFrom = window[0];
+        LocalDateTime resolvedTo = window[1];
 
         List<Reservation> bookings = (assetId != null)
                 ? reservationRepository.findIntersectingByAssetId(assetId, resolvedFrom, resolvedTo)
@@ -333,6 +319,37 @@ public class ReservationAnalyticsService {
         bottlenecks.sort(Comparator.comparing(CapacityBottleneckItem::peakConcurrentDemand)
                 .reversed());
         return bottlenecks;
+    }
+
+    // Defaults to the last 30 days; rejects a reversed or longer-than-366-days window with 400.
+    private static LocalDateTime[] resolveWindow(LocalDateTime from, LocalDateTime to, LocalDateTime now) {
+        LocalDateTime resolvedTo = (to != null) ? to : now;
+        LocalDateTime resolvedFrom = (from != null) ? from : resolvedTo.minusDays(30);
+        if (resolvedFrom.isAfter(resolvedTo)) {
+            throw new InvalidParameterException("from must not be after to");
+        }
+        if (resolvedFrom.plusDays(MAX_WINDOW_DAYS).isBefore(resolvedTo)) {
+            throw new InvalidParameterException("the window must not be longer than " + MAX_WINDOW_DAYS + " days");
+        }
+        return new LocalDateTime[] {resolvedFrom, resolvedTo};
+    }
+
+    // Minutes between start and end that fall inside open hours (Mon-Fri, 08:00-20:00).
+    private static long openMinutesBetween(LocalDateTime start, LocalDateTime end) {
+        long minutes = 0;
+        for (LocalDate day = start.toLocalDate(); !day.isAfter(end.toLocalDate()); day = day.plusDays(1)) {
+            if (day.getDayOfWeek() == DayOfWeek.SATURDAY || day.getDayOfWeek() == DayOfWeek.SUNDAY) {
+                continue;
+            }
+            LocalDateTime open = day.atTime(HEATMAP_START_HOUR, 0);
+            LocalDateTime close = day.atTime(HEATMAP_END_HOUR, 0);
+            LocalDateTime from = start.isAfter(open) ? start : open;
+            LocalDateTime to = end.isBefore(close) ? end : close;
+            if (from.isBefore(to)) {
+                minutes += Duration.between(from, to).toMinutes();
+            }
+        }
+        return minutes;
     }
 
     private static double round1(double value) {
