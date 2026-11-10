@@ -251,6 +251,7 @@ class ChainShiftingConflictResolverTest {
         when(reservationApi.findUpcomingActiveByAsset(eq(2L), any())).thenReturn(List.of(resB));
         ReservationSummary overdue =
                 new ReservationSummary(99L, 44L, 2L, t10.minusDays(1), t12.minusDays(1), ReservationStatus.OVERDUE);
+        when(reservationApi.findCurrentCheckout(1L)).thenReturn(Optional.empty());
         when(reservationApi.findCurrentCheckout(2L)).thenReturn(Optional.of(overdue));
 
         ChainShiftPlan plan = resolver.planChainShift(1L, t10, t12);
