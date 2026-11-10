@@ -74,6 +74,19 @@ class ShippedProjectsTest {
                 .startsWith(expectedSlug + "=");
     }
 
+    // Bug fixed (audit, 10 Nov): "multiplexer" found multimeter-basics only because both start with "multi".
+    @Test
+    void unrelatedWordWithSameStartFindsNothing() {
+        List<String> ranking = search.search("multiplexer", LIBRARY.all()).hits().stream()
+                .map(hit -> hit.project().slug() + "=" + hit.score())
+                .toList();
+
+        assertThat(ranking)
+                .as(
+                        "'multiplexer' is no keyword of any project and shares only 'multi' with 'multimeter': no hits; see ProjectSearch.sameStem")
+                .isEmpty();
+    }
+
     @Test
     void componentsUseOnlyAgreedModels() {
         List<String> models = LIBRARY.all().stream()

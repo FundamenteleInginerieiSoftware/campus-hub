@@ -19,15 +19,20 @@ public class ProjectSearch {
     // Exact keyword match ranks highest so naming the core component or topic wins outright.
     static final int EXACT = 3;
 
-    // Prefix match catches Romanian/English plurals and definite articles (e.g. "termometre", "termometrul") just below
-    // exact hits.
+    // Same-stem match catches Romanian/English plurals and definite articles (e.g. "termometre", "termometrul" for
+    // the keyword "termometru") just below exact hits. See sameStem for the rule.
     static final int PREFIX = 2;
 
     // Title word match gives a +1 tie-breaker boost when the searched word also appears in the project title.
     static final int TITLE = 1;
 
-    // Minimum 5-character stem prevents short words like "pwm" or "led" from falsely matching unrelated words.
+    // Two words need at least 5 shared first letters to count as the same stem, so short words like "pwm" or "led"
+    // never match unrelated words.
     static final int MIN_PREFIX = 5;
+
+    // ...and the shared start may leave out at most the last 2 letters of the shorter word: Romanian and English
+    // inflections change only the ending (-u/-e, -ul, -i, -s, -y/-ies).
+    static final int MAX_ENDING = 2;
 
     // When the top two projects are within 1 point, the UI shows a "Did you mean..." prompt with both choices.
     static final int AMBIGUITY_GAP = 1;
@@ -118,12 +123,22 @@ public class ProjectSearch {
             if (token.equals(kw)) {
                 return EXACT;
             }
-            if (token.length() >= MIN_PREFIX
-                    && kw.length() >= MIN_PREFIX
-                    && token.regionMatches(0, kw, 0, MIN_PREFIX)) {
+            if (sameStem(token, kw)) {
                 best = Math.max(best, PREFIX);
             }
         }
         return best;
+    }
+
+    // Bug fixed: sharing the first 5 letters was enough, so "multiplexer" matched "multimeter" ("multi").
+    // Fix: the shared start must also cover the whole shorter word except at most its last 2 letters. Inflections
+    // only change the ending ("termometr|u" vs "termometr|e"), while different words split much earlier.
+    private static boolean sameStem(String a, String b) {
+        int shared = 0;
+        int shorter = Math.min(a.length(), b.length());
+        while (shared < shorter && a.charAt(shared) == b.charAt(shared)) {
+            shared++;
+        }
+        return shared >= MIN_PREFIX && shared >= shorter - MAX_ENDING;
     }
 }
