@@ -15,5 +15,4 @@ CREATE TABLE idempotency_records (
     CONSTRAINT fk_idempotency_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_idempotency_key_user ON idempotency_records(idempotency_key, user_id);
 CREATE INDEX idx_idempotency_expires ON idempotency_records(expires_at);

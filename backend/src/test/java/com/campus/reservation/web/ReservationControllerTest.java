@@ -19,7 +19,7 @@ import com.campus.common.security.CurrentUser;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
-import com.campus.reservation.idempotency.IdempotencyService;
+import com.campus.reservation.service.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
 import java.time.LocalDateTime;
 import java.util.List;

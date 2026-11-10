@@ -1,5 +1,6 @@
-package com.campus.reservation.idempotency;
+package com.campus.reservation.repository;
 
+import com.campus.reservation.domain.IdempotencyRecord;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

@@ -31,6 +31,7 @@
 | PR | Owner | What | Next step |
 |---|---|---|---|
 | #247 | Calin | Fixes for #240 (bundle quota, after-commit emails, edge-case guards) | Changes requested: hold cooldown only matches the exact same slot |
+| #262 | Calin | Optional `Idempotency-Key` for booking (off-plan, needs a team decision) | Review fixes done: FAILED retry, 60 s takeover, doc 31 |
 | #244 | Liviu | Audit log date filters reject time-zone offsets (#241) | Approved, behind `main`: update branch, then merge |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
