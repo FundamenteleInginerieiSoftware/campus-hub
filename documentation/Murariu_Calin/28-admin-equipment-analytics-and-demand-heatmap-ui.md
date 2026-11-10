@@ -11,13 +11,14 @@ An interactive, graphical dashboard exclusively for lab administrators. It gives
 
 ### Why do we need it?
 1. **Equipment Utilization Tracking**: Administrators need to know if expensive lab assets (oscilloscopes, spectrum analyzers, signal generators) are heavily utilized or sitting idle for weeks.
-2. **Weekly Demand Heatmap**: A visual 7-day x 12-hour matrix (08:00 to 20:00) highlights peak hours (e.g., Tuesday afternoons) versus quiet mornings, helping lab managers adjust staffing and lab opening schedules.
+2. **Weekly Demand Heatmap**: A visual Mon-Fri x 12-hour matrix (08:00 to 20:00; weekends hidden because capacity counts only Mon-Fri) highlights peak hours (e.g., Tuesday afternoons) versus quiet mornings, helping lab managers adjust staffing and lab opening schedules.
 3. **Resource Capacity Planning**: Automatically alerts the administrator when student demand for a specific hardware model exceeds available units, calculating how many additional units the lab should acquire.
 
 ### Key capabilities
 - **Preset Time Windows**: Quick toggles for Last 7 Days, Last 30 Days, and Last 90 Days.
 - **Top KPI Cards**: Overall lab utilization percentage, total realized booked hours vs open lab capacity, cancellation and no-show loss rates, and count of idle equipment units.
 - **Dynamic Demand Heatmap**: Shaded matrix with color-coded demand intensity (from neutral for 0 bookings up to vibrant red for peak hourly slots), with tooltips detailing day, exact hour slot, booking count, and percentage intensity.
+- **CSV export**: "Export CSV" downloads the per-asset rows (all, or only the selected asset) as `utilization_<from>_<to>.csv`, built in the browser.
 - **Equipment Drill-down & Filter**: Inspect the entire lab or filter the heatmap for an individual asset.
 - **Capacity Bottleneck Warnings**: Dedicated callout displaying peak concurrent requests, model saturation rate, and specific acquisition recommendations.
 
@@ -42,7 +43,10 @@ frontend/src/
 - `GET /api/v1/admin/analytics/utilization?from=...&to=...`:
   - Returns `UtilizationAnalyticsResponse` (lab utilization %, capacity hours, idle assets count, per-asset breakdown, detected bottlenecks).
 - `GET /api/v1/admin/analytics/heatmap?from=...&to=...&assetId=...`:
-  - Returns `HeatmapResponse` (sampled bookings count, peak demand, 84 cells covering days 1..7 and hours 8..19).
+  - Returns `HeatmapResponse` (sampled bookings count, peak demand, 84 cells covering days 1..7 and hours 8..19; the page shows only Mon-Fri).
+
+### Campus clock
+`getDateWindow` uses `nowInBucharest()` (same helper as the booking pages), so the window is the campus "today" in any browser time zone and ends at "now": future bookings of today are not counted as used hours.
 
 ### Client Date Formatting Safety
 The backend strictly rejects timezone offsets (`Z`, `+02:00`) with `400 INVALID_PARAMETER` according to `AGENTS.md §5` and bug `#241`. The frontend helper `formatLocalIsoDateTime(date)` produces clean local ISO strings (`"YYYY-MM-DDTHH:mm:ss"`), ensuring seamless compatibility.
