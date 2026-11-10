@@ -50,15 +50,6 @@ public final class TransientFaultClassifier {
                 if (sqlState != null && RETRYABLE_SQL_STATES.contains(sqlState)) {
                     return true;
                 }
-                String msg = sqlEx.getMessage();
-                if (msg != null) {
-                    String lower = msg.toLowerCase();
-                    if (lower.contains("deadlock detected")
-                            || lower.contains("could not obtain lock")
-                            || lower.contains("lock timeout")) {
-                        return true;
-                    }
-                }
             }
             cause = cause.getCause();
         }

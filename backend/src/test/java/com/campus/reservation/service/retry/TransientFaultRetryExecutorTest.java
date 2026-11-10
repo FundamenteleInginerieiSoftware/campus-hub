@@ -204,21 +204,23 @@ class TransientFaultRetryExecutorTest {
     }
 
     @Test
-    @DisplayName("RetryMetrics registers and updates Micrometer counters in MeterRegistry")
-    void retryMetrics_updatesMicrometerCounters() {
-        io.micrometer.core.instrument.MeterRegistry registry =
-                new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
-        RetryMetrics metrics = new RetryMetrics(registry);
+    @DisplayName("RetryMetrics counts retries, recoveries and exhausted operations separately")
+    void retryMetrics_countsEachOutcome() {
+        RetryMetrics metrics = new RetryMetrics();
 
         metrics.recordRetryAttempt();
         metrics.recordRetryAttempt();
         metrics.recordSuccessfulRecovery();
         metrics.recordExhausted();
 
-        assertThat(registry.get("reservation.retry.attempts").counter().count()).isEqualTo(2.0);
-        assertThat(registry.get("reservation.retry.recovered").counter().count())
-                .isEqualTo(1.0);
-        assertThat(registry.get("reservation.retry.exhausted").counter().count())
-                .isEqualTo(1.0);
+        assertThat(metrics.getTotalRetries())
+                .as("two retries recorded; see RetryMetrics.recordRetryAttempt")
+                .isEqualTo(2);
+        assertThat(metrics.getSuccessfulRecoveries())
+                .as("one recovery recorded; see RetryMetrics.recordSuccessfulRecovery")
+                .isEqualTo(1);
+        assertThat(metrics.getExhaustedRetries())
+                .as("one exhausted operation recorded; see RetryMetrics.recordExhausted")
+                .isEqualTo(1);
     }
 }

@@ -26,10 +26,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest
 class PostgresDeadlockIT {
 
-    private static final Long ASSET_A = 701L;
-    private static final Long ASSET_B = 702L;
-    private static final Long CATEGORY_ID = 777L;
-    private static final Long LAB_ROOM_ID = 777L;
+    private Long assetA;
+    private Long assetB;
+    private Long categoryId;
+    private Long labRoomId;
 
     @Autowired
     private TransientFaultRetryExecutor retryExecutor;
@@ -42,31 +42,36 @@ class PostgresDeadlockIT {
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.update("""
-            INSERT INTO lab_rooms (id, code, name, building)
-            VALUES (?, 'LR-777', 'Deadlock Lab', 'Building D')
-            ON CONFLICT (id) DO NOTHING
-            """, LAB_ROOM_ID);
+        // No fixed ids: let PostgreSQL generate them so the test never collides with seeded rows.
+        labRoomId = jdbcTemplate.queryForObject("""
+            INSERT INTO lab_rooms (code, name, building)
+            VALUES ('LR-DEADLOCK-IT', 'Deadlock Lab', 'Building D')
+            RETURNING id
+            """, Long.class);
 
-        jdbcTemplate.update("""
-            INSERT INTO categories (id, name, description)
-            VALUES (?, 'Deadlock Category', 'Used for deadlock integration testing')
-            ON CONFLICT (id) DO NOTHING
-            """, CATEGORY_ID);
+        categoryId = jdbcTemplate.queryForObject("""
+            INSERT INTO categories (name, description)
+            VALUES ('Deadlock Category', 'Used for deadlock integration testing')
+            RETURNING id
+            """, Long.class);
 
-        jdbcTemplate.update("""
-            INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, version, created_at, updated_at)
-            VALUES (?, 'Deadlock Asset A', 'MODEL_DL', 'SN-DL-A', 'AVAILABLE', ?, ?, 0, NOW(), NOW()),
-                   (?, 'Deadlock Asset B', 'MODEL_DL', 'SN-DL-B', 'AVAILABLE', ?, ?, 0, NOW(), NOW())
-            ON CONFLICT (id) DO NOTHING
-            """, ASSET_A, CATEGORY_ID, LAB_ROOM_ID, ASSET_B, CATEGORY_ID, LAB_ROOM_ID);
+        assetA = insertAsset("Deadlock Asset A", "SN-DL-A");
+        assetB = insertAsset("Deadlock Asset B", "SN-DL-B");
+    }
+
+    private Long insertAsset(String name, String serial) {
+        return jdbcTemplate.queryForObject("""
+            INSERT INTO assets (name, model, serial_number, status, category_id, lab_room_id, version, created_at, updated_at)
+            VALUES (?, 'MODEL_DL', ?, 'AVAILABLE', ?, ?, 0, NOW(), NOW())
+            RETURNING id
+            """, Long.class, name, serial, categoryId, labRoomId);
     }
 
     @AfterEach
     void tearDown() {
-        jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?)", ASSET_A, ASSET_B);
-        jdbcTemplate.update("DELETE FROM categories WHERE id = ?", CATEGORY_ID);
-        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", LAB_ROOM_ID);
+        jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?)", assetA, assetB);
+        jdbcTemplate.update("DELETE FROM categories WHERE id = ?", categoryId);
+        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", labRoomId);
     }
 
     @Test
@@ -95,7 +100,7 @@ class PostgresDeadlockIT {
                         return tt.execute(status -> {
                             // Step 1: Lock Asset A
                             jdbcTemplate.queryForObject(
-                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, ASSET_A);
+                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, assetA);
 
                             if (attempt == 1) {
                                 locksAcquiredLatch.countDown();
@@ -109,7 +114,7 @@ class PostgresDeadlockIT {
 
                             // Step 2: Try to lock Asset B (conflicts with Thread 2)
                             jdbcTemplate.queryForObject(
-                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, ASSET_B);
+                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, assetB);
                             return "T1_SUCCESS";
                         });
                     },
@@ -130,7 +135,7 @@ class PostgresDeadlockIT {
                         return tt.execute(status -> {
                             // Step 1: Lock Asset B
                             jdbcTemplate.queryForObject(
-                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, ASSET_B);
+                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, assetB);
 
                             if (attempt == 1) {
                                 locksAcquiredLatch.countDown();
@@ -144,7 +149,7 @@ class PostgresDeadlockIT {
 
                             // Step 2: Try to lock Asset A (conflicts with Thread 1)
                             jdbcTemplate.queryForObject(
-                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, ASSET_A);
+                                    "SELECT id FROM assets WHERE id = ? FOR UPDATE", Long.class, assetA);
                             return "T2_SUCCESS";
                         });
                     },
@@ -155,8 +160,8 @@ class PostgresDeadlockIT {
         String r2 = f2.get(10, TimeUnit.SECONDS);
         executor.shutdownNow();
 
-        assertThat(r1).isEqualTo("T1_SUCCESS");
-        assertThat(r2).isEqualTo("T2_SUCCESS");
+        assertThat(r1).as("thread 1 must finish after the retry; see TransientFaultRetryExecutor.executeWithRetry").isEqualTo("T1_SUCCESS");
+        assertThat(r2).as("thread 2 must finish after the retry; see TransientFaultRetryExecutor.executeWithRetry").isEqualTo("T2_SUCCESS");
 
         int totalAttempts = t1Attempts.get() + t2Attempts.get();
         assertThat(totalAttempts)

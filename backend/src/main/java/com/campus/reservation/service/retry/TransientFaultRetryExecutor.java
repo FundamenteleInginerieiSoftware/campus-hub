@@ -3,6 +3,7 @@ package com.campus.reservation.service.retry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,7 +19,7 @@ public class TransientFaultRetryExecutor {
     private final RetryMetrics retryMetrics;
     private final Sleeper sleeper;
 
-    @org.springframework.beans.factory.annotation.Autowired
+    @Autowired
     public TransientFaultRetryExecutor(RetryMetrics retryMetrics) {
         this(RetryPolicy.defaultPolicy(), retryMetrics, Thread::sleep);
     }
@@ -44,7 +45,7 @@ public class TransientFaultRetryExecutor {
                             retryPolicy.maxAttempts());
                 }
                 return result;
-            } catch (RuntimeException | Error ex) {
+            } catch (RuntimeException ex) {
                 if (!TransientFaultClassifier.isTransientFault(ex)) {
                     throw ex;
                 }
@@ -89,9 +90,5 @@ public class TransientFaultRetryExecutor {
         }
         // Full randomized jitter between 10ms and capped backoff delay
         return ThreadLocalRandom.current().nextLong(10, capped + 1);
-    }
-
-    public RetryMetrics getMetrics() {
-        return retryMetrics;
     }
 }

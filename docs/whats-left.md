@@ -32,6 +32,7 @@
 |---|---|---|---|
 | #247 | Calin | Fixes for #240 (bundle quota, after-commit emails, edge-case guards) | Changes requested: hold cooldown only matches the exact same slot |
 | #244 | Liviu | Audit log date filters reject time-zone offsets (#241) | Approved, behind `main`: update branch, then merge |
+| #265 | Calin | Retry with backoff + jitter on PostgreSQL deadlock / lock timeout / serialization failure (off-plan) | Round 2 review fixed (doc 32, metrics simplified); raise at the next meeting before merge |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 Merged since the last update: Matei #239, #238, #243, #248 (Projects content, pages, Reserve all, bundle banner), #249, #250 (Terraform parts 1 and 2); Calin #246 (bundle banner in My reservations); Liviu #242 (closes #230).
