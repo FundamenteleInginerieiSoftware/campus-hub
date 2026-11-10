@@ -53,13 +53,10 @@ class IdempotencyServiceIT {
 
     @BeforeEach
     void setUp() {
-        userId = jdbcTemplate.queryForObject(
-                """
+        userId = jdbcTemplate.queryForObject("""
                 INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
                 VALUES (?, '{bcrypt}hash', 'Idempotent Student', 'STUDENT', true, NOW()) RETURNING id
-                """,
-                Long.class,
-                "idem-" + UUID.randomUUID() + "@campus.test");
+                """, Long.class, "idem-" + UUID.randomUUID() + "@campus.test");
     }
 
     @AfterEach
