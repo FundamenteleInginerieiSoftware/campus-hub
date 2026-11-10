@@ -387,4 +387,40 @@ class ReservationRepositoryTest {
                 .as("Booking session count should be 2 (1 single + 1 bundle)")
                 .isEqualTo(2);
     }
+
+    @Test
+    @DisplayName(
+            "findUpcomingConfirmedByUser: returns confirmed reservations ending after cutoff ordered by start time")
+    void findUpcomingConfirmedByUser_returnsMatchingReservations() {
+        jdbcTemplate.update("""
+            INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
+            VALUES (101, 'student101@campus.test', '{bcrypt}hash', 'Student 101', 'STUDENT', true, NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+
+        // existingReservation is USER_ID (100), CONFIRMED, 14:00 - 16:00
+        Reservation past = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        reservationRepository.saveAndFlush(past);
+
+        Reservation otherUser = new Reservation(
+                101L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 18, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        reservationRepository.saveAndFlush(otherUser);
+
+        List<Reservation> upcoming =
+                reservationRepository.findUpcomingConfirmedByUser(USER_ID, LocalDateTime.of(2026, 11, 2, 12, 0));
+
+        assertThat(upcoming)
+                .as("Should only return CONFIRMED bookings for USER_ID ending after 12:00")
+                .extracting(Reservation::getId)
+                .containsExactly(existingReservation.getId());
+    }
 }

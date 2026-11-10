@@ -1278,6 +1278,64 @@ public class ReservationService implements ReservationApi {
     }
 
     /**
+     * Cancels all upcoming CONFIRMED reservations for the specified user (e.g. when an admin disables their account).
+     *
+     * <p>Auto-cancels any pending outgoing transfer offers for those reservations so they do not remain orphaned.
+     * Equipment already checked out (CHECKED_OUT or OVERDUE) is not modified as physical return is required at the desk.
+     *
+     * @param userId the ID of the user whose upcoming bookings should be cancelled
+     * @param reason the cancellation explanation
+     * @return the number of upcoming reservations cancelled
+     */
+    @Override
+    @Transactional
+    public int cancelUpcomingReservationsForUser(Long userId, String reason) {
+        if (userId == null) {
+            return 0;
+        }
+        LocalDateTime now = now();
+        String effectiveReason = (reason != null && !reason.isBlank()) ? reason : "Account disabled by administrator";
+
+        List<Reservation> upcoming = reservationRepository.findUpcomingConfirmedByUser(userId, now);
+        if (upcoming.isEmpty()) {
+            return 0;
+        }
+
+        Long actorId = null;
+        if (currentUser != null) {
+            try {
+                actorId = currentUser.id();
+            } catch (Exception ignored) {
+                // Background execution or non-web context
+            }
+        }
+
+        for (Reservation r : upcoming) {
+            r.cancel(now, effectiveReason);
+            cancelPendingTransferIfExists(
+                    r.getId(),
+                    now,
+                    actorId,
+                    "Auto-cancelled due to account status: " + effectiveReason,
+                    "The transfer offer for reservation #" + r.getId() + " was cancelled: " + effectiveReason);
+            auditService.record(actorId, "CANCEL_RESERVATION", "Reservation", r.getId(), effectiveReason);
+            notifyUserAfterCommit(
+                    r.getUserId(),
+                    "Reservation Cancelled",
+                    "Your reservation #" + r.getId() + " has been cancelled. Reason: " + effectiveReason);
+        }
+
+        reservationRepository.saveAll(upcoming);
+        log.info(
+                "Cancelled {} upcoming reservation(s) for user {} (actorId: {}): {}",
+                upcoming.size(),
+                userId,
+                actorId,
+                effectiveReason);
+        return upcoming.size();
+    }
+
+    /**
      * Admin action to check out equipment for a confirmed reservation at the lab desk.
      *
      * <p>Check-out window: only permitted between 15 minutes before slot start and 30 minutes after slot start.
