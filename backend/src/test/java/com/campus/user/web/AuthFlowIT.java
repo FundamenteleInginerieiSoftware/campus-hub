@@ -98,6 +98,18 @@ class AuthFlowIT {
                 .andExpect(status().isCreated());
     }
 
+    // Rule: a password over 72 bytes is a plain wrong password: 401 INVALID_CREDENTIALS, never 500 or 400.
+    @Test
+    void loginWithPasswordOver72BytesIsA401() throws Exception {
+        register("long@campus.test");
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\": \"long@campus.test\", \"password\": \"" + "a".repeat(73) + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+    }
+
     private String login(String email) throws Exception {
         String json = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
