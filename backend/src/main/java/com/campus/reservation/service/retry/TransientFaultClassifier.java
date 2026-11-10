@@ -10,7 +10,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 /**
  * Classifies exceptions to identify transient PostgreSQL concurrency faults
  * such as deadlocks (SQLSTATE 40P01), lock acquisition timeouts (SQLSTATE 55P03),
- * serialization failures (SQLSTATE 40001), and query cancelations (SQLSTATE 57014).
+ * and serialization failures (SQLSTATE 40001).
  */
 public final class TransientFaultClassifier {
 
