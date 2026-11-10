@@ -30,18 +30,12 @@
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
-<<<<<<< HEAD
-| #247 | Calin | Fixes for #240 (bundle quota, after-commit emails, edge-case guards) | Changes requested: hold cooldown only matches the exact same slot |
-| #244 | Liviu | Audit log date filters reject time-zone offsets (#241) | Approved, behind `main`: update branch, then merge |
-| #265 | Calin | Retry with backoff + jitter on PostgreSQL deadlock / lock timeout / serialization failure (off-plan) | Round 2 review fixed (doc 32, metrics simplified); raise at the next meeting before merge |
-=======
 | #263 | Stefania | Only HIGH/CRITICAL incidents take the asset out of use, max 3 open reports per student (#229) | Approved: update branch if behind, then merge |
 | #266 | Calin | Cancel a user's upcoming reservations: `ReservationApi` method + admin endpoint (for #229) | Needs a review |
 | #270 | Calin | Fixes for the code read-through #267 (holds, locking, lifecycle) | Needs a review |
 | #272, #273 | Matei | Project search false hits; project details page errors | Need a review |
 | #255, #256 | Calin | Admin equipment analytics: backend + page (#254) | Needs a review; off-plan, see section 6 |
 | #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review; off-plan, see section 6 |
->>>>>>> origin/main
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 Merged since the last update: Calin #247 (fixes for #240, closes it); Liviu #244 (audit date filters, closes #241); Matei #251, #252, #253 (status refresh, image security updates, ECR scan note), #271 (login rejects passwords over 72 bytes).
