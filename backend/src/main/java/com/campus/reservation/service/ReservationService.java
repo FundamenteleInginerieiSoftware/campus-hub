@@ -434,6 +434,18 @@ public class ReservationService implements ReservationApi {
             savedList.add(reservationRepository.save(r));
         }
 
+        // Auto-confirm active holds owned by this student for any of the booked bundle assets (#267 point 4)
+        if (reservationHoldRepository != null) {
+            reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now).stream()
+                    .filter(h -> sortedAssetIds.contains(h.getAssetId())
+                            && h.getStartTime().equals(start)
+                            && h.getEndTime().equals(end))
+                    .forEach(h -> {
+                        h.confirm(now);
+                        reservationHoldRepository.save(h);
+                    });
+        }
+
         auditService.record(
                 userId,
                 "CREATE_BUNDLE_RESERVATION",
@@ -600,13 +612,16 @@ public class ReservationService implements ReservationApi {
         Reservation r = loadOwnedOrAdmin(id);
         LocalDateTime now = now();
 
+        // Bug fixed (#267 point 5): check status before timing check so a non-CONFIRMED reservation
+        // (e.g. CHECKED_OUT, CANCELLED) always answers that only CONFIRMED bookings can be cancelled,
+        // rather than showing "before the reservation start time".
+        if (r.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new ConflictException("CANCELLATION_NOT_ALLOWED", "Only CONFIRMED reservations can be cancelled");
+        }
+
         if (!currentUser.isAdmin() && !now.isBefore(r.getStartTime())) {
             throw new ConflictException(
                     "CANCELLATION_NOT_ALLOWED", "Students can only cancel before the reservation start time");
-        }
-
-        if (r.getStatus() != ReservationStatus.CONFIRMED) {
-            throw new ConflictException("CANCELLATION_NOT_ALLOWED", "Only CONFIRMED reservations can be cancelled");
         }
 
         // Bug fixed: previously, admin cancellations on another student's booking still recorded
@@ -1197,7 +1212,24 @@ public class ReservationService implements ReservationApi {
     @Override
     public boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
         long ignore = ignoreReservationId == null ? -1L : ignoreReservationId;
-        return !reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
+        if (reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore)) {
+            return false;
+        }
+        if (reservationHoldRepository != null) {
+            Long currentUserId = null;
+            if (currentUser != null) {
+                try {
+                    currentUserId = currentUser.id();
+                } catch (Exception ignored) {
+                }
+            }
+            // Bug fixed (#267 point 3): active holds from other students must be respected so moveToAsset
+            // does not reassign into a slot another student is currently holding.
+            if (reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, currentUserId)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {
@@ -1289,6 +1321,14 @@ public class ReservationService implements ReservationApi {
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
+        // Bug fixed (#267 point 5): check status before window check so NO_SHOW/CANCELLED outside window
+        // answers INVALID_RESERVATION_STATUS_TRANSITION rather than misleading CHECKOUT_WINDOW_CLOSED.
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Cannot check out reservation in status " + reservation.getStatus() + "; expected CONFIRMED");
+        }
+
         LocalDateTime now = now();
         LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
         LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
@@ -1297,13 +1337,6 @@ public class ReservationService implements ReservationApi {
             throw new BusinessRuleException(
                     "CHECKOUT_WINDOW_CLOSED",
                     "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
-        }
-
-        // Fast fail if not in CONFIRMED state before acquiring row locks
-        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
-            throw new InvalidStateTransitionException(
-                    "INVALID_RESERVATION_STATUS_TRANSITION",
-                    "Cannot check out reservation in status " + reservation.getStatus() + "; expected CONFIRMED");
         }
 
         // Lock the asset row first to serialize simultaneous desk check-outs on the same physical equipment
@@ -1353,6 +1386,10 @@ public class ReservationService implements ReservationApi {
         Reservation reservation = reservationRepository
                 .findById(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
+
+        // Bug fixed (#267 point 7): acquire pessimistic lock on the physical asset row (matching check-out)
+        // so a desk return racing the background overdue sweep serializes cleanly without optimistic lock failures.
+        catalogApi.lockForBooking(reservation.getAssetId());
 
         LocalDateTime now = now();
         reservation.returnItem(now);

@@ -830,7 +830,6 @@ class ReservationServiceTest {
     @DisplayName("cancelReservation rejects cancelling a non-CONFIRMED reservation")
     void cancelReservationNonConfirmedFails() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         Reservation r = new Reservation(
                 USER_ID,
                 ASSET_ID,
@@ -843,6 +842,40 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.cancelReservation(1L))
                 .isInstanceOf(ConflictException.class)
                 .hasFieldOrPropertyWithValue("code", "CANCELLATION_NOT_ALLOWED");
+    }
+
+    @Test
+    @DisplayName("checkOutReservation checks status before checking time window")
+    void checkOutReservationChecksStatusBeforeWindow() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "status", ReservationStatus.CANCELLED);
+        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(1L))
+                .isInstanceOf(com.campus.common.error.InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName("isAssetFree returns false when active hold exists from another student")
+    void isAssetFree_returnsFalseWhenActiveHoldExists() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), eq(null), any()))
+                .thenReturn(true);
+
+        boolean free = reservationService.isAssetFree(ASSET_ID, start, end, null);
+
+        assertThat(free).isFalse();
     }
 
     @Test

@@ -287,6 +287,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }, [asset.id, startIso, endIso])
 
   function selectSlot(day: string, time: string) {
+    if (holdLoading || bookingLoading) return
     if (activeHoldRef.current) {
       releaseHold(activeHoldRef.current.id).catch(() => {})
       activeHoldRef.current = null
@@ -300,6 +301,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }
 
   function handleDurationChange(val: number) {
+    if (holdLoading || bookingLoading) return
     if (activeHoldRef.current) {
       releaseHold(activeHoldRef.current.id).catch(() => {})
       activeHoldRef.current = null
@@ -379,14 +381,22 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setHoldLoading(true)
     setHoldError(null)
     setBookingError(null)
+    const reqStart = startIso
+    const reqEnd = endIso
     try {
       const hold = await createHold({
         assetId: asset.id,
-        startTime: startIso,
-        endTime: endIso,
+        startTime: reqStart,
+        endTime: reqEnd,
       })
       if (!isMountedRef.current) {
         // Component unmounted while createHold was in-flight: release immediately to prevent leaking
+        releaseHold(hold.id).catch(() => {})
+        return
+      }
+      // Bug fixed (#267 point 2): if the user changed slot/duration while the request was in-flight,
+      // release the hold immediately so the screen doesn't show one slot while holding another.
+      if (startIso !== reqStart || endIso !== reqEnd) {
         releaseHold(hold.id).catch(() => {})
         return
       }
@@ -543,7 +553,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 </Text>
                 <Group gap={4}>
                   {ALL_DURATIONS.map((dur) => {
-                    const isDisabled = dur.value > maxAvailableMins
+                    const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading
                     const isSelected = effectiveDuration === dur.value
                     return (
                       <Tooltip

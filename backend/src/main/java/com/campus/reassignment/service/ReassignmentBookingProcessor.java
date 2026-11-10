@@ -116,6 +116,15 @@ class ReassignmentBookingProcessor {
                             "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
                             candidate.id(),
                             booking.id());
+                } catch (RuntimeException e) {
+                    // Bug fixed (#267 point 1): catching RuntimeException ensures an unexpected error (e.g.
+                    // optimistic lock conflict on candidate) does not skip the remaining candidates or force-cancel
+                    // fallback.
+                    log.warn(
+                            "Unexpected error moving reservation #{} to candidate asset {}: {}, trying next candidate",
+                            booking.id(),
+                            candidate.id(),
+                            e.getMessage());
                 }
             }
         }
