@@ -202,4 +202,23 @@ class TransientFaultRetryExecutorTest {
                         new RuntimeException(new SQLException("query canceled", "57014"))))
                 .isFalse();
     }
+
+    @Test
+    @DisplayName("RetryMetrics registers and updates Micrometer counters in MeterRegistry")
+    void retryMetrics_updatesMicrometerCounters() {
+        io.micrometer.core.instrument.MeterRegistry registry =
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        RetryMetrics metrics = new RetryMetrics(registry);
+
+        metrics.recordRetryAttempt();
+        metrics.recordRetryAttempt();
+        metrics.recordSuccessfulRecovery();
+        metrics.recordExhausted();
+
+        assertThat(registry.get("reservation.retry.attempts").counter().count()).isEqualTo(2.0);
+        assertThat(registry.get("reservation.retry.recovered").counter().count())
+                .isEqualTo(1.0);
+        assertThat(registry.get("reservation.retry.exhausted").counter().count())
+                .isEqualTo(1.0);
+    }
 }
