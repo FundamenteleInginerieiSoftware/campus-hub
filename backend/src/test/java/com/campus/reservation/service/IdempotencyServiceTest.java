@@ -57,8 +57,8 @@ class IdempotencyServiceTest {
     void rejectsTooLongKey() {
         String key = "k".repeat(129);
 
-        assertThatThrownBy(() -> service.execute(
-                        key, 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("x")))
+        assertThatThrownBy(
+                        () -> service.execute(key, 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("x")))
                 .as("key > 128 chars must be 400 INVALID_IDEMPOTENCY_KEY; see IdempotencyService.execute")
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("1-128");
