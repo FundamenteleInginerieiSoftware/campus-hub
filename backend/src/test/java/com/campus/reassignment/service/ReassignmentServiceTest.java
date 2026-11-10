@@ -78,6 +78,9 @@ class ReassignmentServiceTest {
     private com.campus.reassignment.service.chain.ChainShiftingConflictResolver chainShiftingConflictResolver;
 
     @Mock
+    private com.campus.reassignment.service.chain.ChainShiftExecutor chainShiftExecutor;
+
+    @Mock
     private SubstituteStrategy primaryStrategy;
 
     @Mock
@@ -107,6 +110,7 @@ class ReassignmentServiceTest {
                 bookingProcessor,
                 reassignmentLogRepository,
                 chainShiftingConflictResolver,
+                chainShiftExecutor,
                 clock);
     }
 
@@ -366,6 +370,7 @@ class ReassignmentServiceTest {
                 mockProcessor,
                 reassignmentLogRepository,
                 chainShiftingConflictResolver,
+                chainShiftExecutor,
                 clock);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);

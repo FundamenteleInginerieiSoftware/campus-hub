@@ -2,7 +2,6 @@ package com.campus.reassignment.service;
 
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
-import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
@@ -42,6 +41,7 @@ public class ReassignmentService {
     private final ReassignmentBookingProcessor bookingProcessor;
     private final ReassignmentLogRepository reassignmentLogRepository;
     private final com.campus.reassignment.service.chain.ChainShiftingConflictResolver chainShiftingConflictResolver;
+    private final com.campus.reassignment.service.chain.ChainShiftExecutor chainShiftExecutor;
     private final Clock clock;
 
     /**
@@ -128,8 +128,10 @@ public class ReassignmentService {
     /**
      * Resolves reservation conflicts on a desired asset by discovering and optionally executing
      * an augmenting path chain of shifts to idle substitute equipment.
+     *
+     * <p>Planning runs without database locks; if {@code dryRun} is false and a valid plan was found,
+     * atomic execution is performed by {@link com.campus.reassignment.service.chain.ChainShiftExecutor}.
      */
-    @Transactional
     public com.campus.reassignment.web.ChainShiftPlanResponse resolveChainShift(
             Long targetAssetId, LocalDateTime startTime, LocalDateTime endTime, boolean dryRun) {
         com.campus.reassignment.service.chain.ChainShiftPlan plan =
@@ -137,30 +139,7 @@ public class ReassignmentService {
 
         boolean applied = false;
         if (plan.resolved() && !dryRun && !plan.steps().isEmpty()) {
-            boolean allMoved = true;
-            for (com.campus.reassignment.service.chain.ChainShiftStep step : plan.steps()) {
-                boolean moved = reservationApi.moveToAsset(
-                        step.reservationId(), step.toAssetId(), "CHAIN_SHIFT: " + step.strategyName());
-                if (moved) {
-                    ReassignmentLog logEntry = new ReassignmentLog(
-                            null, // null indicates non-incident administrative chain shift
-                            step.reservationId(),
-                            step.fromAssetId(),
-                            step.toAssetId(),
-                            ReassignmentOutcome.REASSIGNED,
-                            "ChainShift:" + step.strategyName(),
-                            now());
-                    reassignmentLogRepository.save(logEntry);
-                } else {
-                    allMoved = false;
-                    break;
-                }
-            }
-            if (!allMoved) {
-                throw new ConflictException(
-                        "CHAIN_SHIFT_EXECUTION_FAILED",
-                        "One or more reservations in the chain could not be moved (slot conflict or state changed).");
-            }
+            chainShiftExecutor.executeChainShift(plan);
             applied = true;
         }
 
