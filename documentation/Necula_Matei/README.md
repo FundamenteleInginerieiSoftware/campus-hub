@@ -72,7 +72,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | #249 |
 | 45 | [45-terraform-data.md](45-terraform-data.md) | Terraform part 2: RDS (off until W7), photo bucket, ECR, server role, secrets in SSM | #250 |
 | 46 | [46-docker-os-patches.md](46-docker-os-patches.md) | First image in ECR; OS security updates in the Docker image (ECR scan found a critical zlib CVE) | #252 |
-| 49 | [49-project-details-error-fix.md](49-project-details-error-fix.md) | Project details: error cleared after a good reload, campus clock read when needed | #? |
+| 49 | [49-project-details-error-fix.md](49-project-details-error-fix.md) | Project details: error cleared after a good reload, campus clock read when needed | #273 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
