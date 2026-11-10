@@ -12,7 +12,9 @@ import com.campus.reservation.web.HeatmapCell;
 import com.campus.reservation.web.HeatmapResponse;
 import com.campus.reservation.web.UtilizationAnalyticsResponse;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -22,8 +24,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,11 +36,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReservationAnalyticsService {
 
-    private static final double LAB_DAILY_OPEN_HOURS = 12.0; // 08:00 to 20:00
+    private static final double LAB_DAILY_OPEN_HOURS = 12.0; // 08:00 to 20:00 (Monday-Friday)
     private static final int HEATMAP_START_HOUR = 8;
     private static final int HEATMAP_END_HOUR = 20;
 
@@ -50,6 +52,24 @@ public class ReservationAnalyticsService {
     private final ReservationRepository reservationRepository;
     private final CatalogApi catalogApi;
     private final Clock clock;
+    private final JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    public ReservationAnalyticsService(
+            ReservationRepository reservationRepository,
+            CatalogApi catalogApi,
+            Clock clock,
+            @Autowired(required = false) JdbcTemplate jdbcTemplate) {
+        this.reservationRepository = reservationRepository;
+        this.catalogApi = catalogApi;
+        this.clock = clock;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public ReservationAnalyticsService(
+            ReservationRepository reservationRepository, CatalogApi catalogApi, Clock clock) {
+        this(reservationRepository, catalogApi, clock, null);
+    }
 
     /**
      * Calculates laboratory and per-asset utilization rates, cancellation/no-show rates,
@@ -66,7 +86,17 @@ public class ReservationAnalyticsService {
 
         int reportingDays =
                 Math.max(1, (int) ChronoUnit.DAYS.between(resolvedFrom.toLocalDate(), resolvedTo.toLocalDate()) + 1);
-        double openHoursPerAsset = reportingDays * LAB_DAILY_OPEN_HOURS;
+
+        long workingDays = 0;
+        LocalDate curr = resolvedFrom.toLocalDate();
+        LocalDate last = resolvedTo.toLocalDate();
+        while (!curr.isAfter(last)) {
+            if (curr.getDayOfWeek() != DayOfWeek.SATURDAY && curr.getDayOfWeek() != DayOfWeek.SUNDAY) {
+                workingDays++;
+            }
+            curr = curr.plusDays(1);
+        }
+        double openHoursPerAsset = Math.max(1, workingDays) * LAB_DAILY_OPEN_HOURS;
 
         List<Reservation> allIntersecting = reservationRepository.findIntersecting(resolvedFrom, resolvedTo);
 
@@ -100,9 +130,18 @@ public class ReservationAnalyticsService {
         }
 
         // 3. Asset summaries & utilization breakdown
-        // CatalogApi does not expose an asset enumeration facade, so we track utilization across
-        // all equipment assets known to the reservation repository.
-        Set<Long> allAssetIds = new TreeSet<>(reservationRepository.findDistinctAssetIds());
+        // Tracks all operational equipment assets (including never-booked ones)
+        Set<Long> allAssetIds = new TreeSet<>();
+        if (jdbcTemplate != null) {
+            try {
+                List<Long> dbAssetIds =
+                        jdbcTemplate.queryForList("SELECT id FROM assets WHERE status != 'RETIRED'", Long.class);
+                allAssetIds.addAll(dbAssetIds);
+            } catch (Exception e) {
+                log.warn("Could not query assets table: {}", e.getMessage());
+            }
+        }
+        allAssetIds.addAll(reservationRepository.findDistinctAssetIds());
         List<AssetUtilizationItem> assetItems = new ArrayList<>();
         Map<String, List<Long>> modelToAssetIds = new HashMap<>();
 
@@ -265,7 +304,8 @@ public class ReservationAnalyticsService {
 
             int currentDemand = 0;
             int peakDemand = 0;
-            int saturatedEventsCount = 0;
+            int saturatedPeriodsCount = 0;
+            boolean inSaturation = false;
 
             for (TimePoint pt : points) {
                 currentDemand += pt.delta();
@@ -273,19 +313,31 @@ public class ReservationAnalyticsService {
                     peakDemand = currentDemand;
                 }
                 if (currentDemand >= unitCount) {
-                    saturatedEventsCount++;
+                    if (!inSaturation) {
+                        saturatedPeriodsCount++;
+                        inSaturation = true;
+                    }
+                } else {
+                    inSaturation = false;
                 }
             }
 
             if (peakDemand >= unitCount) {
-                int deficit = peakDemand - unitCount + 1;
                 double peakRate = round1((double) peakDemand / unitCount * 100.0);
-                String recommendation = String.format(
-                        "Peak concurrent demand reached %d of %d available units (%.0f%% capacity). Recommend acquiring %d additional unit(s) to alleviate peak bottlenecks.",
-                        peakDemand, unitCount, peakRate, deficit);
+                String recommendation;
+                if (peakDemand > unitCount) {
+                    int deficit = peakDemand - unitCount;
+                    recommendation = String.format(
+                            "Peak concurrent demand exceeded available units (%d requested vs %d units, %.0f%% capacity). Recommend acquiring %d additional unit(s) to eliminate capacity shortages.",
+                            peakDemand, unitCount, peakRate, deficit);
+                } else {
+                    recommendation = String.format(
+                            "Peak concurrent demand reached 100%% capacity (%d of %d available units). Operating at full capacity during peak periods; monitor demand before expanding inventory.",
+                            peakDemand, unitCount);
+                }
 
                 bottlenecks.add(new CapacityBottleneckItem(
-                        model, unitCount, peakDemand, saturatedEventsCount, peakRate, recommendation));
+                        model, unitCount, peakDemand, saturatedPeriodsCount, peakRate, recommendation));
             }
         }
 

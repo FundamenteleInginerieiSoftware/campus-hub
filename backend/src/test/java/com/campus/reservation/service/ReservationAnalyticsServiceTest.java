@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -93,11 +94,11 @@ class ReservationAnalyticsServiceTest {
                 .isEqualTo(6);
         assertThat(response.totalCapacityHours())
                 .as(
-                        "total capacity hours must be 6 days * 12h * 2 assets = 144.0; see ReservationAnalyticsService.getUtilization")
-                .isEqualTo(144.0);
+                        "total capacity hours must be 4 working days * 12h * 2 assets = 96.0; see ReservationAnalyticsService.getUtilization")
+                .isEqualTo(96.0);
         assertThat(response.averageUtilizationPercent())
-                .as("average utilization must be 2.0 / 144.0 = 1.4%; see ReservationAnalyticsService.getUtilization")
-                .isEqualTo(1.4);
+                .as("average utilization must be 2.0 / 96.0 = 2.1%; see ReservationAnalyticsService.getUtilization")
+                .isEqualTo(2.1);
         assertThat(response.totalBookedHours())
                 .as("total realized booked hours must equal 2.0; see ReservationAnalyticsService.getUtilization")
                 .isEqualTo(2.0);
@@ -164,7 +165,7 @@ class ReservationAnalyticsServiceTest {
         assertThat(response.bottlenecks().get(0).model()).isEqualTo("DS1054Z");
         assertThat(response.bottlenecks().get(0).peakConcurrentDemand()).isEqualTo(2);
         assertThat(response.bottlenecks().get(0).totalUnits()).isEqualTo(2);
-        assertThat(response.bottlenecks().get(0).recommendation()).contains("Recommend acquiring 1 additional unit(s)");
+        assertThat(response.bottlenecks().get(0).recommendation()).contains("full capacity");
     }
 
     @Test
@@ -397,12 +398,12 @@ class ReservationAnalyticsServiceTest {
         assertThat(response.bottlenecks().get(0).model()).isEqualTo("DS1054Z");
         assertThat(response.bottlenecks().get(0).peakConcurrentDemand()).isEqualTo(3);
         assertThat(response.bottlenecks().get(0).peakUtilizationRate()).isEqualTo(150.0);
-        assertThat(response.bottlenecks().get(0).recommendation()).contains("Recommend acquiring 2 additional unit(s)");
+        assertThat(response.bottlenecks().get(0).recommendation()).contains("Recommend acquiring 1 additional unit(s)");
 
         assertThat(response.bottlenecks().get(1).model()).isEqualTo("DG1022Z");
         assertThat(response.bottlenecks().get(1).peakConcurrentDemand()).isEqualTo(2);
         assertThat(response.bottlenecks().get(1).peakUtilizationRate()).isEqualTo(100.0);
-        assertThat(response.bottlenecks().get(1).recommendation()).contains("Recommend acquiring 1 additional unit(s)");
+        assertThat(response.bottlenecks().get(1).recommendation()).contains("full capacity");
     }
 
     @Test
@@ -460,5 +461,38 @@ class ReservationAnalyticsServiceTest {
 
         // All 84 cells must be within hours 8..19
         assertThat(heatmap.cells()).allMatch(c -> c.hour() >= 8 && c.hour() < 20);
+    }
+
+    @Test
+    @DisplayName("getUtilization: includes assets without booking history from database as idle")
+    void getUtilization_includesUnreservedAssetsFromDatabaseAsIdle() {
+        JdbcTemplate mockJdbc = org.mockito.Mockito.mock(JdbcTemplate.class);
+        ReservationAnalyticsService serviceWithJdbc =
+                new ReservationAnalyticsService(reservationRepository, catalogApi, clock, mockJdbc);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime from = now.minusDays(5);
+        LocalDateTime to = now;
+
+        // DB has asset 10 and asset 99; reservations table only has asset 10
+        when(mockJdbc.queryForList("SELECT id FROM assets WHERE status != 'RETIRED'", Long.class))
+                .thenReturn(List.of(10L, 99L));
+        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L));
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of());
+
+        when(catalogApi.getAsset(10L))
+                .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
+        when(catalogApi.getAsset(99L))
+                .thenReturn(new AssetSummary(99L, "Unused Asset 99", "NEW_MODEL", 1L, 1L, AssetStatus.AVAILABLE));
+
+        UtilizationAnalyticsResponse response = serviceWithJdbc.getUtilization(from, to);
+
+        assertThat(response.totalAssetsTracked())
+                .as("must track both asset 10 and unreserved asset 99")
+                .isEqualTo(2);
+        assertThat(response.idleAssetsCount())
+                .as("both assets must be idle when 0 bookings exist")
+                .isEqualTo(2);
+        assertThat(response.assets()).extracting(AssetUtilizationItem::assetId).containsExactlyInAnyOrder(10L, 99L);
     }
 }
