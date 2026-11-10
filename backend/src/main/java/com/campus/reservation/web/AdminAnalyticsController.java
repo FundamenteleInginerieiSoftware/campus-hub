@@ -45,7 +45,8 @@ public class AdminAnalyticsController {
                 content = @Content(schema = @Schema(implementation = UtilizationAnalyticsResponse.class))),
         @ApiResponse(
                 responseCode = "400",
-                description = "Invalid date range parameters (from is after to, window longer than 366 days, or a timezone offset)",
+                description =
+                        "Invalid date range parameters (from is after to, window longer than 366 days, or a timezone offset)",
                 content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -84,7 +85,8 @@ public class AdminAnalyticsController {
                 content = @Content(schema = @Schema(implementation = HeatmapResponse.class))),
         @ApiResponse(
                 responseCode = "400",
-                description = "Invalid date range parameters (from is after to, window longer than 366 days, or a timezone offset)",
+                description =
+                        "Invalid date range parameters (from is after to, window longer than 366 days, or a timezone offset)",
                 content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
         @ApiResponse(
                 responseCode = "401",
