@@ -1,4 +1,4 @@
-package com.campus.reservation.idempotency;
+package com.campus.reservation.domain;
 
 public enum IdempotencyStatus {
     IN_PROGRESS,

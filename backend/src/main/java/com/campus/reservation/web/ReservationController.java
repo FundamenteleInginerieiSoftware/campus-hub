@@ -3,7 +3,7 @@ package com.campus.reservation.web;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
-import com.campus.reservation.idempotency.IdempotencyService;
+import com.campus.reservation.service.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

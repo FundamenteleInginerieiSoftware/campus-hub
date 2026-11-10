@@ -1,4 +1,4 @@
-package com.campus.reservation.idempotency;
+package com.campus.reservation.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,12 +12,10 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "idempotency_records")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IdempotencyRecord {
 
@@ -44,24 +42,33 @@ public class IdempotencyRecord {
     @Column(name = "response_body", columnDefinition = "TEXT")
     private String responseBody;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // When the current attempt started. restart() moves it forward, so a stuck IN_PROGRESS
+    // row can be recognised by its age (see IdempotencyService.ABANDONED_AFTER).
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
     public IdempotencyRecord(
-            String idempotencyKey,
-            Long userId,
-            String requestFingerprint,
-            IdempotencyStatus status,
-            LocalDateTime createdAt,
-            LocalDateTime expiresAt) {
+            String idempotencyKey, Long userId, String requestFingerprint, LocalDateTime now, LocalDateTime expiresAt) {
         this.idempotencyKey = idempotencyKey;
         this.userId = userId;
         this.requestFingerprint = requestFingerprint;
-        this.status = status;
-        this.createdAt = createdAt;
+        this.status = IdempotencyStatus.IN_PROGRESS;
+        this.createdAt = now;
+        this.expiresAt = expiresAt;
+    }
+
+    // Reuses the same row for a new attempt (after FAILED, an abandoned IN_PROGRESS or expiry).
+    // Updating instead of delete + insert avoids the unique-key clash: Hibernate sends the INSERT
+    // at once (IDENTITY id) but the DELETE only at flush, so the INSERT hit uq_idempotency_key_user.
+    public void restart(String requestFingerprint, LocalDateTime now, LocalDateTime expiresAt) {
+        this.requestFingerprint = requestFingerprint;
+        this.status = IdempotencyStatus.IN_PROGRESS;
+        this.responseStatus = null;
+        this.responseBody = null;
+        this.createdAt = now;
         this.expiresAt = expiresAt;
     }
 
@@ -76,6 +83,6 @@ public class IdempotencyRecord {
     }
 
     public boolean isExpired(LocalDateTime now) {
-        return expiresAt != null && now.isAfter(expiresAt);
+        return now.isAfter(expiresAt);
     }
 }
