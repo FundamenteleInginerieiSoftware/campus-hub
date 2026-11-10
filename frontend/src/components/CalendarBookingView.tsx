@@ -39,6 +39,7 @@ import {
   type Reservation,
   type ReservationHoldResponse,
 } from '../api/reservations.ts'
+import { ApiError } from '../api/client.ts'
 import ErrorAlert from './ErrorAlert.tsx'
 
 type Props = {
@@ -399,8 +400,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
         releaseHold(hold.id).catch(() => {})
         return
       }
-      // Bug fixed (#267 point 2, #270 review 2): verify the response matches the requested parameters
-      // (hold.assetId, hold.startTime, hold.endTime) AND ensure user hasn't changed selection while request was in-flight.
+      // Bug fixed (#267): drop a hold that isn't for the slot on screen (wrong answer, or the user picked
+      // another slot while the request was running).
       const matchesServer =
         hold.assetId === asset.id &&
         hold.startTime === reqStart &&
@@ -411,6 +412,9 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
 
       if (!matchesServer || !matchesCurrentSelection) {
         releaseHold(hold.id).catch(() => {})
+        if (!matchesServer) {
+          setHoldError(new ApiError(0, 'HOLD_MISMATCH', 'The server held a different slot. Please try again.'))
+        }
         return
       }
       activeHoldRef.current = hold

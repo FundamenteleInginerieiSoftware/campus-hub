@@ -183,10 +183,8 @@ public class ReservationLifecycleService {
                     }
                 }
             } catch (RuntimeException e) {
-                // Bug fixed (#267 point 6): isolate each overdue asset cascade with try/catch so an unexpected
-                // catalog error on one asset does not abort the cascade for remaining overdue assets or skip hold
-                // sweeping.
-                log.warn("Preventive cascade failed for overdue asset #{}: {}", overdueAssetId, e.getMessage());
+                // Bug fixed (#267): one failing asset no longer stops the cascade for the others.
+                log.warn("Preventive cascade failed for overdue asset #{}", overdueAssetId, e);
             }
         }
 

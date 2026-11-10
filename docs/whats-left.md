@@ -85,7 +85,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
 | ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
 | **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PRs: analytics #255, #256; optimal reassignment #258; chain shifting #260; idempotency #262; retry #265 | Team decision |
-| W6 | Review and merge **#270** (fixes for #267) and **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
+| W6 | Review and merge **#270** (fixes for #267: all 10 points done, Matei's review fixes pushed) and **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
 | Proposed, not agreed | Build the **calendar feed** in your `reservation` module (spec + plan `docs/superpowers/*/2026-11-10-calendar-feed*`) · for Stefania's reliability page: a read method on `ReservationApi` for the minutes each asset was really in use (proposed `usedMinutesByAsset`) | Section 7a |

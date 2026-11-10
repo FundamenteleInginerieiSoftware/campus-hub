@@ -120,25 +120,16 @@ class ReassignmentBookingProcessor {
                             booking.id(),
                             e);
                 } catch (RuntimeException e) {
-                    if (isConcurrencyConflict(e)) {
-                        // Bug fixed (#267 point 1, #270 review 3): catching known concurrency conflicts ensures
-                        // that transient lock/version contention tries the remaining candidates before fallback.
-                        log.warn(
-                                "Concurrency conflict moving reservation #{} to candidate asset {}: {}, trying next candidate",
-                                booking.id(),
-                                candidate.id(),
-                                e.getMessage(),
-                                e);
-                    } else {
-                        // Bug fixed (#270 review 3): do NOT swallow unexpected system/logic errors, because doing so
-                        // would cause the engine to mistakenly force-cancel student bookings due to software bugs.
-                        log.error(
-                                "Unexpected system error attempting reassignment of reservation #{} to candidate asset {}",
-                                booking.id(),
-                                candidate.id(),
-                                e);
+                    // Bug fixed (#267): a lock/version conflict now tries the next candidate. Any other error is
+                    // rethrown (ReassignmentService.handle logs it), so a bug never force-cancels a student's booking.
+                    if (!isConcurrencyConflict(e)) {
                         throw e;
                     }
+                    log.warn(
+                            "Concurrency conflict moving reservation #{} to candidate asset {}, trying next candidate",
+                            booking.id(),
+                            candidate.id(),
+                            e);
                 }
             }
         }

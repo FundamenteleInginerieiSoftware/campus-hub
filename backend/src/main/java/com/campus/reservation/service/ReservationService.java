@@ -434,7 +434,7 @@ public class ReservationService implements ReservationApi {
             savedList.add(reservationRepository.save(r));
         }
 
-        // Auto-confirm active holds owned by this student for any of the booked bundle assets (#267 point 4)
+        // Bug fixed (#267): the student's own holds on the bundle slots are confirmed, like in createReservation.
         if (reservationHoldRepository != null) {
             reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now).stream()
                     .filter(h -> sortedAssetIds.contains(h.getAssetId())
@@ -612,9 +612,7 @@ public class ReservationService implements ReservationApi {
         Reservation r = loadOwnedOrAdmin(id);
         LocalDateTime now = now();
 
-        // Bug fixed (#267 point 5): check status before timing check so a non-CONFIRMED reservation
-        // (e.g. CHECKED_OUT, CANCELLED) always answers that only CONFIRMED bookings can be cancelled,
-        // rather than showing "before the reservation start time".
+        // Bug fixed (#267): status first, so a non-CONFIRMED booking gets the right error, not the timing one.
         if (r.getStatus() != ReservationStatus.CONFIRMED) {
             throw new ConflictException("CANCELLATION_NOT_ALLOWED", "Only CONFIRMED reservations can be cancelled");
         }
@@ -676,11 +674,8 @@ public class ReservationService implements ReservationApi {
     /**
      * Extends the duration of an active reservation (CONFIRMED or CHECKED_OUT).
      *
-     * <p>Concurrency & Deadlock Prevention (#270 review 1): Locks the reservation row FIRST via
-     * {@code findByIdForUpdate}, then acquires the asset row lock SECOND via {@code CatalogApi.lockForBooking}.
-     * This consistent locking order across returnReservation, checkOutReservation, markOverdue, and
-     * extendReservation eliminates circular wait deadlocks when desk operations and extensions race on
-     * the same equipment.
+     * <p>Locks the reservation row first, then the asset row, the same order as check-out, return and
+     * markOverdue, so these can't deadlock each other.
      */
     @Transactional
     public ReservationResponse extendReservation(Long id, ExtendReservationRequest req) {
@@ -1224,25 +1219,19 @@ public class ReservationService implements ReservationApi {
 
     @Override
     public boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
+        return isAssetFreeExceptHoldsOf(assetId, start, end, ignoreReservationId, null);
+    }
+
+    // Active holds count as busy, so the engine doesn't move a booking into a slot another student holds (#267).
+    // Only moveToAsset passes the booking owner's id: their own hold on the substitute shouldn't block them.
+    private boolean isAssetFreeExceptHoldsOf(
+            Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId, Long holdOwnerId) {
         long ignore = ignoreReservationId == null ? -1L : ignoreReservationId;
         if (reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore)) {
             return false;
         }
-        if (reservationHoldRepository != null) {
-            Long currentUserId = null;
-            if (currentUser != null) {
-                try {
-                    currentUserId = currentUser.id();
-                } catch (Exception ignored) {
-                }
-            }
-            // Bug fixed (#267 point 3): active holds from other students must be respected so moveToAsset
-            // does not reassign into a slot another student is currently holding.
-            if (reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, currentUserId)) {
-                return false;
-            }
-        }
-        return true;
+        return reservationHoldRepository == null
+                || !reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, holdOwnerId);
     }
 
     public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {
@@ -1275,7 +1264,7 @@ public class ReservationService implements ReservationApi {
         catalogApi.lockForBooking(newAssetId);
 
         if (!catalogApi.isBookable(newAssetId)
-                || !isAssetFree(newAssetId, r.getStartTime(), r.getEndTime(), r.getId())) {
+                || !isAssetFreeExceptHoldsOf(newAssetId, r.getStartTime(), r.getEndTime(), r.getId(), r.getUserId())) {
             throw new SubstituteNoLongerFreeException("Substitute asset " + newAssetId + " is not free");
         }
 
@@ -1330,14 +1319,12 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public ReservationResponse checkOutReservation(Long id) {
-        // Bug fixed (#270 review 1): acquire pessimistic lock on reservation FIRST (findByIdForUpdate),
-        // matching the uniform lock order of returnReservation, markOverdue, and extendReservation.
+        // Lock order: reservation row, then asset row (same as return, markOverdue, extend).
         Reservation reservation = reservationRepository
                 .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        // Bug fixed (#267 point 5): check status before window check so NO_SHOW/CANCELLED outside window
-        // answers INVALID_RESERVATION_STATUS_TRANSITION rather than misleading CHECKOUT_WINDOW_CLOSED.
+        // Bug fixed (#267): status first, so a NO_SHOW/CANCELLED booking doesn't get CHECKOUT_WINDOW_CLOSED.
         if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
             throw new InvalidStateTransitionException(
                     "INVALID_RESERVATION_STATUS_TRANSITION",
@@ -1405,9 +1392,8 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public ReservationResponse returnReservation(Long id) {
-        // Bug fixed (#267 point 7, #270 review 1): serialize desk returns against the background overdue sweep.
-        // We acquire a pessimistic write lock on the reservation row (SELECT ... FOR UPDATE) so concurrent
-        // status transitions wait at the database level and reload the latest committed version.
+        // Bug fixed (#267): a return racing the overdue sweep gave a stale-version error. SELECT ... FOR UPDATE
+        // makes the second one wait and then read the committed status.
         Reservation reservation = reservationRepository
                 .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
@@ -1506,8 +1492,7 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public boolean markOverdue(Long reservationId) {
-        // Bug fixed (#267 point 7, #270 review 1): acquire the same pessimistic lock strategy as returnReservation
-        // so a scheduled sweep racing a physical desk return serializes cleanly and reads the freshly committed state.
+        // Same row lock as returnReservation, so a sweep after a return sees RETURNED and skips it.
         Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
         if (r == null || r.getStatus() != ReservationStatus.CHECKED_OUT) {
             return false;

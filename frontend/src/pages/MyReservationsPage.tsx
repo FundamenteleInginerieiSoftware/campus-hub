@@ -164,7 +164,7 @@ export default function MyReservationsPage() {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const [actionNotice, setActionNotice] = useState<string | null>(() => {
+  const [actionNotice, setActionNoticeState] = useState<string | null>(() => {
     const state = location.state as { bookedId?: number; bookedBundleId?: string; bundleItemCount?: number } | null
     if (state?.bookedId) {
       return `Booking confirmed! Reservation #${state.bookedId} has been added to your upcoming bookings.`
@@ -177,13 +177,14 @@ export default function MyReservationsPage() {
     return null
   })
 
-  // Bug fixed (#267 point 10): clear location.state in an effect via navigate replace instead of
-  // window.history.replaceState in useState initializer, which wipes React Router's internal history state.
+  // Bug fixed (#267): window.history.replaceState wiped React Router's own history state.
+  // Clear the booking notice state through the router instead, keeping the query string.
   useEffect(() => {
     if (location.state) {
-      navigate(location.pathname, { replace: true, state: null })
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
     }
-  }, [location.pathname, location.state, navigate])
+  }, [location.pathname, location.search, location.state, navigate])
+
 
   // Aggregate stats across all reservations, fetched from GET /api/v1/reservations/me/summary
   const [summary, setSummary] = useState<ReservationSummary>({
@@ -211,6 +212,13 @@ export default function MyReservationsPage() {
   const [pendingTransfers, setPendingTransfers] = useState<ReservationTransferResponse[]>([])
   const [transferRespondingId, setTransferRespondingId] = useState<number | null>(null)
   const [transferActionError, setTransferActionError] = useState<unknown>(null)
+  // A later success elsewhere on the page hides an old transfer error.
+  function setActionNotice(notice: string | null) {
+    setActionNoticeState(notice)
+    if (notice) {
+      setTransferActionError(null)
+    }
+  }
 
   // Extend reservation modal state
   const [extendingReservation, setExtendingReservation] = useState<Reservation | null>(null)
@@ -271,8 +279,7 @@ export default function MyReservationsPage() {
         }
         setError(null)
         setPageData(response)
-        // Bug fixed (#267 point 9): clear loading right after page data arrives so rows render immediately,
-        // rather than waiting for background asset-name enrichment to complete.
+        // Bug fixed (#267): rows show as soon as they arrive, not after the asset names load.
         setLoading(false)
 
         const neededAssetIds = [
@@ -357,8 +364,7 @@ export default function MyReservationsPage() {
       setActionNotice('Transfer accepted! The reservation has been transferred to your upcoming bookings.')
       setReloadToken((t) => t + 1)
     } catch (err) {
-      // Bug fixed (#267 point 8): set transferActionError specifically so a failed transfer does not show
-      // the page-level "Could not load reservations" banner when reservation loading succeeded.
+      // Bug fixed (#267): a failed transfer showed the page-level "Could not load reservations" banner.
       setTransferActionError(err)
     } finally {
       setTransferRespondingId(null)
