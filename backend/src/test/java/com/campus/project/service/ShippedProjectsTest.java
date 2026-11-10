@@ -74,6 +74,32 @@ class ShippedProjectsTest {
                 .startsWith(expectedSlug + "=");
     }
 
+    // Bug fixed (audit, 10 Nov): "multiplexer" found multimeter-basics only because both start with "multi".
+    @Test
+    void unrelatedWordWithSameStartFindsNothing() {
+        List<String> ranking = search.search("multiplexer", LIBRARY.all()).hits().stream()
+                .map(hit -> hit.project().slug() + "=" + hit.score())
+                .toList();
+
+        assertThat(ranking)
+                .as(
+                        "'multiplexer' is no keyword of any project and shares only 'multi' with 'multimeter': no hits; see ProjectSearch.sameStem")
+                .isEmpty();
+    }
+
+    // Bug fixed (10 Nov): "proiect" found printed-enclosure through its keyword "proiectare".
+    @Test
+    void theWordProjectIsFiller() {
+        List<String> slugs = search.search("vreau un proiect cu termometru", LIBRARY.all()).hits().stream()
+                .map(hit -> hit.project().slug())
+                .toList();
+
+        assertThat(slugs)
+                .as(
+                        "'proiect' is a stop word, so only 'termometru' counts: thermometer only; see ProjectSearch.STOP_WORDS")
+                .containsExactly("thermometer");
+    }
+
     @Test
     void componentsUseOnlyAgreedModels() {
         List<String> models = LIBRARY.all().stream()
