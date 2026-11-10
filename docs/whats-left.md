@@ -35,7 +35,7 @@
 | #270 | Calin | Fixes for the code read-through #267 (holds, locking, lifecycle) | Needs a review |
 | #272, #273 | Matei | Project search false hits; project details page errors | Need a review |
 | #255, #256 | Calin | Admin equipment analytics: backend + page (#254) | Needs a review; off-plan, see section 6 |
-| #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review; off-plan, see section 6 |
+| #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review (#265: round 2 fixed, see doc 32); off-plan, see section 6 |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 Merged since the last update: Calin #247 (fixes for #240, closes it); Liviu #244 (audit date filters, closes #241); Matei #251, #252, #253 (status refresh, image security updates, ECR scan note), #271 (login rejects passwords over 72 bytes).

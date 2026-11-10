@@ -160,8 +160,12 @@ class PostgresDeadlockIT {
         String r2 = f2.get(10, TimeUnit.SECONDS);
         executor.shutdownNow();
 
-        assertThat(r1).as("thread 1 must finish after the retry; see TransientFaultRetryExecutor.executeWithRetry").isEqualTo("T1_SUCCESS");
-        assertThat(r2).as("thread 2 must finish after the retry; see TransientFaultRetryExecutor.executeWithRetry").isEqualTo("T2_SUCCESS");
+        assertThat(r1)
+                .as("thread 1 must finish after the retry; see TransientFaultRetryExecutor.executeWithRetry")
+                .isEqualTo("T1_SUCCESS");
+        assertThat(r2)
+                .as("thread 2 must finish after the retry; see TransientFaultRetryExecutor.executeWithRetry")
+                .isEqualTo("T2_SUCCESS");
 
         int totalAttempts = t1Attempts.get() + t2Attempts.get();
         assertThat(totalAttempts)
