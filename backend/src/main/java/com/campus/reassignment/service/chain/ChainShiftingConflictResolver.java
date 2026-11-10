@@ -189,7 +189,9 @@ public class ChainShiftingConflictResolver {
                 // A checkout on the candidate cannot be shifted, so the candidate is a dead end.
                 if (subBlockers.size() == 1
                         && !isHeldByCheckout(
-                                candidate.id(), curr.reservation().start(), curr.reservation().end())) {
+                                candidate.id(),
+                                curr.reservation().start(),
+                                curr.reservation().end())) {
                     ReservationSummary nextRes = subBlockers.get(0);
                     Set<Long> nextVisited = new HashSet<>(curr.visitedAssets());
                     nextVisited.add(candidate.id());

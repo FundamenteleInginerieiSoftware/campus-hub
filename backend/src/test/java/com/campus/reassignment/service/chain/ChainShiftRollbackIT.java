@@ -85,13 +85,11 @@ class ChainShiftRollbackIT {
 
     @BeforeEach
     void setUp() {
-        userId = jdbcTemplate.queryForObject(
-                """
+        userId = jdbcTemplate.queryForObject("""
                 INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
                 VALUES ('chainrollback@campus.test', '{bcrypt}hash', 'Chain Student', 'STUDENT', true, NOW())
                 RETURNING id
-                """,
-                Long.class);
+                """, Long.class);
         jdbcTemplate.update("INSERT INTO categories (id, name) VALUES (710, 'Chain IT') ON CONFLICT (id) DO NOTHING");
         jdbcTemplate.update(
                 "INSERT INTO lab_rooms (id, code, name) VALUES (710, 'LAB-710', 'Chain Lab') ON CONFLICT (id) DO NOTHING");
@@ -101,10 +99,7 @@ class ChainShiftRollbackIT {
                     INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
                     VALUES (?, ?, 'CHAIN_MODEL', ?, 'AVAILABLE', 710, 710, NOW(), NOW())
                     ON CONFLICT (id) DO NOTHING
-                    """,
-                    id,
-                    "Asset " + id,
-                    "SN-CHAIN-" + id);
+                    """, id, "Asset " + id, "SN-CHAIN-" + id);
         }
     }
 

@@ -213,11 +213,10 @@ class ChainShiftingConflictResolverTest {
         when(catalogApi.getAsset(1L)).thenReturn(assetX);
 
         // 12:00-14:00 CONFIRMED (shiftable) and 08:00-10:00 CHECKED_OUT (not shiftable, overlaps 09:30)
-        ReservationSummary confirmed =
-                new ReservationSummary(601L, 42L, 1L, t12, t1400, ReservationStatus.CONFIRMED);
+        ReservationSummary confirmed = new ReservationSummary(601L, 42L, 1L, t12, t1400, ReservationStatus.CONFIRMED);
         when(reservationApi.findUpcomingActiveByAsset(eq(1L), any())).thenReturn(List.of(confirmed));
-        ReservationSummary checkout = new ReservationSummary(
-                600L, 41L, 1L, t10.minusHours(2), t10, ReservationStatus.CHECKED_OUT);
+        ReservationSummary checkout =
+                new ReservationSummary(600L, 41L, 1L, t10.minusHours(2), t10, ReservationStatus.CHECKED_OUT);
         when(reservationApi.findCurrentCheckout(1L)).thenReturn(Optional.of(checkout));
 
         ChainShiftPlan plan = resolver.planChainShift(1L, t0930, t1400);
@@ -250,8 +249,8 @@ class ChainShiftingConflictResolverTest {
         when(reservationApi.isAssetFree(2L, t10, t12, null)).thenReturn(false);
         ReservationSummary resB = new ReservationSummary(102L, 43L, 2L, t10, t12, ReservationStatus.CONFIRMED);
         when(reservationApi.findUpcomingActiveByAsset(eq(2L), any())).thenReturn(List.of(resB));
-        ReservationSummary overdue = new ReservationSummary(
-                99L, 44L, 2L, t10.minusDays(1), t12.minusDays(1), ReservationStatus.OVERDUE);
+        ReservationSummary overdue =
+                new ReservationSummary(99L, 44L, 2L, t10.minusDays(1), t12.minusDays(1), ReservationStatus.OVERDUE);
         when(reservationApi.findCurrentCheckout(2L)).thenReturn(Optional.of(overdue));
 
         ChainShiftPlan plan = resolver.planChainShift(1L, t10, t12);

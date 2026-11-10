@@ -76,6 +76,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
 | ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
 | **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo | – |
+| W6 | Chain shifting (#260, off-plan): review fixes done (checkout blocks the plan, rollback IT); open: team decides if it stays, and the 🟡 migration for a nullable `incident_id` (#245) | Team decision |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |
