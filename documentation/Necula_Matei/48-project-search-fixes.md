@@ -55,6 +55,7 @@ Same stem ⇔ `shared ≥ 5` **and** `shared ≥ shorter − 2`.
 | `sameStem` instead of "first 5 letters" | Keeps the inflection matches (doc 39) and drops words that only share a beginning. A plain `startsWith` (the audit's idea) would lose `termometre` ↔ `termometru` |
 | No `@Transactional` on `search` | It only reads the in-memory `ProjectLibrary`; a read-only transaction would still borrow a database connection for nothing |
 | `@Transactional(readOnly = true)` kept on `details` | It calls Liviu's `CatalogApi.findAvailableByModel` and Calin's `ReservationApi.isAssetFree` once per component; one transaction for the whole page |
+| "proiect", "proiectul", "proiecte", "project", "projects" as stop words | "proiect" matched the keyword "proiectare" (design) of `printed-enclosure`, so "vreau un proiect cu termometru" also listed that project. Every result is a project, so the word adds nothing. Test: `ShippedProjectsTest.theWordProjectIsFiller` (only `thermometer` is found) |
 | `details` split | It was ~35 lines doing four jobs (check the slot, count units, decide "reservable", build the answer). Now `details` reads as those four steps; behavior is the same (the existing `ProjectServiceTest` passes unchanged) |
 
 ### How it was tested
@@ -63,6 +64,7 @@ Same stem ⇔ `shared ≥ 5` **and** `shared ≥ shorter − 2`.
 |---|---|---|
 | Red: new tests on the old `ProjectSearch` | `./gradlew --no-daemon test --tests '*ProjectSearchTest' --tests '*ShippedProjectsTest'` | 4 failed: the 3 `sharedStartIsNotEnough` pairs + `unrelatedWordWithSameStartFindsNothing`; the 6 inflection pairs passed (they must keep working) |
 | Green: after the fix | same | all passed |
-| Full build (scratch PostgreSQL 18) | `./gradlew --no-daemon spotlessApply build` | BUILD SUCCESSFUL, 998 tests, 0 failures |
+| Red/green of `theWordProjectIsFiller` | old `ProjectSearch` + new test, then the fix | fails without the stop words, passes with them |
+| Full build (scratch PostgreSQL 18) | `./gradlew --no-daemon spotlessApply build` | BUILD SUCCESSFUL, 998 tests, 0 failures (999 with the stop-word test) |
 
 **Problem hit.** `motoare` ↔ `motor` was first in my "must still match" list, but the words share only `moto` (4 letters), so it never matched, not even before. It's covered because the JSON lists both forms as keywords, so I took it out of the test.

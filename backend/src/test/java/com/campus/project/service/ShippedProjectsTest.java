@@ -87,6 +87,19 @@ class ShippedProjectsTest {
                 .isEmpty();
     }
 
+    // Bug fixed (10 Nov): "proiect" found printed-enclosure through its keyword "proiectare".
+    @Test
+    void theWordProjectIsFiller() {
+        List<String> slugs = search.search("vreau un proiect cu termometru", LIBRARY.all()).hits().stream()
+                .map(hit -> hit.project().slug())
+                .toList();
+
+        assertThat(slugs)
+                .as(
+                        "'proiect' is a stop word, so only 'termometru' counts: thermometer only; see ProjectSearch.STOP_WORDS")
+                .containsExactly("thermometer");
+    }
+
     @Test
     void componentsUseOnlyAgreedModels() {
         List<String> models = LIBRARY.all().stream()

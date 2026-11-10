@@ -40,8 +40,40 @@ public class ProjectSearch {
     // Conversational filler words stripped in both languages so "vreau sa construiesc un termometru" scores like
     // "construiesc termometru".
     private static final Set<String> STOP_WORDS = Set.of(
-            "vreau", "sa", "un", "o", "pentru", "de", "la", "cu", "si", "care", "imi", "este", "din", "i", "want", "to",
-            "build", "make", "a", "an", "the", "for", "with", "my", "of", "and");
+            "vreau",
+            "sa",
+            "un",
+            "o",
+            "pentru",
+            "de",
+            "la",
+            "cu",
+            "si",
+            "care",
+            "imi",
+            "este",
+            "din",
+            "i",
+            "want",
+            "to",
+            "build",
+            "make",
+            "a",
+            "an",
+            "the",
+            "for",
+            "with",
+            "my",
+            "of",
+            "and",
+            // Bug fixed: "proiect" matched the keyword "proiectare" (design) of printed-enclosure, so any query
+            // with "vreau un proiect cu ..." also listed that project. Every result is a project, so the word
+            // itself says nothing: it is filler like "vreau".
+            "proiect",
+            "proiectul",
+            "proiecte",
+            "project",
+            "projects");
 
     private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
     private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^\\p{L}\\p{N}]+");

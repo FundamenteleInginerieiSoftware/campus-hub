@@ -104,7 +104,7 @@ Jackson 3 (`tools.jackson.databind.json.JsonMapper`, Boot 4) reads the files; `P
 
 Pure function: `search(String query, List<Project> projects) → SearchResult(List<ScoredProject> hits, boolean ambiguous)`.
 
-1. **Normalize** (query and keywords/titles): lowercase (`Locale.ROOT`), strip diacritics (`Normalizer.Form.NFD` + remove combining marks; covers `ă â î ș ț` and the cedilla forms `ş ţ`), split on anything that is not a letter or digit, drop tokens shorter than 2 characters and stop words (RO: `vreau sa un o pentru de la cu si care imi este din`; EN: `i want to build make a an the for with my of and`).
+1. **Normalize** (query and keywords/titles): lowercase (`Locale.ROOT`), strip diacritics (`Normalizer.Form.NFD` + remove combining marks; covers `ă â î ș ț` and the cedilla forms `ş ţ`), split on anything that is not a letter or digit, drop tokens shorter than 2 characters and stop words (RO: `vreau sa un o pentru de la cu si care imi este din proiect proiectul proiecte`; EN: `i want to build make a an the for with my of and project projects`; the "project" words since #272, every result is a project).
 2. **Score** each project, using both languages:
    - keyword part (the best one per token): equals a keyword **+3**, else has the same stem as a keyword **+2**, else 0. Same stem = the two words share at least their first **5** letters, and the shared start covers the shorter word except at most its last **2** letters (*termometre* ↔ *termometru*, *senzori* ↔ *senzor*; not *multiplexer* ↔ *multimeter*, which share only *multi*);
    - title part: **+1** if the token equals a title word (either language), added on top of the keyword part.
