@@ -2,6 +2,7 @@ package com.campus.reassignment.service;
 
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
@@ -136,12 +137,13 @@ public class ReassignmentService {
 
         boolean applied = false;
         if (plan.resolved() && !dryRun && !plan.steps().isEmpty()) {
+            boolean allMoved = true;
             for (com.campus.reassignment.service.chain.ChainShiftStep step : plan.steps()) {
                 boolean moved = reservationApi.moveToAsset(
                         step.reservationId(), step.toAssetId(), "CHAIN_SHIFT: " + step.strategyName());
                 if (moved) {
                     ReassignmentLog logEntry = new ReassignmentLog(
-                            0L, // 0 indicates non-incident administrative chain shift
+                            null, // null indicates non-incident administrative chain shift
                             step.reservationId(),
                             step.fromAssetId(),
                             step.toAssetId(),
@@ -149,7 +151,15 @@ public class ReassignmentService {
                             "ChainShift:" + step.strategyName(),
                             now());
                     reassignmentLogRepository.save(logEntry);
+                } else {
+                    allMoved = false;
+                    break;
                 }
+            }
+            if (!allMoved) {
+                throw new ConflictException(
+                        "CHAIN_SHIFT_EXECUTION_FAILED",
+                        "One or more reservations in the chain could not be moved (slot conflict or state changed).");
             }
             applied = true;
         }

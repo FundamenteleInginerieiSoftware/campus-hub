@@ -162,18 +162,18 @@ class AdminReassignmentControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    @DisplayName("POST /api/v1/admin/reassignments/chain-shift defaults dryRun to false for production execution")
-    void resolveChainShiftDefaultsToProductionExecution() throws Exception {
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift defaults dryRun to true for safe simulation")
+    void resolveChainShiftDefaultsToSimulation() throws Exception {
         ChainShiftPlanResponse plan = new ChainShiftPlanResponse(
                 1L,
                 LocalDateTime.of(2026, 11, 15, 10, 0),
                 LocalDateTime.of(2026, 11, 15, 12, 0),
                 true,
-                true,
+                false,
                 List.of(),
-                "Plan applied");
+                "Simulation only");
 
-        when(reassignmentService.resolveChainShift(eq(1L), any(), any(), eq(false)))
+        when(reassignmentService.resolveChainShift(eq(1L), any(), any(), eq(true)))
                 .thenReturn(plan);
 
         mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
@@ -181,6 +181,6 @@ class AdminReassignmentControllerTest {
                         .param("startTime", "2026-11-15T10:00:00")
                         .param("endTime", "2026-11-15T12:00:00"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.applied").value(true));
+                .andExpect(jsonPath("$.applied").value(false));
     }
 }
