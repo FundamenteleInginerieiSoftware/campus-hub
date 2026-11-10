@@ -61,7 +61,7 @@ Rate limiting, lockout and the other gaps are listed in section 9.
 | Register | `POST /api/v1/auth/register` with `email`, `password`, `fullName`. Always creates a **STUDENT**: the request has no role field, so nobody can make themselves admin | `AuthController`, `AuthService.register`, `RegisterRequest` |
 | Email | Trimmed before validation (#165), stored in lower case, `UNIQUE` column. A taken email is `409 EMAIL_TAKEN`, also when two registrations race (the unique constraint catches the second one) | `RegisterRequest`, `User` constructor, `AuthService.register` |
 | Password storage | `PasswordEncoderFactories.createDelegatingPasswordEncoder()`: BCrypt, hash stored with a `{bcrypt}` prefix, so the algorithm can be changed later without breaking old hashes | `SecurityConfig.passwordEncoder` |
-| Login | `POST /api/v1/auth/login`. Unknown email, disabled account and wrong password all give the same `401 INVALID_CREDENTIALS` | `AuthService.login` |
+| Login | `POST /api/v1/auth/login`. Unknown email, disabled account and wrong password all give the same `401 INVALID_CREDENTIALS`; so does a password over 72 bytes (BCrypt's limit; register never stores one) | `AuthService.login` |
 | First admin on AWS | Register never makes admins, so in `prod` the first admin is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` at startup, only if the account doesn't exist yet. The password is never logged | `AdminBootstrap` (`@Profile("prod")`) |
 | Dev accounts | `student1`, `student2`, `admin@campus.test` with password `password`, **dev profile only** | `UserSeeder` (`@Profile("dev")`) |
 

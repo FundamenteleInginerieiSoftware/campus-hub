@@ -8,6 +8,8 @@ import com.campus.project.domain.LocalizedText;
 import com.campus.project.domain.Project;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class ProjectSearchTest {
 
@@ -45,6 +47,45 @@ class ProjectSearchTest {
                 .as(
                         "5-char query 'grade' must prefix-match 7-char keyword 'gradele' with score 2; see ProjectSearch.keywordScore")
                 .containsExactly(new ScoredProject(longerKw, 2));
+    }
+
+    // Romanian and English change only the last 1-2 letters (plural, definite article): these must still find
+    // the keyword. Neither "termometre" nor "termometru" starts with the other, so a plain startsWith is not enough.
+    @ParameterizedTest(name = "\"{0}\" finds keyword \"{1}\"")
+    @CsvSource({
+        "termometre, termometru",
+        "termometrul, termometru",
+        "senzori, senzor",
+        "multimetre, multimetru",
+        "motors, motor",
+        "batteries, battery"
+    })
+    void inflectedFormFindsKeyword(String query, String keyword) {
+        Project p = project("p", "Heat probe", "Sonda caldura", List.of(keyword), List.of("probe"));
+
+        SearchResult result = search.search(query, List.of(p));
+
+        assertThat(result.hits())
+                .as(
+                        "'%s' differs from keyword '%s' only in its ending, so it must match with score 2; see ProjectSearch.sameStem",
+                        query, keyword)
+                .containsExactly(new ScoredProject(p, 2));
+    }
+
+    // Bug fixed (audit, 10 Nov): words that only share their first 5 letters are different words
+    // ("multi" in multiplexer/multimeter), so they must not match.
+    @ParameterizedTest(name = "\"{0}\" must not find keyword \"{1}\"")
+    @CsvSource({"multiplexer, multimeter", "multimeter, multiplexer", "termostat, termometru"})
+    void sharedStartIsNotEnough(String query, String keyword) {
+        Project p = project("p", "Heat probe", "Sonda caldura", List.of(keyword), List.of("probe"));
+
+        SearchResult result = search.search(query, List.of(p));
+
+        assertThat(result.hits())
+                .as(
+                        "'%s' and '%s' share only their first letters, not the whole word minus its ending: no match; see ProjectSearch.sameStem",
+                        query, keyword)
+                .isEmpty();
     }
 
     @Test

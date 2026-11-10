@@ -1,0 +1,79 @@
+name: docs-check
+
+# Checks AGENTS.md section 4, "End of every task": a PR that changes app code must also
+# update the author's personal doc, docs/whats-left.md and the Status section of AGENTS.md.
+# It looks at the PR's files, not at the AI, so it works whatever tool (or none) wrote the PR.
+# Kept apart from Stefania's ci.yml: it needs no database or build and finishes in seconds.
+
+on:
+  pull_request:
+    # labeled/unlabeled: adding or removing the no-docs label runs the check again.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs-check:
+    name: docs-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the PR with its whole history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the diff below needs the base branch commits too
+
+      - name: Check the end-of-task docs
+        # PR data comes in through env vars, never pasted into the script,
+        # so a strange branch name or title can't run as shell code.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NO_DOCS: ${{ contains(github.event.pull_request.labels.*.name, 'no-docs') }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          if [ "$NO_DOCS" = "true" ]; then
+            echo "Label no-docs is set: check skipped."
+            exit 0
+          fi
+          if [ "$AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependabot PR: check skipped."
+            exit 0
+          fi
+
+          # Three dots = only what this PR changed since it left main.
+          changed=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA")
+
+          # Docs-only, test-only, build and CI PRs need nothing extra.
+          if ! grep -qE '^(backend/src/main/|frontend/src/)' <<< "$changed"; then
+            echo "No app code changed (backend/src/main/, frontend/src/): nothing to check."
+            exit 0
+          fi
+
+          missing=()
+          grep -qE '^documentation/[^/]+/' <<< "$changed" ||
+            missing+=("your personal doc: documentation/<Surname_Name>/NN-<topic>.md (new, or this PR's existing one)")
+          grep -qx 'docs/whats-left.md' <<< "$changed" ||
+            missing+=("your section of docs/whats-left.md: what this PR finishes and what it leaves open")
+          grep -qx 'AGENTS.md' <<< "$changed" ||
+            missing+=("your module's bullet in AGENTS.md section 7 (Status): '<what, in a few words> (#PR)'")
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "Personal doc, docs/whats-left.md and AGENTS.md section 7 are all updated."
+            exit 0
+          fi
+
+          echo "This PR changes app code, so AGENTS.md section 4 ('End of every task') asks for:"
+          for m in "${missing[@]}"; do
+            echo "  - $m"
+            echo "::error title=End-of-task docs missing::$m"
+          done
+          echo
+          echo "Add them in a new push to this PR. Edit only your own lines (see AGENTS.md section 4)."
+          echo "Real exception (one-line fix, dependency bump)? Ask a teammate to add the label no-docs."
+          exit 1
