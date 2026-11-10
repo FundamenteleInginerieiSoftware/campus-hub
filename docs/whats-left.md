@@ -33,12 +33,12 @@
 | #263 | Stefania | Only HIGH/CRITICAL incidents take the asset out of use, max 3 open reports per student (#229) | Approved: update branch if behind, then merge |
 | #266 | Calin | Cancel a user's upcoming reservations: `ReservationApi` method + admin endpoint (for #229) | Needs a review |
 | #270 | Calin | Fixes for the code read-through #267 (holds, locking, lifecycle) | Needs a review |
-| #271, #272, #273 | Matei | Login rejects passwords over 72 bytes; project search false hits; project details page errors | Need a review |
+| #272, #273 | Matei | Project search false hits; project details page errors | Need a review |
 | #255, #256 | Calin | Admin equipment analytics: backend + page (#254) | Needs a review; off-plan, see section 6 |
 | #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review; off-plan, see section 6 |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
-Merged since the last update: Calin #247 (fixes for #240, closes it); Liviu #244 (audit date filters, closes #241); Matei #251, #252, #253 (status refresh, image security updates, ECR scan note).
+Merged since the last update: Calin #247 (fixes for #240, closes it); Liviu #244 (audit date filters, closes #241); Matei #251, #252, #253 (status refresh, image security updates, ECR scan note), #271 (login rejects passwords over 72 bytes).
 
 Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are on `main`; left: student-kit models in the catalog seed (Liviu) and the app-wide RO/EN choice (Stefania)), **#229** (Stefania + team decision, PRs #263 and #266), **#245** (retire flow, team decision), code read-through findings per owner: **#267** (Calin), **#268** (Liviu), **#269** (Stefania), feature issues for Calin's PRs: #254, #257, #259, #261, #264.
 
@@ -53,7 +53,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | ~~Dockerfile~~ (✅ #114) · ~~run the image locally with `prod`~~ (✅ smoke test, #129) · ~~push to ECR~~ (✅ 9 Nov, tagged with the commit SHA) | Terraform part 2 (ECR) |
 | W6 | ~~Swagger check~~ (✅ #184) · run the M1 flow · tag `v0.1.0` · status update | Section 2 |
 | W6–W8 | **Projects (#140)**: ~~design + plan~~ (✅ #232) · ~~engine: library, search, details endpoints~~ (✅ #236) · ~~10 projects~~ (✅ #239) · ~~`/projects` pages with RO/EN switch~~ (✅ #238) · ~~`POST /projects/{slug}/reserve` + "Reserve all"~~ (✅ #243, #248) | Liviu: student-kit models in the seed; Stefania: whole-app i18n choice |
-| W6 | Open PRs #271, #272, #273 (fixes from the code read-through) · own items from the read-through are in those PRs | Reviews |
+| W6 | ~~Login password length~~ (✅ #271) · open PRs #272, #273 (the other fixes from the code read-through) | Reviews |
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + Elastic IP + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront · flip `db_enabled` to true (creates RDS) · `MAIL_FROM` with a verified SES sender (the app does not start without it) · `ADMIN_EMAIL` / `ADMIN_PASSWORD` in SSM | Dockerfile, Terraform ✅ |
 | W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · ~~`S3StorageService`~~ (✅ #129, #177) · first live deploy **by the end of W8** | – |
 | W9 | ~~`SesNotificationService`~~ (✅ #129, #177) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
