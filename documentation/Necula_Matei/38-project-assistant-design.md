@@ -25,7 +25,7 @@
 
 | File | Change |
 |---|---|
-| `docs/superpowers/specs/2026-11-09-project-assistant-design.md` | The spec: goal, decisions from #140, ownership, architecture, JSON format + startup validation, search algorithm (scores 3/2/1, prefix ≥ 5, ambiguity gap 1), API, frontend, tests, delivery in 5 PRs, out of scope |
+| `docs/superpowers/specs/2026-11-09-project-assistant-design.md` | The spec: goal, decisions from #140, ownership, architecture, JSON format + startup validation, search algorithm (scores 3/2/1, same stem ≥ 5 letters, ambiguity gap 1), API, frontend, tests, delivery in 5 PRs, out of scope |
 | `docs/superpowers/plans/2026-11-09-project-assistant.md` | Plan for PR 1 (this one) and PR 2 (`feat/project-engine`): 6 tasks, exact interfaces, test names, review focus (unknown JSON field, punctuation-only query, upper case/cedilla, maintenance units/bad slot, files inside the jar) |
 | `AGENTS.md` §5 | Allowed dependencies: `catalog.api, reservation.api <- project`; `project` is a leaf (nothing depends on it) |
 
@@ -35,7 +35,7 @@
 |---|---|---|
 | Engine | Our own templates + search, no LLM | Testable, same answer every time, no cost, no secret in SSM |
 | Storage | JSON files in `resources/projects/`, read at startup | ~10 projects; a content fix is a file edit, not a new Flyway migration; PostgreSQL's Romanian stemmer doesn't match *termometre* ↔ *termometru* (tested on PG 18) |
-| Search | Normalize (lowercase, strip diacritics incl. `ş ţ`), stop words, exact keyword +3, prefix ≥ 5 letters +2, title word +1, rank, "did you mean" when the top two are within 1 point | Every number has a unit test and a reason |
+| Search | Normalize (lowercase, strip diacritics incl. `ş ţ`), stop words, exact keyword +3, same stem +2 (≥ 5 shared letters, only the last 2 may differ; tightened in doc 48), title word +1, rank, "did you mean" when the top two are within 1 point | Every number has a unit test and a reason |
 | Reserve all | Backend picks the lowest-id free unit per model, then one call to `ReservationApi.bookBundle` (Calin) | One transaction, all or nothing; deterministic choice like the reassignment engine (#99) |
 | Language | `?lang=ro\|en`, search matches both; page-level switch until the whole-app approach is picked | Doesn't wait on #140 §4 |
 | Safety at startup | Invalid project file → the app refuses to start, naming the file and field (also unknown fields: Jackson 3 ignores them by default) | A typo can't reach the demo |
