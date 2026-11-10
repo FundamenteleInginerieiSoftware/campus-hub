@@ -1,4 +1,5 @@
 import { apiFetch } from './client.ts'
+import { nowInBucharest } from './reservations.ts'
 
 export type AssetUtilizationItem = {
   assetId: number
@@ -61,29 +62,45 @@ export const DAYS_OF_WEEK = [
   { value: 3, label: 'Wednesday' },
   { value: 4, label: 'Thursday' },
   { value: 5, label: 'Friday' },
-  { value: 6, label: 'Saturday' },
-  { value: 7, label: 'Sunday' },
 ]
+// Saturday and Sunday are left out: capacity counts only Mon-Fri open hours, so weekend cells would have no capacity to compare against.
 
 export const HOURS_RANGE = Array.from({ length: 12 }, (_, i) => i + 8) // 8..19
 
 /**
- * Calculates local date-time boundaries for analytics queries.
- * Subtracts (days - 1) so that the range including today contains exactly N calendar days.
+ * Analytics window on the campus clock (Europe/Bucharest, same helper as the booking pages),
+ * so an admin in another time zone still gets the campus "today".
+ * It ends at "now", so today's future confirmed bookings are not counted as used hours.
  */
 export function getDateWindow(preset: TimeRangePreset): { from: string; to: string } {
-  const toDate = new Date()
-  const fromDate = new Date()
+  const toDate = nowInBucharest()
+  const fromDate = new Date(toDate)
   const days = preset === '7d' ? 7 : preset === '90d' ? 90 : 30
-  // Subtract (days - 1) to prevent off-by-one error (today + prior (days - 1) = exact days count)
+  // today + the (days - 1) days before it = exactly N calendar days
   fromDate.setDate(toDate.getDate() - (days - 1))
   fromDate.setHours(8, 0, 0, 0)
-  toDate.setHours(20, 0, 0, 0)
 
   return {
     from: formatLocalIsoDateTime(fromDate),
     to: formatLocalIsoDateTime(toDate),
   }
+}
+
+/** Builds a CSV of the per-asset rows and makes the browser download it. */
+export function downloadUtilizationCsv(assets: AssetUtilizationItem[], from: string, to: string) {
+  // Quote every value so commas or quotes in asset names don't break the columns.
+  const quote = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`
+  const header = ['assetId', 'name', 'model', 'status', 'bookedHours', 'utilizationPercent', 'bookingCount', 'idle']
+  const rows = assets.map((a) =>
+    [a.assetId, a.name, a.model, a.status, a.bookedHours, a.utilizationPercent, a.bookingCount, a.idle].map(quote).join(','),
+  )
+  const csv = [header.join(','), ...rows].join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `utilization_${from.slice(0, 10)}_${to.slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export function getCellColor(intensity: number, count: number): string {

@@ -10,9 +10,10 @@ import {
   Tabs,
   Text,
 } from '@mantine/core'
-import { IconChartBar, IconFlame, IconRefresh } from '@tabler/icons-react'
+import { IconChartBar, IconDownload, IconFlame, IconRefresh } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  downloadUtilizationCsv,
   getDateWindow,
   getDemandHeatmap,
   getUtilizationAnalytics,
@@ -107,6 +108,9 @@ export default function AdminAnalyticsPage() {
       })
       .catch((err) => {
         if (!ignore) {
+          // Clear the old numbers so the error never sits above stale cards.
+          setUtilization(null)
+          setHeatmap(null)
           setError(err)
         }
       })
@@ -152,6 +156,14 @@ export default function AdminAnalyticsPage() {
           <Group gap="xs">
             <Button
               variant="default"
+              leftSection={<IconDownload size={16} />}
+              disabled={!utilization || loading}
+              onClick={() => utilization && downloadUtilizationCsv(displayedAssets, utilization.from, utilization.to)}
+            >
+              Export CSV
+            </Button>
+            <Button
+              variant="default"
               leftSection={<IconRefresh size={16} />}
               onClick={handleRefresh}
               loading={loading}
@@ -184,7 +196,7 @@ export default function AdminAnalyticsPage() {
 
           <Group gap="sm">
             <Text size="sm" fw={600}>
-              Filter by Asset:
+              Asset (heatmap + table only):
             </Text>
             <Select
               placeholder="All Equipment"
@@ -202,13 +214,14 @@ export default function AdminAnalyticsPage() {
         </Group>
       </Paper>
 
-      {loading && !utilization && (
+      {loading && (
         <Center py="xl">
           <Loader size="lg" />
         </Center>
       )}
 
-      {utilization && (
+      {/* Hide the old data while reloading, so the cards never mix two periods. */}
+      {!loading && utilization && (
         <>
           {/* Key Metric Overview Cards */}
           <AnalyticsKpiCards utilization={utilization} selectedAssetId={selectedAssetId} />
