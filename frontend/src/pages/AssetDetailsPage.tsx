@@ -80,17 +80,30 @@ export default function AssetDetailsPage() {
     if (assetId === null) return
 
     let active = true
+
+    // Bug fixed (#268): reset loading and error on assetId change to prevent flashing previous asset details.
+    // Microtask avoids React cascading render / linter warnings when updating state inside an effect.
+    void Promise.resolve().then(() => {
+      if (active) {
+        setLoading(true)
+        setError(null)
+      }
+    })
+
     getAsset(assetId)
       .then((data) => {
         if (active) {
           setAsset(data)
           setError(null)
-          setLoading(false)
         }
       })
       .catch((err) => {
         if (active) {
           setError(err)
+        }
+      })
+      .finally(() => {
+        if (active) {
           setLoading(false)
         }
       })

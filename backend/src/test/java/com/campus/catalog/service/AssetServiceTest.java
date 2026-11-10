@@ -116,6 +116,31 @@ class AssetServiceTest {
     }
 
     @Test
+    void getByIdThrowsNotFoundWhenAssetIsRetiredAndUserIsStudent() {
+        Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
+        retired.retire(EXPECTED_NOW);
+        when(assetRepository.findWithDetailsById(6L)).thenReturn(Optional.of(retired));
+        when(currentUser.isAdmin()).thenReturn(false);
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () -> assetService.getById(6L));
+
+        assertEquals("ASSET_NOT_FOUND", ex.getCode());
+    }
+
+    @Test
+    void getByIdReturnsRetiredAssetWhenUserIsAdmin() {
+        Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
+        retired.retire(EXPECTED_NOW);
+        when(assetRepository.findWithDetailsById(6L)).thenReturn(Optional.of(retired));
+        when(currentUser.isAdmin()).thenReturn(true);
+
+        AssetResponse response = assetService.getById(6L);
+
+        assertEquals(AssetStatus.RETIRED, response.status());
+        assertEquals("Old Uno", response.name());
+    }
+
+    @Test
     void createNormalizesSerialTruncatesSecondsAndRecordsAudit() {
         when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
@@ -270,7 +295,42 @@ class AssetServiceTest {
         assertEquals("Multimeters", response.categoryName());
         assertEquals("EC202", response.labRoomCode());
         assertEquals(EXPECTED_NOW, response.updatedAt());
-        verify(auditService).record(3L, "ASSET_UPDATED", "ASSET", null, "Updated asset New Name");
+        verify(auditService)
+                .record(
+                        3L,
+                        "ASSET_UPDATED",
+                        "ASSET",
+                        null,
+                        "Updated asset New Name (name: 'Old Name' -> 'New Name', model: 'Old Model' -> 'New Model', description updated, category: Oscilloscopes -> Multimeters, room: EC105 -> EC202)");
+    }
+
+    @Test
+    void updateRejectsStaleVersion() {
+        Asset asset = new Asset("Name", "Model", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "version", 2L);
+        when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
+
+        assertThrows(
+                org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+                () -> assetService.update(7L, new UpdateAssetRequest("New Name", "Model", null, 1L, 2L, 1L)));
+        verify(assetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateAcceptsMatchingVersion() {
+        Asset asset = new Asset("Name", "Model", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "version", 2L);
+        when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
+        when(currentUser.id()).thenReturn(3L);
+
+        AssetResponse response = assetService.update(7L, new UpdateAssetRequest("New Name", "Model", null, 1L, 2L, 2L));
+
+        assertNotNull(response);
+        assertEquals("New Name", response.name());
+        verify(assetRepository).saveAndFlush(asset);
     }
 
     @Test

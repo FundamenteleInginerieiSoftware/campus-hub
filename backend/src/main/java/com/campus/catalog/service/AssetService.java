@@ -21,7 +21,10 @@ import com.campus.common.security.CurrentUser;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +32,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,6 +77,10 @@ public class AssetService {
         Asset asset = assetRepository
                 .findWithDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
+        // Retired assets are hidden from students in catalog search; direct GET by ID must match and 404 (#268).
+        if (asset.getStatus() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
+            throw new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found");
+        }
         return AssetResponse.from(asset);
     }
 
@@ -126,13 +134,49 @@ public class AssetService {
             throw new InvalidStateTransitionException("ASSET_RETIRED", "Retired asset cannot be modified");
         }
 
+        // Optimistic locking protection against concurrent lost updates (#268).
+        if (request.version() != null
+                && asset.getVersion() != null
+                && !request.version().equals(asset.getVersion())) {
+            throw new ObjectOptimisticLockingFailureException(Asset.class, id);
+        }
+
         Category category = findCategoryOrThrow(request.categoryId());
         LabRoom labRoom = findLabRoomOrThrow(request.labRoomId());
 
+        // Track field diffs for comprehensive audit trails (#268).
+        List<String> changes = new ArrayList<>();
+        if (!asset.getName().equals(request.name())) {
+            changes.add("name: '" + asset.getName() + "' -> '" + request.name() + "'");
+        }
+        if (!asset.getModel().equals(request.model())) {
+            changes.add("model: '" + asset.getModel() + "' -> '" + request.model() + "'");
+        }
+        if (!Objects.equals(asset.getDescription(), request.description())) {
+            changes.add("description updated");
+        }
+        boolean categoryChanged = (asset.getCategory().getId() != null && category.getId() != null)
+                ? !asset.getCategory().getId().equals(category.getId())
+                : !Objects.equals(asset.getCategory().getName(), category.getName());
+        if (categoryChanged) {
+            changes.add("category: " + asset.getCategory().getName() + " -> " + category.getName());
+        }
+
+        boolean labRoomChanged = (asset.getLabRoom().getId() != null && labRoom.getId() != null)
+                ? !asset.getLabRoom().getId().equals(labRoom.getId())
+                : !Objects.equals(asset.getLabRoom().getCode(), labRoom.getCode());
+        if (labRoomChanged) {
+            changes.add("room: " + asset.getLabRoom().getCode() + " -> " + labRoom.getCode());
+        }
+
         asset.updateDetails(request.name(), request.model(), request.description(), category, labRoom, now());
         Asset saved = assetRepository.saveAndFlush(asset);
-        auditService.record(
-                currentUser.id(), "ASSET_UPDATED", "ASSET", saved.getId(), "Updated asset " + saved.getName());
+
+        String auditDetails = changes.isEmpty()
+                ? "Updated asset " + saved.getName()
+                : "Updated asset " + saved.getName() + " (" + String.join(", ", changes) + ")";
+
+        auditService.record(currentUser.id(), "ASSET_UPDATED", "ASSET", saved.getId(), auditDetails);
         return AssetResponse.from(saved);
     }
 
