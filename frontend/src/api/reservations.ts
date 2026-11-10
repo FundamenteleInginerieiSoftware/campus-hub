@@ -136,9 +136,12 @@ export function cancelReservation(id: number) {
 
 /**
  * Books an asset for the authenticated student (POST /api/v1/reservations).
+ * Seamlessly provides an Idempotency-Key to prevent double booking on transient network retries.
  */
-export function createReservation(request: CreateReservationRequest) {
-  return apiFetch<Reservation>('/api/v1/reservations', { method: 'POST', body: request })
+export function createReservation(request: CreateReservationRequest, idempotencyKey?: string) {
+  const key = idempotencyKey ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined)
+  const headers: Record<string, string> = key ? { 'Idempotency-Key': key } : {}
+  return apiFetch<Reservation>('/api/v1/reservations', { method: 'POST', body: request, headers })
 }
 
 /**

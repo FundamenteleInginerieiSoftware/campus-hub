@@ -74,4 +74,8 @@ public class IdempotencyRecord {
     public void markFailed() {
         this.status = IdempotencyStatus.FAILED;
     }
+
+    public boolean isExpired(LocalDateTime now) {
+        return expiresAt != null && now.isAfter(expiresAt);
+    }
 }
