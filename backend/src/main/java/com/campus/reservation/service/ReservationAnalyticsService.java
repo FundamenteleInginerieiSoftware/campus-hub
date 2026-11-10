@@ -23,10 +23,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,23 +51,12 @@ public class ReservationAnalyticsService {
     private final ReservationRepository reservationRepository;
     private final CatalogApi catalogApi;
     private final Clock clock;
-    private final JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    public ReservationAnalyticsService(
-            ReservationRepository reservationRepository,
-            CatalogApi catalogApi,
-            Clock clock,
-            @Autowired(required = false) JdbcTemplate jdbcTemplate) {
-        this.reservationRepository = reservationRepository;
-        this.catalogApi = catalogApi;
-        this.clock = clock;
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     public ReservationAnalyticsService(
             ReservationRepository reservationRepository, CatalogApi catalogApi, Clock clock) {
-        this(reservationRepository, catalogApi, clock, null);
+        this.reservationRepository = reservationRepository;
+        this.catalogApi = catalogApi;
+        this.clock = clock;
     }
 
     /**
@@ -136,18 +124,8 @@ public class ReservationAnalyticsService {
         }
 
         // 3. Asset summaries & utilization breakdown
-        // Tracks all operational equipment assets (including never-booked ones)
-        Set<Long> allAssetIds = new TreeSet<>();
-        if (jdbcTemplate != null) {
-            try {
-                List<Long> dbAssetIds =
-                        jdbcTemplate.queryForList("SELECT id FROM assets WHERE status != 'RETIRED'", Long.class);
-                allAssetIds.addAll(dbAssetIds);
-            } catch (Exception e) {
-                log.warn("Could not query assets table: {}", e.getMessage());
-            }
-        }
-        allAssetIds.addAll(reservationRepository.findDistinctAssetIds());
+        // Tracks all operational equipment assets recorded across reservations
+        Set<Long> allAssetIds = new TreeSet<>(reservationRepository.findDistinctAssetIds());
         List<AssetUtilizationItem> assetItems = new ArrayList<>();
         Map<String, List<Long>> modelToAssetIds = new HashMap<>();
 
@@ -186,8 +164,9 @@ public class ReservationAnalyticsService {
 
         assetItems.sort(Comparator.comparing(AssetUtilizationItem::bookedHours).reversed());
 
-        double totalBookedHours = round1(assetBookedHoursMap.values().stream()
-                .mapToDouble(Double::doubleValue)
+        // Sum booked hours exclusively for operational assets tracked in assetItems (excluding retired equipment)
+        double totalBookedHours = round1(assetItems.stream()
+                .mapToDouble(AssetUtilizationItem::bookedHours)
                 .sum());
         int totalAssetsTracked = assetItems.size();
         double totalCapacityHours = round1(totalAssetsTracked * openHoursPerAsset);
@@ -302,23 +281,23 @@ public class ReservationAnalyticsService {
             }
 
             // Sweep-line algorithm over booking boundaries
-            List<TimePoint> points = new ArrayList<>();
+            // Deltas are aggregated by timestamp using TreeMap so that contiguous bookings (e.g. 08-09 and 09-10)
+            // have their -1 and +1 applied simultaneously at 09:00 without an artificial drop in saturation.
+            Map<LocalDateTime, Integer> timeDeltas = new TreeMap<>();
             for (Reservation r : modelBookings) {
                 LocalDateTime start = r.getStartTime().isBefore(from) ? from : r.getStartTime();
                 LocalDateTime end = r.getEndTime().isAfter(to) ? to : r.getEndTime();
-                points.add(new TimePoint(start, 1));
-                points.add(new TimePoint(end, -1));
+                timeDeltas.merge(start, 1, Integer::sum);
+                timeDeltas.merge(end, -1, Integer::sum);
             }
-
-            points.sort(Comparator.comparing(TimePoint::time).thenComparingInt(TimePoint::delta));
 
             int currentDemand = 0;
             int peakDemand = 0;
             int saturatedPeriodsCount = 0;
             boolean inSaturation = false;
 
-            for (TimePoint pt : points) {
-                currentDemand += pt.delta();
+            for (Map.Entry<LocalDateTime, Integer> timeEntry : timeDeltas.entrySet()) {
+                currentDemand += timeEntry.getValue();
                 if (currentDemand > peakDemand) {
                     peakDemand = currentDemand;
                 }
@@ -363,6 +342,4 @@ public class ReservationAnalyticsService {
     private static double round2(double value) {
         return Math.round(value * 100.0) / 100.0;
     }
-
-    private record TimePoint(LocalDateTime time, int delta) {}
 }

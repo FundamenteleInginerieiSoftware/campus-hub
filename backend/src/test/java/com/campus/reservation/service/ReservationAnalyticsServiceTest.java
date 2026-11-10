@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -464,47 +463,26 @@ class ReservationAnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("getUtilization: includes assets without booking history from database as idle")
-    void getUtilization_includesUnreservedAssetsFromDatabaseAsIdle() {
-        JdbcTemplate mockJdbc = org.mockito.Mockito.mock(JdbcTemplate.class);
-        ReservationAnalyticsService serviceWithJdbc =
-                new ReservationAnalyticsService(reservationRepository, catalogApi, clock, mockJdbc);
-
+    @DisplayName("getUtilization: excludes RETIRED assets and their booking hours from active utilization metrics")
+    void getUtilization_skipsRetiredAssetsAndTheirHours() {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime from = now.minusDays(5);
         LocalDateTime to = now;
 
-        // DB has asset 10 and asset 99; reservations table only has asset 10
-        when(mockJdbc.queryForList("SELECT id FROM assets WHERE status != 'RETIRED'", Long.class))
-                .thenReturn(List.of(10L, 99L));
-        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L));
-        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of());
+        // Booking on operational asset 10: 2 hours
+        Reservation r10 = new Reservation(
+                42L, 10L, from.plusDays(1).withHour(10), from.plusDays(1).withHour(12), now.minusDays(10));
+        ReflectionTestUtils.setField(r10, "id", 101L);
+        ReflectionTestUtils.setField(r10, "status", ReservationStatus.CONFIRMED);
 
-        when(catalogApi.getAsset(10L))
-                .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
-        when(catalogApi.getAsset(99L))
-                .thenReturn(new AssetSummary(99L, "Unused Asset 99", "NEW_MODEL", 1L, 1L, AssetStatus.AVAILABLE));
-
-        UtilizationAnalyticsResponse response = serviceWithJdbc.getUtilization(from, to);
-
-        assertThat(response.totalAssetsTracked())
-                .as("must track both asset 10 and unreserved asset 99")
-                .isEqualTo(2);
-        assertThat(response.idleAssetsCount())
-                .as("both assets must be idle when 0 bookings exist")
-                .isEqualTo(2);
-        assertThat(response.assets()).extracting(AssetUtilizationItem::assetId).containsExactlyInAnyOrder(10L, 99L);
-    }
-
-    @Test
-    @DisplayName("getUtilization: excludes RETIRED assets so archived equipment does not skew lab capacity")
-    void getUtilization_skipsRetiredAssets() {
-        LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime from = now.minusDays(5);
-        LocalDateTime to = now;
+        // Historical booking on retired asset 88: 4 hours
+        Reservation r88 = new Reservation(
+                43L, 88L, from.plusDays(2).withHour(10), from.plusDays(2).withHour(14), now.minusDays(10));
+        ReflectionTestUtils.setField(r88, "id", 102L);
+        ReflectionTestUtils.setField(r88, "status", ReservationStatus.RETURNED);
 
         when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L, 88L));
-        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of());
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of(r10, r88));
 
         when(catalogApi.getAsset(10L))
                 .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
@@ -518,6 +496,47 @@ class ReservationAnalyticsServiceTest {
                 .as("retired asset 88 must be excluded from active equipment fleet")
                 .isEqualTo(1);
         assertThat(response.assets()).extracting(AssetUtilizationItem::assetId).containsExactly(10L);
+        assertThat(response.totalBookedHours())
+                .as("total booked hours must only sum operational assets (2.0h), excluding retired asset 88 (4.0h)")
+                .isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName(
+            "detectBottlenecks: contiguous back-to-back bookings (08-09, 09-10) count as 1 saturated period, not 2")
+    void detectBottlenecks_mergesContiguousBookingsIntoSingleSaturatedPeriod() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 2, 8, 0); // Monday 08:00
+        LocalDateTime to = LocalDateTime.of(2026, 11, 2, 20, 0); // Monday 20:00
+
+        // Single available unit for model "DS1054Z" (Asset 10)
+        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L));
+        when(catalogApi.getAsset(10L))
+                .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
+
+        // Res 1: 08:00 - 09:00
+        Reservation r1 = new Reservation(42L, 10L, from.withHour(8), from.withHour(9), from.minusDays(1));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+        ReflectionTestUtils.setField(r1, "status", ReservationStatus.CONFIRMED);
+
+        // Res 2: 09:00 - 10:00 (contiguous with Res 1 at 09:00)
+        Reservation r2 = new Reservation(43L, 10L, from.withHour(9), from.withHour(10), from.minusDays(1));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+        ReflectionTestUtils.setField(r2, "status", ReservationStatus.CONFIRMED);
+
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of(r1, r2));
+
+        UtilizationAnalyticsResponse response = analyticsService.getUtilization(from, to);
+
+        assertThat(response.bottlenecks())
+                .as("model DS1054Z must be detected as bottleneck; see ReservationAnalyticsService.getUtilization")
+                .hasSize(1);
+        assertThat(response.bottlenecks().get(0).peakConcurrentDemand())
+                .as("peak demand should be 1 unit")
+                .isEqualTo(1);
+        assertThat(response.bottlenecks().get(0).bottleneckHoursCount())
+                .as(
+                        "contiguous bookings 08:00-09:00 and 09:00-10:00 must be counted as 1 continuous saturated period, not 2")
+                .isEqualTo(1);
     }
 
     @Test
