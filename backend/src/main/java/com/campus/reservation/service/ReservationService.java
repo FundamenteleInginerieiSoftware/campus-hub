@@ -674,16 +674,17 @@ public class ReservationService implements ReservationApi {
     }
 
     /**
-     *
      * Extends the duration of an active reservation (CONFIRMED or CHECKED_OUT).
      *
-     * <p>Concurrency & Atomicity: Locks the asset row first, verifies that the extended slot
-     * [currentEndTime, newEndTime] has no overlapping reservations, and validates operating hours
-     * and duration limits (max 4h total). If unavailable, the reservation remains unchanged.
+     * <p>Concurrency & Deadlock Prevention (#270 review 1): Locks the reservation row FIRST via
+     * {@code findByIdForUpdate}, then acquires the asset row lock SECOND via {@code CatalogApi.lockForBooking}.
+     * This consistent locking order across returnReservation, checkOutReservation, markOverdue, and
+     * extendReservation eliminates circular wait deadlocks when desk operations and extensions race on
+     * the same equipment.
      */
     @Transactional
     public ReservationResponse extendReservation(Long id, ExtendReservationRequest req) {
-        Reservation reservation = loadOwnedOrAdmin(id);
+        Reservation reservation = loadOwnedOrAdminForUpdate(id);
         LocalDateTime now = now();
 
         if (reservation.getStatus() != ReservationStatus.CONFIRMED
@@ -802,7 +803,7 @@ public class ReservationService implements ReservationApi {
         Long userId = currentUser.id();
         LocalDateTime now = now();
 
-        Reservation reservation = loadOwnedOrAdmin(reservationId);
+        Reservation reservation = loadOwnedOrAdminForUpdate(reservationId);
 
         if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
             throw new InvalidStateTransitionException(
@@ -1123,6 +1124,18 @@ public class ReservationService implements ReservationApi {
         return reservation;
     }
 
+    private Reservation loadOwnedOrAdminForUpdate(Long id) {
+        Reservation reservation = reservationRepository
+                .findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
+
+        if (!reservation.getUserId().equals(currentUser.id()) && !currentUser.isAdmin()) {
+            throw new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id);
+        }
+
+        return reservation;
+    }
+
     private void validateReservationRequest(CreateReservationRequest req, LocalDateTime now) {
         validateSlotRules(req.startTime(), req.endTime(), now);
     }
@@ -1317,8 +1330,10 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public ReservationResponse checkOutReservation(Long id) {
+        // Bug fixed (#270 review 1): acquire pessimistic lock on reservation FIRST (findByIdForUpdate),
+        // matching the uniform lock order of returnReservation, markOverdue, and extendReservation.
         Reservation reservation = reservationRepository
-                .findById(id)
+                .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
         // Bug fixed (#267 point 5): check status before window check so NO_SHOW/CANCELLED outside window
@@ -1339,8 +1354,15 @@ public class ReservationService implements ReservationApi {
                     "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
         }
 
-        // Lock the asset row first to serialize simultaneous desk check-outs on the same physical equipment
+        // Lock the asset row SECOND to serialize simultaneous desk check-outs on the same physical equipment
         catalogApi.lockForBooking(reservation.getAssetId());
+
+        // Re-verify status under both locks in case of racing transitions
+        if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new InvalidStateTransitionException(
+                    "INVALID_RESERVATION_STATUS_TRANSITION",
+                    "Cannot check out reservation in status " + reservation.getStatus() + "; expected CONFIRMED");
+        }
 
         // Bug fixed (#113): these checks must run BEFORE reservation.checkOut(now).
         // If checkOut() ran first, Hibernate auto-flush would write status=CHECKED_OUT to the DB

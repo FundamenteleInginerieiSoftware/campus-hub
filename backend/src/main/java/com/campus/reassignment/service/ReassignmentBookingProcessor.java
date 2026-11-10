@@ -20,7 +20,6 @@ import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.ConcurrencyFailureException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -172,16 +171,12 @@ class ReassignmentBookingProcessor {
     }
 
     private static boolean isConcurrencyConflict(Throwable t) {
-        if (t instanceof SubstituteNoLongerFreeException
-                || t instanceof ConcurrencyFailureException
-                || t instanceof TransientDataAccessException) {
+        if (t instanceof SubstituteNoLongerFreeException || t instanceof ConcurrencyFailureException) {
             return true;
         }
         Throwable cause = t.getCause();
         while (cause != null) {
-            if (cause instanceof ConcurrencyFailureException
-                    || cause instanceof TransientDataAccessException
-                    || cause instanceof SubstituteNoLongerFreeException) {
+            if (cause instanceof ConcurrencyFailureException || cause instanceof SubstituteNoLongerFreeException) {
                 return true;
             }
             if (cause instanceof SQLException sqlEx) {
