@@ -29,8 +29,8 @@ public class ProjectService {
     private final ReservationApi reservationApi;
 
     // The list view intentionally skips CatalogApi/ReservationApi so searching the in-memory
-    // library makes zero database queries.
-    @Transactional(readOnly = true)
+    // library makes zero database queries. That is also why there is no @Transactional here:
+    // it would borrow a database connection for a request that never uses it.
     public ProjectSearchResponse search(String query, Lang lang) {
         SearchResult result = projectSearch.search(query, projectLibrary.all());
         List<ProjectListItem> items = result.hits().stream()
@@ -49,41 +49,17 @@ public class ProjectService {
         return new ProjectSearchResponse(result.ambiguous(), items);
     }
 
+    // One read-only transaction for all the catalog and reservation lookups of one page,
+    // instead of a new one per component.
     @Transactional(readOnly = true)
     public ProjectDetailsResponse details(String slug, Lang lang, LocalDateTime start, LocalDateTime end) {
         Project project = findProject(projectLibrary, slug);
-        if ((start == null) != (end == null)) {
-            throw new BadRequestException("VALIDATION_FAILED", "Both start and end must be provided together");
-        }
-        if (start != null) {
-            requireEndAfterStart(start, end);
-        }
-
-        boolean slotChecked = start != null;
-        List<ComponentView> componentViews = project.components().stream()
-                .map(comp -> toComponentView(comp, lang, slotChecked, start, end))
+        requireWholeSlotOrNone(start, end);
+        List<ComponentView> components = project.components().stream()
+                .map(comp -> toComponentView(comp, lang, start, end))
                 .toList();
-        boolean reservable = componentViews.stream().allMatch(c -> c.available() >= c.quantity());
-
-        List<String> bringYourself =
-                project.bringYourself().stream().map(t -> t.in(lang)).toList();
-        List<StepView> steps = project.steps().stream()
-                .map(s -> new StepView(s.title().in(lang), s.text().in(lang)))
-                .toList();
-        List<String> mistakes = project.mistakes().stream().map(t -> t.in(lang)).toList();
-
-        return new ProjectDetailsResponse(
-                project.slug(),
-                project.title().in(lang),
-                project.summary().in(lang),
-                project.difficulty(),
-                project.estimatedHours(),
-                componentViews,
-                bringYourself,
-                steps,
-                mistakes,
-                slotChecked,
-                reservable);
+        boolean reservable = components.stream().allMatch(c -> c.available() >= c.quantity());
+        return toDetailsResponse(project, lang, components, start != null, reservable);
     }
 
     // Shared with ProjectReservationService, so details and Reserve all answer an unknown slug
@@ -100,23 +76,54 @@ public class ProjectService {
         }
     }
 
-    private ComponentView toComponentView(
-            ProjectComponent comp, Lang lang, boolean slotChecked, LocalDateTime start, LocalDateTime end) {
+    // Both or neither: without a slot the page shows plain stock, with one it shows the units
+    // free in that slot. Half a slot (only start or only end) is a 400.
+    private static void requireWholeSlotOrNone(LocalDateTime start, LocalDateTime end) {
+        if ((start == null) != (end == null)) {
+            throw new BadRequestException("VALIDATION_FAILED", "Both start and end must be provided together");
+        }
+        if (start != null) {
+            requireEndAfterStart(start, end);
+        }
+    }
+
+    private ComponentView toComponentView(ProjectComponent comp, Lang lang, LocalDateTime start, LocalDateTime end) {
+        int available = countFreeUnits(comp.model(), start, end);
+        return new ComponentView(comp.model(), comp.quantity(), comp.why().in(lang), available);
+    }
+
+    // start == null means "no slot chosen": count every AVAILABLE unit of the model.
+    private int countFreeUnits(String model, LocalDateTime start, LocalDateTime end) {
         // Liviu's CatalogApi.findAvailableByModel filters to AVAILABLE operational status;
         // passing null as excludeAssetId means "exclude nothing" (Spring Data turns IdNot(null)
         // into IS NOT NULL).
-        List<AssetSummary> candidates = catalogApi.findAvailableByModel(comp.model(), null);
-        int available;
-        if (!slotChecked) {
-            available = candidates.size();
-        } else {
-            // Calin's ReservationApi.isAssetFree checks active bookings (CONFIRMED, CHECKED_OUT,
-            // OVERDUE) in the slot; null ignoreReservationId excludes no reservation. It does not see
-            // 1-minute holds, so a held unit still counts here; Reserve all then gets SLOT_HELD.
-            available = (int) candidates.stream()
-                    .filter(a -> reservationApi.isAssetFree(a.id(), start, end, null))
-                    .count();
+        List<AssetSummary> candidates = catalogApi.findAvailableByModel(model, null);
+        if (start == null) {
+            return candidates.size();
         }
-        return new ComponentView(comp.model(), comp.quantity(), comp.why().in(lang), available);
+        // Calin's ReservationApi.isAssetFree checks active bookings (CONFIRMED, CHECKED_OUT,
+        // OVERDUE) in the slot; null ignoreReservationId excludes no reservation. It does not see
+        // 1-minute holds, so a held unit still counts here; Reserve all then gets SLOT_HELD.
+        return (int) candidates.stream()
+                .filter(a -> reservationApi.isAssetFree(a.id(), start, end, null))
+                .count();
+    }
+
+    private static ProjectDetailsResponse toDetailsResponse(
+            Project project, Lang lang, List<ComponentView> components, boolean slotChecked, boolean reservable) {
+        return new ProjectDetailsResponse(
+                project.slug(),
+                project.title().in(lang),
+                project.summary().in(lang),
+                project.difficulty(),
+                project.estimatedHours(),
+                components,
+                project.bringYourself().stream().map(t -> t.in(lang)).toList(),
+                project.steps().stream()
+                        .map(s -> new StepView(s.title().in(lang), s.text().in(lang)))
+                        .toList(),
+                project.mistakes().stream().map(t -> t.in(lang)).toList(),
+                slotChecked,
+                reservable);
     }
 }

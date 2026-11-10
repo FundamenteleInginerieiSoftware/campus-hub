@@ -9,6 +9,7 @@ import com.campus.user.web.LoginRequest;
 import com.campus.user.web.LoginResponse;
 import com.campus.user.web.RegisterRequest;
 import com.campus.user.web.UserResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -78,14 +79,28 @@ public class AuthService {
      */
     // An unknown email skips the BCrypt check, so it answers a bit faster. That reveals nothing new:
     // register's 409 EMAIL_TAKEN already tells anyone whether an email has an account.
-    @Transactional(readOnly = true)
+    //
+    // Bug fixed: BCrypt only reads the first 72 bytes of a password, so a longer one was cut silently:
+    // the real 72-byte password plus any tail logged in.
+    // Fix: register never stores a password over 72 bytes, so a longer one can't be right. It gets the same
+    // 401 as a wrong password, without calling BCrypt.
+    //
+    // No @Transactional here on purpose: it kept a database connection open during the slow BCrypt check.
+    // login only reads, through one repository call (which runs in its own read-only transaction), and
+    // builds the response from plain columns (no lazy fields), so it needs no transaction around it.
     public LoginResponse login(LoginRequest request) {
         User user = userRepository
                 .findByEmailIgnoreCase(request.email().trim())
                 .filter(User::isEnabled)
-                .filter(found -> passwordEncoder.matches(request.password(), found.getPasswordHash()))
+                .filter(found -> fitsBcrypt(request.password())
+                        && passwordEncoder.matches(request.password(), found.getPasswordHash()))
                 .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "Wrong email or password"));
         return new LoginResponse(createToken(user), tokenLifetime.toSeconds(), UserResponse.from(user));
+    }
+
+    // Same byte rule as RegisterRequest: "ș" counts as 2 bytes.
+    private static boolean fitsBcrypt(String password) {
+        return password.getBytes(StandardCharsets.UTF_8).length <= 72;
     }
 
     // The claims are part of the contract: Stefania's CurrentUser reads "sub", and the decoder rejects
