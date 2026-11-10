@@ -93,4 +93,22 @@ public class AdminReservationController {
     public ResponseEntity<ReservationResponse> returnItem(@PathVariable Long id) {
         return ResponseEntity.ok(reservationService.returnReservation(id));
     }
+
+    @Operation(
+            summary = "Cancel upcoming reservations for user",
+            description =
+                    "Cancels all upcoming CONFIRMED reservations for the specified user (e.g. when an admin disables their account).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Upcoming reservations cancelled"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)")
+    })
+    @PostMapping("/users/{userId}/cancel-upcoming")
+    public ResponseEntity<BatchCancelResponse> cancelUpcomingForUser(
+            @PathVariable Long userId,
+            @RequestParam(required = false, defaultValue = "Account disabled by administrator") String reason) {
+        int count = reservationService.cancelUpcomingReservationsForUser(userId, reason);
+        return ResponseEntity.ok(
+                new BatchCancelResponse(count, "Successfully cancelled " + count + " upcoming reservation(s)"));
+    }
 }

@@ -75,4 +75,20 @@ public interface ReservationApi {
      * @return the unique bundle identifier assigned to all reservations in the kit
      */
     UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end);
+
+    /**
+     * Cancels all upcoming CONFIRMED reservations for a specific user (e.g. when an administrator
+     * disables their account or revokes lab privileges; #229 Part 2).
+     *
+     * <p>Also automatically cancels any pending outgoing transfer offers for those reservations so they
+     * do not remain orphaned.
+     *
+     * <p>Reservations already checked out (CHECKED_OUT or OVERDUE) are not modified, as the physical
+     * equipment is already in the student's possession and must be physically returned at the lab desk.
+     *
+     * @param userId the ID of the user whose upcoming bookings should be cancelled
+     * @param reason explanation for cancellation (e.g. "User account disabled by administrator")
+     * @return the number of upcoming reservations that were cancelled
+     */
+    int cancelUpcomingReservationsForUser(Long userId, String reason);
 }
