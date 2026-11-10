@@ -94,8 +94,7 @@ class ChainShiftRollbackIT {
         jdbcTemplate.update(
                 "INSERT INTO lab_rooms (id, code, name) VALUES (710, 'LAB-710', 'Chain Lab') ON CONFLICT (id) DO NOTHING");
         for (long id : List.of(ASSET_X, ASSET_Y, ASSET_Z)) {
-            jdbcTemplate.update(
-                    """
+            jdbcTemplate.update("""
                     INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
                     VALUES (?, ?, 'CHAIN_MODEL', ?, 'AVAILABLE', 710, 710, NOW(), NOW())
                     ON CONFLICT (id) DO NOTHING
