@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Admin endpoints for querying automated disaster-recovery reassignment audit logs
- * and calculating global optimal reassignment plans via Min-Cost Max-Flow.
+ * and the global reassignment planner (greedy + branch and bound).
  */
 @Validated
 @RestController
@@ -57,7 +57,7 @@ public class AdminReassignmentController {
     @Operation(
             summary = "Solve global optimal reassignment plan (Admin)",
             description =
-                    "Computes the global optimal reassignment plan using Min-Cost Max-Flow for all upcoming reservations of a damaged asset, including a side-by-side comparison against the chronological greedy heuristic.")
+                    "Plans the reassignment of all upcoming reservations of an asset that is UNDER_MAINTENANCE using greedy + branch and bound, and shows the greedy result next to it. dryRun=true (default) only returns the plan; dryRun=false runs the standard reassignment engine (same strategies, retries and logging as the incident flow).")
     @ApiResponses({
         @ApiResponse(
                 responseCode = "200",
@@ -78,6 +78,10 @@ public class AdminReassignmentController {
         @ApiResponse(
                 responseCode = "404",
                 description = "Damaged asset not found",
+                content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Asset is not UNDER_MAINTENANCE",
                 content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
     public ResponseEntity<OptimalReassignmentPlanResponse> solveOptimal(
@@ -88,9 +92,10 @@ public class AdminReassignmentController {
                     Long incidentId,
             @Parameter(
                             description =
-                                    "If true, simulates the optimal moves without mutating database state; defaults to false (production execution)")
-                    @RequestParam(defaultValue = "false")
+                                    "If true (default), only returns the plan and changes nothing. Set false to execute it.")
+                    @RequestParam(defaultValue = "true")
                     boolean dryRun) {
-        return ResponseEntity.ok(reassignmentService.solveOptimalPlan(assetId, incidentId, dryRun));
+        return ResponseEntity.ok(
+                OptimalReassignmentPlanResponse.from(reassignmentService.solveOptimalPlan(assetId, incidentId, dryRun)));
     }
 }

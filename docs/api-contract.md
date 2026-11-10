@@ -286,7 +286,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
-| `POST /api/v1/admin/reassignments/solve-optimal?assetId=1&dryRun=false` | Admin | – | `200` + `OptimalReassignmentPlanResponse` | `400 MISSING_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND` (dryRun defaults to false for production execution; pass dryRun=true for simulation) |
+| `POST /api/v1/admin/reassignments/solve-optimal?assetId=1&dryRun=true` | Admin | – | `200` + `OptimalReassignmentPlanResponse` | `400 MISSING_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND`, `409 ASSET_NOT_UNDER_MAINTENANCE` (dryRun defaults to true and only returns the plan; pass dryRun=false to execute through the standard reassignment engine) |
 
 ```json
 // CreateReservationRequest
@@ -381,7 +381,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "id": 1,
   "incidentId": 100,
   "reservationId": 10,
-  "fromAssetId": 501,
+  "originalAssetId": 501,
   "toAssetId": 502,
   "outcome": "REASSIGNED",
   "strategy": "SameModelStrategy",
@@ -395,30 +395,30 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "totalReservations": 5,
   "rescuedReservations": 5,
   "forceCancelledReservations": 0,
-  "sameModelSubstitutions": 4,
-  "sameCategorySubstitutions": 1,
-  "applied": false,
+  "sameModelCount": 4,
+  "sameCategoryCount": 1,
+  "executed": false,
   "actions": [
     {
       "reservationId": 101,
       "startTime": "2026-11-15T10:00:00",
       "endTime": "2026-11-15T12:00:00",
-      "fromAssetId": 1,
+      "originalAssetId": 1,
       "assignedAssetId": 10,
       "assignedAssetName": "Rigol DS1054Z Scope #2",
       "strategyName": "SameModel",
-      "penaltyCost": 10
+      "penaltyScore": 10
     }
   ],
   "comparison": {
-    "mcmfRescuedCount": 5,
+    "optimalRescuedCount": 5,
     "greedyRescuedCount": 3,
-    "mcmfCancelledCount": 0,
-    "greedyCancelledCount": 2,
-    "mcmfTotalCost": 60,
+    "optimalForceCancelledCount": 0,
+    "greedyForceCancelledCount": 2,
+    "optimalTotalCost": 60,
     "greedyTotalCost": 2040,
     "optimalStrictlyBetter": true,
-    "explanation": "MCMF rescued 5/5 reservations (cost 60) vs Greedy 3/5 (cost 2040). Global optimization strictly saved more reservations or reduced model degradation."
+    "explanation": "Branch and bound rescued 5/5 reservations (cost 60) vs Greedy 3/5 (cost 2040). Global optimization strictly saved more reservations or reduced model degradation."
   }
 }
 

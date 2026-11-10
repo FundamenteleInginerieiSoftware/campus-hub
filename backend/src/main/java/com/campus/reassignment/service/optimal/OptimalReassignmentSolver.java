@@ -1,9 +1,6 @@
 package com.campus.reassignment.service.optimal;
 
 import com.campus.catalog.api.AssetSummary;
-import com.campus.reassignment.web.GreedyComparisonSummary;
-import com.campus.reassignment.web.OptimalReassignmentPlanResponse;
-import com.campus.reassignment.web.ReassignmentActionItem;
 import com.campus.reservation.api.ReservationSummary;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,15 +12,16 @@ import java.util.function.BiPredicate;
 import org.springframework.stereotype.Component;
 
 /**
- * Global optimal reassignment solver employing Min-Cost Max-Flow (MCMF) over a bipartite
- * interval-scheduling network.
+ * Global reassignment solver: a greedy baseline plus a branch-and-bound search over
+ * "which free substitute (or cancel) for each booking".
  *
- * <p>Unlike the chronological greedy strategy (which can greedily allocate a versatile unit
- * and force-cancel later reservations), this solver finds the global configuration that:
- * <ol>
- *   <li>Maximizes the total count of rescued student reservations (Max-Flow).</li>
- *   <li>Minimizes total substitution degradation / student inconvenience (Min-Cost).</li>
- * </ol>
+ * <p>The search ranks plans first by how many bookings are rescued, then by total penalty
+ * (same model is cheaper than same category). The greedy result is the starting upper bound, so
+ * branches that cannot beat it are pruned.
+ *
+ * <p>Note: the bookings of one damaged asset never overlap (booking overlap rule + row lock), so for
+ * that input the greedy is already optimal and the search stops at the root. It only finds a better
+ * plan when the bookings compete for the same substitutes.
  */
 @Component
 public class OptimalReassignmentSolver {
@@ -47,7 +45,7 @@ public class OptimalReassignmentSolver {
      * Solves the optimal reassignment problem globally and returns the full plan response
      * including side-by-side comparison with the chronological greedy heuristic.
      */
-    public OptimalReassignmentPlanResponse solve(
+    public OptimalReassignmentPlan solve(
             Long damagedAssetId,
             String damagedAssetName,
             List<ReservationSummary> bookings,
@@ -56,7 +54,7 @@ public class OptimalReassignmentSolver {
             BiPredicate<Long, ReservationSummary> isAssetFreeChecker) {
 
         if (bookings == null || bookings.isEmpty()) {
-            return new OptimalReassignmentPlanResponse(
+            return new OptimalReassignmentPlan(
                     damagedAssetId,
                     damagedAssetName,
                     0,
@@ -69,21 +67,21 @@ public class OptimalReassignmentSolver {
                     new GreedyComparisonSummary(0, 0, 0, 0, 0, 0, false, "No upcoming reservations affected."));
         }
 
-        // 1. Solve via Min-Cost Max-Flow
-        Solution mcmfSolution = solveMcmf(bookings, damagedAsset, candidateSubstitutes, isAssetFreeChecker);
+        // 1. Solve with branch and bound (greedy cost is the starting bound)
+        Solution optimalSolution = solveOptimal(bookings, damagedAsset, candidateSubstitutes, isAssetFreeChecker);
 
         // 2. Solve via Chronological Greedy for academic comparison
         Solution greedySolution = solveGreedy(bookings, damagedAsset, candidateSubstitutes, isAssetFreeChecker);
 
-        boolean isStrictlyBetter = (mcmfSolution.rescuedCount() > greedySolution.rescuedCount())
-                || (mcmfSolution.rescuedCount() == greedySolution.rescuedCount()
-                        && mcmfSolution.totalCost() < greedySolution.totalCost());
+        boolean isStrictlyBetter = (optimalSolution.rescuedCount() > greedySolution.rescuedCount())
+                || (optimalSolution.rescuedCount() == greedySolution.rescuedCount()
+                        && optimalSolution.totalCost() < greedySolution.totalCost());
 
         String explanation = String.format(
-                "MCMF rescued %d/%d reservations (cost %d) vs Greedy %d/%d (cost %d). Global optimization %s.",
-                mcmfSolution.rescuedCount(),
+                "Branch and bound rescued %d/%d reservations (cost %d) vs Greedy %d/%d (cost %d). Global optimization %s.",
+                optimalSolution.rescuedCount(),
                 bookings.size(),
-                mcmfSolution.totalCost(),
+                optimalSolution.totalCost(),
                 greedySolution.rescuedCount(),
                 bookings.size(),
                 greedySolution.totalCost(),
@@ -91,7 +89,7 @@ public class OptimalReassignmentSolver {
                         ? "strictly saved more reservations or reduced model degradation"
                         : "matched optimal baseline");
 
-        List<ReassignmentActionItem> actionItems = mcmfSolution.actions().stream()
+        List<ReassignmentActionItem> actionItems = optimalSolution.actions().stream()
                 .map(action -> new ReassignmentActionItem(
                         action.booking().id(),
                         action.booking().start(),
@@ -103,22 +101,22 @@ public class OptimalReassignmentSolver {
                         action.penaltyCost()))
                 .toList();
 
-        return new OptimalReassignmentPlanResponse(
+        return new OptimalReassignmentPlan(
                 damagedAssetId,
                 damagedAssetName,
                 bookings.size(),
-                mcmfSolution.rescuedCount(),
-                mcmfSolution.cancelledCount(),
-                mcmfSolution.sameModelCount(),
-                mcmfSolution.sameCategoryCount(),
+                optimalSolution.rescuedCount(),
+                optimalSolution.cancelledCount(),
+                optimalSolution.sameModelCount(),
+                optimalSolution.sameCategoryCount(),
                 false,
                 actionItems,
                 new GreedyComparisonSummary(
-                        mcmfSolution.rescuedCount(),
+                        optimalSolution.rescuedCount(),
                         greedySolution.rescuedCount(),
-                        mcmfSolution.cancelledCount(),
+                        optimalSolution.cancelledCount(),
                         greedySolution.cancelledCount(),
-                        mcmfSolution.totalCost(),
+                        optimalSolution.totalCost(),
                         greedySolution.totalCost(),
                         isStrictlyBetter,
                         explanation));
@@ -133,7 +131,7 @@ public class OptimalReassignmentSolver {
      * allowing non-overlapping bookings within the same time cluster to utilize different substitutes
      * while guaranteeing that no substitute is ever double-booked across overlapping intervals.
      */
-    public Solution solveMcmf(
+    public Solution solveOptimal(
             List<ReservationSummary> bookings,
             AssetSummary damagedAsset,
             List<AssetSummary> candidateSubstitutes,

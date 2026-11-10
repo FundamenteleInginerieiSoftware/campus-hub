@@ -19,12 +19,15 @@ import static org.mockito.Mockito.when;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.optimal.GreedyComparisonSummary;
+import com.campus.reassignment.service.optimal.OptimalReassignmentPlan;
 import com.campus.reassignment.service.optimal.OptimalReassignmentSolver;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
@@ -472,5 +475,85 @@ class ReassignmentServiceTest {
         assertThatCode(() -> reassignmentService.getLogs(0, 1)).doesNotThrowAnyException();
         assertThatCode(() -> reassignmentService.getLogs(0, 100)).doesNotThrowAnyException();
         assertThatCode(() -> reassignmentService.getLogs(Integer.MAX_VALUE, 1)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("solveOptimalPlan returns 409 and touches nothing when the asset is not UNDER_MAINTENANCE")
+    void solveOptimalPlanRejectsHealthyAsset() {
+        when(catalogApi.getAsset(SUBSTITUTE_ASSET_ID)).thenReturn(substituteAsset);
+
+        assertThatThrownBy(() -> reassignmentService.solveOptimalPlan(SUBSTITUTE_ASSET_ID, INCIDENT_ID, false))
+                .as("a healthy asset must not have its bookings moved")
+                .isInstanceOf(ConflictException.class);
+        verify(reservationApi, never()).moveToAsset(any(), any(), anyString());
+        verify(reservationApi, never()).forceCancel(any(), anyString());
+    }
+
+    @Test
+    @DisplayName("solveOptimalPlan with dryRun=true only plans and moves nothing")
+    void solveOptimalPlanDryRunMovesNothing() {
+        OptimalReassignmentPlan plan = stubPlanForOneBooking();
+
+        OptimalReassignmentPlan result = reassignmentService.solveOptimalPlan(DAMAGED_ASSET_ID, INCIDENT_ID, true);
+
+        assertThat(result).as("dry run returns the solver plan unchanged").isEqualTo(plan);
+        verify(reservationApi, never()).moveToAsset(any(), any(), anyString());
+        verify(reassignmentLogRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("solveOptimalPlan with dryRun=false runs the standard engine (strategies + log per booking)")
+    void solveOptimalPlanLiveRunUsesEngine() {
+        stubPlanForOneBooking();
+        ReservationSummary booking = new ReservationSummary(
+                1L,
+                USER_ID,
+                DAMAGED_ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                ReservationStatus.CONFIRMED);
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
+        when(primaryStrategy.name()).thenReturn("SameModelStrategy");
+        when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
+                .thenReturn(true);
+
+        OptimalReassignmentPlan result = reassignmentService.solveOptimalPlan(DAMAGED_ASSET_ID, INCIDENT_ID, false);
+
+        assertThat(result.executed()).as("live run is marked executed").isTrue();
+        assertThat(result.rescuedReservations())
+                .as("counts come from what the engine did")
+                .isEqualTo(1);
+        verify(reassignmentLogRepository).save(argThat(entry -> entry.getStrategy().equals("SameModelStrategy")));
+    }
+
+    private OptimalReassignmentPlan stubPlanForOneBooking() {
+        ReservationSummary booking = new ReservationSummary(
+                1L,
+                USER_ID,
+                DAMAGED_ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                ReservationStatus.CONFIRMED);
+        OptimalReassignmentPlan plan = new OptimalReassignmentPlan(
+                DAMAGED_ASSET_ID,
+                "Damaged Scope",
+                1,
+                1,
+                0,
+                1,
+                0,
+                false,
+                List.of(),
+                new GreedyComparisonSummary(1, 1, 0, 0, 10, 10, false, "same"));
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
+                .thenReturn(List.of(booking));
+        when(catalogApi.findAvailableByModel(damagedAsset.model(), DAMAGED_ASSET_ID))
+                .thenReturn(List.of(substituteAsset));
+        when(catalogApi.findAvailableByCategory(damagedAsset.categoryId(), DAMAGED_ASSET_ID))
+                .thenReturn(List.of());
+        when(optimalReassignmentSolver.solve(any(), any(), any(), any(), any(), any()))
+                .thenReturn(plan);
+        return plan;
     }
 }

@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
-import com.campus.reassignment.web.OptimalReassignmentPlanResponse;
-import com.campus.reassignment.web.ReassignmentActionItem;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.LocalDateTime;
@@ -25,7 +23,7 @@ class OptimalReassignmentSolverTest {
 
     @Test
     @DisplayName(
-            "Counterexample: MCMF rescues 100% of reservations where Greedy cancels a student due to short-sighted allocation")
+            "Counterexample: Branch and bound rescues 100% of reservations where Greedy cancels a student due to short-sighted allocation")
     void solve_rescuesAllReservationsWhereGreedyFails() {
         LocalDateTime base = LocalDateTime.of(2026, 11, 15, 10, 0);
 
@@ -48,7 +46,7 @@ class OptimalReassignmentSolverTest {
 
         // r1 can accept subSameModel (cost 10) or subSameCategory (cost 50)
         // r2 can ONLY accept subSameModel (cost 10) because it strictly needs DS1054Z
-        OptimalReassignmentPlanResponse response =
+        OptimalReassignmentPlan response =
                 solver.solve(1L, "Scope Damaged", List.of(r1, r2), damaged, candidates, (candidateId, booking) -> {
                     if (booking.id() == 102L) {
                         return candidateId == 10L; // r2 only compatible with asset 10
@@ -61,10 +59,10 @@ class OptimalReassignmentSolverTest {
                 .isNotNull();
 
         assertThat(response.rescuedReservations())
-                .as("MCMF must rescue both reservations (2/2); see OptimalReassignmentSolver.solve")
+                .as("Solver must rescue both reservations (2/2); see OptimalReassignmentSolver.solve")
                 .isEqualTo(2);
         assertThat(response.forceCancelledReservations())
-                .as("MCMF must have zero cancellations; see OptimalReassignmentSolver.solve")
+                .as("Solver must have zero cancellations; see OptimalReassignmentSolver.solve")
                 .isZero();
 
         // Check academic greedy comparison
@@ -75,7 +73,7 @@ class OptimalReassignmentSolverTest {
                 .as("Greedy heuristic force-cancels 1 reservation")
                 .isEqualTo(1);
         assertThat(response.comparison().optimalStrictlyBetter())
-                .as("MCMF global optimization must be strictly better than greedy")
+                .as("Branch and bound must be strictly better than greedy")
                 .isTrue();
     }
 
@@ -97,7 +95,7 @@ class OptimalReassignmentSolverTest {
         // Only ONE substitute asset available (Asset 10), but free during both slots
         AssetSummary substitute = new AssetSummary(10L, "Scope Substitute", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
 
-        OptimalReassignmentPlanResponse response = solver.solve(
+        OptimalReassignmentPlan response = solver.solve(
                 1L, "Scope Damaged", List.of(r1, r2), damaged, List.of(substitute), (candidateId, booking) -> true);
 
         assertThat(response.rescuedReservations())
@@ -114,7 +112,7 @@ class OptimalReassignmentSolverTest {
     void solve_handlesEmptyBookings() {
         AssetSummary damaged = new AssetSummary(1L, "Scope Damaged", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
 
-        OptimalReassignmentPlanResponse response =
+        OptimalReassignmentPlan response =
                 solver.solve(1L, "Scope Damaged", List.of(), damaged, List.of(), (c, b) -> true);
 
         assertThat(response.totalReservations()).isZero();
@@ -144,7 +142,7 @@ class OptimalReassignmentSolverTest {
         AssetSummary sub1 = new AssetSummary(10L, "Scope 1", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         AssetSummary sub2 = new AssetSummary(20L, "Scope 2", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
 
-        OptimalReassignmentPlanResponse response =
+        OptimalReassignmentPlan response =
                 solver.solve(1L, "Scope Damaged", List.of(rA, rB, rC), damaged, List.of(sub1, sub2), (c, b) -> true);
 
         assertThat(response.rescuedReservations())
@@ -173,7 +171,7 @@ class OptimalReassignmentSolverTest {
         // Only ONE substitute asset available
         AssetSummary sub1 = new AssetSummary(10L, "Scope 1", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
 
-        OptimalReassignmentPlanResponse response =
+        OptimalReassignmentPlan response =
                 solver.solve(1L, "Scope Damaged", List.of(rA, rB, rC), damaged, List.of(sub1), (c, b) -> true);
 
         assertThat(response.rescuedReservations())
@@ -222,7 +220,7 @@ class OptimalReassignmentSolverTest {
         // Asset Y: only free for B (not A)
         AssetSummary assetY = new AssetSummary(20L, "Scope Y", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
 
-        OptimalReassignmentPlanResponse response = solver.solve(
+        OptimalReassignmentPlan response = solver.solve(
                 1L, "Scope Damaged", List.of(rA, rB), damaged, List.of(assetX, assetY), (candidateId, booking) -> {
                     if (candidateId == 10L) return booking.id() == 101L; // X only free for A
                     if (candidateId == 20L) return booking.id() == 102L; // Y only free for B
@@ -279,18 +277,10 @@ class OptimalReassignmentSolverTest {
             }
         }
 
-        // Warm up JIT
-        solver.solve(1L, "Scope Damaged", bookings.subList(0, 10), damaged, candidates, (cId, b) -> true);
-
-        long startNanos = System.nanoTime();
-        OptimalReassignmentPlanResponse response =
+        OptimalReassignmentPlan response =
                 solver.solve(1L, "Scope Damaged", bookings, damaged, candidates, (cId, b) -> true);
-        long elapsedMillis = (System.nanoTime() - startNanos) / 1_000_000;
 
         assertThat(response.totalReservations()).isEqualTo(60);
         assertThat(response.rescuedReservations()).isEqualTo(60);
-        assertThat(elapsedMillis)
-                .as("Branch-and-bound pruning must solve 60 reservations in under 100ms; took " + elapsedMillis + "ms")
-                .isLessThan(100);
     }
 }

@@ -47,7 +47,7 @@ Each document is structured in two parts:
 | 24 | [`24-reservation-api-book-bundle-facade-and-project-architecture.md`](./24-reservation-api-book-bundle-facade-and-project-architecture.md) | ReservationApi bookBundle Facade & Project Assistant | In-process atomic booking facade (1..5 assets) for project assistant, ArchUnit leaf module rule for project |
 | 25 | [`25-bundle-booking-confirmation-banner.md`](./25-bundle-booking-confirmation-banner.md) | Bundle Booking Confirmation Banner in My Reservations | Navigation state handling for `bookedBundleId`, item count banner formatting, project kit feedback |
 | 26 | [`26-reservation-bundle-quota-after-commit-notifications-and-guards.md`](./26-reservation-bundle-quota-after-commit-notifications-and-guards.md) | Reservation Bundle Quota, After-Commit Emails & Edge Guards | Distinct session counting (`coalesce(bundle_id, id)`), `afterCommit` notification sync, anti-probing, hold cooldown, bundle extend guard |
-| 29 | [`29-global-optimal-reassignment-mcmf.md`](./29-global-optimal-reassignment-mcmf.md) | Global Optimal Reassignment Engine (Min-Cost Max-Flow) | Successive Shortest Path (SSP) with Dijkstra & Johnson node potentials, Interval Conflict Clustering, dry-run & execution |
+| 29 | [`29-global-optimal-reassignment.md`](./29-global-optimal-reassignment.md) | Global Optimal Reassignment Planner (greedy + branch and bound) | Greedy upper bound, suffix lower bounds, pruning, dry-run (default) & execution through the standard engine |
 
 
 

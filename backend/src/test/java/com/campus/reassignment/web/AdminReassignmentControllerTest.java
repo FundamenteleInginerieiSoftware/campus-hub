@@ -10,11 +10,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.campus.common.error.ConflictException;
 import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.service.ReassignmentService;
+import com.campus.reassignment.service.optimal.GreedyComparisonSummary;
+import com.campus.reassignment.service.optimal.OptimalReassignmentPlan;
+import com.campus.reassignment.service.optimal.ReassignmentActionItem;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -129,7 +133,7 @@ class AdminReassignmentControllerTest {
     @WithMockUser(roles = "ADMIN")
     @DisplayName("POST /api/v1/admin/reassignments/solve-optimal returns 200 with optimal plan for admin")
     void solveOptimalSuccessForAdmin() throws Exception {
-        OptimalReassignmentPlanResponse response = new OptimalReassignmentPlanResponse(
+        OptimalReassignmentPlan response = new OptimalReassignmentPlan(
                 10L,
                 "Rigol DS1054Z",
                 2,
@@ -165,9 +169,9 @@ class AdminReassignmentControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    @DisplayName("POST /api/v1/admin/reassignments/solve-optimal defaults dryRun to false for production execution")
-    void solveOptimalDefaultsToProductionExecution() throws Exception {
-        OptimalReassignmentPlanResponse response = new OptimalReassignmentPlanResponse(
+    @DisplayName("POST /api/v1/admin/reassignments/solve-optimal defaults dryRun to true so a bare call changes nothing")
+    void solveOptimalDefaultsToDryRun() throws Exception {
+        OptimalReassignmentPlan response = new OptimalReassignmentPlan(
                 10L,
                 "Rigol DS1054Z",
                 2,
@@ -187,10 +191,23 @@ class AdminReassignmentControllerTest {
                         10)),
                 new GreedyComparisonSummary(2, 1, 0, 1, 60, 1010, true, "Optimal saved strictly more"));
 
-        when(reassignmentService.solveOptimalPlan(eq(10L), any(), eq(false))).thenReturn(response);
+        when(reassignmentService.solveOptimalPlan(eq(10L), any(), eq(true))).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/admin/reassignments/solve-optimal").param("assetId", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.damagedAssetId").value(10));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/solve-optimal returns 409 when the asset is not UNDER_MAINTENANCE")
+    void solveOptimalReturns409ForHealthyAsset() throws Exception {
+        when(reassignmentService.solveOptimalPlan(eq(10L), any(), eq(false)))
+                .thenThrow(new ConflictException("ASSET_NOT_UNDER_MAINTENANCE", "Asset #10 is not UNDER_MAINTENANCE"));
+
+        mockMvc.perform(post("/api/v1/admin/reassignments/solve-optimal")
+                        .param("assetId", "10")
+                        .param("dryRun", "false"))
+                .andExpect(status().isConflict());
     }
 }
