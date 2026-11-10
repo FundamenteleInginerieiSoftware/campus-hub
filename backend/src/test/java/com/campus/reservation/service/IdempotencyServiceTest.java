@@ -32,8 +32,7 @@ class IdempotencyServiceTest {
     void setUp() {
         repository = mock(IdempotencyRecordRepository.class);
         Clock clock = Clock.fixed(Instant.parse("2026-11-10T10:00:00Z"), ZoneId.of("Europe/Bucharest"));
-        service = new IdempotencyService(
-                repository, new ObjectMapper(), clock, mock(PlatformTransactionManager.class));
+        service = new IdempotencyService(repository, new ObjectMapper(), clock, mock(PlatformTransactionManager.class));
     }
 
     @Test

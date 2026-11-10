@@ -3,7 +3,6 @@ package com.campus.reservation.service;
 import com.campus.common.error.BadRequestException;
 import com.campus.common.error.ConflictException;
 import com.campus.reservation.domain.IdempotencyRecord;
-import com.campus.reservation.domain.IdempotencyStatus;
 import com.campus.reservation.repository.IdempotencyRecordRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -102,8 +101,7 @@ public class IdempotencyService {
 
         Optional<ResponseEntity<T>> replay;
         try {
-            replay = requiresNewTx.execute(
-                    status -> claimKey(idempotencyKey, userId, fingerprint, now, responseType));
+            replay = requiresNewTx.execute(status -> claimKey(idempotencyKey, userId, fingerprint, now, responseType));
         } catch (DataIntegrityViolationException e) {
             // Two first requests raced: the other one inserted the key first.
             throw inProgress();
@@ -178,7 +176,8 @@ public class IdempotencyService {
             return builder.body(objectMapper.readValue(rec.getResponseBody(), responseType));
         } catch (RuntimeException e) {
             // E.g. the response record changed between deploys. Replay the status only.
-            log.warn("Stored idempotent response for key {} is unreadable: {}", rec.getIdempotencyKey(), e.getMessage());
+            log.warn(
+                    "Stored idempotent response for key {} is unreadable: {}", rec.getIdempotencyKey(), e.getMessage());
             return builder.build();
         }
     }
