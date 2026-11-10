@@ -495,4 +495,57 @@ class ReservationAnalyticsServiceTest {
                 .isEqualTo(2);
         assertThat(response.assets()).extracting(AssetUtilizationItem::assetId).containsExactlyInAnyOrder(10L, 99L);
     }
+
+    @Test
+    @DisplayName("getUtilization: excludes RETIRED assets so archived equipment does not skew lab capacity")
+    void getUtilization_skipsRetiredAssets() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime from = now.minusDays(5);
+        LocalDateTime to = now;
+
+        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L, 88L));
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of());
+
+        when(catalogApi.getAsset(10L))
+                .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
+        // Asset 88 was retired
+        when(catalogApi.getAsset(88L))
+                .thenReturn(new AssetSummary(88L, "Decommissioned Scope", "OLD_MODEL", 1L, 1L, AssetStatus.RETIRED));
+
+        UtilizationAnalyticsResponse response = analyticsService.getUtilization(from, to);
+
+        assertThat(response.totalAssetsTracked())
+                .as("retired asset 88 must be excluded from active equipment fleet")
+                .isEqualTo(1);
+        assertThat(response.assets()).extracting(AssetUtilizationItem::assetId).containsExactly(10L);
+    }
+
+    @Test
+    @DisplayName("getUtilization: computes exact operating hours for partial day windows")
+    void getUtilization_calculatesPartialDayOperatingHoursAccurately() {
+        // Wednesday 14:00 to 18:00 (4 hours within lab operating window 08:00-20:00)
+        LocalDateTime from = LocalDateTime.of(2026, 11, 4, 14, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 4, 18, 0);
+
+        Reservation r = new Reservation(42L, 10L, from, from.plusHours(2), from.minusDays(1));
+        ReflectionTestUtils.setField(r, "id", 201L);
+        ReflectionTestUtils.setField(r, "status", ReservationStatus.CONFIRMED);
+
+        when(reservationRepository.findIntersecting(from, to)).thenReturn(List.of(r));
+        when(reservationRepository.findDistinctAssetIds()).thenReturn(List.of(10L));
+        when(catalogApi.getAsset(10L))
+                .thenReturn(new AssetSummary(10L, "Scope 10", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE));
+
+        UtilizationAnalyticsResponse response = analyticsService.getUtilization(from, to);
+
+        assertThat(response.totalCapacityHours())
+                .as("partial 4-hour window on 1 asset must yield exactly 4.0 capacity hours, not a full 12h day")
+                .isEqualTo(4.0);
+        assertThat(response.totalBookedHours())
+                .as("2-hour reservation within 4-hour window must give 2.0 booked hours")
+                .isEqualTo(2.0);
+        assertThat(response.averageUtilizationPercent())
+                .as("2.0 / 4.0 must equal 50.0% utilization")
+                .isEqualTo(50.0);
+    }
 }

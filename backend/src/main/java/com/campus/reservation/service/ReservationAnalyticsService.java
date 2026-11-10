@@ -87,16 +87,22 @@ public class ReservationAnalyticsService {
         int reportingDays =
                 Math.max(1, (int) ChronoUnit.DAYS.between(resolvedFrom.toLocalDate(), resolvedTo.toLocalDate()) + 1);
 
-        long workingDays = 0;
+        long openMinutes = 0;
         LocalDate curr = resolvedFrom.toLocalDate();
         LocalDate last = resolvedTo.toLocalDate();
         while (!curr.isAfter(last)) {
             if (curr.getDayOfWeek() != DayOfWeek.SATURDAY && curr.getDayOfWeek() != DayOfWeek.SUNDAY) {
-                workingDays++;
+                LocalDateTime dayOpen = curr.atTime(HEATMAP_START_HOUR, 0);
+                LocalDateTime dayClose = curr.atTime(HEATMAP_END_HOUR, 0);
+                LocalDateTime windowStart = resolvedFrom.isAfter(dayOpen) ? resolvedFrom : dayOpen;
+                LocalDateTime windowEnd = resolvedTo.isBefore(dayClose) ? resolvedTo : dayClose;
+                if (windowStart.isBefore(windowEnd)) {
+                    openMinutes += Duration.between(windowStart, windowEnd).toMinutes();
+                }
             }
             curr = curr.plusDays(1);
         }
-        double openHoursPerAsset = Math.max(1, workingDays) * LAB_DAILY_OPEN_HOURS;
+        double openHoursPerAsset = openMinutes / 60.0;
 
         List<Reservation> allIntersecting = reservationRepository.findIntersecting(resolvedFrom, resolvedTo);
 
@@ -148,6 +154,10 @@ public class ReservationAnalyticsService {
         for (Long assetId : allAssetIds) {
             try {
                 AssetSummary asset = catalogApi.getAsset(assetId);
+                // Exclude retired equipment from active utilization metrics
+                if (asset.status() == com.campus.catalog.api.AssetStatus.RETIRED) {
+                    continue;
+                }
                 double bookedHours = assetBookedHoursMap.getOrDefault(assetId, 0.0);
                 int bookingCount = assetBookingCountMap.getOrDefault(assetId, 0);
                 double utilPercent = openHoursPerAsset > 0
