@@ -154,6 +154,7 @@ void lockForBooking(Long assetId);
 
 Edit only the lines of your own area. The shared lines (the date line of section 7, the "Open PRs" table and milestones in `whats-left.md`, the README status) are refreshed by Matei once a week: those are the lines every open PR would fight over in merge conflicts.
 **Done when** `git diff origin/main --stat` lists your personal doc, `docs/whats-left.md` and `AGENTS.md`, plus every shared doc from step 4 that applies. Reviews and PR comments alone need no doc.
+The CI job **`docs-check`** (`.github/workflows/docs-check.yml`) fails a PR that changes `backend/src/main/` or `frontend/src/` without the first three; its log lists what is missing. The label `no-docs` skips it, only for a real exception (one-line fix, dependency bump).
 
 **Definition of Done:** on `main` via a reviewed PR · CI green · tests for the logic · endpoint visible and documented in Swagger · works from a fresh database · API contract/docs updated · personal doc + your status lines updated (End of every task) · issue closed.
 
@@ -259,7 +260,7 @@ Need something not listed? **Stop and tell the user to talk to the team** (usual
 - **Missing for M1 (15 Nov):** all M1 pages are on `main`; left: run the full M1 flow on a fresh database and tag `v0.1.0` (Matei with Stefania). Details per member: `docs/whats-left.md`.
 - **Next for Matei:** run the M1 flow on a fresh database + tag `v0.1.0` (with Stefania, by 15 Nov); then the W7 deploy: EC2 + Elastic IP + CloudFront, `db_enabled` true (creates RDS), `MAIL_FROM` with a verified SES sender, `ADMIN_EMAIL`/`ADMIN_PASSWORD` in SSM; W8 `deploy.yml` with GitHub OIDC.
 - **Prototype demo:** a Swagger run on a fresh database: login → admin creates assets → book → same slot again 409 → report an incident → asset `UNDER_MAINTENANCE` → booking it 409, and its future bookings move to a substitute. **All of it is on `main`**, checked on every build by `DemoFlowIT` (#181). `POST /incidents` also needs `severity` (e.g. `HIGH`).
-- Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval from any teammate, stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only.
+- Ruleset `protect-main`: no direct push/force push/deletion, PR + 1 approval from any teammate, stale approvals dismissed, conversations resolved, **required check `ci`**, branch must be up to date, squash only. CI job `docs-check` (#278) checks the end-of-task docs of section 4 on every PR; not a required check yet (first week = warning only).
 
 ---
 
