@@ -150,7 +150,11 @@ class PickupPassServiceTest {
     void rejectsWrongCode() {
         studentExists();
         String wrong = "000000";
-        assertThat(wrong).isNotEqualTo(codes.code(STUDENT_ID, STEP)).isNotEqualTo(codes.code(STUDENT_ID, STEP - 1));
+        assertThat(wrong)
+                .as(
+                        "test guard: 000000 must not be a valid code at this step; see PickupPassServiceTest.rejectsWrongCode")
+                .isNotEqualTo(codes.code(STUDENT_ID, STEP))
+                .isNotEqualTo(codes.code(STUDENT_ID, STEP - 1));
 
         assertInvalid(wrong, "verify: a wrong code must be rejected");
     }

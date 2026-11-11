@@ -63,6 +63,26 @@ class AdminPickupPassControllerTest {
     }
 
     @Test
+    void requiresLogin() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":12,\"code\":\"493027\"}"))
+                .andReturn()
+                .getResponse();
+
+        assertThat(response.getStatus())
+                .as("verify without a token answers 401; see SecurityConfig.apiChain (/api/v1/**)")
+                .isEqualTo(401);
+        assertThat(jsonMapper
+                        .readTree(response.getContentAsString())
+                        .path("code")
+                        .asString())
+                .as("the 401 is our ProblemDetail JSON with a code; see SecurityErrorHandler")
+                .isEqualTo("UNAUTHORIZED");
+        verifyNoInteractions(pickupPassService);
+    }
+
+    @Test
     void studentGets403() throws Exception {
         MockHttpServletResponse response = verify("STUDENT", "{\"userId\":12,\"code\":\"493027\"}");
 

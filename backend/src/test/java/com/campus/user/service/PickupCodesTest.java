@@ -3,6 +3,7 @@ package com.campus.user.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +17,20 @@ class PickupCodesTest {
         assertThat(codes.code(12, 100))
                 .as("same user and step must give the same code; see PickupCodes.code")
                 .isEqualTo(codes.code(12, 100));
+    }
+
+    @Test
+    void digitsAreAsciiInAnyLocale() {
+        Locale old = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-EG"));
+            assertThat(codes.code(12, 100))
+                    .as(
+                            "the code must be ASCII digits whatever the JVM locale, or verify never matches; see PickupCodes.code")
+                    .matches("[0-9]{6}");
+        } finally {
+            Locale.setDefault(old);
+        }
     }
 
     @Test

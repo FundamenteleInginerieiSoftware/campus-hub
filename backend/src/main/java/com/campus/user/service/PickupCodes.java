@@ -3,12 +3,14 @@ package com.campus.user.service;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.Locale;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
  * The rotating 6-digit pickup code: HMAC-SHA256 over "pickup-v1|userId|timeStep", cut down to six
- * digits. Phone and server compute the same number, so nothing is stored.
+ * digits. Only the server computes it (the phone just fetches it); the same inputs always give the
+ * same code, so nothing is stored.
  */
 final class PickupCodes {
 
@@ -35,7 +37,9 @@ final class PickupCodes {
             throw new IllegalStateException("HmacSHA256 is not available", e);
         }
         int number = ByteBuffer.wrap(mac).getInt() & 0x7fffffff;
-        return String.format("%0" + DIGITS + "d", number % 1_000_000);
+        // Bug fixed: String.format used the JVM default locale, so on an Arabic or Thai JVM the code came
+        // out in non-ASCII digits and verify never matched. Fix: Locale.ROOT always gives 0-9.
+        return String.format(Locale.ROOT, "%0" + DIGITS + "d", number % 1_000_000);
     }
 
     static long timeStep(long epochSecond) {

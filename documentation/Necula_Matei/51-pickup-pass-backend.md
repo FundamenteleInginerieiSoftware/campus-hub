@@ -29,7 +29,7 @@ Think of the app of a bank that shows a 6-digit number which changes every half 
 | File | What it is |
 |---|---|
 | `user/service/PickupCodes.java` | The formula (package-private, no Spring) |
-| `user/service/PickupPassService.java` | `currentPass()` and `verify(userId, code)` (Task 1-2, already on the branch) |
+| `user/service/PickupPassService.java` | `currentPass()` and `verify(userId, code)` |
 | `user/web/PickupPassController.java` | `GET /api/v1/users/me/pickup-pass` |
 | `user/web/AdminPickupPassController.java` | `POST /api/v1/admin/pickup-pass/verify` |
 | `user/web/VerifyPickupPassRequest.java` | `@NotNull Long userId`, `@NotNull @Pattern("\\d{6}") String code` |
@@ -51,7 +51,7 @@ code     = (first 4 bytes of mac as int, sign bit cleared) % 1_000_000, padded t
 | Accept step and step - 1 | Reading at second 29 and typing 10 s later must work; a code lives at most 60 s |
 | `DIGITS = 6` | Easy to read aloud and type; same as authenticator apps |
 | `PURPOSE = "pickup-v1"` | A login token is signed over `base64.base64` text, which never contains `\|`, so a signature of one kind can never pass for the other. Also leaves room for a "v2" |
-| Key = `app.jwt.secret` | No new secret to deploy; a short secret already fails at startup (doc 35) |
+| Key = `app.jwt.secret` | No new secret to deploy; a secret under 32 bytes already stops the app at startup (doc 23, `docs/report/security.md`) |
 | `Clock` instead of `Instant.now()` | Fixed clock in tests (team rule) |
 | `MessageDigest.isEqual` | Same time for a right and a wrong code |
 | One error for all failures | Wrong code, old code, unknown user, disabled user all give `409 PICKUP_CODE_INVALID`: nobody can probe which accounts exist |
