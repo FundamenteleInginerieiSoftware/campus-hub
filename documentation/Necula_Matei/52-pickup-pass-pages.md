@@ -36,17 +36,18 @@
 
 | Moment | What happens | Why |
 |---|---|---|
-| Open | One `GET /users/me/pickup-pass`; seconds copied from `validForSeconds` | The backend decides when a code ends, the page only counts |
-| Every second | A 1 s interval lowers a ref and the state | The ref is read inside the tick, so no fetch starts inside a `setState` updater (React may run updaters twice) |
-| Reaches 0 | The timer stops and `reloadToken` goes up, which refetches | A new `pass` object restarts the timer |
+| Open | One `GET /users/me/pickup-pass`; `expiresAt = now + validForSeconds` | The backend decides when a code ends, the page only counts |
+| Every second | A 1 s interval stores the current time; the ring shows `expiresAt - now` | One clock, so the countdown cannot drift and there is no second counter |
+| Reaches 0 | The timer stops and the page refetches (a new code restarts it) | The old code is already dead on the backend |
 | Tab hidden then visible | `visibilitychange` refetches | Browsers slow down timers in hidden tabs, the number could be old |
-| Error | `ErrorAlert` + "Try again"; the timer stays stopped | No retry loop against a down backend |
+| Error | The code is removed; only `ErrorAlert` + "Try again" show; each new request clears the old alert | Bug fixed: an expired code used to stay on screen with "0s" after a failed refresh, so a student could show it at the desk |
 | Leave the page | Interval and listener are removed; a late answer is ignored (`ignore` flag) | No updates on an unmounted page |
 
 ### Verify dialog
 
 - `PinInput length={6} type="number"`; whitespace is stripped before sending, so a pasted `493 027` works.
 - The check runs in `onChange` when 6 digits are there. `onComplete` did not fire for a pasted value in the manual test.
+- While a check runs, Cancel and the close button are disabled, so a late success cannot mark a student the admin already cancelled. After a wrong code the focus returns to the first box.
 - `PICKUP_CODE_INVALID` shows the text above and empties the input; any other error goes through `errorMessage`.
 - `verified` lives only in the desk page state: it is a convenience for the person at the desk, not a record. The record is the `PICKUP_PASS_VERIFIED` audit row the backend writes.
 
@@ -57,9 +58,11 @@
 | Code refreshes at 0 | A new request after the countdown, a different code |
 | Hidden then visible | Exactly one extra request |
 | Wrong code `000000` | Error shown, input emptied (`pickup-04-invalid.png`) |
+| Backend stopped while the page is open | At 0 the code disappears; only "Request failed with status 502" and "Try again" show |
+| Desk at 390 px | Verify and Check out fit in the card, no sideways scroll (`pickup-05-desk-phone.png`) |
 | Pasted `429 973` (the student's current code) | Dialog closed, "Student One" + green check (`pickup-03-verified.png`) |
 
-Screenshots: `docs/screenshots/pickup-01-pass.png` (390 px wide), `pickup-02-verify-dialog.png`, `pickup-03-verified.png`, `pickup-04-invalid.png`. `npm run lint && npm run build` are clean.
+Screenshots: `docs/screenshots/pickup-01-pass.png` (390 px wide), `pickup-02-verify-dialog.png`, `pickup-03-verified.png`, `pickup-04-invalid.png`, `pickup-05-desk-phone.png`. `npm run lint && npm run build` are clean.
 
 ### Still open
 

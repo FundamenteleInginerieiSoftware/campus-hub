@@ -1,23 +1,29 @@
 import { Alert, Button, Modal, PinInput, Stack, Text } from '@mantine/core'
 import { IconAlertTriangle, IconCircleCheckFilled } from '@tabler/icons-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client.ts'
 import { errorMessage } from '../api/errorMessages.ts'
 import { verifyPickupPass, type VerifiedStudent } from '../api/pickupPass.ts'
 
 type Props = {
   userId: number
-  opened: boolean
   onClose: () => void
   onVerified: (student: VerifiedStudent) => void
 }
 
 // The admin types the 6 digits the student shows. The backend answers with the student's name,
 // so the desk knows the person in front of them owns the booking (the Student column only has an id).
-export function VerifyStudentDialog({ userId, opened, onClose, onVerified }: Props) {
+export function VerifyStudentDialog({ userId, onClose, onVerified }: Props) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const firstBox = useRef<HTMLInputElement>(null)
+
+  // The boxes are disabled while checking, which drops the focus: after a wrong code put it back on
+  // the first box so the admin can type again at once.
+  useEffect(() => {
+    if (!busy && error) firstBox.current?.focus()
+  }, [busy, error])
 
   async function submit(raw: string) {
     // A pasted "493 027" arrives with the space; only the digits count.
@@ -48,7 +54,15 @@ export function VerifyStudentDialog({ userId, opened, onClose, onVerified }: Pro
   }
 
   return (
-    <Modal opened={opened} onClose={close} title={`Verify student #${userId}`} centered>
+    <Modal
+      opened
+      onClose={close}
+      closeOnClickOutside={!busy}
+      closeOnEscape={!busy}
+      withCloseButton={!busy}
+      title={`Verify student #${userId}`}
+      centered
+    >
       <Stack align="center">
         <Text size="sm" c="dimmed" ta="center">
           Ask the student for the 6-digit code on their Pickup pass page.
@@ -58,6 +72,7 @@ export function VerifyStudentDialog({ userId, opened, onClose, onVerified }: Pro
           type="number"
           oneTimeCode
           autoFocus
+          ref={firstBox}
           value={value}
           onChange={(next) => {
             setValue(next)
@@ -72,7 +87,7 @@ export function VerifyStudentDialog({ userId, opened, onClose, onVerified }: Pro
             {error}
           </Alert>
         )}
-        <Button variant="default" onClick={close}>
+        <Button variant="default" onClick={close} disabled={busy}>
           Cancel
         </Button>
       </Stack>

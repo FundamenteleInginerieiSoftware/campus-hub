@@ -267,7 +267,10 @@ export default function ReservationsDeskPage() {
       // Only the id until the desk verifies the student's pickup code: there is no admin endpoint
       // to look up another user's name.
       header: 'Student',
-      render: (r) => (verified[r.userId] ? <VerifiedMark student={verified[r.userId]} /> : <Text>Student #{r.userId}</Text>),
+      render: (r) => {
+        const student = verified[r.userId]
+        return student ? <VerifiedMark student={student} /> : <Text>Student #{r.userId}</Text>
+      },
     },
     {
       header: 'Status',
@@ -385,7 +388,6 @@ export default function ReservationsDeskPage() {
       {verifyingUserId !== null && (
         <VerifyStudentDialog
           userId={verifyingUserId}
-          opened
           onClose={() => setVerifyingUserId(null)}
           onVerified={(student) => setVerified((prev) => ({ ...prev, [student.userId]: student }))}
         />
