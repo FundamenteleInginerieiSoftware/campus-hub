@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-11
-**Branch / PR:** `feat/frontend-pickup-pass` (#PICKUP2), PR 2 of 3 (the QR image is PR 3)
+**Branch / PR:** `feat/frontend-pickup-pass` (#284), PR 2 of 3 (the QR image is PR 3)
 **See also:** `51-pickup-pass-backend.md`, `docs/superpowers/specs/2026-11-10-pickup-pass-design.md` (section 7)
 
 ---
