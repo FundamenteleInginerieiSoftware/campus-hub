@@ -363,6 +363,7 @@ interface ReservationApi {
   boolean forceCancel(Long reservationId, String reason);                   // idempotent; false if no longer CONFIRMED
   Optional<ReservationSummary> findCurrentCheckout(Long assetId);
   UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end);  // 1-5 assets, all or nothing, counts as 1 booking (#235, for Projects)
+  int cancelUpcomingReservationsForUser(Long userId, String reason);  // future CONFIRMED only (+ their pending transfer offers); returns how many; for disabled users (#266, #229)
 }
 record ReservationSummary(Long id, Long userId, Long assetId, LocalDateTime start, LocalDateTime end, ReservationStatus status) {}
 
