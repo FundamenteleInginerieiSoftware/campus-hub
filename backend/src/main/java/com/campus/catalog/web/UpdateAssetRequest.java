@@ -13,4 +13,10 @@ public record UpdateAssetRequest(
 
         @Size(max = 2000) String description,
         @NotNull(message = "must not be null") Long categoryId,
-        @NotNull(message = "must not be null") Long labRoomId) {}
+        @NotNull(message = "must not be null") Long labRoomId,
+        Long version) {
+
+    public UpdateAssetRequest(String name, String model, String description, Long categoryId, Long labRoomId) {
+        this(name, model, description, categoryId, labRoomId, null);
+    }
+}

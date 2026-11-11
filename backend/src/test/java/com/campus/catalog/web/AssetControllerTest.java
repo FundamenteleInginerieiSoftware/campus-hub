@@ -244,6 +244,27 @@ class AssetControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void updateWithStaleVersionReturns409StaleVersion() throws Exception {
+        when(assetService.update(eq(7L), any(UpdateAssetRequest.class)))
+                .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                        com.campus.catalog.domain.Asset.class, 7L));
+
+        mockMvc.perform(put("/api/v1/admin/assets/7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Rigol #1",
+                                  "model": "Rigol DS1054Z",
+                                  "categoryId": 2,
+                                  "labRoomId": 1,
+                                  "version": 0
+                                }"""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("STALE_VERSION"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void retireAssetReturns200WithRetiredStatus() throws Exception {
         when(assetService.retire(7L)).thenReturn(sampleAsset(AssetStatus.RETIRED));
 

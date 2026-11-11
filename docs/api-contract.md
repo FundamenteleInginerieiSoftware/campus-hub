@@ -518,9 +518,9 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 | Method & Path | Access | Response | Errors |
 |---|---|---|---|
 | `GET /api/v1/assets` | `STUDENT`, `ADMIN` | `200` `PageResponse<AssetResponse>` | `400 INVALID_PARAMETER` |
-| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
+| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` (retired assets return 404 for students) |
 | `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
-| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
+| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` / `STALE_VERSION` |
 | `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
 
 `GET /api/v1/assets` optional query parameters:
@@ -554,6 +554,7 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "labRoomId": 1,
   "labRoomCode": "EC105",
   "labRoomName": "Electronics Lab",
+  "version": 0,
   "createdAt": "2026-10-29T12:00:00",
   "updatedAt": "2026-10-29T12:00:00"
 }

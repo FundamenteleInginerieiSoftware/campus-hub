@@ -16,8 +16,40 @@ public record AssetResponse(
         Long labRoomId,
         String labRoomCode,
         String labRoomName,
+        Long version,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
+
+    public AssetResponse(
+            Long id,
+            String name,
+            String model,
+            String serialNumber,
+            String description,
+            AssetStatus status,
+            Long categoryId,
+            String categoryName,
+            Long labRoomId,
+            String labRoomCode,
+            String labRoomName,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+        this(
+                id,
+                name,
+                model,
+                serialNumber,
+                description,
+                status,
+                categoryId,
+                categoryName,
+                labRoomId,
+                labRoomCode,
+                labRoomName,
+                0L,
+                createdAt,
+                updatedAt);
+    }
 
     public static AssetResponse from(Asset asset) {
         return new AssetResponse(
@@ -32,6 +64,7 @@ public record AssetResponse(
                 asset.getLabRoom().getId(),
                 asset.getLabRoom().getCode(),
                 asset.getLabRoom().getName(),
+                asset.getVersion(),
                 asset.getCreatedAt(),
                 asset.getUpdatedAt());
     }
