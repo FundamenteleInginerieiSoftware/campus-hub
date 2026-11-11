@@ -58,6 +58,10 @@ public class CatalogSeeder implements CommandLineRunner {
                 "Microcontrollers", "Embedded development kits and prototyping boards (STM32, ESP32, Arduino)"));
         Category cat3dPrinters = categoryRepository.save(
                 new Category("3D Printers", "Additive manufacturing, FDM and resin 3D printers for rapid prototyping"));
+        Category catSensors = categoryRepository.save(new Category(
+                "Sensors & Modules", "Sensor breakout boards, displays, robotics modules and actuator kits"));
+        Category catPowerProto = categoryRepository.save(new Category(
+                "Power & Prototyping", "Benchtop DC power supplies, soldering stations and prototyping accessories"));
 
         // 2. Lab Rooms
         LabRoom roomA101 = labRoomRepository.save(
@@ -234,11 +238,168 @@ public class CatalogSeeder implements CommandLineRunner {
                 now);
         printer4.retire(now);
 
+        // 4. Student project hardware kits (#140) for Projects Assistant & atomic "Reserve all" bundle bookings.
+        // Microcontrollers: Arduino Uno R3 boards
+        Asset arduino1 = new Asset(
+                "Arduino Uno R3 Dev Board 1",
+                "Arduino Uno R3",
+                "ARDUINO-UNO-001",
+                "ATmega328P microcontroller board with 14 digital I/O pins and 6 analog inputs",
+                catMicrocontrollers,
+                roomB204,
+                now);
+        Asset arduino2 = new Asset(
+                "Arduino Uno R3 Dev Board 2",
+                "Arduino Uno R3",
+                "ARDUINO-UNO-002",
+                "ATmega328P microcontroller board with 14 digital I/O pins and 6 analog inputs",
+                catMicrocontrollers,
+                roomB204,
+                now);
+        Asset arduino3 = new Asset(
+                "Arduino Uno R3 Dev Board 3",
+                "Arduino Uno R3",
+                "ARDUINO-UNO-003",
+                "ATmega328P microcontroller board with 14 digital I/O pins and 6 analog inputs",
+                catMicrocontrollers,
+                roomB204,
+                now);
+
+        // Sensors & Modules
+        Asset ds18b20_1 = new Asset(
+                "DS18B20 Temperature Sensor Kit 1",
+                "DS18B20 temperature sensor kit",
+                "SENSOR-DS18B20-001",
+                "1-Wire digital temperature sensor probe with 4.7k pull-up breakout resistor",
+                catSensors,
+                roomB204,
+                now);
+        Asset ds18b20_2 = new Asset(
+                "DS18B20 Temperature Sensor Kit 2",
+                "DS18B20 temperature sensor kit",
+                "SENSOR-DS18B20-002",
+                "1-Wire digital temperature sensor probe with 4.7k pull-up breakout resistor",
+                catSensors,
+                roomB204,
+                now);
+
+        Asset hcsr04_1 = new Asset(
+                "HC-SR04 Ultrasonic Distance Sensor Kit 1",
+                "HC-SR04 ultrasonic sensor kit",
+                "SENSOR-HCSR04-001",
+                "Ultrasonic sonar distance ranging sensor module (2cm - 400cm range)",
+                catSensors,
+                roomB204,
+                now);
+        Asset hcsr04_2 = new Asset(
+                "HC-SR04 Ultrasonic Distance Sensor Kit 2",
+                "HC-SR04 ultrasonic sensor kit",
+                "SENSOR-HCSR04-002",
+                "Ultrasonic sonar distance ranging sensor module (2cm - 400cm range)",
+                catSensors,
+                roomB204,
+                now);
+
+        Asset lcd1 = new Asset(
+                "16x2 I2C LCD Character Display Kit 1",
+                "16x2 I2C LCD module kit",
+                "DISPLAY-LCD1602-001",
+                "HD44780 1602 LCD with PCF8574 I2C adapter backpack (address 0x27)",
+                catSensors,
+                roomB204,
+                now);
+        Asset lcd2 = new Asset(
+                "16x2 I2C LCD Character Display Kit 2",
+                "16x2 I2C LCD module kit",
+                "DISPLAY-LCD1602-002",
+                "HD44780 1602 LCD with PCF8574 I2C adapter backpack (address 0x27)",
+                catSensors,
+                roomB204,
+                now);
+
+        Asset robot1 = new Asset(
+                "2WD Smart Robot Car Chassis + L298N Kit 1",
+                "2WD robot chassis + L298N kit",
+                "ROBOT-2WD-001",
+                "2-wheel drive robot chassis kit with dual DC gear motors, optical encoders, and L298N driver",
+                catSensors,
+                roomC305,
+                now);
+        Asset robot2 = new Asset(
+                "2WD Smart Robot Car Chassis + L298N Kit 2",
+                "2WD robot chassis + L298N kit",
+                "ROBOT-2WD-002",
+                "2-wheel drive robot chassis kit with dual DC gear motors, optical encoders, and L298N driver",
+                catSensors,
+                roomC305,
+                now);
+
+        // Power & Prototyping
+        Asset bb1 = new Asset(
+                "Solderless Breadboard + Jumper Wire Kit 1",
+                "Breadboard + jumper wire kit",
+                "PROTO-BB-001",
+                "830-tie point full-size breadboard with 65-piece male-to-male and male-to-female flexible jumper wires",
+                catPowerProto,
+                roomA101,
+                now);
+        Asset bb2 = new Asset(
+                "Solderless Breadboard + Jumper Wire Kit 2",
+                "Breadboard + jumper wire kit",
+                "PROTO-BB-002",
+                "830-tie point full-size breadboard with 65-piece male-to-male and male-to-female flexible jumper wires",
+                catPowerProto,
+                roomB204,
+                now);
+        Asset bb3 = new Asset(
+                "Solderless Breadboard + Jumper Wire Kit 3",
+                "Breadboard + jumper wire kit",
+                "PROTO-BB-003",
+                "830-tie point full-size breadboard with 65-piece male-to-male and male-to-female flexible jumper wires",
+                catPowerProto,
+                roomC305,
+                now);
+
+        Asset dp832_1 = new Asset(
+                "Rigol DP832 Triple-Output Power Supply 1",
+                "DP832",
+                "RIGOL-DP832-001",
+                "3-channel programmable DC bench power supply (30V/3A, 30V/3A, 5V/3A; 195W total)",
+                catPowerProto,
+                roomA101,
+                now);
+        Asset dp832_2 = new Asset(
+                "Rigol DP832 Triple-Output Power Supply 2",
+                "DP832",
+                "RIGOL-DP832-002",
+                "3-channel programmable DC bench power supply (30V/3A, 30V/3A, 5V/3A; 195W total)",
+                catPowerProto,
+                roomA101,
+                now);
+
+        Asset hakko1 = new Asset(
+                "Hakko FX-888D Digital Soldering Station 1",
+                "FX-888D",
+                "HAKKO-FX888D-001",
+                "70W ESD-safe digital temperature adjustable soldering station (50°C - 480°C)",
+                catPowerProto,
+                roomA101,
+                now);
+        Asset hakko2 = new Asset(
+                "Hakko FX-888D Digital Soldering Station 2",
+                "FX-888D",
+                "HAKKO-FX888D-002",
+                "70W ESD-safe digital temperature adjustable soldering station (50°C - 480°C)",
+                catPowerProto,
+                roomC305,
+                now);
+
         assetRepository.saveAll(List.of(
                 osc1, osc2, osc3, osc4, osc5, multi1, multi2, multi3, multi4, mcu1, mcu2, mcu3, mcu4, mcu5, printer1,
-                printer2, printer3, printer4));
+                printer2, printer3, printer4, arduino1, arduino2, arduino3, ds18b20_1, ds18b20_2, hcsr04_1, hcsr04_2,
+                lcd1, lcd2, robot1, robot2, bb1, bb2, bb3, dp832_1, dp832_2, hakko1, hakko2));
 
         log.info(
-                "Seeded dev catalog: 4 categories, 3 lab rooms, 18 assets (including multi-unit models and status variants)");
+                "Seeded dev catalog: 6 categories, 3 lab rooms, 36 assets (including project kits and multi-unit models)");
     }
 }
