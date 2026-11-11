@@ -1,0 +1,119 @@
+import { Button, Center, Loader, Paper, RingProgress, Stack, Text } from '@mantine/core'
+import { useEffect, useRef, useState } from 'react'
+import { fetchPickupPass, type PickupPass } from '../api/pickupPass.ts'
+import ErrorAlert from '../components/ErrorAlert.tsx'
+import PageHeader from '../components/PageHeader.tsx'
+
+const STEP_SECONDS = 30 // the backend changes the code every 30 s (PickupPassService.STEP_SECONDS)
+
+// "493027" → "493 027", easier to read out loud at the desk.
+function spaced(code: string): string {
+  return `${code.slice(0, 3)} ${code.slice(3)}`
+}
+
+export default function PickupPassPage() {
+  const [pass, setPass] = useState<PickupPass | null>(null)
+  const [secondsLeft, setSecondsLeft] = useState(0)
+  // The tick reads the seconds from here: a setState updater must not start a fetch.
+  const secondsRef = useRef(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<unknown>(null)
+  // Adding 1 asks the backend for a code again (timer at 0, tab visible again, "Try again").
+  const [reloadToken, setReloadToken] = useState(0)
+
+  // Every change of reloadToken fetches one code. "ignore" drops the answer of an older request.
+  useEffect(() => {
+    let ignore = false
+    fetchPickupPass()
+      .then((fresh) => {
+        if (ignore) return
+        setPass(fresh)
+        secondsRef.current = fresh.validForSeconds
+        setSecondsLeft(fresh.validForSeconds)
+        setError(null)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [reloadToken])
+
+  // One tick per second. At 0 the code is already old on the backend, so ask for the next one.
+  // After a failed load the old code stays at 0 and the timer stops: "Try again" asks once more.
+  useEffect(() => {
+    if (!pass) return
+    const timer = setInterval(() => {
+      if (secondsRef.current <= 1) {
+        clearInterval(timer)
+        setSecondsLeft(0)
+        setReloadToken((t) => t + 1)
+      } else {
+        secondsRef.current -= 1
+        setSecondsLeft(secondsRef.current)
+      }
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [pass])
+
+  // A hidden tab (phone locked) has its timers paused or slowed, so the shown code may be old when
+  // the student comes back: fetch a fresh one at once.
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === 'visible') setReloadToken((t) => t + 1)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+
+  function retry() {
+    setLoading(true)
+    setReloadToken((t) => t + 1)
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Pickup pass"
+        description="Show this code at the desk when you collect your equipment. It changes every 30 seconds."
+      />
+      <ErrorAlert error={error} />
+      {error !== null && (
+        <Button variant="default" onClick={retry} loading={loading} mb="md">
+          Try again
+        </Button>
+      )}
+      {loading && !pass && (
+        <Center py="xl">
+          <Loader />
+        </Center>
+      )}
+      {pass && (
+        <Paper withBorder p="xl" maw={420} bg="var(--app-surface)">
+          <Stack align="center" gap="md">
+            <Text fz={48} fw={700} ff="monospace" aria-label="Pickup code">
+              {spaced(pass.code)}
+            </Text>
+            <RingProgress
+              size={120}
+              thickness={10}
+              sections={[{ value: (secondsLeft / STEP_SECONDS) * 100, color: 'blue' }]}
+              label={
+                <Text ta="center" fw={600}>
+                  {secondsLeft}s
+                </Text>
+              }
+            />
+            <Text size="sm" c="dimmed" ta="center">
+              A new code appears by itself. Don't share a screenshot: it stops working in under a minute.
+            </Text>
+          </Stack>
+        </Paper>
+      )}
+    </>
+  )
+}

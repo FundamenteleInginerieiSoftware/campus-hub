@@ -7,6 +7,7 @@ import {
   IconClipboardList,
   IconHistory,
   IconLayoutGrid,
+  IconQrcode,
   type Icon,
 } from '@tabler/icons-react'
 import type { Role } from '../api/auth.ts'
@@ -29,6 +30,7 @@ const STUDENT_MENU: NavGroup[] = [
     items: [
       { label: 'My reservations', path: '/reservations', icon: IconCalendarEvent },
       { label: 'My incidents', path: '/incidents', icon: IconAlertTriangle },
+      { label: 'Pickup pass', path: '/pickup-pass', icon: IconQrcode },
     ],
   },
 ]
