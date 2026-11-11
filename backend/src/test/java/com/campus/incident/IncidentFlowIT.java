@@ -338,6 +338,66 @@ class IncidentFlowIT {
                 .isEqualTo(PNG);
     }
 
+    // ---- severity and the per-student limit (#229) -------------------------------------------
+
+    @Test
+    void aLowReport_isATicketForTheAdmin_andTheAssetStaysAvailable() throws Exception {
+        long incidentId = report(studentA, "Scratch on the case", "LOW");
+
+        assertThat(incidentStatus(studentA, incidentId)).isEqualTo("OPEN");
+        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+
+        // The admin looks at it, finds it really broken and starts the repair: now it is out of use.
+        postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/start-repair", null);
+        assertThat(assetStatus()).isEqualTo("UNDER_MAINTENANCE");
+
+        postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/resolve", null);
+        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+    }
+
+    @Test
+    void rejectingALowReport_leavesTheAssetAvailable() throws Exception {
+        long incidentId = report(studentA, "Looks dusty", "MEDIUM");
+
+        MvcResult rejected = postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/reject", null);
+
+        assertThat(rejected.getResponse().getStatus()).isEqualTo(200);
+        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+    }
+
+    // An OPEN LOW ticket must not keep the asset out of use after the HIGH one is closed.
+    @Test
+    void closingTheHighReport_bringsTheAssetBack_evenWithAnOpenLowTicket() throws Exception {
+        long high = report(studentA, "Does not turn on", "HIGH");
+        report(studentB, "Knob is loose", "LOW");
+        assertThat(assetStatus()).isEqualTo("UNDER_MAINTENANCE");
+
+        postAs(admin, "/api/v1/admin/incidents/" + high + "/resolve", null);
+
+        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+    }
+
+    @Test
+    void aStudentCanHaveAtMost3OpenReports_butAnAdminCanAlwaysReport() throws Exception {
+        for (int i = 1; i <= 3; i++) {
+            report(studentA, "Problem " + i, "LOW");
+        }
+
+        MvcResult fourth = postAs(studentA, "/api/v1/incidents", reportJson(assetId, "Problem 4", "LOW"));
+        assertThat(fourth.getResponse().getStatus()).isEqualTo(409);
+        assertThat(field(fourth, "$.code")).isEqualTo("TOO_MANY_OPEN_INCIDENTS");
+
+        // Another student is not affected, and neither is an admin.
+        assertThat(postAs(studentB, "/api/v1/incidents", reportJson(assetId, "Mine", "LOW"))
+                        .getResponse()
+                        .getStatus())
+                .isEqualTo(201);
+        assertThat(postAs(admin, "/api/v1/incidents", reportJson(assetId, "Admin", "LOW"))
+                        .getResponse()
+                        .getStatus())
+                .isEqualTo(201);
+    }
+
     // ---- helpers ---------------------------------------------------------------------------
 
     private MvcResult uploadAs(String token, long incidentId, String contentType, byte[] bytes) throws Exception {
@@ -349,11 +409,20 @@ class IncidentFlowIT {
     }
 
     private long report(String token, String description) throws Exception {
-        return createdId(token, "/api/v1/incidents", reportJson(assetId, description));
+        return report(token, description, "HIGH");
+    }
+
+    private long report(String token, String description, String severity) throws Exception {
+        return createdId(token, "/api/v1/incidents", reportJson(assetId, description, severity));
     }
 
     private static String reportJson(long asset, String description) {
-        return "{\"assetId\": %d, \"description\": \"%s\", \"severity\": \"HIGH\"}".formatted(asset, description);
+        return reportJson(asset, description, "HIGH");
+    }
+
+    private static String reportJson(long asset, String description, String severity) {
+        return "{\"assetId\": %d, \"description\": \"%s\", \"severity\": \"%s\"}"
+                .formatted(asset, description, severity);
     }
 
     private String assetStatus() throws Exception {

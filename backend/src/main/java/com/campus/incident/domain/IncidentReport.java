@@ -106,6 +106,15 @@ public class IncidentReport {
     }
 
     /**
+     * Does this incident keep its asset UNDER_MAINTENANCE? Yes while IN_REPAIR (an admin confirmed the damage),
+     * and while OPEN only for HIGH or CRITICAL (#229). RESOLVED and REJECTED never do.
+     */
+    public boolean keepsAssetOutOfUse() {
+        return this.status == IncidentStatus.IN_REPAIR
+                || (this.status == IncidentStatus.OPEN && this.severity.takesAssetOutOfUseAtOnce());
+    }
+
+    /**
      * A photo can be added or replaced only while the incident is still OPEN or IN_REPAIR. Called before the
      * file is stored, so a closed incident never leaves an unused file behind.
      */
@@ -133,11 +142,20 @@ public class IncidentReport {
         this.resolvedAt = resolvedAt;
     }
 
+    /**
+     * Decided in #229 (docs/decisions.md): only HIGH and CRITICAL take the asset out of use as soon as they are
+     * reported. LOW ("cosmetic, it still works") and MEDIUM are tickets for the admin, who takes the asset out
+     * of use with Start repair once they have looked at it.
+     */
     public enum IncidentSeverity {
         LOW,
         MEDIUM,
         HIGH,
-        CRITICAL
+        CRITICAL;
+
+        public boolean takesAssetOutOfUseAtOnce() {
+            return this == HIGH || this == CRITICAL;
+        }
     }
 
     public enum IncidentStatus {

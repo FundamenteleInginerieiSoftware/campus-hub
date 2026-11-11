@@ -18,6 +18,7 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BadRequestException;
+import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
@@ -61,7 +62,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class IncidentServiceTest {
 
-    private static final List<IncidentStatus> ACTIVE = List.of(IncidentStatus.OPEN, IncidentStatus.IN_REPAIR);
     private static final Long ASSET_ID = 10L;
 
     @Mock
@@ -97,12 +97,16 @@ class IncidentServiceTest {
     }
 
     private IncidentReport incident(Long id, IncidentStatus status) {
+        return incident(id, status, IncidentSeverity.HIGH);
+    }
+
+    private IncidentReport incident(Long id, IncidentStatus status, IncidentSeverity severity) {
         IncidentReport report = new IncidentReport(
                 ASSET_ID,
                 null,
                 reporterId,
                 "Defect",
-                IncidentSeverity.HIGH,
+                severity,
                 null,
                 nowInSeconds().minusHours(1));
         ReflectionTestUtils.setField(report, "id", id);
@@ -139,7 +143,7 @@ class IncidentServiceTest {
                 return report;
             });
 
-            IncidentResponse response = incidentService.reportIncident(request, reporterId);
+            IncidentResponse response = incidentService.reportIncident(request, reporterId, false);
 
             assertThat(response.id()).isEqualTo(100L);
             assertThat(response.status()).isEqualTo(IncidentStatus.OPEN);
@@ -163,7 +167,7 @@ class IncidentServiceTest {
         void locksTheAssetBeforeSavingTheReport() {
             givenSaveReturnsItsArgument();
 
-            incidentService.reportIncident(request, reporterId);
+            incidentService.reportIncident(request, reporterId, false);
 
             InOrder order = inOrder(catalogApi, incidentReportRepository, eventPublisher);
             order.verify(catalogApi).markUnderMaintenance(ASSET_ID);
@@ -178,7 +182,7 @@ class IncidentServiceTest {
                     .when(catalogApi)
                     .markUnderMaintenance(ASSET_ID);
 
-            assertThatThrownBy(() -> incidentService.reportIncident(request, reporterId))
+            assertThatThrownBy(() -> incidentService.reportIncident(request, reporterId, false))
                     .isInstanceOf(NotFoundException.class)
                     .extracting("code")
                     .isEqualTo("ASSET_NOT_FOUND");
@@ -194,7 +198,7 @@ class IncidentServiceTest {
                     .when(catalogApi)
                     .markUnderMaintenance(ASSET_ID);
 
-            assertThatThrownBy(() -> incidentService.reportIncident(request, reporterId))
+            assertThatThrownBy(() -> incidentService.reportIncident(request, reporterId, false))
                     .isInstanceOf(InvalidStateTransitionException.class)
                     .extracting("code")
                     .isEqualTo("ASSET_RETIRED");
@@ -267,7 +271,7 @@ class IncidentServiceTest {
         void resolves_andMarksTheAssetAvailable_whenNoOtherIncidentIsActive(IncidentStatus from) {
             givenIncident(incident(1L, from));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.UNDER_MAINTENANCE));
 
@@ -285,7 +289,7 @@ class IncidentServiceTest {
         void locksTheAssetBeforeCheckingForOtherIncidents() {
             givenIncident(incident(1L, IncidentStatus.OPEN));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.UNDER_MAINTENANCE));
 
@@ -294,7 +298,7 @@ class IncidentServiceTest {
             InOrder order = inOrder(catalogApi, incidentReportRepository);
             order.verify(incidentReportRepository).save(any(IncidentReport.class));
             order.verify(catalogApi).lockForBooking(ASSET_ID);
-            order.verify(incidentReportRepository).existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE);
+            order.verify(incidentReportRepository).existsIncidentKeepingAssetOutOfUse(ASSET_ID);
             order.verify(catalogApi).markAvailable(ASSET_ID);
         }
 
@@ -302,7 +306,7 @@ class IncidentServiceTest {
         void keepsTheAssetUnderMaintenance_whenAnotherIncidentIsStillActive() {
             givenIncident(incident(1L, IncidentStatus.OPEN));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(true);
 
             IncidentResponse response = incidentService.resolveIncident(1L, null, adminId);
@@ -317,7 +321,7 @@ class IncidentServiceTest {
         void resolves_andLeavesARetiredAssetRetired() {
             givenIncident(incident(1L, IncidentStatus.IN_REPAIR));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.RETIRED));
 
@@ -331,7 +335,7 @@ class IncidentServiceTest {
         void doesNotTouchAnAssetThatIsAlreadyAvailable() {
             givenIncident(incident(1L, IncidentStatus.OPEN));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.AVAILABLE));
 
@@ -387,7 +391,7 @@ class IncidentServiceTest {
         void rejects_andMarksTheAssetAvailable_whenNoOtherIncidentIsActive(IncidentStatus from) {
             givenIncident(incident(1L, from));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.UNDER_MAINTENANCE));
 
@@ -405,7 +409,7 @@ class IncidentServiceTest {
         void keepsTheAssetUnderMaintenance_whenAnotherIncidentIsStillActive() {
             givenIncident(incident(1L, IncidentStatus.IN_REPAIR));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(true);
 
             IncidentResponse response = incidentService.rejectIncident(1L, null, adminId);
@@ -419,7 +423,7 @@ class IncidentServiceTest {
         void rejects_andLeavesARetiredAssetRetired() {
             givenIncident(incident(1L, IncidentStatus.OPEN));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.RETIRED));
 
@@ -599,7 +603,7 @@ class IncidentServiceTest {
             });
 
             incidentService.reportIncident(
-                    new CreateIncidentRequest(ASSET_ID, "Display cracked", IncidentSeverity.HIGH), reporterId);
+                    new CreateIncidentRequest(ASSET_ID, "Display cracked", IncidentSeverity.HIGH), reporterId, false);
 
             verify(auditService).record(reporterId, "INCIDENT_REPORTED", "INCIDENT", 100L, "Asset 10: HIGH");
         }
@@ -618,7 +622,7 @@ class IncidentServiceTest {
         void resolve_isAudited_withTheNotes_afterTheAssetIsReleased() {
             givenIncident(incident(1L, IncidentStatus.IN_REPAIR));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(false);
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.UNDER_MAINTENANCE));
 
@@ -634,7 +638,7 @@ class IncidentServiceTest {
         void reject_isAudited_withoutNotes() {
             givenIncident(incident(1L, IncidentStatus.OPEN));
             givenSaveReturnsItsArgument();
-            when(incidentReportRepository.existsByAssetIdAndStatusIn(ASSET_ID, ACTIVE))
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
                     .thenReturn(true);
 
             incidentService.rejectIncident(1L, "  ", adminId);
@@ -650,9 +654,179 @@ class IncidentServiceTest {
                     .markUnderMaintenance(ASSET_ID);
 
             assertThatThrownBy(() -> incidentService.reportIncident(
-                            new CreateIncidentRequest(ASSET_ID, "Broken", IncidentSeverity.LOW), reporterId))
+                            new CreateIncidentRequest(ASSET_ID, "Broken", IncidentSeverity.HIGH), reporterId, false))
                     .isInstanceOf(InvalidStateTransitionException.class);
             verifyNoInteractions(auditService);
+        }
+    }
+
+    // ---- severity and the per-student limit (#229) -------------------------------------------
+
+    @Nested
+    class OnlyHighAndCriticalTakeTheAssetOutOfUse {
+
+        private CreateIncidentRequest request(IncidentSeverity severity) {
+            return new CreateIncidentRequest(ASSET_ID, "Scratch on the case", severity);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource({"LOW", "MEDIUM"})
+        void aLowOrMediumReport_isSavedAsOpen_butTheAssetStaysInUse(IncidentSeverity severity) {
+            when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.AVAILABLE));
+            givenSaveReturnsItsArgument();
+
+            IncidentResponse response = incidentService.reportIncident(request(severity), reporterId, false);
+
+            assertThat(response.status()).isEqualTo(IncidentStatus.OPEN);
+            assertThat(response.severity()).isEqualTo(severity);
+            // Same lock as a HIGH report, so it still waits for a resolve on the same asset.
+            InOrder order = inOrder(catalogApi, incidentReportRepository);
+            order.verify(catalogApi).lockForBooking(ASSET_ID);
+            order.verify(incidentReportRepository).save(any(IncidentReport.class));
+            verify(catalogApi, never()).markUnderMaintenance(any());
+            verifyNoInteractions(eventPublisher);
+            verify(auditService).record(reporterId, "INCIDENT_REPORTED", "INCIDENT", null, "Asset 10: " + severity);
+        }
+
+        @Test
+        void aCriticalReport_takesTheAssetOutOfUse_andStartsTheEngine() {
+            givenSaveReturnsItsArgument();
+
+            incidentService.reportIncident(request(IncidentSeverity.CRITICAL), reporterId, false);
+
+            verify(catalogApi).markUnderMaintenance(ASSET_ID);
+            verify(eventPublisher).publishEvent(any(AssetDamagedEvent.class));
+        }
+
+        @Test
+        void aLowReport_onARetiredAsset_isA409_andSavesNothing() {
+            when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.RETIRED));
+
+            assertThatThrownBy(() -> incidentService.reportIncident(request(IncidentSeverity.LOW), reporterId, false))
+                    .isInstanceOf(InvalidStateTransitionException.class)
+                    .extracting("code")
+                    .isEqualTo("ASSET_RETIRED");
+            verify(incidentReportRepository, never()).save(any());
+            verifyNoInteractions(auditService, eventPublisher);
+        }
+
+        @Test
+        void aLowReport_onAMissingAsset_isA404() {
+            doThrow(new NotFoundException("ASSET_NOT_FOUND", "Asset 10 was not found"))
+                    .when(catalogApi)
+                    .lockForBooking(ASSET_ID);
+
+            assertThatThrownBy(
+                            () -> incidentService.reportIncident(request(IncidentSeverity.MEDIUM), reporterId, false))
+                    .isInstanceOf(NotFoundException.class)
+                    .extracting("code")
+                    .isEqualTo("ASSET_NOT_FOUND");
+            verify(incidentReportRepository, never()).save(any());
+        }
+
+        @Test
+        void aStudentWith3OpenReports_isRefused_beforeTheAssetIsTouched() {
+            when(incidentReportRepository.countByReportedByIdAndStatus(reporterId, IncidentStatus.OPEN))
+                    .thenReturn(3L);
+
+            assertThatThrownBy(() -> incidentService.reportIncident(request(IncidentSeverity.HIGH), reporterId, false))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .extracting("code")
+                    .isEqualTo("TOO_MANY_OPEN_INCIDENTS");
+            verifyNoInteractions(catalogApi, eventPublisher, auditService);
+            verify(incidentReportRepository, never()).save(any());
+        }
+
+        @Test
+        void aStudentWith2OpenReports_canStillReport() {
+            when(incidentReportRepository.countByReportedByIdAndStatus(reporterId, IncidentStatus.OPEN))
+                    .thenReturn(2L);
+            givenSaveReturnsItsArgument();
+
+            assertThat(incidentService
+                            .reportIncident(request(IncidentSeverity.HIGH), reporterId, false)
+                            .status())
+                    .isEqualTo(IncidentStatus.OPEN);
+        }
+
+        @Test
+        void anAdmin_hasNoLimit() {
+            givenSaveReturnsItsArgument();
+
+            incidentService.reportIncident(request(IncidentSeverity.HIGH), adminId, true);
+
+            verify(incidentReportRepository, never()).countByReportedByIdAndStatus(any(), any());
+            verify(incidentReportRepository).save(any(IncidentReport.class));
+        }
+
+        @Test
+        void startRepair_onALowReport_takesAnAvailableAssetOutOfUse_andStartsTheEngine() {
+            givenIncident(incident(1L, IncidentStatus.OPEN, IncidentSeverity.LOW));
+            when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.AVAILABLE));
+            givenSaveReturnsItsArgument();
+
+            IncidentResponse response = incidentService.startRepair(1L, adminId);
+
+            assertThat(response.status()).isEqualTo(IncidentStatus.IN_REPAIR);
+            InOrder order = inOrder(catalogApi, incidentReportRepository, eventPublisher);
+            order.verify(catalogApi).lockForBooking(ASSET_ID);
+            order.verify(catalogApi).markUnderMaintenance(ASSET_ID);
+            order.verify(incidentReportRepository).save(any(IncidentReport.class));
+            ArgumentCaptor<AssetDamagedEvent> event = ArgumentCaptor.forClass(AssetDamagedEvent.class);
+            order.verify(eventPublisher).publishEvent(event.capture());
+            assertThat(event.getValue().incidentId()).isEqualTo(1L);
+            assertThat(event.getValue().assetId()).isEqualTo(ASSET_ID);
+            // The event names the student who reported it, not the admin who started the repair.
+            assertThat(event.getValue().reportedById()).isEqualTo(reporterId);
+        }
+
+        @ParameterizedTest(name = "asset {0}")
+        @CsvSource({"UNDER_MAINTENANCE", "RETIRED"})
+        void startRepair_onALowReport_leavesAnAssetThatIsNotAvailableAsItIs(AssetStatus status) {
+            givenIncident(incident(1L, IncidentStatus.OPEN, IncidentSeverity.MEDIUM));
+            when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(status));
+            givenSaveReturnsItsArgument();
+
+            assertThat(incidentService.startRepair(1L, adminId).status()).isEqualTo(IncidentStatus.IN_REPAIR);
+            verify(catalogApi, never()).markUnderMaintenance(any());
+            verifyNoInteractions(eventPublisher);
+        }
+
+        @Test
+        void resolvingAnOpenLowReport_doesNotTouchTheAsset() {
+            givenIncident(incident(1L, IncidentStatus.OPEN, IncidentSeverity.LOW));
+            givenSaveReturnsItsArgument();
+
+            assertThat(incidentService
+                            .resolveIncident(1L, "Cleaned it", adminId)
+                            .status())
+                    .isEqualTo(IncidentStatus.RESOLVED);
+            verifyNoInteractions(catalogApi);
+            verify(incidentReportRepository, never()).existsIncidentKeepingAssetOutOfUse(any());
+        }
+
+        @Test
+        void rejectingAnOpenMediumReport_doesNotTouchTheAsset() {
+            givenIncident(incident(1L, IncidentStatus.OPEN, IncidentSeverity.MEDIUM));
+            givenSaveReturnsItsArgument();
+
+            assertThat(incidentService.rejectIncident(1L, null, adminId).status())
+                    .isEqualTo(IncidentStatus.REJECTED);
+            verifyNoInteractions(catalogApi);
+        }
+
+        @Test
+        void resolvingAStartedLowReport_releasesTheAsset() {
+            givenIncident(incident(1L, IncidentStatus.IN_REPAIR, IncidentSeverity.LOW));
+            givenSaveReturnsItsArgument();
+            when(incidentReportRepository.existsIncidentKeepingAssetOutOfUse(ASSET_ID))
+                    .thenReturn(false);
+            when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.UNDER_MAINTENANCE));
+
+            incidentService.resolveIncident(1L, null, adminId);
+
+            verify(catalogApi).lockForBooking(ASSET_ID);
+            verify(catalogApi).markAvailable(ASSET_ID);
         }
     }
 

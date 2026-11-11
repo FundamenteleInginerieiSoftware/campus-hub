@@ -3,7 +3,9 @@ package com.campus.incident.service;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
+import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.InvalidParameterException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
@@ -17,7 +19,6 @@ import java.io.InputStream;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -33,8 +34,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 public class IncidentService {
 
-    /** Incidents that still keep their asset out of use. */
-    private static final List<IncidentStatus> ACTIVE_STATUSES = List.of(IncidentStatus.OPEN, IncidentStatus.IN_REPAIR);
+    /**
+     * #229: a student can have at most this many reports still OPEN (waiting for an admin). Without it, one
+     * student could report every asset id in a loop. Admins have no limit.
+     */
+    static final int MAX_OPEN_REPORTS_PER_STUDENT = 3;
 
     /** Same limit as the other lists in the app (catalog, reservations, reassignment log). */
     static final int MAX_PAGE_SIZE = 100;
@@ -68,34 +72,58 @@ public class IncidentService {
     }
 
     /**
-     * Takes the asset out of use, saves the report and announces it, all in one transaction.
+     * Saves the report and, for HIGH or CRITICAL, takes the asset out of use, all in one transaction.
      *
-     * <p>Bug fixed (#164): markUnderMaintenance runs FIRST. It locks the asset row (SELECT ... FOR UPDATE)
-     * and throws 404 ASSET_NOT_FOUND / 409 ASSET_RETIRED, so a report for a missing or retired asset saves
-     * nothing, and a report always waits for a resolve or reject running on the same asset (and the other
-     * way round) instead of racing with it.
+     * <p>Bug fixed (#229): every report used to take the asset out of use, even LOW ("cosmetic, it still
+     * works"), and moved or cancelled everyone's bookings on it, so any student could block any asset. Now
+     * only HIGH and CRITICAL do that at once; LOW and MEDIUM are tickets that wait for an admin (startRepair).
+     * A student can also have at most {@link #MAX_OPEN_REPORTS_PER_STUDENT} OPEN reports (409
+     * TOO_MANY_OPEN_INCIDENTS).
+     *
+     * <p>Bug fixed (#164): the asset row is locked FIRST (SELECT ... FOR UPDATE), which also throws 404
+     * ASSET_NOT_FOUND / 409 ASSET_RETIRED, so a report for a missing or retired asset saves nothing, and a
+     * report always waits for a resolve or reject running on the same asset instead of racing with it.
      *
      * <p>Calin's reassignment engine reacts to the event after the commit, when the asset is already
      * UNDER_MAINTENANCE, so it can never be picked as its own substitute.
      */
     @Transactional
-    public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId) {
-        catalogApi.markUnderMaintenance(request.assetId());
+    public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId, boolean reporterIsAdmin) {
+        if (!reporterIsAdmin
+                && incidentReportRepository.countByReportedByIdAndStatus(reporterId, IncidentStatus.OPEN)
+                        >= MAX_OPEN_REPORTS_PER_STUDENT) {
+            throw new BusinessRuleException(
+                    "TOO_MANY_OPEN_INCIDENTS",
+                    "You already have " + MAX_OPEN_REPORTS_PER_STUDENT
+                            + " open reports; wait until an admin has looked at them");
+        }
+
+        boolean outOfUse = request.severity().takesAssetOutOfUseAtOnce();
+        if (outOfUse) {
+            catalogApi.markUnderMaintenance(request.assetId());
+        } else {
+            lockAndRefuseRetired(request.assetId());
+        }
 
         IncidentReport report = new IncidentReport(
                 request.assetId(), null, reporterId, request.description(), request.severity(), null, now());
         IncidentReport saved = incidentReportRepository.save(report);
         audit(reporterId, "INCIDENT_REPORTED", saved, saved.getSeverity().name());
 
-        eventPublisher.publishEvent(
-                new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, clock.instant()));
-
+        if (outOfUse) {
+            eventPublisher.publishEvent(
+                    new AssetDamagedEvent(saved.getId(), saved.getAssetId(), reporterId, clock.instant()));
+        }
         return toResponse(saved);
     }
 
     /**
-     * OPEN to IN_REPAIR. Starting twice returns the incident unchanged. The asset stays UNDER_MAINTENANCE,
-     * so nothing changes in the catalog. From RESOLVED or REJECTED: 409 INVALID_INCIDENT_STATUS_TRANSITION.
+     * OPEN to IN_REPAIR. Starting twice returns the incident unchanged. From RESOLVED or REJECTED: 409
+     * INVALID_INCIDENT_STATUS_TRANSITION.
+     *
+     * <p>#229: for a LOW or MEDIUM report this is where the admin confirms the damage, so an AVAILABLE asset
+     * goes UNDER_MAINTENANCE now and the reassignment engine moves its bookings (same event as a HIGH
+     * report). An asset already under maintenance (a HIGH report) or retired is left as it is.
      */
     @Transactional
     public IncidentResponse startRepair(Long incidentId, Long adminId) {
@@ -105,15 +133,30 @@ public class IncidentService {
             return toResponse(report);
         }
 
+        boolean takesAssetOutNow = !report.keepsAssetOutOfUse();
         report.startRepair();
+        boolean assetWasAvailable = false;
+        if (takesAssetOutNow) {
+            catalogApi.lockForBooking(report.getAssetId());
+            assetWasAvailable = catalogApi.getAsset(report.getAssetId()).status() == AssetStatus.AVAILABLE;
+            if (assetWasAvailable) {
+                catalogApi.markUnderMaintenance(report.getAssetId());
+            }
+        }
+
         IncidentReport updated = incidentReportRepository.save(report);
         audit(adminId, "INCIDENT_REPAIR_STARTED", updated, null);
+        if (assetWasAvailable) {
+            eventPublisher.publishEvent(new AssetDamagedEvent(
+                    updated.getId(), updated.getAssetId(), updated.getReportedById(), clock.instant()));
+        }
         return toResponse(updated);
     }
 
     /**
-     * Resolves an OPEN or IN_REPAIR incident. Resolving twice returns the incident unchanged. The asset
-     * becomes AVAILABLE again only when no other OPEN or IN_REPAIR incident is left on it.
+     * Resolves an OPEN or IN_REPAIR incident. Resolving twice returns the incident unchanged. If this incident
+     * kept the asset out of use, the asset becomes AVAILABLE again once no other incident keeps it out of use.
+     * A LOW or MEDIUM report that was never started did not touch the asset, so closing it does not either.
      */
     @Transactional
     public IncidentResponse resolveIncident(Long incidentId, String resolutionNotes, Long adminId) {
@@ -123,9 +166,12 @@ public class IncidentService {
             return toResponse(report);
         }
 
+        boolean keptAssetOutOfUse = report.keepsAssetOutOfUse();
         report.resolve(adminId, resolutionNotes, now());
         IncidentReport updated = incidentReportRepository.save(report);
-        releaseAssetIfNoActiveIncident(updated.getAssetId());
+        if (keptAssetOutOfUse) {
+            releaseAssetIfNoOtherIncident(updated.getAssetId());
+        }
         audit(adminId, "INCIDENT_RESOLVED", updated, resolutionNotes);
 
         return toResponse(updated);
@@ -143,9 +189,12 @@ public class IncidentService {
             return toResponse(report);
         }
 
+        boolean keptAssetOutOfUse = report.keepsAssetOutOfUse();
         report.reject(adminId, resolutionNotes, now());
         IncidentReport updated = incidentReportRepository.save(report);
-        releaseAssetIfNoActiveIncident(updated.getAssetId());
+        if (keptAssetOutOfUse) {
+            releaseAssetIfNoOtherIncident(updated.getAssetId());
+        }
         audit(adminId, "INCIDENT_REJECTED", updated, resolutionNotes);
 
         return toResponse(updated);
@@ -296,14 +345,22 @@ public class IncidentService {
      * 409 ASSET_RETIRED for it, which rolled back the resolve, so the incident could never be closed. Only an
      * asset that is still UNDER_MAINTENANCE goes back to AVAILABLE.
      */
-    private void releaseAssetIfNoActiveIncident(Long assetId) {
+    private void releaseAssetIfNoOtherIncident(Long assetId) {
         catalogApi.lockForBooking(assetId);
 
-        if (incidentReportRepository.existsByAssetIdAndStatusIn(assetId, ACTIVE_STATUSES)) {
+        if (incidentReportRepository.existsIncidentKeepingAssetOutOfUse(assetId)) {
             return;
         }
         if (catalogApi.getAsset(assetId).status() == AssetStatus.UNDER_MAINTENANCE) {
             catalogApi.markAvailable(assetId);
+        }
+    }
+
+    // LOW/MEDIUM report: same lock and the same 404/409 as markUnderMaintenance, but the asset stays in use.
+    private void lockAndRefuseRetired(Long assetId) {
+        catalogApi.lockForBooking(assetId);
+        if (catalogApi.getAsset(assetId).status() == AssetStatus.RETIRED) {
+            throw new InvalidStateTransitionException("ASSET_RETIRED", "Cannot report an incident on a retired asset");
         }
     }
 
