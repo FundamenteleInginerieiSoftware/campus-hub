@@ -9,6 +9,10 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.chain.ChainShiftExecutor;
+import com.campus.reassignment.service.chain.ChainShiftPlan;
+import com.campus.reassignment.service.chain.ChainShiftingConflictResolver;
+import com.campus.reassignment.web.ChainShiftPlanResponse;
 import com.campus.reassignment.web.ReassignmentLogResponse;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
@@ -40,6 +44,8 @@ public class ReassignmentService {
     private final NotificationService notificationService;
     private final ReassignmentBookingProcessor bookingProcessor;
     private final ReassignmentLogRepository reassignmentLogRepository;
+    private final ChainShiftingConflictResolver chainShiftingConflictResolver;
+    private final ChainShiftExecutor chainShiftExecutor;
     private final Clock clock;
 
     /**
@@ -121,5 +127,26 @@ public class ReassignmentService {
         Pageable pageable = PageRequest.of(page, size);
         Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);
+    }
+
+    /**
+     * Resolves reservation conflicts on a desired asset by discovering and optionally executing
+     * an augmenting path chain of shifts to idle substitute equipment.
+     *
+     * <p>Planning runs without database locks; if {@code dryRun} is false and a valid plan was found,
+     * atomic execution is performed by {@link ChainShiftExecutor}.
+     */
+    public ChainShiftPlanResponse resolveChainShift(
+            Long targetAssetId, LocalDateTime startTime, LocalDateTime endTime, boolean dryRun) {
+        ChainShiftPlan plan = chainShiftingConflictResolver.planChainShift(targetAssetId, startTime, endTime);
+
+        boolean applied = false;
+        if (plan.resolved() && !dryRun && !plan.steps().isEmpty()) {
+            chainShiftExecutor.executeChainShift(plan);
+            applied = true;
+        }
+
+        return new ChainShiftPlanResponse(
+                targetAssetId, startTime, endTime, plan.resolved(), applied, plan.steps(), plan.explanation());
     }
 }

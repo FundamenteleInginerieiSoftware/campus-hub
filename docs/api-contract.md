@@ -290,6 +290,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `POST /api/v1/admin/reassignments/chain-shift?targetAssetId=1&startTime=...&endTime=...&dryRun=true` | Admin | – | `200` + `ChainShiftPlanResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND` (`dryRun` defaults to `true`: the plan is only computed; pass `dryRun=false` to apply it. `startTime` must be before `endTime`, local time without `Z`/offset, else 400) |
 
 ```json
 // CreateReservationRequest
@@ -389,6 +390,40 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
   "outcome": "REASSIGNED",
   "strategy": "SameModelStrategy",
   "createdAt": "2026-11-03T14:00:00"
+}
+
+// ChainShiftPlanResponse (returned by POST /api/v1/admin/reassignments/chain-shift)
+{
+  "targetAssetId": 1,
+  "startTime": "2026-11-15T10:00:00",
+  "endTime": "2026-11-15T12:00:00",
+  "resolved": true,
+  "applied": false,
+  "steps": [
+    {
+      "reservationId": 102,
+      "userId": 43,
+      "fromAssetId": 2,
+      "fromAssetName": "Rigol Scope #2",
+      "toAssetId": 3,
+      "toAssetName": "Rigol Scope #3",
+      "startTime": "2026-11-15T10:00:00",
+      "endTime": "2026-11-15T12:00:00",
+      "strategyName": "SameModel"
+    },
+    {
+      "reservationId": 101,
+      "userId": 42,
+      "fromAssetId": 1,
+      "fromAssetName": "Rigol Scope #1",
+      "toAssetId": 2,
+      "toAssetName": "Rigol Scope #2",
+      "startTime": "2026-11-15T10:00:00",
+      "endTime": "2026-11-15T12:00:00",
+      "strategyName": "SameModel"
+    }
+  ],
+  "message": "Found feasible augmenting path of 2 shift(s) freeing 'Rigol Scope #1' for [2026-11-15T10:00:00 - 2026-11-15T12:00:00]."
 }
 
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE` or `RETIRED`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).

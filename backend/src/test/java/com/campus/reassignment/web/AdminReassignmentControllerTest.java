@@ -1,9 +1,14 @@
 package com.campus.reassignment.web;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -101,5 +106,104 @@ class AdminReassignmentControllerTest {
         mockMvc.perform(get("/api/v1/admin/reassignments").param("size", "101")).andExpect(status().isBadRequest());
 
         verifyNoInteractions(reassignmentService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 401 when anonymous")
+    void resolveChainShiftUnauthenticatedReturns401() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00")
+                        .param("endTime", "2026-11-15T12:00:00"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(reassignmentService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 403 when student")
+    void resolveChainShiftForbiddenForStudent() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00")
+                        .param("endTime", "2026-11-15T12:00:00"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(reassignmentService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 200 with plan response when admin")
+    void resolveChainShiftSuccessForAdmin() throws Exception {
+        ChainShiftPlanResponse plan = new ChainShiftPlanResponse(
+                1L,
+                LocalDateTime.of(2026, 11, 15, 10, 0),
+                LocalDateTime.of(2026, 11, 15, 12, 0),
+                true,
+                false,
+                List.of(),
+                "Found feasible augmenting path");
+
+        when(reassignmentService.resolveChainShift(anyLong(), any(), any(), anyBoolean()))
+                .thenReturn(plan);
+
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00")
+                        .param("endTime", "2026-11-15T12:00:00")
+                        .param("dryRun", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetAssetId").value(1))
+                .andExpect(jsonPath("$.resolved").value(true))
+                .andExpect(jsonPath("$.applied").value(false));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift defaults dryRun to true for safe simulation")
+    void resolveChainShiftDefaultsToSimulation() throws Exception {
+        ChainShiftPlanResponse plan = new ChainShiftPlanResponse(
+                1L,
+                LocalDateTime.of(2026, 11, 15, 10, 0),
+                LocalDateTime.of(2026, 11, 15, 12, 0),
+                true,
+                false,
+                List.of(),
+                "Simulation only");
+
+        when(reassignmentService.resolveChainShift(eq(1L), any(), any(), eq(true)))
+                .thenReturn(plan);
+
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00")
+                        .param("endTime", "2026-11-15T12:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applied").value(false));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 400 when startTime is not before endTime")
+    void resolveChainShiftRejectsEmptyWindow() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T12:00:00")
+                        .param("endTime", "2026-11-15T10:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/chain-shift returns 400 for a time with a Z offset (#233)")
+    void resolveChainShiftRejectsZoneOffset() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reassignments/chain-shift")
+                        .param("targetAssetId", "1")
+                        .param("startTime", "2026-11-15T10:00:00Z")
+                        .param("endTime", "2026-11-15T12:00:00Z"))
+                .andExpect(status().isBadRequest());
     }
 }
