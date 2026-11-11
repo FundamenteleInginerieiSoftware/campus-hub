@@ -3,6 +3,8 @@ package com.campus.reservation.web;
 import com.campus.common.paging.PageResponse;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.retry.RetryMetrics;
+import com.campus.reservation.service.retry.TransientFaultRetryExecutor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -36,6 +38,24 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminReservationController {
 
     private final ReservationService reservationService;
+    private final RetryMetrics retryMetrics;
+    private final TransientFaultRetryExecutor retryExecutor;
+
+    @Operation(
+            summary = "Get transient fault retry metrics (Admin)",
+            description = "Retrieves telemetry on recovered PostgreSQL deadlocks and transient concurrency faults")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Retry telemetry metrics returned"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)")
+    })
+    @GetMapping("/retry-metrics")
+    public ResponseEntity<RetryMetricsResponse> getRetryMetrics() {
+        return ResponseEntity.ok(new RetryMetricsResponse(
+                retryMetrics.getTotalRetries(),
+                retryMetrics.getSuccessfulRecoveries(),
+                retryMetrics.getExhaustedRetries()));
+    }
 
     @Operation(
             summary = "Search reservations (Admin)",
@@ -78,7 +98,8 @@ public class AdminReservationController {
     })
     @PostMapping("/{id}/check-out")
     public ResponseEntity<ReservationResponse> checkOut(@PathVariable Long id) {
-        return ResponseEntity.ok(reservationService.checkOutReservation(id));
+        return ResponseEntity.ok(
+                retryExecutor.executeWithRetry(() -> reservationService.checkOutReservation(id), "adminCheckOut"));
     }
 
     @Operation(summary = "Return reservation", description = "Marks a checked-out or overdue reservation as returned")
@@ -91,6 +112,7 @@ public class AdminReservationController {
     })
     @PostMapping("/{id}/return")
     public ResponseEntity<ReservationResponse> returnItem(@PathVariable Long id) {
-        return ResponseEntity.ok(reservationService.returnReservation(id));
+        return ResponseEntity.ok(
+                retryExecutor.executeWithRetry(() -> reservationService.returnReservation(id), "adminReturnItem"));
     }
 }

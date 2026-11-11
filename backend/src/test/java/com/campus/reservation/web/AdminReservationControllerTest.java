@@ -17,8 +17,12 @@ import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.retry.RetryMetrics;
+import com.campus.reservation.service.retry.TransientFaultRetryExecutor;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +41,19 @@ class AdminReservationControllerTest {
 
     @MockitoBean
     private ReservationService reservationService;
+
+    @MockitoBean
+    private RetryMetrics retryMetrics;
+
+    @MockitoBean
+    private TransientFaultRetryExecutor retryExecutor;
+
+    @BeforeEach
+    void setUpRetryExecutor() {
+        org.mockito.Mockito.lenient()
+                .when(retryExecutor.executeWithRetry(any(), any()))
+                .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(0)).get());
+    }
 
     private final ReservationResponse checkedOutResponse = new ReservationResponse(
             1L,
@@ -226,5 +243,20 @@ class AdminReservationControllerTest {
         mockMvc.perform(post("/api/v1/admin/reservations/1/return"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INVALID_RESERVATION_STATUS_TRANSITION"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/reservations/retry-metrics returns 200 with retry telemetry")
+    void getRetryMetricsReturns200() throws Exception {
+        when(retryMetrics.getTotalRetries()).thenReturn(14L);
+        when(retryMetrics.getSuccessfulRecoveries()).thenReturn(6L);
+        when(retryMetrics.getExhaustedRetries()).thenReturn(1L);
+
+        mockMvc.perform(get("/api/v1/admin/reservations/retry-metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalRetries").value(14))
+                .andExpect(jsonPath("$.successfulRecoveries").value(6))
+                .andExpect(jsonPath("$.exhaustedRetries").value(1));
     }
 }
