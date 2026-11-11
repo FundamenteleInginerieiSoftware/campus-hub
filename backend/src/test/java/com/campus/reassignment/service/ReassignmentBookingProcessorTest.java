@@ -1,6 +1,7 @@
 package com.campus.reassignment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -197,6 +199,46 @@ class ReassignmentBookingProcessorTest {
                 processor.processSingleBooking(event, booking, damagedAsset);
 
         assertThat(resultOpt).isEmpty();
+        verify(reassignmentLogRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("processSingleBooking retries next candidate when candidate throws ConcurrencyFailureException")
+    void processSingleBookingRetriesNextCandidateOnConcurrencyFailure() {
+        AssetSummary racedCandidate = new AssetSummary(20L, "Raced Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary secondCandidate =
+                new AssetSummary(30L, "Second Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(racedCandidate, secondCandidate));
+        when(strategy1.name()).thenReturn("SameModelStrategy");
+        when(reservationApi.moveToAsset(50L, 20L, "Incident #100"))
+                .thenThrow(new CannotAcquireLockException("Lock timeout on candidate asset 20"));
+        when(reservationApi.moveToAsset(50L, 30L, "Incident #100")).thenReturn(true);
+
+        Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
+                processor.processSingleBooking(event, booking, damagedAsset);
+
+        assertThat(resultOpt).isPresent();
+        assertThat(resultOpt.get().outcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
+        assertThat(resultOpt.get().substituteAssetName()).isEqualTo("Second Scope");
+        verify(reassignmentLogRepository).save(any(ReassignmentLog.class));
+    }
+
+    @Test
+    @DisplayName("processSingleBooking rethrows unexpected RuntimeException without force-cancelling booking")
+    void processSingleBookingRethrowsUnexpectedRuntimeExceptionWithoutForceCancelling() {
+        AssetSummary candidate = new AssetSummary(20L, "Faulty Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(candidate));
+        when(reservationApi.moveToAsset(50L, 20L, "Incident #100"))
+                .thenThrow(new IllegalStateException("Unexpected internal failure"));
+
+        assertThatThrownBy(() -> processor.processSingleBooking(event, booking, damagedAsset))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unexpected internal failure");
+
+        // Crucial (#270 review 3): forceCancel must NEVER be called when an unexpected exception occurs
+        verify(reservationApi, never()).forceCancel(any(), any());
         verify(reassignmentLogRepository, never()).save(any());
     }
 }

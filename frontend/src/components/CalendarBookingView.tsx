@@ -39,6 +39,7 @@ import {
   type Reservation,
   type ReservationHoldResponse,
 } from '../api/reservations.ts'
+import { ApiError } from '../api/client.ts'
 import ErrorAlert from './ErrorAlert.tsx'
 
 type Props = {
@@ -261,6 +262,11 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     return `${selectedDay}T${endTimeStr}:00`
   }, [selectedDay, selectedStartTime, effectiveDuration])
 
+  const selectionRef = useRef({ startIso, endIso })
+  useEffect(() => {
+    selectionRef.current = { startIso, endIso }
+  }, [startIso, endIso])
+
   // Check availability when slot changes
   useEffect(() => {
     let cancelled = false
@@ -287,6 +293,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }, [asset.id, startIso, endIso])
 
   function selectSlot(day: string, time: string) {
+    if (holdLoading || bookingLoading) return
     if (activeHoldRef.current) {
       releaseHold(activeHoldRef.current.id).catch(() => {})
       activeHoldRef.current = null
@@ -300,6 +307,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }
 
   function handleDurationChange(val: number) {
+    if (holdLoading || bookingLoading) return
     if (activeHoldRef.current) {
       releaseHold(activeHoldRef.current.id).catch(() => {})
       activeHoldRef.current = null
@@ -379,15 +387,34 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
     setHoldLoading(true)
     setHoldError(null)
     setBookingError(null)
+    const reqStart = startIso
+    const reqEnd = endIso
     try {
       const hold = await createHold({
         assetId: asset.id,
-        startTime: startIso,
-        endTime: endIso,
+        startTime: reqStart,
+        endTime: reqEnd,
       })
       if (!isMountedRef.current) {
         // Component unmounted while createHold was in-flight: release immediately to prevent leaking
         releaseHold(hold.id).catch(() => {})
+        return
+      }
+      // Bug fixed (#267): drop a hold that isn't for the slot on screen (wrong answer, or the user picked
+      // another slot while the request was running).
+      const matchesServer =
+        hold.assetId === asset.id &&
+        hold.startTime === reqStart &&
+        hold.endTime === reqEnd
+      const matchesCurrentSelection =
+        selectionRef.current.startIso === reqStart &&
+        selectionRef.current.endIso === reqEnd
+
+      if (!matchesServer || !matchesCurrentSelection) {
+        releaseHold(hold.id).catch(() => {})
+        if (!matchesServer) {
+          setHoldError(new ApiError(0, 'HOLD_MISMATCH', 'The server held a different slot. Please try again.'))
+        }
         return
       }
       activeHoldRef.current = hold
@@ -543,7 +570,7 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 </Text>
                 <Group gap={4}>
                   {ALL_DURATIONS.map((dur) => {
-                    const isDisabled = dur.value > maxAvailableMins
+                    const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading
                     const isSelected = effectiveDuration === dur.value
                     return (
                       <Tooltip

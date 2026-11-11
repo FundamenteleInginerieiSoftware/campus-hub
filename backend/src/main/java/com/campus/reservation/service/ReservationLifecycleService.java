@@ -149,37 +149,42 @@ public class ReservationLifecycleService {
         }
 
         for (Long overdueAssetId : overdueAssetIds) {
-            List<Reservation> upcomingOnSameAsset =
-                    reservationRepository.findUpcomingConfirmedByAsset(overdueAssetId, now);
+            try {
+                List<Reservation> upcomingOnSameAsset =
+                        reservationRepository.findUpcomingConfirmedByAsset(overdueAssetId, now);
 
-            List<Reservation> threatenedBookings = new ArrayList<>();
-            for (Reservation upcoming : upcomingOnSameAsset) {
-                if (upcoming.getStartTime().isAfter(cascadeHorizon)) {
-                    break;
+                List<Reservation> threatenedBookings = new ArrayList<>();
+                for (Reservation upcoming : upcomingOnSameAsset) {
+                    if (upcoming.getStartTime().isAfter(cascadeHorizon)) {
+                        break;
+                    }
+                    threatenedBookings.add(upcoming);
                 }
-                threatenedBookings.add(upcoming);
-            }
-            if (threatenedBookings.isEmpty()) {
-                continue;
-            }
-
-            // Bug fixed (#155): fetch the overdue asset and its ordered same-model substitutes once per
-            // overdueAssetId instead of inside the inner loop, and prioritize substitutes in the same lab room
-            // (then lowest ID) while strictly filtering for AVAILABLE status.
-            AssetSummary currentAsset = catalogApi.getAsset(overdueAssetId);
-            List<AssetSummary> orderedSubstitutes =
-                    catalogApi.findAvailableByModel(currentAsset.model(), overdueAssetId).stream()
-                            .filter(sub -> sub.status() == AssetStatus.AVAILABLE)
-                            .sorted(Comparator.comparing(
-                                            (AssetSummary a) -> Objects.equals(a.labRoomId(), currentAsset.labRoomId()))
-                                    .reversed()
-                                    .thenComparing(AssetSummary::id))
-                            .toList();
-
-            for (Reservation threatened : threatenedBookings) {
-                if (tryPreventiveMove(threatened, overdueAssetId, orderedSubstitutes)) {
-                    cascadedReservationIds.add(threatened.getId());
+                if (threatenedBookings.isEmpty()) {
+                    continue;
                 }
+
+                // Bug fixed (#155): fetch the overdue asset and its ordered same-model substitutes once per
+                // overdueAssetId instead of inside the inner loop, and prioritize substitutes in the same lab room
+                // (then lowest ID) while strictly filtering for AVAILABLE status.
+                AssetSummary currentAsset = catalogApi.getAsset(overdueAssetId);
+                List<AssetSummary> orderedSubstitutes =
+                        catalogApi.findAvailableByModel(currentAsset.model(), overdueAssetId).stream()
+                                .filter(sub -> sub.status() == AssetStatus.AVAILABLE)
+                                .sorted(Comparator.comparing((AssetSummary a) ->
+                                                Objects.equals(a.labRoomId(), currentAsset.labRoomId()))
+                                        .reversed()
+                                        .thenComparing(AssetSummary::id))
+                                .toList();
+
+                for (Reservation threatened : threatenedBookings) {
+                    if (tryPreventiveMove(threatened, overdueAssetId, orderedSubstitutes)) {
+                        cascadedReservationIds.add(threatened.getId());
+                    }
+                }
+            } catch (RuntimeException e) {
+                // Bug fixed (#267): one failing asset no longer stops the cascade for the others.
+                log.warn("Preventive cascade failed for overdue asset #{}", overdueAssetId, e);
             }
         }
 

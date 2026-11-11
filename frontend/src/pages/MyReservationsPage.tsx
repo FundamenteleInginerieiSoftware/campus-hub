@@ -28,7 +28,7 @@ import {
   IconUserShare,
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import {
   acceptTransfer,
   cancelReservation,
@@ -163,20 +163,28 @@ export default function MyReservationsPage() {
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'past'>('all')
 
   const location = useLocation()
-  const [actionNotice, setActionNotice] = useState<string | null>(() => {
+  const navigate = useNavigate()
+  const [actionNotice, setActionNoticeState] = useState<string | null>(() => {
     const state = location.state as { bookedId?: number; bookedBundleId?: string; bundleItemCount?: number } | null
     if (state?.bookedId) {
-      window.history.replaceState({}, document.title)
       return `Booking confirmed! Reservation #${state.bookedId} has been added to your upcoming bookings.`
     }
     if (state?.bookedBundleId) {
-      window.history.replaceState({}, document.title)
       return state.bundleItemCount
         ? `Bundle booking confirmed! ${state.bundleItemCount} items have been added to your upcoming bookings.`
         : 'Bundle booking confirmed! Your kit items have been added to your upcoming bookings.'
     }
     return null
   })
+
+  // Bug fixed (#267): window.history.replaceState wiped React Router's own history state.
+  // Clear the booking notice state through the router instead, keeping the query string.
+  useEffect(() => {
+    if (location.state) {
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
+    }
+  }, [location.pathname, location.search, location.state, navigate])
+
 
   // Aggregate stats across all reservations, fetched from GET /api/v1/reservations/me/summary
   const [summary, setSummary] = useState<ReservationSummary>({
@@ -203,6 +211,14 @@ export default function MyReservationsPage() {
   // Incoming pending transfers
   const [pendingTransfers, setPendingTransfers] = useState<ReservationTransferResponse[]>([])
   const [transferRespondingId, setTransferRespondingId] = useState<number | null>(null)
+  const [transferActionError, setTransferActionError] = useState<unknown>(null)
+  // A later success elsewhere on the page hides an old transfer error.
+  function setActionNotice(notice: string | null) {
+    setActionNoticeState(notice)
+    if (notice) {
+      setTransferActionError(null)
+    }
+  }
 
   // Extend reservation modal state
   const [extendingReservation, setExtendingReservation] = useState<Reservation | null>(null)
@@ -263,6 +279,8 @@ export default function MyReservationsPage() {
         }
         setError(null)
         setPageData(response)
+        // Bug fixed (#267): rows show as soon as they arrive, not after the asset names load.
+        setLoading(false)
 
         const neededAssetIds = [
           ...new Set(
@@ -340,15 +358,14 @@ export default function MyReservationsPage() {
 
   async function handleAcceptTransfer(transferId: number) {
     setTransferRespondingId(transferId)
-    setError(null)
+    setTransferActionError(null)
     try {
       await acceptTransfer(transferId)
       setActionNotice('Transfer accepted! The reservation has been transferred to your upcoming bookings.')
-      setError(null)
-      setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
-      setError(err)
+      // Bug fixed (#267): a failed transfer showed the page-level "Could not load reservations" banner.
+      setTransferActionError(err)
     } finally {
       setTransferRespondingId(null)
     }
@@ -356,15 +373,13 @@ export default function MyReservationsPage() {
 
   async function handleRejectTransfer(transferId: number) {
     setTransferRespondingId(transferId)
-    setError(null)
+    setTransferActionError(null)
     try {
       await rejectTransfer(transferId)
       setActionNotice('Transfer offer declined.')
-      setError(null)
-      setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
-      setError(err)
+      setTransferActionError(err)
     } finally {
       setTransferRespondingId(null)
     }
@@ -641,8 +656,8 @@ export default function MyReservationsPage() {
       )}
 
       {/* Incoming Reservation Transfer Offers */}
-      {Array.isArray(pendingTransfers) &&
-        pendingTransfers.map((t) => (
+      <ErrorAlert error={transferActionError} />
+      {pendingTransfers.map((t) => (
         <Alert
           key={t.id}
           color="blue"

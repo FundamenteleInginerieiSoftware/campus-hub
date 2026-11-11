@@ -108,6 +108,7 @@ class ReservationServiceRulesTest {
     @Test
     void unknownReservationIsNotFoundForGetByIdAndReturn() {
         when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.getById(999L))
                 .isInstanceOf(NotFoundException.class)
@@ -165,6 +166,7 @@ class ReservationServiceRulesTest {
     void noShowAndOverdueSkipReservationsInTheWrongStatus() {
         Reservation confirmed = reservation(1L, now.plusHours(1), now.plusHours(2));
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(confirmed));
 
         // A CONFIRMED booking was never checked out, so it can't become OVERDUE.
         assertThat(reservationService.markOverdue(1L)).isFalse();
@@ -206,7 +208,7 @@ class ReservationServiceRulesTest {
     void checkOutSucceedsWhenTheAssetHolderIsTheSameReservation() {
         Reservation confirmed = reservation(4L, now, now.plusHours(2));
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(4L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
                 .thenReturn(Optional.of(confirmed));
