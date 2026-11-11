@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth (owner of the `user` module)
 **Date:** 2026-11-11
-**Branch / PR:** `feat/user-pickup-pass` (#PICKUP1), PR 1 of 3 (pages come next)
+**Branch / PR:** `feat/user-pickup-pass` (#283), PR 1 of 3 (pages come next)
 **See also:** `docs/superpowers/specs/2026-11-10-pickup-pass-design.md`, `docs/api-contract.md` ("Pickup pass (Matei)")
 
 ---
