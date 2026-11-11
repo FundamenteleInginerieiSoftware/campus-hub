@@ -61,7 +61,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W9 | ~~Frontend: **admin reservations desk page**~~ (✅ #138, #194) | – |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
 | W10 | ~~Security pass~~ (✅ `SecurityPassIT`, #139) · ~~PIT survivors in my code~~ (✅ #182) · load smoke test · restore an RDS snapshot once · cost check | – |
-| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`): PR 1 (backend, both endpoints) is done in #283, PR 2 (pages) next · small asks from teammates' features: the `SecurityConfig` rule for Calin's calendar feed (land it first), the live push call in `SesNotificationService` for Liviu's live notifications, maybe one async-dispatch line in `SecurityConfig` | Section 7a |
+| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`): PR 1 (backend, both endpoints) is done in #283, PR 2 (student page + desk Verify dialog) is done in #284, PR 3 (QR image + scan) waits for Stefania's approval of the QR libraries · small asks from teammates' features: the `SecurityConfig` rule for Calin's calendar feed (land it first), the live push call in `SesNotificationService` for Liviu's live notifications, maybe one async-dispatch line in `SecurityConfig` | Section 7a |
 | W11–W12 | ~~Deployment + component diagrams~~ (✅ #186; update the AWS one after the deploy) · ~~security chapter~~ (✅ #185) · CI/CD description · runbook · demo on AWS + local fallback + video · `terraform destroy` after grading | – |
 
 ## 5. Liviu Nedelcu: catalog + shared services

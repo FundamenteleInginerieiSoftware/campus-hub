@@ -77,6 +77,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 49 | [49-project-details-error-fix.md](49-project-details-error-fix.md) | Project details: error cleared after a good reload, campus clock read when needed | #273 |
 | 50 | [50-docs-check.md](50-docs-check.md) | End-of-task docs rule (AGENTS.md §4) + `docs-check` CI job + Gemini/Copilot pointer files | #277, #279 |
 | 51 | [51-pickup-pass-backend.md](51-pickup-pass-backend.md) | Pickup pass (backend): a 6-digit code that changes every 30 s, shown by the student and checked by the admin at the desk | #283 |
+| 52 | [52-pickup-pass-pages.md](52-pickup-pass-pages.md) | Pickup pass (pages): the student's code page and the Verify dialog on the Reservations desk | #284 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
