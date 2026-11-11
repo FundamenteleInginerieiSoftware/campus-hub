@@ -227,4 +227,37 @@ class AdminReservationControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INVALID_RESERVATION_STATUS_TRANSITION"));
     }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 200 with batch cancel summary")
+    void cancelUpcomingForUserReturns200WithCount() throws Exception {
+        when(reservationService.cancelUpcomingReservationsForUser(42L, "Disciplinary suspension"))
+                .thenReturn(3);
+
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming")
+                        .param("reason", "Disciplinary suspension"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(3))
+                .andExpect(jsonPath("$.message").value("Successfully cancelled 3 upcoming reservation(s)"));
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 403 for student")
+    void cancelUpcomingForUserForbiddenForStudent() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 401 when unauthenticated")
+    void cancelUpcomingForUserUnauthorizedWithoutAuth() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(reservationService);
+    }
 }

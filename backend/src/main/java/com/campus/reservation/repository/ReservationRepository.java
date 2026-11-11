@@ -89,6 +89,15 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
         """)
     List<Reservation> findUpcomingConfirmedByAsset(@Param("assetId") Long assetId, @Param("from") LocalDateTime from);
 
+    @Query("""
+        select r from Reservation r
+        where r.userId = :userId
+          and r.status = com.campus.reservation.api.ReservationStatus.CONFIRMED
+          and r.endTime > :cutoff
+        order by r.startTime asc
+        """)
+    List<Reservation> findUpcomingConfirmedByUser(@Param("userId") Long userId, @Param("cutoff") LocalDateTime cutoff);
+
     // Strictly `< :cutoff` (where cutoff = now - 30m) so a student arriving at exact startTime + 30m
     // can still check out (`!now.isAfter(latest)`), and the sweep only marks NO_SHOW after +30m has passed.
     @Query("""

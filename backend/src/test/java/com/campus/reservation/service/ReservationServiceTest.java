@@ -3738,4 +3738,144 @@ class ReservationServiceTest {
             TransactionSynchronizationManager.clearSynchronization();
         }
     }
+
+    @Test
+    @DisplayName(
+            "cancelUpcomingReservationsForUser: cancels all confirmed upcoming bookings, auto-cancels transfers and notifies user after commit (#229)")
+    void cancelUpcomingReservationsForUser_cancelsAllConfirmedUpcoming_andTransfers() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+
+        Reservation r2 = new Reservation(
+                USER_ID,
+                11L,
+                now.plusDays(2).withHour(14).withMinute(0),
+                now.plusDays(2).withHour(16).withMinute(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r1, r2));
+
+        ReservationTransfer pendingTransfer = new ReservationTransfer(101L, USER_ID, 42L, now.minusMinutes(30));
+        ReflectionTestUtils.setField(pendingTransfer, "id", 501L);
+        when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(pendingTransfer));
+        when(reservationTransferRepository.findByReservationIdAndStatus(102L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+
+        when(currentUser.id()).thenReturn(99L); // Admin actor
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            int cancelledCount =
+                    reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
+
+            assertThat(cancelledCount)
+                    .as("Should report exactly 2 cancelled reservations")
+                    .isEqualTo(2);
+
+            assertThat(r1.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+            assertThat(r1.getCancelReason()).isEqualTo("Account disabled by administrator");
+            assertThat(r2.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+            assertThat(r2.getCancelReason()).isEqualTo("Account disabled by administrator");
+
+            // Pending transfer must have been auto-cancelled
+            assertThat(pendingTransfer.getStatus()).isEqualTo(TransferStatus.CANCELLED);
+            verify(reservationTransferRepository).save(pendingTransfer);
+            verify(auditService)
+                    .record(
+                            eq(99L),
+                            eq("TRANSFER_CANCELLED"),
+                            eq("ReservationTransfer"),
+                            eq(501L),
+                            contains("Auto-cancelled due to account status"));
+
+            // Audit records for both reservation cancellations
+            verify(auditService)
+                    .record(
+                            eq(99L),
+                            eq("CANCEL_RESERVATION"),
+                            eq("Reservation"),
+                            eq(101L),
+                            eq("Account disabled by administrator"));
+            verify(auditService)
+                    .record(
+                            eq(99L),
+                            eq("CANCEL_RESERVATION"),
+                            eq("Reservation"),
+                            eq(102L),
+                            eq("Account disabled by administrator"));
+
+            // Verify saveAll called on repository
+            verify(reservationRepository).saveAll(List.of(r1, r2));
+
+            // Commit transaction and verify notification emails dispatched
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            verify(notificationService)
+                    .notifyUser(
+                            eq(USER_ID), eq("Reservation Cancelled"), contains("reservation #101 has been cancelled"));
+            verify(notificationService)
+                    .notifyUser(
+                            eq(USER_ID), eq("Reservation Cancelled"), contains("reservation #102 has been cancelled"));
+            // Recipient of transfer notification
+            verify(notificationService)
+                    .notifyUser(
+                            eq(42L),
+                            eq("Reservation Transfer Cancelled"),
+                            contains("transfer offer for reservation #101 was cancelled"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: returns 0 when user has no upcoming confirmed bookings")
+    void cancelUpcomingReservationsForUser_returnsZeroWhenEmpty() {
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+
+        int count = reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled");
+        assertThat(count).isEqualTo(0);
+        verify(reservationRepository, never()).saveAll(any());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: returns 0 when userId is null")
+    void cancelUpcomingReservationsForUser_returnsZeroWhenUserIdNull() {
+        int count = reservationService.cancelUpcomingReservationsForUser(null, "Account disabled");
+        assertThat(count).isEqualTo(0);
+        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: falls back to default reason when reason is null or blank")
+    void cancelUpcomingReservationsForUser_usesDefaultReasonWhenBlank() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r));
+
+        int count = reservationService.cancelUpcomingReservationsForUser(USER_ID, "   ");
+        assertThat(count).isEqualTo(1);
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r.getCancelReason()).isEqualTo("Account disabled by administrator");
+    }
 }
