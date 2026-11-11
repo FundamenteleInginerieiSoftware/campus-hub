@@ -1,7 +1,9 @@
 package com.campus.reassignment.service;
 
+import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.paging.PageResponse;
 import com.campus.incident.api.AssetDamagedEvent;
@@ -9,14 +11,19 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.optimal.OptimalReassignmentPlan;
+import com.campus.reassignment.service.optimal.OptimalReassignmentSolver;
 import com.campus.reassignment.web.ReassignmentLogResponse;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +47,7 @@ public class ReassignmentService {
     private final NotificationService notificationService;
     private final ReassignmentBookingProcessor bookingProcessor;
     private final ReassignmentLogRepository reassignmentLogRepository;
+    private final OptimalReassignmentSolver optimalReassignmentSolver;
     private final Clock clock;
 
     /**
@@ -52,13 +60,22 @@ public class ReassignmentService {
      */
     public void handle(AssetDamagedEvent event) {
         AssetSummary damaged = catalogApi.getAsset(event.assetId());
-        LocalDateTime now = now();
-        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now);
+        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now());
+        runEngine(event, damaged, upcoming);
+    }
 
+    /** What the engine actually did, counted per outcome. */
+    record EngineCounts(int reassigned, int forceCancelled) {}
+
+    // Shared by the incident flow and the admin "solve-optimal" live run, so both get the same
+    // strategies, per-booking REQUIRES_NEW transaction (move + log together) and next-candidate retry.
+    private EngineCounts runEngine(AssetDamagedEvent event, AssetSummary damaged, List<ReservationSummary> upcoming) {
         List<ReservationSummary> sortedBookings = upcoming.stream()
                 .sorted(Comparator.comparing(ReservationSummary::start))
                 .toList();
 
+        int reassigned = 0;
+        int forceCancelled = 0;
         for (ReservationSummary booking : sortedBookings) {
             try {
                 Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
@@ -67,6 +84,7 @@ public class ReassignmentService {
                 if (resultOpt.isPresent()) {
                     ReassignmentBookingProcessor.ReassignmentExecutionResult result = resultOpt.get();
                     if (result.outcome() == ReassignmentOutcome.REASSIGNED) {
+                        reassigned++;
                         sendNotificationSafely(
                                 booking.userId(),
                                 "Reservation Reassigned",
@@ -74,6 +92,7 @@ public class ReassignmentService {
                                         + result.substituteAssetName() + " due to equipment maintenance.");
                     } else {
                         // The only other outcome is FORCE_CANCELLED.
+                        forceCancelled++;
                         sendNotificationSafely(
                                 booking.userId(),
                                 "Reservation Cancelled",
@@ -86,6 +105,7 @@ public class ReassignmentService {
                 log.warn("Skipping reassignment for booking #{} due to concurrent update or failure", booking.id(), e);
             }
         }
+        return new EngineCounts(reassigned, forceCancelled);
     }
 
     // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so timestamps
@@ -121,5 +141,66 @@ public class ReassignmentService {
         Pageable pageable = PageRequest.of(page, size);
         Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);
+    }
+
+    /**
+     * Plans the reassignment of every upcoming booking of an asset that is {@code UNDER_MAINTENANCE}
+     * with greedy + branch and bound ({@link OptimalReassignmentSolver}).
+     *
+     * <p>{@code dryRun=true} only returns the plan. {@code dryRun=false} runs the standard engine
+     * ({@link ReassignmentBookingProcessor}) instead of a second execution loop, so a live run keeps the
+     * engine's guarantees: Strategy order (same room first, stable tie-break), next candidate on
+     * {@code SubstituteNoLongerFreeException}, and move + log in one transaction per booking.
+     *
+     * @throws ConflictException if the asset is not {@code UNDER_MAINTENANCE}
+     */
+    public OptimalReassignmentPlan solveOptimalPlan(Long damagedAssetId, Long incidentId, boolean dryRun) {
+        AssetSummary damaged = catalogApi.getAsset(damagedAssetId);
+        // Without this check one call on a healthy asset would move (or cancel) all its bookings.
+        if (damaged.status() != AssetStatus.UNDER_MAINTENANCE) {
+            throw new ConflictException(
+                    "ASSET_NOT_UNDER_MAINTENANCE", "Asset #" + damagedAssetId + " is not UNDER_MAINTENANCE");
+        }
+        LocalDateTime now = now();
+        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(damagedAssetId, now);
+
+        // Same model first, then same category; LinkedHashMap keeps that order (and the catalog's
+        // stable tie-break) and drops duplicates.
+        Map<Long, AssetSummary> candidatesById = new LinkedHashMap<>();
+        for (AssetSummary a : catalogApi.findAvailableByModel(damaged.model(), damagedAssetId)) {
+            candidatesById.put(a.id(), a);
+        }
+        for (AssetSummary a : catalogApi.findAvailableByCategory(damaged.categoryId(), damagedAssetId)) {
+            candidatesById.putIfAbsent(a.id(), a);
+        }
+
+        OptimalReassignmentPlan plan = optimalReassignmentSolver.solve(
+                damagedAssetId,
+                damaged.name(),
+                upcoming,
+                damaged,
+                new ArrayList<>(candidatesById.values()),
+                (candidateId, booking) ->
+                        reservationApi.isAssetFree(candidateId, booking.start(), booking.end(), booking.id()));
+
+        if (dryRun) {
+            return plan;
+        }
+
+        EngineCounts counts =
+                runEngine(new AssetDamagedEvent(incidentId, damagedAssetId, null, clock.instant()), damaged, upcoming);
+
+        // The counts are what the engine really did; the actions stay as the plan for comparison.
+        return new OptimalReassignmentPlan(
+                plan.damagedAssetId(),
+                plan.damagedAssetName(),
+                plan.totalReservations(),
+                counts.reassigned(),
+                counts.forceCancelled(),
+                plan.sameModelCount(),
+                plan.sameCategoryCount(),
+                true,
+                plan.actions(),
+                plan.comparison());
     }
 }
