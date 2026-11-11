@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) and the end-of-task docs check (`50-docs-check.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the pickup pass backend (`51-pickup-pass-backend.md`), the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) and the end-of-task docs check (`50-docs-check.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -43,6 +43,10 @@ campus-hub/
         │                          user/api/UserApi.java, user/api/UserSummary.java,
         │                          user/web/{Register,Login}Request.java, {User,Login}Response.java,
         │                          user/web/UserController.java,
+        │                          user/service/{PickupCodes,PickupPassService}.java,
+        │                          user/web/{PickupPass,AdminPickupPass}Controller.java,
+        │                          user/web/{VerifyPickupPassRequest,PickupPassResponse,PickupPassVerifiedResponse}.java
+        │                                                  (51-pickup-pass-backend.md)
         │                          project/** (39-project-engine.md),
         │                          project/service/ProjectReservationService.java,
         │                          project/web/{ReserveProjectRequest,ReserveProjectResponse,ReservedItem}.java
@@ -56,6 +60,8 @@ campus-hub/
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
         │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest, S3StorageServiceTest,
         │                          SesNotificationServiceTest, ProdProfileStartupTest, SecurityPassIT,
+        │                          user/service/{PickupCodesTest,PickupPassServiceTest}, user/web/{PickupPass,AdminPickupPass}ControllerTest
+        │                                                  (51-pickup-pass-backend.md)
         │                          UserControllerTest, SpaConfigTest, DemoFlowIT, OpenApiDocsIT,
         │                          project/service/ShippedProjectsTest
         │                          project/service/ProjectReservationServiceTest (42-project-reserve-all.md)
@@ -164,6 +170,16 @@ campus-hub/
 | `SesNotificationService.java` | On AWS, sends real e-mails to users instead of writing them to the log. A failed e-mail is logged and never undoes the booking change. |
 | `S3StorageServiceTest`, `SesNotificationServiceTest` | Check what we ask S3 and SES to do, without connecting to AWS. |
 | `ProdProfileStartupTest` | Starts the whole app in AWS mode, so a missing piece shows up in CI instead of on the server. |
+
+### Backend: pickup pass (`51-pickup-pass-backend.md`)
+| File | What it does |
+|---|---|
+| `PickupCodes.java` | Works out the 6-digit code for a student at a given half-minute. No storage: the phone side and the server side do the same sum and get the same number. |
+| `PickupPassService.java` | Gives the logged-in student their code, and checks a code the admin typed at the desk (writes who was verified into the audit log). |
+| `PickupPassController.java` | The student's address (`/api/v1/users/me/pickup-pass`): "show me my code". |
+| `AdminPickupPassController.java` | The admin's address (`/api/v1/admin/pickup-pass/verify`): "is this code right for student 12?". Students get "not allowed". |
+| `VerifyPickupPassRequest.java`, `PickupPassResponse.java`, `PickupPassVerifiedResponse.java` | The forms: what the desk sends (student + 6 digits), the code the student sees, and "this is Ana Pop". |
+| `PickupCodesTest`, `PickupPassServiceTest`, `PickupPassControllerTest`, `AdminPickupPassControllerTest` | Check the code is stable and 6 digits, an old code is refused, a student can't verify, and bad input is refused. |
 
 ### `infra/`: AWS as code with Terraform, part 1 (`44-terraform-network.md`)
 | File | What it does |
@@ -335,6 +351,15 @@ campus-hub/
 | `UserService` | `@Service` implementing `UserApi`, so other modules get it when they inject `UserApi`. `getById` maps `User` → `UserSummary` inside a `@Transactional(readOnly = true)` method (open-in-view is off) and throws `NotFoundException("USER_NOT_FOUND", …)`; `exists` = `existsById`. Details in `11-user-service.md`. `me()` (not on `UserApi`, only for the controller) takes the id from the injected `CurrentUser` and returns a `UserResponse`, else `USER_NOT_FOUND`. Details in `17-users-me.md`. |
 | `UserController` | `GET /api/v1/users/me` → `userService.me()`. No parameters at all: the id can only come from the token. Protected by the `/api/v1/**` rule (401 without a token). |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
+
+### Backend: pickup pass (`51-pickup-pass-backend.md`)
+| File | What it does |
+|---|---|
+| `PickupCodes` | Package-private, no Spring: `code(userId, step)` = HMAC-SHA256 over `"pickup-v1|userId|step"`, first 4 bytes as a non-negative int, `% 1_000_000`, zero-padded. Also `timeStep`, `validForSeconds`, `qrText`. A new `Mac` per call (not thread-safe). |
+| `PickupPassService` | `@Service`; key from `app.jwt.secret`; "now" from the shared `Clock`. `verify` is `@Transactional`: enabled-user lookup, current and previous step compared with `MessageDigest.isEqual`, one `PICKUP_CODE_INVALID` (409) for every failure, audit row on success. |
+| `PickupPassController` / `AdminPickupPassController` | `GET /api/v1/users/me/pickup-pass` (any token) and `POST /api/v1/admin/pickup-pass/verify` (`/api/v1/admin/**` rule gives 403 to students). Records only, no entity. |
+| `VerifyPickupPassRequest` | `@NotNull Long userId`, `@NotNull @Pattern("\d{6}") String code`: the pattern also protects the service from a `null` code. |
+| Tests | `PickupCodesTest` (9), `PickupPassServiceTest` (12, fixed `Clock`), `PickupPassControllerTest` (3) and `AdminPickupPassControllerTest` (7) with `@WebMvcTest` + `@Import(SecurityConfig.class)` + `jwt()`. |
 
 ### Prototype mockup
 | File | Key points |
