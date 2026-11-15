@@ -206,7 +206,7 @@ public class IdempotencyService {
             initialDelayString = "${app.reservation.idempotency-cleanup-initial-delay-ms:600000}")
     @Transactional
     public int sweepExpiredRecords() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         int deleted = repository.deleteExpiredRecords(now);
         if (deleted > 0) {
             log.info("Purged {} expired idempotency records older than {}", deleted, now);
