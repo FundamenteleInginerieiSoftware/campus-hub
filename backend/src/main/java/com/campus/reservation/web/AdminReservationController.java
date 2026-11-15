@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -100,13 +101,19 @@ public class AdminReservationController {
                     "Cancels all upcoming CONFIRMED reservations for the specified user (e.g. when an admin disables their account).")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Upcoming reservations cancelled"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "Validation failed when cancellation reason exceeds 255 characters (VALIDATION_FAILED)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)")
+        @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)"),
+        @ApiResponse(responseCode = "404", description = "User not found (USER_NOT_FOUND)")
     })
     @PostMapping("/users/{userId}/cancel-upcoming")
     public ResponseEntity<BatchCancelResponse> cancelUpcomingForUser(
             @PathVariable Long userId,
-            @RequestParam(required = false, defaultValue = "Account disabled by administrator") String reason) {
+            @RequestParam(required = false, defaultValue = "Account disabled by administrator")
+                    @Size(max = 255, message = "Cancellation reason must not exceed 255 characters")
+                    String reason) {
         int count = reservationService.cancelUpcomingReservationsForUser(userId, reason);
         return ResponseEntity.ok(
                 new BatchCancelResponse(count, "Successfully cancelled " + count + " upcoming reservation(s)"));

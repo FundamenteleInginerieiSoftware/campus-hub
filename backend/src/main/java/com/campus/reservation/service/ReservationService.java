@@ -391,13 +391,9 @@ public class ReservationService implements ReservationApi {
 
         // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
         boolean isAdmin = false;
-        if (currentUser != null) {
-            try {
-                if (currentUser.id().equals(userId) && currentUser.isAdmin()) {
-                    isAdmin = true;
-                }
-            } catch (Exception ignored) {
-            }
+        Long callerId = currentUserIdOrNull();
+        if (callerId != null && callerId.equals(userId) && currentUser.isAdmin()) {
+            isAdmin = true;
         }
         if (!isAdmin && userApi != null) {
             isAdmin = userApi.findActiveRole(userId).map(r -> r == Role.ADMIN).orElse(false);
@@ -1085,11 +1081,7 @@ public class ReservationService implements ReservationApi {
             }
 
             if (reservationHoldRepository != null) {
-                Long currentUserId = null;
-                try {
-                    currentUserId = currentUser != null ? currentUser.id() : null;
-                } catch (Exception ignored) {
-                }
+                Long currentUserId = currentUserIdOrNull();
                 if (reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, currentUserId)) {
                     List<Long> substitutes = findFreeSameModelSubstitutes(asset, start, end);
                     return AvailabilityResponse.forAsset(
@@ -1264,11 +1256,7 @@ public class ReservationService implements ReservationApi {
         Set<Long> busy = new LinkedHashSet<>(
                 reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES));
         if (reservationHoldRepository != null) {
-            Long currentUserId = null;
-            try {
-                currentUserId = currentUser != null ? currentUser.id() : null;
-            } catch (Exception ignored) {
-            }
+            Long currentUserId = currentUserIdOrNull();
             busy.addAll(reservationHoldRepository.findHeldAssetIds(start, end, now(), currentUserId));
         }
         return new ArrayList<>(busy);
@@ -1337,22 +1325,46 @@ public class ReservationService implements ReservationApi {
                         r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
     }
 
+    private Long currentUserIdOrNull() {
+        if (currentUser == null) {
+            return null;
+        }
+        try {
+            return currentUser.id();
+        } catch (Exception ignored) {
+            // Background execution or non-web context
+            return null;
+        }
+    }
+
     /**
      * Cancels all upcoming CONFIRMED reservations for the specified user (e.g. when an admin disables their account).
      *
      * <p>Auto-cancels any pending outgoing transfer offers for those reservations so they do not remain orphaned.
+     * Active 1-minute slot holds expire on their own, and incoming transfer offers where the disabled user is the
+     * recipient remain {@code PENDING} (accepting is blocked by the disabled account).
      * Equipment already checked out (CHECKED_OUT or OVERDUE) is not modified as physical return is required at the desk.
      *
      * @param userId the ID of the user whose upcoming bookings should be cancelled
-     * @param reason the cancellation explanation
+     * @param reason the cancellation explanation (max 255 characters)
      * @return the number of upcoming reservations cancelled
      */
     @Override
     @Transactional
     public int cancelUpcomingReservationsForUser(Long userId, String reason) {
+        if (reason != null && reason.length() > 255) {
+            throw new InvalidParameterException("Cancellation reason must not exceed 255 characters");
+        }
         if (userId == null) {
             return 0;
         }
+        if (userApi != null && !userApi.exists(userId)) {
+            throw new NotFoundException("USER_NOT_FOUND", "User not found: " + userId);
+        }
+
+        // Serialize against concurrent bookings, holds, or transfers for the same student.
+        reservationRepository.lockUserQuota(userId);
+
         LocalDateTime now = now();
         String effectiveReason = (reason != null && !reason.isBlank()) ? reason : "Account disabled by administrator";
 
@@ -1361,14 +1373,7 @@ public class ReservationService implements ReservationApi {
             return 0;
         }
 
-        Long actorId = null;
-        if (currentUser != null) {
-            try {
-                actorId = currentUser.id();
-            } catch (Exception ignored) {
-                // Background execution or non-web context
-            }
-        }
+        Long actorId = currentUserIdOrNull();
 
         for (Reservation r : upcoming) {
             r.cancel(now, effectiveReason);

@@ -415,12 +415,45 @@ class ReservationRepositoryTest {
                 LocalDateTime.of(2026, 11, 2, 7, 0));
         reservationRepository.saveAndFlush(otherUser);
 
+        Reservation checkedOut = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 18, 0),
+                LocalDateTime.of(2026, 11, 2, 19, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        checkedOut.checkOut(LocalDateTime.of(2026, 11, 2, 18, 5));
+        reservationRepository.saveAndFlush(checkedOut);
+
+        Reservation overdue = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 8, 0),
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        overdue.checkOut(LocalDateTime.of(2026, 11, 3, 8, 5));
+        overdue.markOverdue();
+        reservationRepository.saveAndFlush(overdue);
+
+        Reservation cancelled = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 3, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        cancelled.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled earlier");
+        reservationRepository.saveAndFlush(cancelled);
+
         List<Reservation> upcoming =
                 reservationRepository.findUpcomingConfirmedByUser(USER_ID, LocalDateTime.of(2026, 11, 2, 12, 0));
 
         assertThat(upcoming)
-                .as("Should only return CONFIRMED bookings for USER_ID ending after 12:00")
+                .as(
+                        "findUpcomingConfirmedByUser must return only CONFIRMED bookings for USER_ID ending after 12:00 (excluding past, other user, CHECKED_OUT, OVERDUE, and CANCELLED)")
                 .extracting(Reservation::getId)
                 .containsExactly(existingReservation.getId());
+        assertThat(upcoming)
+                .as("CHECKED_OUT, OVERDUE, and CANCELLED bookings for USER_ID must not be returned")
+                .extracting(Reservation::getStatus)
+                .containsOnly(ReservationStatus.CONFIRMED);
     }
 }

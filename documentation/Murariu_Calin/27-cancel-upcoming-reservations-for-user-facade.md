@@ -25,7 +25,9 @@ Am adăugat o metodă dedicată în fațada publică `ReservationApi` și un end
   - Anulează automat orice ofertă de transfer `PENDING` asociată acelor rezervări, notificând colegul că transferul nu mai este valabil.
   - Înregistrează fiecare anulare în jurnalul de audit (`CANCEL_RESERVATION`).
   - Trimite notificări pe email utilizatorului după comiterea cu succes a tranzacției (`afterCommit`).
-  - **Important:** Echipamentele deja ridicate fizic (`CHECKED_OUT` sau `OVERDUE`) nu sunt anulate automat, deoarece ele se află în posesia fizică a studentului și trebuie predate fizic la biroul de laborator de către administrator prin procedura standard de returnare (`POST /api/v1/admin/reservations/{id}/return`).
+  - **Important:**
+    - Echipamentele deja ridicate fizic (`CHECKED_OUT` sau `OVERDUE`) nu sunt anulate automat, deoarece ele se află în posesia fizică a studentului și trebuie predate fizic la biroul de laborator de către administrator prin procedura standard de returnare (`POST /api/v1/admin/reservations/{id}/return`).
+    - Hold-urile temporare active de 1 minut (`ReservationHold`) expiră automat la termen fără intervenție, iar ofertele de transfer primite (`PENDING`) unde utilizatorul dezactivat este destinatar rămân `PENDING` până la expirare sau anulare (acceptarea lor este oricum blocată de contul dezactivat).
 
 ---
 
@@ -33,8 +35,9 @@ Am adăugat o metodă dedicată în fațada publică `ReservationApi` și un end
 
 ### 1. Architectural Alignment & Boundaries
 Conform regulilor din `AGENTS.md` și ArchUnit (`ModuleBoundaryArchitectureTest`):
-- `com.campus.reservation` depinde de `com.campus.user.api` (pentru roluri și existență student).
-- Păstrăm decuplarea strictă fără cicluri bidirecționale (`no_cycles_between_modules`): pachetul `user` nu importă clase interne din `reservation`. În schimb, Ștefania (@m1runa-stefan1a) poate apela noul endpoint REST sau fațada `ReservationApi` atunci când finalizează partea sa din Issue #229 în modulul `user/admin/`.
+- `com.campus.reservation` depinde de `com.campus.user.api` (pentru roluri și verificare existență utilizator prin `userApi.exists(userId)`).
+- Păstrăm decuplarea strictă fără cicluri bidirecționale (`no_cycles_between_modules`): modulul `user` **nu trebuie să importe** `reservation` (nici `ReservationApi`). Prin urmare, integrarea din `#229` va fi legată printr-un eveniment `UserDisabledEvent` publicat din `user.api` și consumat sincron printr-un `@EventListener` în modulul `reservation` (care va invoca `cancelUpcomingReservationsForUser`).
+- La începutul execuției, `cancelUpcomingReservationsForUser` validează lungimea motivului (`<= 255` caractere), verifică existența utilizatorului (`404 USER_NOT_FOUND` dacă lipsește) și achiziționează blocarea `reservationRepository.lockUserQuota(userId)` pentru a serializa anularea față de eventuale rezervări/hold-uri/transferuri concurente.
 
 ```mermaid
 sequenceDiagram
@@ -85,7 +88,8 @@ int cancelUpcomingReservationsForUser(Long userId, String reason);
 
 #### `AdminReservationController.java`
 - `POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming`
-- Query Params: `reason` (optional, default: `"Account disabled by administrator"`)
+- Query Params: `reason` (optional, max 255 chars, default: `"Account disabled by administrator"`)
+- Errors: `400 VALIDATION_FAILED` (dacă `reason` depășește 255 de caractere), `404 USER_NOT_FOUND` (dacă `userId` nu există), `401 UNAUTHORIZED`, `403 FORBIDDEN`
 - Response: `200 OK`
 ```json
 {
@@ -106,15 +110,19 @@ ORDER BY r.startTime ASC
 
 ### 4. Test Coverage & Verification Plan
 - **Unit Tests (`ReservationServiceTest`):**
-  - Anulează toate rezervările viitoare `CONFIRMED` ale utilizatorului.
-  - Anulează ofertele de transfer `PENDING` asociate și notifică destinatarul transferului.
-  - Emite notificări către utilizator exclusiv după comiterea tranzacției (`afterCommit`).
+  - Anulează toate rezervările viitoare `CONFIRMED` ale utilizatorului după achiziționarea `lockUserQuota(userId)`.
+  - Anulează ofertele de transfer `PENDING` asociate și notifică destinatarul transferului după commit.
+  - Înregistrează audit (`CANCEL_RESERVATION`) și emite notificări către utilizator exclusiv după comiterea tranzacției (`afterCommit`).
   - Tratează cazul în care utilizatorul nu are rezervări viitoare (returnează 0).
   - Tratează cazul `userId == null` (returnează 0).
   - Folosește motivul implicit atunci când parametrul `reason` este null sau blank.
+  - Respinge `reason` > 255 caractere cu `InvalidParameterException` (`INVALID_PARAMETER`).
+  - Aruncă `NotFoundException` (`USER_NOT_FOUND`) când `userApi.exists(userId)` este fals.
 - **Repository Integration Test (`ReservationRepositoryTest`):**
-  - Verifică filtrarea corectă pe bază de date reală PostgreSQL pentru `findUpcomingConfirmedByUser`.
+  - Verifică filtrarea corectă pe bază de date reală PostgreSQL pentru `findUpcomingConfirmedByUser` (excluzând trecutul, alți utilizatori și statusurile `CHECKED_OUT`, `OVERDUE`, `CANCELLED`).
 - **Controller Test (`AdminReservationControllerTest`):**
   - Returnează `200 OK` cu `BatchCancelResponse` pentru `ROLE_ADMIN`.
+  - Returnează `400 VALIDATION_FAILED` când `reason` depășește 255 caractere.
+  - Returnează `404 USER_NOT_FOUND` când utilizatorul nu există.
   - Returnează `403 FORBIDDEN` pentru `ROLE_STUDENT`.
   - Returnează `401 UNAUTHORIZED` pentru apeluri neautentificate.
