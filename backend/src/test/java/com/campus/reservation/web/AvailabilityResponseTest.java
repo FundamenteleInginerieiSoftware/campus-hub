@@ -27,4 +27,18 @@ class AvailabilityResponseTest {
         assertThat(response.available()).isFalse();
         assertThat(response.conflictReason()).isEqualTo("NO_ASSETS_AVAILABLE");
     }
+
+    @Test
+    void forAssetUnavailableWithSubstitutesPopulatesIds() {
+        AvailabilityResponse response =
+                AvailabilityResponse.forAsset(10L, start, end, false, "RESERVATION_CONFLICT", List.of(12L, 11L));
+
+        assertThat(response.available())
+                .as("unavailable asset check must report available=false; see AvailabilityResponse.forAsset")
+                .isFalse();
+        assertThat(response.availableAssetIds())
+                .as("substitute unit IDs must be preserved in caller order; see AvailabilityResponse.forAsset")
+                .containsExactly(12L, 11L);
+        assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
+    }
 }
