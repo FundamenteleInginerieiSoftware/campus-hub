@@ -38,12 +38,14 @@ public class ChainShiftingConflictResolver {
     private final Clock clock;
 
     public ChainShiftPlan planChainShift(Long targetAssetId, LocalDateTime startTime, LocalDateTime endTime) {
+        // Look up the asset first so an unknown targetAssetId fails with 404 ASSET_NOT_FOUND
+        // before any availability check can short-circuit to resolved=true.
+        AssetSummary targetAsset = catalogApi.getAsset(targetAssetId);
+
         // 1. If target asset is already free, zero shifts needed
         if (reservationApi.isAssetFree(targetAssetId, startTime, endTime, null)) {
             return new ChainShiftPlan(true, List.of(), "Target equipment is already free during the requested window.");
         }
-
-        AssetSummary targetAsset = catalogApi.getAsset(targetAssetId);
 
         // 2. Find all active reservations directly blocking the target asset during [startTime, endTime]
         LocalDateTime now = LocalDateTime.now(clock);

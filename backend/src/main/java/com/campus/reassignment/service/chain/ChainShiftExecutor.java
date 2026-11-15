@@ -64,7 +64,8 @@ public class ChainShiftExecutor {
             }
 
             ReassignmentLog logEntry = new ReassignmentLog(
-                    null, // null indicates non-incident administrative chain shift
+                    // Sentinel 0L marks admin-triggered chain shifts until #245 makes incident_id nullable.
+                    0L,
                     step.reservationId(),
                     step.fromAssetId(),
                     step.toAssetId(),

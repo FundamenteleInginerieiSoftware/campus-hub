@@ -20,6 +20,8 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.chain.ChainShiftExecutor;
+import com.campus.reassignment.service.chain.ChainShiftingConflictResolver;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
@@ -51,8 +53,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Import({
     ReassignmentService.class,
     ReassignmentBookingProcessor.class,
-    com.campus.reassignment.service.chain.ChainShiftingConflictResolver.class,
-    com.campus.reassignment.service.chain.ChainShiftExecutor.class,
+    ChainShiftingConflictResolver.class,
+    ChainShiftExecutor.class,
     ReservationService.class,
     SameModelStrategy.class,
     SameCategoryStrategy.class,

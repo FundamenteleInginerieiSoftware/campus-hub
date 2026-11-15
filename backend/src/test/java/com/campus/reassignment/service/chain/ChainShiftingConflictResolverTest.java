@@ -1,13 +1,16 @@
 package com.campus.reassignment.service.chain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
+import com.campus.common.error.NotFoundException;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
@@ -46,8 +49,24 @@ class ChainShiftingConflictResolverTest {
     }
 
     @Test
+    @DisplayName("Unknown target asset throws NotFoundException before availability check")
+    void planChainShift_unknownTargetAssetThrowsNotFound() {
+        when(catalogApi.getAsset(999L)).thenThrow(new NotFoundException("ASSET_NOT_FOUND", "Asset not found"));
+
+        assertThatThrownBy(() -> resolver.planChainShift(999L, t10, t12))
+                .as(
+                        "unknown targetAssetId must fail with 404 ASSET_NOT_FOUND before isAssetFree; see ChainShiftingConflictResolver.planChainShift")
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Asset not found");
+
+        verifyNoInteractions(reservationApi);
+    }
+
+    @Test
     @DisplayName("Target asset already free: returns resolved true with 0 steps")
     void planChainShift_targetAlreadyFree() {
+        AssetSummary assetX = new AssetSummary(1L, "Scope X", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(1L)).thenReturn(assetX);
         when(reservationApi.isAssetFree(1L, t10, t12, null)).thenReturn(true);
 
         ChainShiftPlan plan = resolver.planChainShift(1L, t10, t12);

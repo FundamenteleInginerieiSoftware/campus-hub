@@ -29,18 +29,20 @@ If X is in use right now (checked out or overdue), moving its future bookings wo
 
 | Step | What the code does |
 |---|---|
-| 1 | Target already free (`isAssetFree`) → resolved, 0 steps |
-| 2 | Blockers = CONFIRMED bookings on the target that overlap the window (`findUpcomingActiveByAsset`) |
-| 3 | Target has a CHECKED_OUT booking overlapping the window, or is OVERDUE (`findCurrentCheckout`) → not resolved |
-| 4 | For each blocker: BFS over candidate units (same model first, then same category). A free candidate ends the chain. A candidate blocked by exactly one CONFIRMED booking and no checkout becomes the next link |
-| 5 | Depth limit `MAX_CHAIN_DEPTH = 3`; each path keeps its own visited set (no A → B → A) |
-| 6 | Units used by one chain are not offered to the next blocker on the same target (conservative, never two steps on one unit) |
+| 1 | Look up the target asset first (`catalogApi.getAsset`) so an unknown ID fails immediately with 404 `ASSET_NOT_FOUND` |
+| 2 | Target already free (`isAssetFree`) → resolved, 0 steps |
+| 3 | Blockers = CONFIRMED bookings on the target that overlap the window (`findUpcomingActiveByAsset`) |
+| 4 | Target has a CHECKED_OUT booking overlapping the window, or is OVERDUE (`findCurrentCheckout`) → not resolved |
+| 5 | For each blocker: BFS over candidate units (same model first, then same category). A free candidate ends the chain. A candidate blocked by exactly one CONFIRMED booking and no checkout becomes the next link |
+| 6 | Depth limit `MAX_CHAIN_DEPTH = 3`; each path keeps its own visited set (no A → B → A) |
+| 7 | Units used by one chain are not offered to the next blocker on the same target (conservative, never two steps on one unit) |
 
 BFS finds the chain with the fewest moves. Steps are returned in reverse order: the last booking moves to the idle unit first, so every move lands on a unit that is already free.
 
 ### 2. Execution (`ChainShiftExecutor.executeChainShift`)
 
 - One `@Transactional` method for the whole chain. If `moveToAsset` returns false or throws `SubstituteNoLongerFreeException`, it throws `409 CHAIN_SHIFT_EXECUTION_FAILED` and everything rolls back (moves and `reassignment_log` rows).
+- Each `reassignment_log` row records `incidentId = 0L` as the administrative chain-shift sentinel until team decision `#245` makes `reassignment_log.incident_id` nullable.
 - Emails are sent in `afterCommit`, so a rolled-back chain sends none.
 
 ### 3. REST API
@@ -53,7 +55,7 @@ BFS finds the chain with the fewest moves. Steps are returned in reverse order: 
 
 | Test | Checks |
 |---|---|
-| `ChainShiftingConflictResolverTest` | already free, 1-step, 2-step + reverse order, no path, target only in use, target checked out + CONFIRMED blocker, candidate OVERDUE skipped |
+| `ChainShiftingConflictResolverTest` | unknown target → 404, already free, 1-step, 2-step + reverse order, no path, target only in use, target checked out + CONFIRMED blocker, candidate OVERDUE skipped |
 | `ChainShiftRollbackIT` (PostgreSQL) | 2-step chain, step 2 fails → step 1 undone, no log rows, no emails |
 | `ChainShiftExecutorTest` | step order, failure → 409 (Mockito, no transaction) |
 | `AdminReassignmentControllerTest` | 401, 403, 200, default `dryRun=true`, 400 for start ≥ end and for `Z` |

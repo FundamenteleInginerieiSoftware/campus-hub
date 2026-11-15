@@ -25,6 +25,8 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
+import com.campus.reassignment.service.chain.ChainShiftExecutor;
+import com.campus.reassignment.service.chain.ChainShiftingConflictResolver;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
@@ -75,10 +77,10 @@ class ReassignmentServiceTest {
     private ReassignmentLogRepository reassignmentLogRepository;
 
     @Mock
-    private com.campus.reassignment.service.chain.ChainShiftingConflictResolver chainShiftingConflictResolver;
+    private ChainShiftingConflictResolver chainShiftingConflictResolver;
 
     @Mock
-    private com.campus.reassignment.service.chain.ChainShiftExecutor chainShiftExecutor;
+    private ChainShiftExecutor chainShiftExecutor;
 
     @Mock
     private SubstituteStrategy primaryStrategy;

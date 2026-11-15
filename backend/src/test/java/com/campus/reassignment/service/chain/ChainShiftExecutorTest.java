@@ -79,7 +79,7 @@ class ChainShiftExecutorTest {
         List<ReassignmentLog> logs = logCaptor.getAllValues();
         assertThat(logs).hasSize(2);
         assertThat(logs.get(0).getOutcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
-        assertThat(logs.get(0).getIncidentId()).isNull(); // administrative chain shift
+        assertThat(logs.get(0).getIncidentId()).isEqualTo(0L); // administrative chain shift sentinel until #245
 
         verify(notificationService).notifyUser(eq(42L), anyString(), anyString());
         verify(notificationService).notifyUser(eq(43L), anyString(), anyString());
