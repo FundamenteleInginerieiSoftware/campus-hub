@@ -81,6 +81,12 @@ class ReassignmentBookingProcessor {
      */
     public Optional<ReassignmentExecutionResult> processSingleBooking(
             AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) {
+        String moveReason =
+                hasRealIncident(event.incidentId()) ? "Incident #" + event.incidentId() : "Equipment maintenance";
+        String cancelReason = hasRealIncident(event.incidentId())
+                ? "Equipment failure, incident #" + event.incidentId()
+                : "Equipment maintenance";
+
         Set<Long> attemptedCandidateIds = new HashSet<>();
         for (SubstituteStrategy strategy : strategies) {
             List<AssetSummary> candidates = strategy.findCandidates(booking, damaged);
@@ -91,8 +97,7 @@ class ReassignmentBookingProcessor {
                 }
                 try {
                     return inRequiresNewTransaction(() -> {
-                        boolean moved = reservationApi.moveToAsset(
-                                booking.id(), candidate.id(), "Incident #" + event.incidentId());
+                        boolean moved = reservationApi.moveToAsset(booking.id(), candidate.id(), moveReason);
 
                         if (moved) {
                             ReassignmentLog logEntry = new ReassignmentLog(
@@ -122,8 +127,7 @@ class ReassignmentBookingProcessor {
 
         // If no strategy found a free substitute, force-cancel the reservation in a fresh REQUIRES_NEW transaction
         return inRequiresNewTransaction(() -> {
-            boolean cancelled =
-                    reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+            boolean cancelled = reservationApi.forceCancel(booking.id(), cancelReason);
 
             if (cancelled) {
                 ReassignmentLog logEntry = new ReassignmentLog(
@@ -141,6 +145,10 @@ class ReassignmentBookingProcessor {
 
             return Optional.empty();
         });
+    }
+
+    private static boolean hasRealIncident(Long incidentId) {
+        return incidentId != null && incidentId != 0L;
     }
 
     private <T> T inRequiresNewTransaction(Supplier<T> action) {

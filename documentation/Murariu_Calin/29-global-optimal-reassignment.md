@@ -64,7 +64,7 @@ To guarantee **mathematical optimality at true interval granularity**:
 `POST /api/v1/admin/reassignments/solve-optimal`
 - Query parameters:
   - `assetId` (Long, required): ID of the asset; it must be `UNDER_MAINTENANCE`, otherwise `409 ASSET_NOT_UNDER_MAINTENANCE`.
-  - `incidentId` (Long, optional): incident to link in the log.
+  - `incidentId` (Long, optional): incident to link in the log. When omitted (`null`) and `dryRun=false`, `reassignment_log.incident_id` records sentinel `0L` until `#245` makes `incident_id` nullable, and student cancellation/reason text says `"equipment maintenance"` instead of an incident number.
   - `dryRun` (Boolean, default `true`): only returns the plan. `dryRun=false` runs the standard `ReassignmentBookingProcessor` per booking (Strategy order, retry on `SubstituteNoLongerFreeException`, move + log in one transaction), the same path as the incident flow.
 
 ### 4. Verification & Mutation Testing

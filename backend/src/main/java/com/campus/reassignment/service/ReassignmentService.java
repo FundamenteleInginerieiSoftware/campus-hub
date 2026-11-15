@@ -93,12 +93,13 @@ public class ReassignmentService {
                     } else {
                         // The only other outcome is FORCE_CANCELLED.
                         forceCancelled++;
-                        sendNotificationSafely(
-                                booking.userId(),
-                                "Reservation Cancelled",
-                                "Your reservation #" + booking.id()
+                        String body = (event.incidentId() == null || event.incidentId() == 0L)
+                                ? "Your reservation #" + booking.id()
+                                        + " has been cancelled due to equipment maintenance."
+                                : "Your reservation #" + booking.id()
                                         + " has been cancelled due to equipment failure (incident #"
-                                        + event.incidentId() + ").");
+                                        + event.incidentId() + ").";
+                        sendNotificationSafely(booking.userId(), "Reservation Cancelled", body);
                     }
                 }
             } catch (RuntimeException e) {
@@ -187,8 +188,10 @@ public class ReassignmentService {
             return plan;
         }
 
-        EngineCounts counts =
-                runEngine(new AssetDamagedEvent(incidentId, damagedAssetId, null, clock.instant()), damaged, upcoming);
+        // Sentinel 0L marks admin-triggered optimal runs without an incident until #245 makes incident_id nullable.
+        long effectiveIncidentId = incidentId != null ? incidentId : 0L;
+        EngineCounts counts = runEngine(
+                new AssetDamagedEvent(effectiveIncidentId, damagedAssetId, null, clock.instant()), damaged, upcoming);
 
         // The counts are what the engine really did; the actions stay as the plan for comparison.
         return new OptimalReassignmentPlan(

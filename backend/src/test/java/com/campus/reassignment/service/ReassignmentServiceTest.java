@@ -527,6 +527,62 @@ class ReassignmentServiceTest {
                 .save(argThat(entry -> entry.getStrategy().equals("SameModelStrategy")));
     }
 
+    @Test
+    @DisplayName("solveOptimalPlan with null incidentId uses 0L sentinel and 'equipment maintenance' text")
+    void solveOptimalPlanWithoutIncidentUsesSentinelAndCleanText() {
+        stubPlanForOneBooking();
+        ReservationSummary booking = new ReservationSummary(
+                1L,
+                USER_ID,
+                DAMAGED_ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                ReservationStatus.CONFIRMED);
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
+        when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
+        when(reservationApi.forceCancel(1L, "Equipment maintenance")).thenReturn(true);
+
+        OptimalReassignmentPlan result = reassignmentService.solveOptimalPlan(DAMAGED_ASSET_ID, null, false);
+
+        assertThat(result.executed()).isTrue();
+        assertThat(result.forceCancelledReservations()).isEqualTo(1);
+        verify(reassignmentLogRepository)
+                .save(argThat(entry ->
+                        entry.getIncidentId().equals(0L) && entry.getOutcome() == ReassignmentOutcome.FORCE_CANCELLED));
+        verify(notificationService)
+                .notifyUser(
+                        eq(USER_ID),
+                        eq("Reservation Cancelled"),
+                        argThat(body -> body.contains("equipment maintenance")
+                                && !body.contains("#0")
+                                && !body.contains("#null")));
+    }
+
+    @Test
+    @DisplayName("solveOptimalPlan with null incidentId uses 0L sentinel and 'Equipment maintenance' on moveToAsset")
+    void solveOptimalPlanWithoutIncidentMoveUsesSentinelAndCleanReason() {
+        stubPlanForOneBooking();
+        ReservationSummary booking = new ReservationSummary(
+                1L,
+                USER_ID,
+                DAMAGED_ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                ReservationStatus.CONFIRMED);
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
+        when(primaryStrategy.name()).thenReturn("SameModelStrategy");
+        when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Equipment maintenance"))
+                .thenReturn(true);
+
+        OptimalReassignmentPlan result = reassignmentService.solveOptimalPlan(DAMAGED_ASSET_ID, null, false);
+
+        assertThat(result.executed()).isTrue();
+        assertThat(result.rescuedReservations()).isEqualTo(1);
+        verify(reassignmentLogRepository)
+                .save(argThat(entry ->
+                        entry.getIncidentId().equals(0L) && entry.getOutcome() == ReassignmentOutcome.REASSIGNED));
+    }
+
     private OptimalReassignmentPlan stubPlanForOneBooking() {
         ReservationSummary booking = new ReservationSummary(
                 1L,
