@@ -14,7 +14,7 @@ In distributed web applications, network glitches, mobile timeouts, and double-c
 3. If one succeeds and the other fails on overlap, the student receives an error screen even though their reservation was successfully registered, causing panic and repeated clicks.
 
 To eliminate this class of issues, we implemented a robust **Idempotency Framework** with **Request Fingerprinting**:
-- **Client Header (`Idempotency-Key`)**: The client attaches a unique UUID in the HTTP header `Idempotency-Key` (e.g., generated per UI button click).
+- **Client Header (`Idempotency-Key`)**: The client attaches a unique UUID in the HTTP header `Idempotency-Key`. On the frontend, `frontend/src/api/reservations.ts` (`createReservation`) automatically attaches a slot-scoped key per `(assetId, startTime, endTime)` booking attempt and reuses that same key if the student retries the same slot after a network drop or recoverable failure.
 - **Request Fingerprinting (SHA-256)**: The server computes a SHA-256 digest of the user ID, HTTP method, target URI, and normalized request body.
 - **Cached Replay**: If the same key is submitted again, the server intercepts the call and serves the original HTTP response status code and JSON payload directly from the database, accompanied by the HTTP response header `Idempotency-Replayed: true`.
 - **Payload Mismatch Detection**: If a client attempts to reuse an existing idempotency key with different parameters (e.g. attempting to book a different asset or different time slot with an old key), the server rejects it immediately with HTTP 400 (`IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`).
@@ -70,12 +70,15 @@ The UNIQUE constraint already creates the `(idempotency_key, user_id)` lookup in
 - `IdempotencyService.sweepExpiredRecords()` runs via `@Scheduled(fixedDelayString = "${app.reservation.idempotency-cleanup-ms:172800000}", initialDelayString = "${app.reservation.idempotency-cleanup-initial-delay-ms:600000}")`.
 - Fixed delay 172,800,000 ms (2 days). It deletes rows with `expires_at < now` (`idx_idempotency_expires`), in a `@Transactional` method.
 
-### 4. Controller Integration
+### 4. Controller & Frontend Integration
 `ReservationController`:
 - `POST /api/v1/reservations` returns `ResponseEntity<ReservationResponse>`.
 - `POST /api/v1/reservations/bundle` returns `ResponseEntity<MultiAssetReservationResponse>`.
 - Both accept the optional header `@RequestHeader(value = "Idempotency-Key", required = false)`.
-- **The frontend does not send `Idempotency-Key` yet**, so the feature is not used by the app today; it works for API clients. Adding the header in `frontend/src/api/reservations.ts` is a follow-up.
+
+`frontend/src/api/reservations.ts`:
+- `generateIdempotencyKey()` creates a UUID via `crypto.randomUUID()` (with a timestamp/random fallback).
+- `pendingBookingAttempt` tracks `{ slotSignature, key }` for the active `(assetId, startTime, endTime)` attempt in `createReservation(request, idempotencyKey?)`. Retrying the same slot after a network error, `409`, or `5xx` reuses the exact same `Idempotency-Key` (letting the backend replay a committed `COMPLETED` response or restart a `FAILED`/abandoned record); selecting a different slot, hitting a `400` validation error, or completing a `2xx` booking clears it so the next booking gets a fresh key.
 
 ### 5. Verification & Testing
 Unit tests, `IdempotencyServiceTest` (mock repository, input checks only):
