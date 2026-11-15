@@ -195,6 +195,10 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 `PROJECT_NOT_FOUND` 404 · `PROJECT_COMPONENT_UNAVAILABLE` 409 (+ `VALIDATION_FAILED` 400, `INVALID_PARAMETER` 400, `MALFORMED_REQUEST` 400 above; `POST /projects/{slug}/reserve` also passes on the Reservations codes from `bookBundle`)
 
+### Pickup pass (Matei)
+
+`PICKUP_CODE_INVALID` 409 (wrong or expired code, unknown user, disabled user: one answer for all four) (+ `VALIDATION_FAILED` 400 above)
+
 Owners: check the status codes above when you implement them, and fix this list if yours differ.
 
 ---
@@ -485,6 +489,32 @@ Query parameters:
 ```
 
 ---
+
+### Pickup pass (Matei)
+
+A 6-digit code that changes every 30 seconds proves at the lab desk that the person owns the account (like a bank's authenticator app). Nothing is stored: the code is `HMAC-SHA256(app.jwt.secret, "pickup-v1|userId|timeStep")` cut to 6 digits. Verification is a separate step; check-out and return (Calin) do not require it.
+
+| Method & Path | Access | Request | Response | Errors |
+|---|---|---|---|---|
+| `GET /api/v1/users/me/pickup-pass` | any logged-in user | – | `200` `PickupPassResponse` | `401 UNAUTHORIZED` |
+| `POST /api/v1/admin/pickup-pass/verify` | `ADMIN` | `VerifyPickupPassRequest` | `200` `PickupPassVerifiedResponse` + audit row `PICKUP_PASS_VERIFIED` (actor = the admin, entity `USER`) | `400 VALIDATION_FAILED` (no `userId`, or `code` not exactly 6 digits), `401 UNAUTHORIZED`, `403 FORBIDDEN`, `409 PICKUP_CODE_INVALID` |
+
+`GET` response. `code` is a JSON **string** (leading zeros); `validForSeconds` counts down from 30 to 1:
+
+```json
+{ "code": "493027", "qrText": "campus-pickup:1:12:493027", "validForSeconds": 17 }
+```
+
+`POST` request and response. The current and the previous 30-second step are accepted, so a code is good for at most 60 seconds:
+
+```json
+{ "userId": 12, "code": "493027" }
+```
+```json
+{ "userId": 12, "fullName": "Ana Pop", "email": "ana@campus.test" }
+```
+
+`409 PICKUP_CODE_INVALID` ("The code is wrong or has expired") is the one answer for a wrong code, an old code, an unknown user and a disabled user, so the endpoint does not reveal which accounts exist.
 
 ### Catalog endpoints — Categories & Lab Rooms (Liviu)
 
