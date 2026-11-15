@@ -154,6 +154,7 @@ class ReservationServiceRulesTest {
     @Test
     void movingAnUnknownOrNotConfirmedReservationDoesNothing() {
         when(reservationRepository.findById(777L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(777L)).thenReturn(Optional.empty());
 
         assertThat(reservationService.moveToAsset(777L, OTHER_ASSET_ID, "reason"))
                 .isFalse();

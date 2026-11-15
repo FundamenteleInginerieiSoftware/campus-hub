@@ -404,8 +404,8 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
       // another slot while the request was running).
       const matchesServer =
         hold.assetId === asset.id &&
-        hold.startTime === reqStart &&
-        hold.endTime === reqEnd
+        new Date(hold.startTime).getTime() === new Date(reqStart).getTime() &&
+        new Date(hold.endTime).getTime() === new Date(reqEnd).getTime()
       const matchesCurrentSelection =
         selectionRef.current.startIso === reqStart &&
         selectionRef.current.endIso === reqEnd
