@@ -18,7 +18,7 @@ Without intelligent fault tolerance:
 
 To solve this, we implemented a **Transient Fault Retry Engine**:
 - **Automatic Concurrency Recovery**: Catches transient PostgreSQL lock contention and deadlocks and transparently re-executes the booking operation in a brand new database transaction.
-- **Exponential Backoff**: Successive retry attempts back off exponentially (50ms $\rightarrow$ 100ms $\rightarrow$ 200ms) to allow the competing transaction to commit and release its locks.
+- **Exponential Backoff**: With `maxAttempts = 3` (1 initial try + at most 2 retries), there are at most 2 sleeps whose cap doubles exponentially (`50ms` before retry 1, `100ms` before retry 2) to allow the competing transaction to commit and release its locks.
 - **Randomized Full Jitter**: If two colliding transactions retry at fixed intervals, they wake up at the exact same millisecond and re-deadlock each other (the classic "thundering herd" lock stampede). Full randomized jitter introduces unpredictable timing variance, ensuring one transaction acquires locks while the other is still waiting.
 - **Immediate Fail-Fast on Business Rules**: Non-transient business rejections (such as overlapping bookings, booking in the past, or invalid durations) are never retried and return their standard HTTP 400/409 responses immediately.
 - **Admin Telemetry Dashboard**: Lab administrators can inspect real-time recovery metrics via `GET /api/v1/admin/reservations/retry-metrics`.

@@ -35,7 +35,7 @@
 | #270 | Calin | Fixes for the code read-through #267 (holds, locking, lifecycle) | Needs a review |
 | #272, #273 | Matei | Project search false hits; project details page errors | Need a review |
 | #255, #256 | Calin | Admin equipment analytics: backend + page (#254) | Needs a review; off-plan, see section 6 |
-| #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review (#265: round 2 fixed, see doc 32); off-plan, see section 6 |
+| #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review; off-plan, see section 6 |
 | #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
 
 Merged since the last update: Calin #247 (fixes for #240, closes it); Liviu #244 (audit date filters, closes #241); Matei #251, #252, #253 (status refresh, image security updates, ECR scan note), #271 (login rejects passwords over 72 bytes).
@@ -84,7 +84,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Align `ReservationSeeder` with `CatalogSeeder`~~: ✅ it books asset 1, a DS1054Z with 2 more units of the same model (#193) | – |
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
 | ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
-| **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PRs: analytics #255, #256; optimal reassignment #258; chain shifting #260; idempotency #262; retry #265 | Team decision |
+| **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PRs: analytics #255, #256; optimal reassignment #258; chain shifting #260; idempotency #262; retry #265 (round 2 fixed, see doc 32) | Team decision |
 | W6 | Review and merge **#270** (fixes for #267) and **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
