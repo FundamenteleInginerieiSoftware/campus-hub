@@ -19,17 +19,17 @@ Following the backend cleanup for Issue #268, three frontend improvements were c
 ## Part 2: Technical Details
 
 ### 1. Inventory Tab Components (`frontend/src/pages/catalog/`)
-- [`InventoryAssetsTab.tsx`](file:///C:/Users/nlivi/Desktop/Campus/campus-hub/frontend/src/pages/catalog/InventoryAssetsTab.tsx): Manages asset search, pagination, create/edit asset modal (`assetModalError`), and retire confirmation modal (`retireModalError`).
-- [`InventoryCategoriesTab.tsx`](file:///C:/Users/nlivi/Desktop/Campus/campus-hub/frontend/src/pages/catalog/InventoryCategoriesTab.tsx): Manages categories table, create/edit category modal (`formModalError`), and delete confirmation modal (`deleteModalError`).
-- [`InventoryLabRoomsTab.tsx`](file:///C:/Users/nlivi/Desktop/Campus/campus-hub/frontend/src/pages/catalog/InventoryLabRoomsTab.tsx): Manages lab rooms table, create/edit room modal (`formModalError`), and delete confirmation modal (`deleteModalError`).
-- [`AdminInventoryPage.tsx`](file:///C:/Users/nlivi/Desktop/Campus/campus-hub/frontend/src/pages/AdminInventoryPage.tsx): Reduced to a ~75-line orchestrator holding shared category/room lookups and tab state.
+- [`InventoryAssetsTab.tsx`](../../frontend/src/pages/catalog/InventoryAssetsTab.tsx): Manages asset search, pagination, create/edit asset modal (`assetModalError`), and retire confirmation modal (`retireModalError`).
+- [`InventoryCategoriesTab.tsx`](../../frontend/src/pages/catalog/InventoryCategoriesTab.tsx): Manages categories table, create/edit category modal (`formModalError`), and delete confirmation modal (`deleteModalError`).
+- [`InventoryLabRoomsTab.tsx`](../../frontend/src/pages/catalog/InventoryLabRoomsTab.tsx): Manages lab rooms table, create/edit room modal (`formModalError`), and delete confirmation modal (`deleteModalError`).
+- [`AdminInventoryPage.tsx`](../../frontend/src/pages/AdminInventoryPage.tsx): Reduced to a ~75-line orchestrator holding shared category/room lookups and tab state.
 
 ### 2. Shared Status Badge Color Helper
-- Created [`assetStatus.ts`](file:///C:/Users/nlivi/Desktop/Campus/campus-hub/frontend/src/pages/catalog/assetStatus.ts) exporting `statusBadgeColor(status: AssetStatus)`.
+- Created [`assetStatus.ts`](../../frontend/src/pages/catalog/assetStatus.ts) exporting `statusBadgeColor(status: AssetStatus)`.
 - Reused in `CatalogPage.tsx`, `AssetDetailsPage.tsx`, and `InventoryAssetsTab.tsx`.
 
 ### 3. Audit Log Action Filter
-- Updated `ACTION_OPTIONS` (`Users` group) in [`AdminAuditLogPage.tsx`](file:///C:/Users/nlivi/Desktop/Campus/campus-hub/frontend/src/pages/AdminAuditLogPage.tsx) to include `PICKUP_PASS_VERIFIED`.
+- Updated `ACTION_OPTIONS` (`Users` group) in [`AdminAuditLogPage.tsx`](../../frontend/src/pages/AdminAuditLogPage.tsx) to include `PICKUP_PASS_VERIFIED`.
 
 ### 4. Verification
 - `npm run lint` (`oxlint`): 0 warnings, 0 errors.
