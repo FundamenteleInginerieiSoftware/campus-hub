@@ -47,10 +47,12 @@ import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -1071,13 +1073,15 @@ public class ReservationService implements ReservationApi {
             AssetSummary asset = catalogApi.getAsset(assetId);
 
             if (asset.status() != AssetStatus.AVAILABLE) {
-                return AvailabilityResponse.forAsset(assetId, start, end, false, "ASSET_NOT_BOOKABLE");
+                List<Long> substitutes = findFreeSameModelSubstitutes(asset, start, end);
+                return AvailabilityResponse.forAsset(assetId, start, end, false, "ASSET_NOT_BOOKABLE", substitutes);
             }
 
             boolean reservationOverlap =
                     reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, -1L);
             if (reservationOverlap) {
-                return AvailabilityResponse.forAsset(assetId, start, end, false, "RESERVATION_CONFLICT");
+                List<Long> substitutes = findFreeSameModelSubstitutes(asset, start, end);
+                return AvailabilityResponse.forAsset(assetId, start, end, false, "RESERVATION_CONFLICT", substitutes);
             }
 
             if (reservationHoldRepository != null) {
@@ -1087,7 +1091,9 @@ public class ReservationService implements ReservationApi {
                 } catch (Exception ignored) {
                 }
                 if (reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, currentUserId)) {
-                    return AvailabilityResponse.forAsset(assetId, start, end, false, "RESERVATION_CONFLICT");
+                    List<Long> substitutes = findFreeSameModelSubstitutes(asset, start, end);
+                    return AvailabilityResponse.forAsset(
+                            assetId, start, end, false, "RESERVATION_CONFLICT", substitutes);
                 }
             }
 
@@ -1105,6 +1111,26 @@ public class ReservationService implements ReservationApi {
                 .toList();
 
         return AvailabilityResponse.forCategory(categoryId, start, end, availableAssetIds);
+    }
+
+    // Mirrors SameModelStrategy's candidate ordering (same lab room first, then lowest ID)
+    // so students who hit a slot conflict see the closest free identical unit right away.
+    private List<Long> findFreeSameModelSubstitutes(AssetSummary asset, LocalDateTime start, LocalDateTime end) {
+        if (asset.model() == null || asset.model().isBlank()) {
+            return List.of();
+        }
+        List<AssetSummary> candidates = catalogApi.findAvailableByModel(asset.model(), asset.id());
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> busyIds = new HashSet<>(findBusyAssetIds(start, end));
+        return candidates.stream()
+                .filter(candidate -> !busyIds.contains(candidate.id()))
+                .sorted(Comparator.comparing(
+                                (AssetSummary candidate) -> !Objects.equals(candidate.labRoomId(), asset.labRoomId()))
+                        .thenComparing(AssetSummary::id))
+                .map(AssetSummary::id)
+                .toList();
     }
 
     private Reservation loadOwnedOrAdmin(Long id) {

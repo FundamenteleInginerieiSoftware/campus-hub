@@ -31,6 +31,7 @@ import {
   confirmHold,
   createHold,
   createReservation,
+  fetchAssetSummary,
   nowInBucharest,
   parseCampusLocalDateTime,
   releaseHold,
@@ -167,8 +168,21 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
  * Google Calendar-style weekly equipment scheduling and booking component.
  * Calin's booking view ready to be embedded into Liviu's catalog equipment pages.
  */
-export default function CalendarBookingView({ asset, onBack, onSuccess }: Props) {
+export default function CalendarBookingView({ asset: initialAsset, onBack, onSuccess }: Props) {
   const navigate = useNavigate()
+  // Allows in-place switching to a free same-model substitute unit while keeping the selected slot
+  const [switchedAsset, setSwitchedAsset] = useState<{
+    baseAssetId: number
+    selected: AssetSummary
+  } | null>(null)
+  const asset =
+    switchedAsset && switchedAsset.baseAssetId === initialAsset.id
+      ? switchedAsset.selected
+      : initialAsset
+  const [substituteState, setSubstituteState] = useState<{
+    key: string
+    items: AssetSummary[]
+  }>({ key: '', items: [] })
   const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
   const maxBookingDate = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14, today.getHours(), today.getMinutes(), today.getSeconds()), [today])
@@ -479,6 +493,56 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
   }
 
   const isSlotAvailable = availability.data?.available === true
+
+  const substituteKey =
+    !availability.checking && availability.data && !availability.data.available
+      ? `${asset.id}:${startIso}:${endIso}:${availability.data.availableAssetIds.slice(0, 3).join(',')}`
+      : ''
+
+  useEffect(() => {
+    if (!substituteKey || !availability.data) {
+      return
+    }
+    const subIds = availability.data.availableAssetIds.slice(0, 3)
+    if (subIds.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    Promise.all(subIds.map((id) => fetchAssetSummary(id).catch(() => null))).then((items) => {
+      if (!cancelled) {
+        setSubstituteState({
+          key: substituteKey,
+          items: items.filter((item): item is AssetSummary => item !== null),
+        })
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [substituteKey, availability.data])
+
+  const substituteAssets =
+    substituteKey && substituteState.key === substituteKey ? substituteState.items : []
+  const totalAvailableSubstitutes = Math.max(
+    availability.data?.availableAssetIds.length ?? 0,
+    substituteAssets.length,
+  )
+
+  function handleSwitchToSubstitute(sub: AssetSummary) {
+    if (holdLoading || bookingLoading) return
+    if (activeHoldRef.current) {
+      releaseHold(activeHoldRef.current.id).catch(() => {})
+      activeHoldRef.current = null
+      setActiveHold(null)
+      setHoldRemainingSeconds(0)
+    }
+    setBookingError(null)
+    setHoldError(null)
+    setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+    setSwitchedAsset(sub.id === initialAsset.id ? null : { baseAssetId: initialAsset.id, selected: sub })
+  }
 
   return (
     <Stack gap="lg">
@@ -808,6 +872,21 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                 <Text size="xs" c="dimmed">
                   {asset.model}
                 </Text>
+                {asset.id !== initialAsset.id && (
+                  <Group gap={6} mt={4}>
+                    <Badge size="xs" color="teal" variant="light">
+                      Switched unit
+                    </Badge>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      disabled={holdLoading || bookingLoading}
+                      onClick={() => handleSwitchToSubstitute(initialAsset)}
+                    >
+                      Back to {initialAsset.name}
+                    </Button>
+                  </Group>
+                )}
               </div>
 
               <div>
@@ -867,6 +946,65 @@ export default function CalendarBookingView({ asset, onBack, onSuccess }: Props)
                   </Text>
                 )}
               </Alert>
+
+              {!availability.checking && !isSlotAvailable && substituteAssets.length > 0 && (
+                <Paper withBorder p="xs" radius="sm" bg="var(--mantine-color-teal-light)">
+                  <Stack gap={6}>
+                    <Group justify="space-between" gap="xs">
+                      <Text size="xs" fw={700} c="teal">
+                        Free units of model {asset.model} for this slot:
+                      </Text>
+                      <Badge size="xs" color="teal" variant="light">
+                        {totalAvailableSubstitutes} available
+                      </Badge>
+                    </Group>
+                    {substituteAssets.map((sub) => (
+                      <Group
+                        key={sub.id}
+                        justify="space-between"
+                        align="center"
+                        wrap="nowrap"
+                        p={6}
+                        style={{
+                          backgroundColor: 'var(--app-surface)',
+                          borderRadius: 'var(--mantine-radius-sm)',
+                          border: '1px solid var(--mantine-color-teal-light-hover)',
+                        }}
+                      >
+                        <Box style={{ minWidth: 0 }}>
+                          <Group gap={6} wrap="nowrap">
+                            <Text size="xs" fw={600} truncate>
+                              {sub.name}
+                            </Text>
+                            {asset.labRoomId != null && sub.labRoomId === asset.labRoomId && (
+                              <Badge size="xs" color="teal" variant="filled">
+                                Same room
+                              </Badge>
+                            )}
+                          </Group>
+                          <Text size="xs" c="dimmed" ff="monospace">
+                            SN: {sub.serialNumber}
+                          </Text>
+                        </Box>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="teal"
+                          disabled={holdLoading || bookingLoading}
+                          onClick={() => handleSwitchToSubstitute(sub)}
+                        >
+                          Switch unit
+                        </Button>
+                      </Group>
+                    ))}
+                    {totalAvailableSubstitutes > substituteAssets.length && (
+                      <Text size="xs" c="dimmed">
+                        Showing the first {substituteAssets.length} of {totalAvailableSubstitutes} free units.
+                      </Text>
+                    )}
+                  </Stack>
+                </Paper>
+              )}
 
               {/* Rules reminders */}
               <Stack gap={4} p="xs" style={{ background: 'var(--mantine-color-body)', borderRadius: 6 }}>
