@@ -358,7 +358,7 @@ class ReservationRepositoryTest {
                 .as("Initial single booking counts as 1 session")
                 .isEqualTo(1);
 
-        // Add 2 reservations belonging to the same bundle
+        // Add 3 reservations belonging to the same bundle
         Reservation item1 = new Reservation(
                 USER_ID,
                 ASSET_ID,
@@ -377,14 +377,25 @@ class ReservationRepositoryTest {
         item2.assignBundle(bundleId);
         reservationRepository.saveAndFlush(item2);
 
-        // Total active rows = 3, but total booking sessions = 2 (1 single + 1 bundle)
+        Reservation item3 = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 3, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 0));
+        item3.assignBundle(bundleId);
+        reservationRepository.saveAndFlush(item3);
+
+        // Total active rows = 4, but total booking sessions = 2 (1 single + 1 bundle of 3)
         long rowCount = reservationRepository.countByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         long sessionCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                 USER_ID, ReservationStatus.ACTIVE_STATUSES);
 
-        assertThat(rowCount).as("Raw reservation row count should be 3").isEqualTo(3);
+        assertThat(rowCount)
+                .as("Raw reservation row count should be 4 (1 single + 3 in bundle)")
+                .isEqualTo(4);
         assertThat(sessionCount)
-                .as("Booking session count should be 2 (1 single + 1 bundle)")
+                .as("Booking session count should be 2 (1 single + 1 bundle of 3)")
                 .isEqualTo(2);
     }
 

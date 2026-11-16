@@ -935,18 +935,108 @@ class ReservationServiceTest {
 
     @Test
     @DisplayName(
-            "isAssetFree: holds do not block isAssetFree so confirmed bookings take precedence on reassignment (#228 point 8)")
+            "isAssetFree: excludes reservation owner's own active hold when ignoreReservationId is provided (#267)")
     void isAssetFree_holdsDoNotBlockReassignment() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation existing = new Reservation(USER_ID, 99L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(existing, "id", 55L);
 
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 55L))
+                .thenReturn(false);
+        when(reservationRepository.findById(55L)).thenReturn(Optional.of(existing));
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 55L))
+                .as(
+                        "reassignment holds: booking owner's own hold must not block isAssetFree; see ReservationService.isAssetFree")
+                .isTrue();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName(
+            "isAssetFree: blocks when another student holds substitute while ignoreReservationId is provided (#267)")
+    void isAssetFree_blocksAnotherStudentsHoldWhenIgnoreReservationIdProvided() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation existing = new Reservation(USER_ID, 99L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(existing, "id", 55L);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 55L))
+                .thenReturn(false);
+        when(reservationRepository.findById(55L)).thenReturn(Optional.of(existing));
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 55L))
+                .as(
+                        "reassignment holds: another student's active hold must block isAssetFree; see ReservationService.isAssetFree")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("isAssetFree: passes null holdOwnerId when ignoreReservationId is not found (#267)")
+    void isAssetFree_fallsBackToNullHoldOwnerWhenIgnoredReservationNotFound() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 999L))
+                .thenReturn(false);
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 999L))
+                .as(
+                        "reassignment holds: unknown ignoreReservationId must fall back to null holdOwnerId; see ReservationService.isAssetFree")
+                .isFalse();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull());
+    }
+
+    @Test
+    @DisplayName("isAssetFree: excludes current user's own active hold when ignoreReservationId is null (#267)")
+    void isAssetFree_excludesCurrentUsersHoldWhenIgnoreReservationIdIsNull() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
 
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
                 .as(
-                        "reassignment priority: browsing holds must not block isAssetFree; see ReservationService.isAssetFree")
+                        "project reserve-all holds: caller's own active hold must not block isAssetFree; see ReservationService.isAssetFree")
                 .isTrue();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName("isAssetFree: blocks another student's active hold when ignoreReservationId is null (#267)")
+    void isAssetFree_blocksAnotherStudentsHoldWhenIgnoreReservationIdIsNull() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
+                .as(
+                        "project reserve-all holds: another student's active hold must block isAssetFree; see ReservationService.isAssetFree")
+                .isFalse();
     }
 
     @Test
@@ -3477,7 +3567,7 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("moveToAsset: reassignment succeeds even if substitute asset has a browsing hold (#228 point 8)")
+    @DisplayName("moveToAsset: excludes booking owner's own active hold on substitute asset (#267, #270)")
     void moveToAsset_succeedsEvenIfSubstituteAssetHasActiveHold() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -3491,13 +3581,43 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(200L)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
                 .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
 
         boolean moved = reservationService.moveToAsset(100L, 200L, "Reassigned");
 
         assertThat(moved)
                 .as(
-                        "reassignment priority: confirmed booking takes precedence over browsing holds; see ReservationService.moveToAsset")
+                        "active holds: booking owner's own hold on substitute must not block move; see ReservationService.moveToAsset")
                 .isTrue();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName("moveToAsset: throws SubstituteNoLongerFreeException when another student holds substitute (#270)")
+    void moveToAsset_throwsWhenAnotherStudentHoldsSubstitute() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(200L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.moveToAsset(100L, 200L, "Reassigned"))
+                .as(
+                        "active holds: another student's hold on substitute must abort move; see ReservationService.moveToAsset")
+                .isInstanceOf(SubstituteNoLongerFreeException.class);
     }
 
     @Test
