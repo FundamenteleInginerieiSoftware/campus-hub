@@ -4063,6 +4063,68 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName(
+            "cancelUpcomingReservationsForUser: sends one summary notification per bundle instead of one per asset (#229)")
+    void cancelUpcomingReservationsForUser_groupsNotificationsPerBundle() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        UUID bundleId = UUID.randomUUID();
+        Reservation b1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        b1.assignBundle(bundleId);
+        ReflectionTestUtils.setField(b1, "id", 201L);
+
+        Reservation b2 = new Reservation(
+                USER_ID,
+                11L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        b2.assignBundle(bundleId);
+        ReflectionTestUtils.setField(b2, "id", 202L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(b1, b2));
+        when(reservationTransferRepository.findByReservationIdAndStatus(anyLong(), eq(TransferStatus.PENDING)))
+                .thenReturn(Optional.empty());
+        when(currentUser.id()).thenReturn(99L);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            int cancelledCount =
+                    reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
+
+            assertThat(cancelledCount)
+                    .as("Both reservations in the bundle must be cancelled; see cancelUpcomingReservationsForUser")
+                    .isEqualTo(2);
+            verify(auditService, org.mockito.Mockito.times(2))
+                    .record(
+                            eq(99L),
+                            eq("CANCEL_RESERVATION"),
+                            eq("Reservation"),
+                            anyLong(),
+                            eq("Account disabled by administrator"));
+
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            verify(notificationService, org.mockito.Mockito.times(1))
+                    .notifyUser(
+                            eq(USER_ID),
+                            eq("Reservation Bundle Cancelled"),
+                            contains("bundle #" + bundleId + " was cancelled"));
+            verify(notificationService, never()).notifyUser(eq(USER_ID), eq("Reservation Cancelled"), anyString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
     @DisplayName("cancelUpcomingReservationsForUser: returns 0 when user has no upcoming confirmed bookings")
     void cancelUpcomingReservationsForUser_returnsZeroWhenEmpty() {
         when(userApi.exists(USER_ID)).thenReturn(true);

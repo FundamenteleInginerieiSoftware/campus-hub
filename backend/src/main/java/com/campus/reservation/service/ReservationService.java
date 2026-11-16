@@ -1382,6 +1382,7 @@ public class ReservationService implements ReservationApi {
         }
 
         Long actorId = currentUserIdOrNull();
+        Set<UUID> notifiedBundles = new HashSet<>();
 
         for (Reservation r : upcoming) {
             r.cancel(now, effectiveReason);
@@ -1392,10 +1393,18 @@ public class ReservationService implements ReservationApi {
                     "Auto-cancelled due to account status: " + effectiveReason,
                     "The transfer offer for reservation #" + r.getId() + " was cancelled: " + effectiveReason);
             auditService.record(actorId, "CANCEL_RESERVATION", "Reservation", r.getId(), effectiveReason);
-            notifyUserAfterCommit(
-                    r.getUserId(),
-                    "Reservation Cancelled",
-                    "Your reservation #" + r.getId() + " has been cancelled. Reason: " + effectiveReason);
+            // Send one summary notification per bundle instead of N emails for an N-asset kit.
+            if (r.getBundleId() == null) {
+                notifyUserAfterCommit(
+                        r.getUserId(),
+                        "Reservation Cancelled",
+                        "Your reservation #" + r.getId() + " has been cancelled. Reason: " + effectiveReason);
+            } else if (notifiedBundles.add(r.getBundleId())) {
+                notifyUserAfterCommit(
+                        r.getUserId(),
+                        "Reservation Bundle Cancelled",
+                        "Your reservation bundle #" + r.getBundleId() + " was cancelled. Reason: " + effectiveReason);
+            }
         }
 
         reservationRepository.saveAll(upcoming);

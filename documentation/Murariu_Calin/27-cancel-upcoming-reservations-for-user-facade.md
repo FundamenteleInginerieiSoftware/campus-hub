@@ -24,7 +24,7 @@ Am adăugat o metodă dedicată în fațada publică `ReservationApi` și un end
   - Anulează toate rezervările viitoare cu status `CONFIRMED` ale utilizatorului respectiv.
   - Anulează automat orice ofertă de transfer `PENDING` asociată acelor rezervări, notificând colegul că transferul nu mai este valabil.
   - Înregistrează fiecare anulare în jurnalul de audit (`CANCEL_RESERVATION`).
-  - Trimite notificări pe email utilizatorului după comiterea cu succes a tranzacției (`afterCommit`).
+  - Trimite notificări pe email utilizatorului după comiterea cu succes a tranzacției (`afterCommit`) — câte o notificare grupată per `bundleId` (`Reservation Bundle Cancelled`) pentru rezervările bundle și câte una per rezervare individuală.
   - **Important:**
     - Echipamentele deja ridicate fizic (`CHECKED_OUT` sau `OVERDUE`) nu sunt anulate automat, deoarece ele se află în posesia fizică a studentului și trebuie predate fizic la biroul de laborator de către administrator prin procedura standard de returnare (`POST /api/v1/admin/reservations/{id}/return`).
     - Hold-urile temporare active de 1 minut (`ReservationHold`) expiră automat la termen fără intervenție, iar ofertele de transfer primite (`PENDING`) unde utilizatorul dezactivat este destinatar rămân `PENDING` până la expirare sau anulare (acceptarea lor este oricum blocată de contul dezactivat).
