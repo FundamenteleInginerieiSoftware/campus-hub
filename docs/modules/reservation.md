@@ -147,6 +147,16 @@ To prevent checkout collisions during high-traffic lab hours, the module provide
 - **Release Hold (`POST /api/v1/reservations/holds/{id}/release`):** Frees the slot immediately if the user cancels or navigates away.
 - **Automated Cleanup Job:** `ReservationLifecycleService.sweepExpiredHolds()` runs periodically to mark abandoned holds as `EXPIRED`. Queries filter `status = 'ACTIVE' AND expires_at > now`, so expired holds unblock availability immediately.
 
+---
+
+## 12. Private iCalendar Subscription Feed
+
+Students can generate a private subscription link to sync their bookings with external calendar apps (Google Calendar, Apple Calendar, Outlook):
+- **`CalendarTokenService`:** Manages per-user 256-bit secret tokens in `calendar_feeds` (persisting only SHA-256 hashes, auditing `CALENDAR_FEED_CREATED` / `CALENDAR_FEED_REVOKED`), exposed via `GET`/`POST`/`DELETE /api/v1/reservations/me/calendar-feed` (`CalendarFeedSettingsController`). Validates the 43-character base64url pattern before hashing and checks `UserApi.findActiveRole` so disabled accounts lose access immediately.
+- **`CalendarFeedService`:** Loads the user's reservations overlapping `[campusNow - 30d, campusNow + 30d]` via `ReservationRepository.findByUserIdOverlappingRange`, keeps visible statuses (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, `RETURNED`) so cancelled/no-show bookings disappear from subscribed calendars, caches `CatalogApi.getAsset(assetId)` lookups once per asset (falling back to `Equipment #<id>` if missing), and prefixes `OVERDUE` summaries.
+- **`IcsWriter`:** Pure RFC 5545 serializer emitting `VCALENDAR`/`VEVENT` text with strict `CRLF` endings, text escaping, 75-byte UTF-8 safe line folding, and `Europe/Bucharest` → UTC timestamp conversion.
+- **`CalendarFeedController`:** Exposes `GET /api/v1/calendar/{token}.ics` returning `text/calendar;charset=UTF-8` with `Cache-Control: no-store` (or `404 CALENDAR_FEED_NOT_FOUND`).
+
 
 
 

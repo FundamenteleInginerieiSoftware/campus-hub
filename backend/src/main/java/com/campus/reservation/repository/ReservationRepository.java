@@ -139,4 +139,14 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
     List<Long> findBusyAssetIds(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     List<Reservation> findByBundleIdOrderByAssetIdAsc(UUID bundleId);
+
+    @Query("""
+        select r from Reservation r
+        where r.userId = :userId
+          and r.startTime < :to
+          and r.endTime > :from
+        order by r.startTime asc
+        """)
+    List<Reservation> findByUserIdOverlappingRange(
+            @Param("userId") Long userId, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 }
