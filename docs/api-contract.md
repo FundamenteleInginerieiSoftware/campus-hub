@@ -625,3 +625,23 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "createdAt": "2026-11-08T10:00:00"
 }
 ```
+
+---
+
+### Calendar feed (Calin)
+
+Authenticated settings endpoints for the logged-in user's private iCalendar subscription link (the user ID comes from `CurrentUser.id()`). Only the SHA-256 hash of the 32-byte random token is persisted in `calendar_feeds`, so the full path is returned once on creation.
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/reservations/me/calendar-feed` | any logged-in user | `200` `CalendarFeedStatusResponse` (`{ "enabled": boolean }`) | `401 UNAUTHORIZED` |
+| `POST /api/v1/reservations/me/calendar-feed` | any logged-in user | `201` `CalendarFeedCreatedResponse` (`{ "path": "/api/v1/calendar/<token>.ics" }`); replaces any existing link and writes audit `CALENDAR_FEED_CREATED` (entity `USER`) | `401 UNAUTHORIZED` |
+| `DELETE /api/v1/reservations/me/calendar-feed` | any logged-in user | `204` No Content (idempotent when no link exists); writes audit `CALENDAR_FEED_REVOKED` (entity `USER`) only when a link existed | `401 UNAUTHORIZED` |
+
+```json
+// CalendarFeedStatusResponse (GET /api/v1/reservations/me/calendar-feed)
+{ "enabled": true }
+
+// CalendarFeedCreatedResponse (POST /api/v1/reservations/me/calendar-feed)
+{ "path": "/api/v1/calendar/aB3dEf...43chars...XyZ.ics" }
+```
