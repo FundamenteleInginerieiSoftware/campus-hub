@@ -1,6 +1,6 @@
 package com.campus.reservation.web;
 
-import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.HoldService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
         description = "Temporary slot locking for smooth booking UX and concurrency protection")
 public class ReservationHoldController {
 
-    private final ReservationService reservationService;
+    private final HoldService holdService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -42,7 +42,7 @@ public class ReservationHoldController {
                 description = "Slot already reserved, held by another user, or active hold quota exceeded")
     })
     public ReservationHoldResponse createHold(@Valid @RequestBody CreateHoldRequest request) {
-        return reservationService.createHold(request);
+        return holdService.createHold(request);
     }
 
     @PostMapping("/{id}/confirm")
@@ -56,7 +56,7 @@ public class ReservationHoldController {
                 description = "Hold expired, already confirmed/released, or student quota reached")
     })
     public ReservationResponse confirmHold(@PathVariable Long id) {
-        return reservationService.confirmHold(id);
+        return holdService.confirmHold(id);
     }
 
     @PostMapping("/{id}/release")
@@ -68,7 +68,7 @@ public class ReservationHoldController {
         @ApiResponse(responseCode = "409", description = "Hold is not in ACTIVE status")
     })
     public ReservationHoldResponse releaseHold(@PathVariable Long id) {
-        return reservationService.releaseHold(id);
+        return holdService.releaseHold(id);
     }
 
     @GetMapping("/active")
@@ -78,6 +78,6 @@ public class ReservationHoldController {
         @ApiResponse(responseCode = "401", description = "Unauthenticated")
     })
     public List<ReservationHoldResponse> getMyActiveHolds() {
-        return reservationService.getMyActiveHolds();
+        return holdService.getMyActiveHolds();
     }
 }

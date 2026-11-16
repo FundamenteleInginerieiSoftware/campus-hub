@@ -44,6 +44,9 @@ class ReservationLifecycleServiceTest {
     private ReservationService reservationService;
 
     @Mock
+    private HoldService holdService;
+
+    @Mock
     private CatalogApi catalogApi;
 
     @Mock
@@ -57,7 +60,7 @@ class ReservationLifecycleServiceTest {
         // 2026-11-02T10:00:00 Europe/Bucharest
         clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
         lifecycleService = new ReservationLifecycleService(
-                reservationRepository, reservationService, catalogApi, notificationService, clock);
+                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock);
     }
 
     @Test
@@ -345,7 +348,7 @@ class ReservationLifecycleServiceTest {
         // --- Sweep 2: at 11:00 (60 minutes later, equipment still OVERDUE) ---
         Clock clock2 = Clock.fixed(Instant.parse("2026-11-02T09:00:00Z"), ZoneId.of("Europe/Bucharest"));
         ReservationLifecycleService service2 = new ReservationLifecycleService(
-                reservationRepository, reservationService, catalogApi, notificationService, clock2);
+                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock2);
 
         LocalDateTime now2 = LocalDateTime.now(clock2); // 11:00
         when(reservationRepository.findConfirmedBeforeCutoff(now2.minusMinutes(30)))
@@ -477,10 +480,10 @@ class ReservationLifecycleServiceTest {
     }
 
     @Test
-    @DisplayName("sweepExpiredHolds: delegates to reservationService and returns count")
+    @DisplayName("sweepExpiredHolds: delegates to holdService and returns count")
     void sweepExpiredHolds_delegatesToServiceAndReturnsCount() {
         LocalDateTime expectedNow = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-        when(reservationService.sweepExpiredHolds(expectedNow)).thenReturn(5);
+        when(holdService.sweepExpiredHolds(expectedNow)).thenReturn(5);
 
         int swept = lifecycleService.sweepExpiredHolds();
 
@@ -488,6 +491,6 @@ class ReservationLifecycleServiceTest {
                 .as(
                         "sweep expired holds: lifecycle scheduled runner must return count of holds swept; see ReservationLifecycleService.sweepExpiredHolds")
                 .isEqualTo(5);
-        verify(reservationService).sweepExpiredHolds(expectedNow);
+        verify(holdService).sweepExpiredHolds(expectedNow);
     }
 }
