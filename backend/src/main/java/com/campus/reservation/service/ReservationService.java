@@ -390,11 +390,7 @@ public class ReservationService implements ReservationApi {
         }
 
         // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
-        boolean isAdmin = false;
-        Long callerId = currentUserIdOrNull();
-        if (callerId != null && callerId.equals(userId) && currentUser.isAdmin()) {
-            isAdmin = true;
-        }
+        boolean isAdmin = isCurrentUserAdmin(userId);
         if (!isAdmin && userApi != null) {
             isAdmin = userApi.findActiveRole(userId).map(r -> r == Role.ADMIN).orElse(false);
         }
@@ -1323,6 +1319,18 @@ public class ReservationService implements ReservationApi {
                         assetId, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE))
                 .map(r -> new ReservationSummary(
                         r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
+    }
+
+    private boolean isCurrentUserAdmin(Long userId) {
+        if (currentUser == null) {
+            return false;
+        }
+        try {
+            return currentUser.id().equals(userId) && currentUser.isAdmin();
+        } catch (Exception ignored) {
+            // Background execution or non-web context
+            return false;
+        }
     }
 
     private Long currentUserIdOrNull() {
