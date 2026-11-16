@@ -56,6 +56,7 @@ Each document is structured in two parts:
 | 38 | [`38-reservation-lifecycle-and-code-cleanup.md`](./38-reservation-lifecycle-and-code-cleanup.md) | Reservation Lifecycle & Code Cleanup (#267) | Single 1-minute hold sweep, unified `ReservationRepository` active overlap queries, clean `ReservationHold.confirm()`, `NO_RESERVATION_ID`, `Objects::isNull` |
 | 40 | [`40-calendar-feed-token-and-ics-writer.md`](./40-calendar-feed-token-and-ics-writer.md) | Calendar Feed Token Management & iCalendar Writer | `calendar_feeds` SHA-256 token hash, `CalendarTokenService`, `/me/calendar-feed` endpoints, RFC 5545 `IcsWriter` |
 | 41 | [`41-calendar-feed-endpoint.md`](./41-calendar-feed-endpoint.md) | Calendar Feed Endpoint & Service | `findByUserIdOverlappingRange`, `CalendarFeedService` 30-day window + catalog caching, `GET /api/v1/calendar/{token}.ics` |
+| 42 | [`42-calendar-sync-page.md`](./42-calendar-sync-page.md) | Calendar Sync Page (Frontend) | `calendarFeed.ts` API wrapper, 3-state `CalendarSyncPage`, `CopyButton`, `.ics` download, replace/revoke confirm modals |
 
 
 
