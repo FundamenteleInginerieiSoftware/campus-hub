@@ -2,6 +2,7 @@ package com.campus.reservation.api;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -94,4 +95,19 @@ public interface ReservationApi {
      * @return the number of upcoming reservations that were cancelled
      */
     int cancelUpcomingReservationsForUser(Long userId, String reason);
+
+    /**
+     * Computes real equipment usage minutes per asset within the {@code [from, to]} window.
+     *
+     * <p>Counts only reservations that were actually checked out ({@code checkedOutAt != null}),
+     * measuring from {@code checkedOutAt} to {@code returnedAt}, or to {@code min(now, to)} if the
+     * asset is still {@code CHECKED_OUT} or {@code OVERDUE}, clipped to {@code [from, to]}. Bookings
+     * that were never picked up ({@code CONFIRMED}, {@code CANCELLED}, {@code FORCE_CANCELLED},
+     * {@code NO_SHOW}) do not count.
+     *
+     * @param from start of the measurement window (non-null)
+     * @param to end of the measurement window (non-null)
+     * @return map from asset ID to total positive usage minutes in the window (empty if {@code to <= from})
+     */
+    Map<Long, Long> usedMinutesByAsset(LocalDateTime from, LocalDateTime to);
 }

@@ -600,4 +600,156 @@ class ReservationRepositoryTest {
                         savedForceCancelled.getId(),
                         savedNoShow.getId());
     }
+
+    @Test
+    @DisplayName(
+            "findCheckedOutOverlapping: includes returned overlapping [from, to] edges and active unreturned checkouts")
+    void findCheckedOutOverlapping_includesReturnedAndActiveOverlappingWindow() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 2, 10, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 2, 18, 0);
+
+        // 1. Returned completely inside [10:00, 18:00]
+        Reservation returnedInside = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        returnedInside.checkOut(LocalDateTime.of(2026, 11, 2, 11, 0));
+        returnedInside.returnItem(LocalDateTime.of(2026, 11, 2, 12, 0));
+        Reservation savedInside = reservationRepository.saveAndFlush(returnedInside);
+
+        // 2. Returned overlapping the 'from' boundary (08:30 - 10:30)
+        Reservation returnedCrossingFrom = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 30),
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        returnedCrossingFrom.checkOut(LocalDateTime.of(2026, 11, 2, 8, 30));
+        returnedCrossingFrom.returnItem(LocalDateTime.of(2026, 11, 2, 10, 30));
+        Reservation savedCrossingFrom = reservationRepository.saveAndFlush(returnedCrossingFrom);
+
+        // 3. Returned overlapping the 'to' boundary (17:00 - 19:00)
+        Reservation returnedCrossingTo = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 17, 0),
+                LocalDateTime.of(2026, 11, 2, 19, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        returnedCrossingTo.checkOut(LocalDateTime.of(2026, 11, 2, 17, 0));
+        returnedCrossingTo.returnItem(LocalDateTime.of(2026, 11, 2, 19, 0));
+        Reservation savedCrossingTo = reservationRepository.saveAndFlush(returnedCrossingTo);
+
+        // 4. Active CHECKED_OUT started before 'from' with returnedAt == null
+        Reservation activeCheckedOut = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        activeCheckedOut.checkOut(LocalDateTime.of(2026, 11, 2, 9, 0));
+        Reservation savedCheckedOut = reservationRepository.saveAndFlush(activeCheckedOut);
+
+        // 5. Active OVERDUE inside window with returnedAt == null
+        Reservation activeOverdue = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 13, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        activeOverdue.checkOut(LocalDateTime.of(2026, 11, 2, 12, 0));
+        activeOverdue.markOverdue();
+        Reservation savedOverdue = reservationRepository.saveAndFlush(activeOverdue);
+
+        List<Reservation> result = reservationRepository.findCheckedOutOverlapping(from, to);
+
+        assertThat(result)
+                .as(
+                        "findCheckedOutOverlapping must include returned bookings overlapping [from, to] and active CHECKED_OUT/OVERDUE rows; see ReservationRepository.findCheckedOutOverlapping")
+                .extracting(Reservation::getId)
+                .containsExactlyInAnyOrder(
+                        savedInside.getId(),
+                        savedCrossingFrom.getId(),
+                        savedCrossingTo.getId(),
+                        savedCheckedOut.getId(),
+                        savedOverdue.getId());
+    }
+
+    @Test
+    @DisplayName("findCheckedOutOverlapping: excludes never-picked-up bookings and checkouts outside [from, to]")
+    void findCheckedOutOverlapping_excludesUnpickedUpAndOutsideWindow() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 2, 10, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 2, 18, 0);
+
+        // existingReservation from setUp is CONFIRMED inside [14:00, 16:00] with checkedOutAt == null
+
+        Reservation cancelled = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        cancelled.cancel(LocalDateTime.of(2026, 11, 1, 12, 0), "No longer needed");
+        reservationRepository.saveAndFlush(cancelled);
+
+        Reservation noShow = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 13, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        noShow.markNoShow();
+        reservationRepository.saveAndFlush(noShow);
+
+        // Returned completely before 'from' (08:00 - 09:30)
+        Reservation returnedBefore = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        returnedBefore.checkOut(LocalDateTime.of(2026, 11, 2, 8, 0));
+        returnedBefore.returnItem(LocalDateTime.of(2026, 11, 2, 9, 30));
+        reservationRepository.saveAndFlush(returnedBefore);
+
+        // Returned exactly at 'from' (08:00 - 10:00) -> 0 minutes overlap
+        Reservation returnedAtFrom = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        returnedAtFrom.checkOut(LocalDateTime.of(2026, 11, 2, 8, 0));
+        returnedAtFrom.returnItem(from);
+        reservationRepository.saveAndFlush(returnedAtFrom);
+
+        // Checked out exactly at 'to' (18:00 - 19:00) -> 0 minutes overlap
+        Reservation checkedOutAtTo = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 18, 0),
+                LocalDateTime.of(2026, 11, 2, 19, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        checkedOutAtTo.checkOut(to);
+        checkedOutAtTo.returnItem(LocalDateTime.of(2026, 11, 2, 19, 0));
+        reservationRepository.saveAndFlush(checkedOutAtTo);
+
+        // Active CHECKED_OUT starting after 'to' (18:30)
+        Reservation activeAfterTo = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 18, 30),
+                LocalDateTime.of(2026, 11, 2, 19, 30),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        activeAfterTo.checkOut(LocalDateTime.of(2026, 11, 2, 18, 30));
+        reservationRepository.saveAndFlush(activeAfterTo);
+
+        List<Reservation> result = reservationRepository.findCheckedOutOverlapping(from, to);
+
+        assertThat(result)
+                .as(
+                        "findCheckedOutOverlapping must exclude CONFIRMED/CANCELLED/NO_SHOW and checkouts outside [from, to]; see ReservationRepository.findCheckedOutOverlapping")
+                .isEmpty();
+    }
 }
