@@ -51,6 +51,7 @@ Each document is structured in two parts:
 | 31 | [`31-reusable-idempotency-request-fingerprinting.md`](./31-reusable-idempotency-request-fingerprinting.md) | Reusable Idempotency & Request Fingerprinting | SHA-256 fingerprinting, atomic persistence, cached replay, concurrent request lock, payload mismatch |
 | 33 | [`33-reservation-reassignment-code-review-fixes.md`](./33-reservation-reassignment-code-review-fixes.md) | Code Review #267 Fixes | Concurrency conflict retries, hold race guard & mismatch release, `isAssetFree` holds, bundle hold confirm, status-first check, overdue cascade isolation, row lock on return/overdue |
 | 34 | [`34-same-model-substitute-suggestions.md`](./34-same-model-substitute-suggestions.md) | Same-Model Substitute Suggestions on Booking Conflict | `AvailabilityResponse` substitute IDs, same-room-first sorting in `ReservationService`, in-place unit switch in `CalendarBookingView` |
+| 35 | [`35-hold-prefilter-calendar-nav-and-test-hardening.md`](./35-hold-prefilter-calendar-nav-and-test-hardening.md) | Hold Prefilter Alignment, Calendar Week Nav Guard & Test Hardening | `isAssetFree` own-hold exclusion, `CalendarBookingView` week-nav loading guard, stale hold tests, 3-item bundle count, ArchUnit Rule 1 strictness |
 
 
 

@@ -1233,19 +1233,40 @@ public class ReservationService implements ReservationApi {
 
     @Override
     public boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
-        return isAssetFreeExceptHoldsOf(assetId, start, end, ignoreReservationId, null);
+        if (hasReservationOverlap(assetId, start, end, ignoreReservationId)) {
+            return false;
+        }
+        if (reservationHoldRepository == null) {
+            return true;
+        }
+        // Reassignment strategies pass ignoreReservationId so we exclude the booking owner's own hold
+        // (just like moveToAsset). Unscoped checks (e.g. Project "Reserve all") exclude the caller's own hold.
+        Long holdOwnerId = ignoreReservationId != null
+                ? reservationRepository
+                        .findById(ignoreReservationId)
+                        .map(Reservation::getUserId)
+                        .orElse(null)
+                : currentUserIdOrNull();
+        return !hasActiveHoldOverlap(assetId, start, end, holdOwnerId);
     }
 
     // Active holds count as busy, so the engine doesn't move a booking into a slot another student holds (#267).
-    // Only moveToAsset passes the booking owner's id: their own hold on the substitute shouldn't block them.
+    // moveToAsset already holds the Reservation entity, so it passes r.getUserId() directly without a redundant query.
     private boolean isAssetFreeExceptHoldsOf(
             Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId, Long holdOwnerId) {
+        return !hasReservationOverlap(assetId, start, end, ignoreReservationId)
+                && !hasActiveHoldOverlap(assetId, start, end, holdOwnerId);
+    }
+
+    private boolean hasReservationOverlap(
+            Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
         long ignore = ignoreReservationId == null ? -1L : ignoreReservationId;
-        if (reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore)) {
-            return false;
-        }
-        return reservationHoldRepository == null
-                || !reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, holdOwnerId);
+        return reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
+    }
+
+    private boolean hasActiveHoldOverlap(Long assetId, LocalDateTime start, LocalDateTime end, Long holdOwnerId) {
+        return reservationHoldRepository != null
+                && reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, holdOwnerId);
     }
 
     public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {

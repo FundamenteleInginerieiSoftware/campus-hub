@@ -52,7 +52,7 @@ class ModuleBoundaryArchitectureTest {
                             .because(String.format(
                                     "Module '%s' must not access internal packages of module '%s'; use '%s.api' instead",
                                     sourceModule, targetModule, targetModule))
-                            .allowEmptyShould(true)
+                            .allowEmptyShould(false)
                             .check(classes);
                 }
             }
