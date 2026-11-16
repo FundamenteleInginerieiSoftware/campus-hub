@@ -387,4 +387,73 @@ class ReservationRepositoryTest {
                 .as("Booking session count should be 2 (1 single + 1 bundle)")
                 .isEqualTo(2);
     }
+
+    @Test
+    @DisplayName(
+            "findUpcomingConfirmedByUser: returns confirmed reservations ending after cutoff ordered by start time")
+    void findUpcomingConfirmedByUser_returnsMatchingReservations() {
+        jdbcTemplate.update("""
+            INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
+            VALUES (101, 'student101@campus.test', '{bcrypt}hash', 'Student 101', 'STUDENT', true, NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+
+        // existingReservation is USER_ID (100), CONFIRMED, 14:00 - 16:00
+        Reservation past = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        reservationRepository.saveAndFlush(past);
+
+        Reservation otherUser = new Reservation(
+                101L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 18, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        reservationRepository.saveAndFlush(otherUser);
+
+        Reservation checkedOut = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 18, 0),
+                LocalDateTime.of(2026, 11, 2, 19, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        checkedOut.checkOut(LocalDateTime.of(2026, 11, 2, 18, 5));
+        reservationRepository.saveAndFlush(checkedOut);
+
+        Reservation overdue = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 8, 0),
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        overdue.checkOut(LocalDateTime.of(2026, 11, 3, 8, 5));
+        overdue.markOverdue();
+        reservationRepository.saveAndFlush(overdue);
+
+        Reservation cancelled = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 3, 10, 0),
+                LocalDateTime.of(2026, 11, 3, 12, 0),
+                LocalDateTime.of(2026, 11, 2, 7, 0));
+        cancelled.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled earlier");
+        reservationRepository.saveAndFlush(cancelled);
+
+        List<Reservation> upcoming =
+                reservationRepository.findUpcomingConfirmedByUser(USER_ID, LocalDateTime.of(2026, 11, 2, 12, 0));
+
+        assertThat(upcoming)
+                .as(
+                        "findUpcomingConfirmedByUser must return only CONFIRMED bookings for USER_ID ending after 12:00 (excluding past, other user, CHECKED_OUT, OVERDUE, and CANCELLED)")
+                .extracting(Reservation::getId)
+                .containsExactly(existingReservation.getId());
+        assertThat(upcoming)
+                .as("CHECKED_OUT, OVERDUE, and CANCELLED bookings for USER_ID must not be returned")
+                .extracting(Reservation::getStatus)
+                .containsOnly(ReservationStatus.CONFIRMED);
+    }
 }
