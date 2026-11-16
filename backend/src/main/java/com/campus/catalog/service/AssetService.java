@@ -1,5 +1,6 @@
 package com.campus.catalog.service;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.domain.Asset;
 import com.campus.catalog.domain.Category;
@@ -16,19 +17,22 @@ import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
+import com.campus.common.paging.PageRequests;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +40,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AssetService {
 
-    private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_SORT_FIELDS =
             Set.of("name", "model", "serialNumber", "status", "createdAt", "updatedAt");
 
@@ -44,23 +47,14 @@ public class AssetService {
     private final CategoryRepository categoryRepository;
     private final LabRoomRepository labRoomRepository;
     private final AuditService auditService;
+    private final ApplicationEventPublisher eventPublisher;
     private final CurrentUser currentUser;
     private final Clock clock;
 
     @Transactional(readOnly = true)
     public PageResponse<AssetResponse> search(
             String search, Long categoryId, Long labRoomId, AssetStatus status, int page, int size, String sort) {
-        if (page < 0) {
-            throw new InvalidParameterException("Page index must not be negative");
-        }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new InvalidParameterException("Page size must be between 1 and " + MAX_PAGE_SIZE);
-        }
-        if ((long) page * size > Integer.MAX_VALUE) {
-            throw new InvalidParameterException("Page offset exceeds maximum supported value");
-        }
-
-        Pageable pageable = PageRequest.of(page, size, parseSort(sort));
+        Pageable pageable = PageRequests.of(page, size, PageRequests.parseSort(sort, "name,asc", ALLOWED_SORT_FIELDS));
         boolean excludeRetired = !currentUser.isAdmin();
 
         Page<Asset> assets = assetRepository.findAll(
@@ -73,6 +67,10 @@ public class AssetService {
         Asset asset = assetRepository
                 .findWithDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
+        // Retired assets are hidden from students in catalog search; direct GET by ID must match and 404 (#268).
+        if (asset.getStatus() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
+            throw new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found");
+        }
         return AssetResponse.from(asset);
     }
 
@@ -93,19 +91,12 @@ public class AssetService {
         Asset asset = new Asset(
                 request.name(), request.model(), normalizedSerial, request.description(), category, labRoom, now());
 
-        Asset saved;
-        try {
-            saved = assetRepository.saveAndFlush(asset);
-        } catch (DataIntegrityViolationException ex) {
-            // Check if the serial was actually taken by a concurrent insert; otherwise rethrow so unexpected
-            // FK or check constraint errors are not falsely reported as duplicate serial (#167).
-            if (assetRepository.existsBySerialNumberIgnoreCase(normalizedSerial)) {
-                throw serialTaken(normalizedSerial);
-            }
-            throw ex;
-        }
+        Asset saved = CatalogPersistence.saveOrThrowConflict(
+                () -> assetRepository.saveAndFlush(asset),
+                () -> assetRepository.existsBySerialNumberIgnoreCase(normalizedSerial),
+                () -> serialTaken(normalizedSerial));
 
-        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate serial (#120).
+        // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate serial.
         auditService.record(
                 currentUser.id(),
                 "ASSET_CREATED",
@@ -126,13 +117,45 @@ public class AssetService {
             throw new InvalidStateTransitionException("ASSET_RETIRED", "Retired asset cannot be modified");
         }
 
+        // Two admins editing the same asset: the second save must not silently overwrite the first.
+        if (request.version() != null
+                && asset.getVersion() != null
+                && !request.version().equals(asset.getVersion())) {
+            throw new ObjectOptimisticLockingFailureException(Asset.class, id);
+        }
+
         Category category = findCategoryOrThrow(request.categoryId());
         LabRoom labRoom = findLabRoomOrThrow(request.labRoomId());
 
+        // Compare against trimmed values (matching Asset.updateDetails) so whitespace-only edits
+        // are not recorded as spurious field changes in the audit log.
+        String nextName = request.name().trim();
+        String nextModel = request.model().trim();
+        List<String> changes = new ArrayList<>();
+        if (!asset.getName().equals(nextName)) {
+            changes.add("name: '" + asset.getName() + "' -> '" + nextName + "'");
+        }
+        if (!asset.getModel().equals(nextModel)) {
+            changes.add("model: '" + asset.getModel() + "' -> '" + nextModel + "'");
+        }
+        if (!Objects.equals(asset.getDescription(), request.description())) {
+            changes.add("description updated");
+        }
+        if (!Objects.equals(asset.getCategory().getId(), category.getId())) {
+            changes.add("category: " + asset.getCategory().getName() + " -> " + category.getName());
+        }
+        if (!Objects.equals(asset.getLabRoom().getId(), labRoom.getId())) {
+            changes.add("room: " + asset.getLabRoom().getCode() + " -> " + labRoom.getCode());
+        }
+
         asset.updateDetails(request.name(), request.model(), request.description(), category, labRoom, now());
         Asset saved = assetRepository.saveAndFlush(asset);
-        auditService.record(
-                currentUser.id(), "ASSET_UPDATED", "ASSET", saved.getId(), "Updated asset " + saved.getName());
+
+        String auditDetails = changes.isEmpty()
+                ? "Updated asset " + saved.getName()
+                : "Updated asset " + saved.getName() + " (" + String.join(", ", changes) + ")";
+
+        auditService.record(currentUser.id(), "ASSET_UPDATED", "ASSET", saved.getId(), auditDetails);
         return AssetResponse.from(saved);
     }
 
@@ -144,7 +167,8 @@ public class AssetService {
                 .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + id + " was not found"));
 
-        asset.retire(now());
+        LocalDateTime retiredAt = now();
+        asset.retire(retiredAt);
         Asset saved = assetRepository.saveAndFlush(asset);
         auditService.record(
                 currentUser.id(),
@@ -152,6 +176,10 @@ public class AssetService {
                 "ASSET",
                 saved.getId(),
                 "Retired asset " + saved.getName() + " (S/N " + saved.getSerialNumber() + ")");
+
+        // Publishes domain event for Calin's reassignment engine (Observer pattern, #245).
+        eventPublisher.publishEvent(new AssetRetiredEvent(saved.getId(), retiredAt, currentUser.id()));
+
         return AssetResponse.from(saved);
     }
 
@@ -178,34 +206,5 @@ public class AssetService {
     private static ConflictException serialTaken(String serial) {
         return new ConflictException(
                 "SERIAL_NUMBER_TAKEN", "Serial number '" + serial + "' is already in the inventory");
-    }
-
-    // Whitelists sortable Asset fields and appends a secondary sort on id so paging stays deterministic
-    // when several items share the same name, model, status, or timestamp.
-    private static Sort parseSort(String sort) {
-        String raw = (sort == null || sort.isBlank()) ? "name,asc" : sort.trim();
-        String[] parts = raw.split(",", -1);
-        if (parts.length > 2) {
-            throw new InvalidParameterException("Sort parameter must have format 'field,asc' or 'field,desc'");
-        }
-
-        String field = parts[0].trim();
-        if (!ALLOWED_SORT_FIELDS.contains(field)) {
-            throw new InvalidParameterException("Unsupported sort property '" + field + "'");
-        }
-
-        Sort.Direction direction = Sort.Direction.ASC;
-        if (parts.length == 2 && !parts[1].isBlank()) {
-            String dirToken = parts[1].trim().toLowerCase(Locale.ROOT);
-            direction = switch (dirToken) {
-                case "asc" -> Sort.Direction.ASC;
-                case "desc" -> Sort.Direction.DESC;
-                default ->
-                    throw new InvalidParameterException(
-                            "Invalid sort direction '" + parts[1].trim() + "'; expected 'asc' or 'desc'");
-            };
-        }
-
-        return Sort.by(direction, field).and(Sort.by(Sort.Direction.ASC, "id"));
     }
 }

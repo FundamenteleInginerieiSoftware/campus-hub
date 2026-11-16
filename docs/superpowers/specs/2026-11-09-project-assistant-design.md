@@ -104,16 +104,16 @@ Jackson 3 (`tools.jackson.databind.json.JsonMapper`, Boot 4) reads the files; `P
 
 Pure function: `search(String query, List<Project> projects) → SearchResult(List<ScoredProject> hits, boolean ambiguous)`.
 
-1. **Normalize** (query and keywords/titles): lowercase (`Locale.ROOT`), strip diacritics (`Normalizer.Form.NFD` + remove combining marks; covers `ă â î ș ț` and the cedilla forms `ş ţ`), split on anything that is not a letter or digit, drop tokens shorter than 2 characters and stop words (RO: `vreau sa un o pentru de la cu si care imi este din`; EN: `i want to build make a an the for with my of and`).
+1. **Normalize** (query and keywords/titles): lowercase (`Locale.ROOT`), strip diacritics (`Normalizer.Form.NFD` + remove combining marks; covers `ă â î ș ț` and the cedilla forms `ş ţ`), split on anything that is not a letter or digit, drop tokens shorter than 2 characters and stop words (RO: `vreau sa un o pentru de la cu si care imi este din proiect proiectul proiecte`; EN: `i want to build make a an the for with my of and project projects`; the "project" words since #272, every result is a project).
 2. **Score** each project, using both languages:
-   - keyword part (the best one per token): equals a keyword **+3**, else shares a prefix of at least **5** characters with a keyword (both tokens ≥ 5 long) **+2** (*termometre* ↔ *termometru*), else 0;
+   - keyword part (the best one per token): equals a keyword **+3**, else has the same stem as a keyword **+2**, else 0. Same stem = the two words share at least their first **5** letters, and the shared start covers the shorter word except at most its last **2** letters (*termometre* ↔ *termometru*, *senzori* ↔ *senzor*; not *multiplexer* ↔ *multimeter*, which share only *multi*);
    - title part: **+1** if the token equals a title word (either language), added on top of the keyword part.
    Duplicate query tokens are removed first, so repeating a word doesn't inflate the score.
 3. **Rank**: score descending, then English title ascending (stable demo order). Score 0 is hidden.
 4. **Empty or only-stop-word query** → every project, sorted by English title, `ambiguous = false`.
 5. **Ambiguous**: at least 2 hits and `top − second ≤ 1` → `ambiguous = true` (the page shows "Did you mean …" with both).
 
-Constants (`EXACT = 3`, `PREFIX = 2`, `TITLE = 1`, `MIN_PREFIX = 5`, `AMBIGUITY_GAP = 1`) live together at the top of `ProjectSearch`, each with a one-line *why*.
+Constants (`EXACT = 3`, `PREFIX = 2`, `TITLE = 1`, `MIN_PREFIX = 5`, `MAX_ENDING = 2`, `AMBIGUITY_GAP = 1`) live together at the top of `ProjectSearch`, each with a one-line *why*.
 
 ## 7. API (`docs/api-contract.md` gets a "Projects (Matei)" section)
 
@@ -154,7 +154,7 @@ Error codes added to the contract: `PROJECT_NOT_FOUND` (404), `PROJECT_COMPONENT
 
 | Test | Kind | Covers |
 |---|---|---|
-| `ProjectSearchTest` | plain JUnit | exact keyword, prefix plural/singular, diacritics both ways, cedilla `ş`, both languages, stop words only, empty query lists all, no match, token counted once, tie → English title order, ambiguity on/off at the gap |
+| `ProjectSearchTest` | plain JUnit | exact keyword, prefix plural/singular, shared start alone is no match (*multiplexer* ≠ *multimeter*), diacritics both ways, cedilla `ş`, both languages, stop words only, empty query lists all, no match, token counted once, tie → English title order, ambiguity on/off at the gap |
 | `ProjectLibraryTest` | plain JUnit + test fixtures in `src/test/resources/projects-invalid/…` | real files load; each invalid case fails with the file + field in the message; duplicate slug; duplicate model; > 5 units |
 | `ProjectServiceTest` | Mockito (`CatalogApi`, `ReservationApi`) | availability without slot, with slot, missing model → 0 + not reservable, half slot → 400, unknown slug → 404, lang switch |
 | `ProjectReservationServiceTest` | Mockito | lowest free ids picked, quantity 2, not enough → 409 naming the model, facade errors pass through, user id from `CurrentUser` |

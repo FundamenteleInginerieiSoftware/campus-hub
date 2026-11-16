@@ -20,6 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -118,6 +119,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L);
 
         verify(reservationService).moveToAsset(eq(33L), eq(SUB_ASSET_ID), any());
+        verify(reservationService, never()).sweepExpiredHolds(any());
         verify(notificationService).notifyUser(eq(101L), eq("Reservation Marked as No-Show"), any());
         verify(notificationService).notifyUser(eq(102L), eq("Equipment Overdue"), any());
         verify(notificationService).notifyUser(eq(103L), eq("Proactive Reservation Reassignment"), any());
@@ -477,7 +479,7 @@ class ReservationLifecycleServiceTest {
     @Test
     @DisplayName("sweepExpiredHolds: delegates to reservationService and returns count")
     void sweepExpiredHolds_delegatesToServiceAndReturnsCount() {
-        LocalDateTime expectedNow = LocalDateTime.now(clock).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        LocalDateTime expectedNow = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         when(reservationService.sweepExpiredHolds(expectedNow)).thenReturn(5);
 
         int swept = lifecycleService.sweepExpiredHolds();

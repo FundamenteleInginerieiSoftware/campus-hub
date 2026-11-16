@@ -1,4 +1,4 @@
-import { apiFetch } from './client.ts'
+import { ApiError, apiFetch, tokenStorage } from './client.ts'
 import type { PageResponse } from './types.ts'
 
 // Lifecycle statuses of a reservation, matching ReservationStatus.java in the backend.
@@ -134,11 +134,74 @@ export function cancelReservation(id: number) {
   return apiFetch<Reservation>(`/api/v1/reservations/${id}/cancel`, { method: 'POST' })
 }
 
+// Remembers the Idempotency-Key of the latest unfinished booking attempt for a given
+// (assetId, startTime, endTime) slot so a retry or double-click reuses the exact same key,
+// while selecting a different slot or starting a new booking after success generates a fresh key.
+let pendingBookingAttempt: { slotSignature: string; key: string } | null = null
+
+export function generateIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+}
+
 /**
  * Books an asset for the authenticated student (POST /api/v1/reservations).
+ * Automatically sends and reuses a slot-scoped Idempotency-Key header so network
+ * retries or double-clicks on the same slot do not create duplicate reservations.
  */
-export function createReservation(request: CreateReservationRequest) {
-  return apiFetch<Reservation>('/api/v1/reservations', { method: 'POST', body: request })
+export async function createReservation(
+  request: CreateReservationRequest,
+  idempotencyKey?: string,
+): Promise<Reservation> {
+  const slotSignature = `${request.assetId}|${request.startTime}|${request.endTime}`
+  let key: string
+  if (idempotencyKey !== undefined) {
+    key = idempotencyKey
+  } else if (pendingBookingAttempt?.slotSignature === slotSignature) {
+    key = pendingBookingAttempt.key
+  } else {
+    key = generateIdempotencyKey()
+    pendingBookingAttempt = { slotSignature, key }
+  }
+
+  const token = tokenStorage.get()
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'Idempotency-Key': key,
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch('/api/v1/reservations', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    if ((response.status === 400 || response.status === 401) && pendingBookingAttempt?.key === key) {
+      pendingBookingAttempt = null
+    }
+    if (response.status === 401 && token) {
+      tokenStorage.clear()
+    }
+    throw new ApiError(
+      response.status,
+      problem?.code ?? 'UNKNOWN_ERROR',
+      problem?.detail ?? `Request failed with status ${response.status}`,
+      problem?.errors ?? [],
+    )
+  }
+
+  if (pendingBookingAttempt?.key === key) {
+    pendingBookingAttempt = null
+  }
+  return (await response.json()) as Reservation
 }
 
 /**

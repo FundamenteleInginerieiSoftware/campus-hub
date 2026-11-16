@@ -15,12 +15,17 @@ import com.campus.common.error.ConflictException;
 import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
+import com.campus.common.security.CurrentUser;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
+import com.campus.reservation.service.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +46,19 @@ class ReservationControllerTest {
 
     @MockitoBean
     private ReservationService reservationService;
+
+    @MockitoBean
+    private CurrentUser currentUser;
+
+    @MockitoBean
+    private IdempotencyService idempotencyService;
+
+    @BeforeEach
+    void setUpIdempotency() {
+        when(currentUser.id()).thenReturn(42L);
+        when(idempotencyService.execute(any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(6)).get());
+    }
 
     private final ReservationResponse sampleResponse = new ReservationResponse(
             1L,
@@ -396,7 +414,7 @@ class ReservationControllerTest {
     @Test
     @DisplayName("POST /api/v1/reservations/bundle returns 201 CREATED")
     void createBundleReturns201() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         MultiAssetReservationResponse response = new MultiAssetReservationResponse(
                 bundleId,
                 LocalDateTime.of(2026, 11, 2, 14, 0),
@@ -425,7 +443,7 @@ class ReservationControllerTest {
     @Test
     @DisplayName("GET /api/v1/reservations/bundle/{bundleId} returns 200 OK")
     void getBundleReturns200() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         MultiAssetReservationResponse response = new MultiAssetReservationResponse(
                 bundleId,
                 LocalDateTime.of(2026, 11, 2, 14, 0),
@@ -443,7 +461,7 @@ class ReservationControllerTest {
     @Test
     @DisplayName("POST /api/v1/reservations/bundle/{bundleId}/cancel returns 200 OK")
     void cancelBundleReturns200() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         when(reservationService.cancelBundle(eq(bundleId), any())).thenReturn(List.of(sampleResponse));
 
         mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel"))
@@ -455,7 +473,7 @@ class ReservationControllerTest {
     @DisplayName(
             "POST /api/v1/reservations/bundle/{bundleId}/cancel rejects reason over 255 chars with 400 (#240 point 2)")
     void cancelBundle_rejectsOverlongReasonWith400() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         String overlongReason = "a".repeat(256);
 
         mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel")

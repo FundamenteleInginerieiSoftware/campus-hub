@@ -42,19 +42,7 @@ import {
 import type { PageResponse } from '../api/types.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
 import PageHeader from '../components/PageHeader.tsx'
-
-function statusBadgeColor(status: AssetStatus): string {
-  switch (status) {
-    case 'AVAILABLE':
-      return 'teal'
-    case 'UNDER_MAINTENANCE':
-      return 'yellow'
-    case 'RETIRED':
-      return 'gray'
-    default:
-      return 'blue'
-  }
-}
+import { statusBadgeColor } from './catalog/assetStatus.ts'
 
 function statusLabel(status: AssetStatus): string {
   switch (status) {

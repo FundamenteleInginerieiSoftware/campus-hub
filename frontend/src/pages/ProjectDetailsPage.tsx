@@ -15,7 +15,7 @@ import {
   Title,
 } from '@mantine/core'
 import { IconArrowLeft, IconCheck, IconX } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.ts'
 import {
@@ -156,9 +156,11 @@ export default function ProjectDetailsPage() {
   const [error, setError] = useState<unknown>(null)
 
   // ---- Slot state (PR 5's "Reserve all" reads selectedSlot, checkedSlot and kitReservable) ----
-  // The campus clock when the page opened; the backend checks the real time again when booking.
-  const [now] = useState(nowInBucharest)
-  const days = useMemo(() => bookableDays(now), [now])
+  // Bug fixed: "now" was read once when the page opened (useState(nowInBucharest)), so a page left open
+  // overnight kept offering yesterday's slots. Fix: read the campus clock on every render, and again
+  // right before checking or booking (dropSlotIfPast). The backend checks the real time when booking anyway.
+  const now = nowInBucharest()
+  const days = bookableDays(now)
   const [day, setDay] = useState<string | null>(() => days[0] ?? null)
   const [startTime, setStartTime] = useState<string | null>(() => (days[0] ? startTimesFor(days[0], now)[0] : null))
   const [endTime, setEndTime] = useState<string | null>(() => (startTime ? defaultEnd(startTime) : null))
@@ -183,11 +185,28 @@ export default function ProjectDetailsPage() {
   // Shown inside the "Book the kit" card, next to the button that caused it.
   const [reserveError, setReserveError] = useState<unknown>(null)
 
+  // Bug fixed: when the URL switched to another project while this page stayed open, the old project
+  // (and its checked slot and errors) stayed on screen until the new one loaded. Fix: reset them during
+  // render when the slug changes (React's "reset state on prop change" pattern), so the loader shows instead.
+  const [shownSlug, setShownSlug] = useState(slug)
+  if (slug !== shownSlug) {
+    setShownSlug(slug)
+    setProject(null)
+    setLoading(true)
+    setError(null)
+    setSlotToCheck(null)
+    setCheckedSlot(null)
+    setReserveError(null)
+  }
+
   useEffect(() => {
     let ignore = false
     fetchProject(slug, lang, slotToCheck ?? undefined)
       .then((response) => {
         if (ignore) return
+        // Bug fixed: an earlier failed load left its error on screen after a later load worked.
+        // Fix: a successful load clears it.
+        setError(null)
         setProject(response)
         setCheckedSlot(response.slotChecked ? slotToCheck : null)
       })
@@ -211,8 +230,16 @@ export default function ProjectDetailsPage() {
     setLang(next)
   }
 
+  // The selects were built from an earlier clock reading: the chosen slot may have started meanwhile.
+  // Then pick the first slot that is bookable now, so the student sees the change and checks again.
+  function dropSlotIfPast(slot: Slot) {
+    if (new Date(slot.start) > nowInBucharest()) return false
+    changeDay(bookableDays(nowInBucharest())[0] ?? null)
+    return true
+  }
+
   function checkAvailability() {
-    if (!selectedSlot) return
+    if (!selectedSlot || dropSlotIfPast(selectedSlot)) return
     setLoading(true)
     setError(null)
     setReserveError(null)
@@ -221,7 +248,7 @@ export default function ProjectDetailsPage() {
   }
 
   async function reserveAll() {
-    if (!selectedSlot || !kitReservable || reserving) return
+    if (!selectedSlot || !kitReservable || reserving || dropSlotIfPast(selectedSlot)) return
     const slot = selectedSlot
     setReserving(true)
     setReserveError(null)
@@ -249,7 +276,7 @@ export default function ProjectDetailsPage() {
   function changeDay(next: string | null) {
     if (!next) return
     setDay(next)
-    const start = startTimesFor(next, now)[0] ?? null
+    const start = startTimesFor(next, nowInBucharest())[0] ?? null
     setStartTime(start)
     setEndTime(start ? defaultEnd(start) : null)
   }

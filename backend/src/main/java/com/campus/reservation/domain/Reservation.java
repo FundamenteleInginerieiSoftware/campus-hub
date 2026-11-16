@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -67,7 +68,7 @@ public class Reservation {
     private String cancelReason;
 
     @Column(name = "bundle_id")
-    private java.util.UUID bundleId;
+    private UUID bundleId;
 
     @Version
     @Column(name = "version", nullable = false)
@@ -134,7 +135,7 @@ public class Reservation {
         this.status = ReservationStatus.NO_SHOW;
     }
 
-    public void assignBundle(java.util.UUID bundleId) {
+    public void assignBundle(UUID bundleId) {
         this.bundleId = bundleId;
     }
 

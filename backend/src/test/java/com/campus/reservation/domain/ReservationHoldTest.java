@@ -44,7 +44,7 @@ class ReservationHoldTest {
     }
 
     @Test
-    @DisplayName("confirm() marks hold as EXPIRED and throws HOLD_EXPIRED when TTL has elapsed")
+    @DisplayName("confirm() throws HOLD_EXPIRED without mutating status when TTL has elapsed")
     void confirmAfterExpiryThrowsConflict() {
         ReservationHold hold = new ReservationHold(10L, 1L, START, END, EXPIRES, NOW);
 
@@ -52,7 +52,9 @@ class ReservationHoldTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("The reservation hold has expired");
 
-        assertThat(hold.getStatus()).isEqualTo(HoldStatus.EXPIRED);
+        assertThat(hold.getStatus())
+                .as("confirm() must not mutate status before throwing; the 1-minute sweep persists EXPIRED")
+                .isEqualTo(HoldStatus.ACTIVE);
     }
 
     @Test

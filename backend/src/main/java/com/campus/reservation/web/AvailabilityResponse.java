@@ -12,7 +12,8 @@ import java.util.List;
  * @param startTime start of the evaluated time slot
  * @param endTime end of the evaluated time slot
  * @param available {@code true} if at least one asset (or the specific asset) is available for booking
- * @param availableAssetIds list of asset IDs that are free and operational during the slot
+ * @param availableAssetIds for category checks or available single-asset checks, the free asset IDs;
+ *     when a specific asset is unavailable ({@code available == false}), free bookable same-model substitute IDs (same room first, then ID ascending)
  * @param conflictReason explanation if the specific asset is unavailable (e.g. {@code "RESERVATION_CONFLICT"}, {@code "ASSET_NOT_BOOKABLE"})
  */
 @Schema(description = "Availability evaluation for a time window")
@@ -32,15 +33,30 @@ public record AvailabilityResponse(
         @Schema(description = "Whether the requested asset/category can be booked", example = "true")
         boolean available,
 
-        @Schema(description = "IDs of free and bookable assets in this window")
+        @Schema(
+                description =
+                        "IDs of free and bookable assets (or free same-model substitutes when assetId is unavailable)")
         List<Long> availableAssetIds,
 
         @Schema(description = "Machine-readable conflict reason if unavailable", example = "RESERVATION_CONFLICT")
         String conflictReason) {
     public static AvailabilityResponse forAsset(
             Long assetId, LocalDateTime start, LocalDateTime end, boolean available, String conflictReason) {
-        return new AvailabilityResponse(
-                assetId, null, start, end, available, available ? List.of(assetId) : List.of(), conflictReason);
+        return forAsset(assetId, start, end, available, conflictReason, available ? List.of(assetId) : List.of());
+    }
+
+    // When the requested unit is unavailable for the slot, availableAssetIds carries free
+    // same-model substitute unit IDs (sorted same-room first) so the booking UI can offer
+    // an in-place unit switch without a separate round-trip.
+    public static AvailabilityResponse forAsset(
+            Long assetId,
+            LocalDateTime start,
+            LocalDateTime end,
+            boolean available,
+            String conflictReason,
+            List<Long> availableAssetIds) {
+        List<Long> safeIds = availableAssetIds == null ? List.of() : List.copyOf(availableAssetIds);
+        return new AvailabilityResponse(assetId, null, start, end, available, safeIds, conflictReason);
     }
 
     public static AvailabilityResponse forCategory(

@@ -1,17 +1,17 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) and the OS security updates in the Docker image (`46-docker-os-patches.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) and the pickup pass backend (`51-pickup-pass-backend.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
 campus-hub/
-├── README.md  CONTRIBUTING.md  AGENTS.md  CLAUDE.md
+├── README.md  CONTRIBUTING.md  AGENTS.md  CLAUDE.md  GEMINI.md        (GEMINI.md: 50-docs-check.md)
 ├── .gitignore  .gitattributes  .editorconfig
 ├── Dockerfile  .dockerignore                             (19-dockerfile.md, 46-docker-os-patches.md)
 ├── .github/
-│   ├── CODEOWNERS  pull_request_template.md
+│   ├── CODEOWNERS  pull_request_template.md  copilot-instructions.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
-│   └── workflows/ci.yml
+│   └── workflows/ci.yml  docs-check.yml                  (docs-check: 50-docs-check.md)
 ├── docs/  decisions.md  api-contract.md  plan-w4-w6.md  whats-left.md
 │   ├── superpowers/specs/ + plans/                       (38-project-assistant-design.md)
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
@@ -43,6 +43,10 @@ campus-hub/
         │                          user/api/UserApi.java, user/api/UserSummary.java,
         │                          user/web/{Register,Login}Request.java, {User,Login}Response.java,
         │                          user/web/UserController.java,
+        │                          user/service/{PickupCodes,PickupPassService}.java,
+        │                          user/web/{PickupPass,AdminPickupPass}Controller.java,
+        │                          user/web/{VerifyPickupPassRequest,PickupPassResponse,PickupPassVerifiedResponse}.java
+        │                                                  (51-pickup-pass-backend.md)
         │                          project/** (39-project-engine.md),
         │                          project/service/ProjectReservationService.java,
         │                          project/web/{ReserveProjectRequest,ReserveProjectResponse,ReservedItem}.java
@@ -56,6 +60,8 @@ campus-hub/
         │                          ErrorJsonTest, AuthServiceTest, AuthFlowIT,
         │                          UserSeederTest, AdminBootstrapTest, SpaFrontendTest, S3StorageServiceTest,
         │                          SesNotificationServiceTest, ProdProfileStartupTest, SecurityPassIT,
+        │                          user/service/{PickupCodesTest,PickupPassServiceTest}, user/web/{PickupPass,AdminPickupPass}ControllerTest
+        │                                                  (51-pickup-pass-backend.md)
         │                          UserControllerTest, SpaConfigTest, DemoFlowIT, OpenApiDocsIT,
         │                          project/service/ShippedProjectsTest
         │                          project/service/ProjectReservationServiceTest (42-project-reserve-all.md)
@@ -86,6 +92,8 @@ campus-hub/
 | `pull_request_template.md` | The form every pull request starts with: what, why, how to test, a checklist. |
 | `ISSUE_TEMPLATE/` | Forms for new issues: bug, task, user story. |
 | `workflows/ci.yml` | The robot that builds and tests every pull request. It must be green before merging. |
+| `workflows/docs-check.yml` | A second, quick robot: when a pull request changes the app, it checks that the author also updated their personal notes and their lines in the project status (`50-docs-check.md`). |
+| `copilot-instructions.md` | Tells GitHub Copilot to read and follow `AGENTS.md`. |
 
 ### Backend: build (PR #13)
 | File | What it does |
@@ -108,7 +116,7 @@ campus-hub/
 | File | What it does |
 |---|---|
 | `CampusHubApplication.java` | The "start button" of the server. |
-| `SecurityConfig.java` | The guard at the door: decides which addresses are public, which need a login token and which are for admins only. Also scrambles passwords and signs login tokens (`04-password-jwt-roles.md`). |
+| `SecurityConfig.java` | The guard at the door: decides which addresses are public (including Calin's `GET /api/v1/calendar/*` feed, `53-calendar-feed-security-rule.md`), which need a login token and which are for admins only. Also scrambles passwords and signs login tokens (`04-password-jwt-roles.md`). |
 | `AuthController.java` | A "ping" address that answers `pong`, to check the app runs. Login comes here next. |
 | `package-info.java` (one per module) | A label on each folder: what it does, who owns it, what it may use. |
 | `CampusHubApplicationTests` | Checks the app can start at all. |
@@ -162,6 +170,16 @@ campus-hub/
 | `SesNotificationService.java` | On AWS, sends real e-mails to users instead of writing them to the log. A failed e-mail is logged and never undoes the booking change. |
 | `S3StorageServiceTest`, `SesNotificationServiceTest` | Check what we ask S3 and SES to do, without connecting to AWS. |
 | `ProdProfileStartupTest` | Starts the whole app in AWS mode, so a missing piece shows up in CI instead of on the server. |
+
+### Backend: pickup pass (`51-pickup-pass-backend.md`)
+| File | What it does |
+|---|---|
+| `PickupCodes.java` | Works out the 6-digit code for a student at a given half-minute. No storage: only the server works it out (the phone just asks for it), and the same student at the same half-minute always gets the same number. |
+| `PickupPassService.java` | Gives the logged-in student their code, and checks a code the admin typed at the desk (writes who was verified into the audit log). |
+| `PickupPassController.java` | The student's address (`/api/v1/users/me/pickup-pass`): "show me my code". |
+| `AdminPickupPassController.java` | The admin's address (`/api/v1/admin/pickup-pass/verify`): "is this code right for student 12?". Students get "not allowed". |
+| `VerifyPickupPassRequest.java`, `PickupPassResponse.java`, `PickupPassVerifiedResponse.java` | The forms: what the desk sends (student + 6 digits), the code the student sees, and "this is Ana Pop". |
+| `PickupCodesTest`, `PickupPassServiceTest`, `PickupPassControllerTest`, `AdminPickupPassControllerTest` | Check the code is stable and 6 digits, an old code is refused, a student can't verify, and bad input is refused. |
 
 ### `infra/`: AWS as code with Terraform, part 1 (`44-terraform-network.md`)
 | File | What it does |
@@ -272,6 +290,8 @@ campus-hub/
 | `AGENTS.md` | Starts with an override table: the plan PDFs say Maven / Java 21 / H2, the repo uses **Gradle / Java 25 / PostgreSQL 18**. Then: session start checks, the v2 ownership table, the "never" list, workflow, architecture rules, week plan, WAIT-or-go checks (`onmain`/`inmain` shell helpers), cross-module contracts. |
 | `CODEOWNERS` | One line, `*` = all four of us, so GitHub requests every teammate on every PR (never the author). Since 4 Nov 2026 the `protect-main` ruleset no longer requires a code owner's approval: 1 approval from anyone is enough. Before that, every path had owner + review buddy (Matei ↔ Liviu, Calin ↔ Stefania). |
 | `ci.yml` | One job named **`ci`**, which is the exact name the `protect-main` ruleset requires. A `postgres:18` service container with `campus_test`; `SPRING_DATASOURCE_*` env vars point the tests at it. Java 25 (Temurin) + `gradle/actions/setup-gradle@v6`, then `./gradlew build` and the JaCoCo report as an artifact. Every backend step has `if: hashFiles('backend/gradlew') != ''` and every frontend step `hashFiles('frontend/package.json')`, so docs-only PRs (like #12) still pass. |
+| `docs-check.yml` | Job **`docs-check`**, `pull_request` only (also on `labeled`/`unlabeled`). Diffs `base.sha...head.sha`; if `backend/src/main/` or `frontend/src/` changed, requires a file under `documentation/*/`, `docs/whats-left.md` and `AGENTS.md`, else `::error` lines + exit 1. Skipped by the `no-docs` label and for Dependabot. PR data only via `env`, never inlined in the script. Not a required check yet. |
+| `GEMINI.md` / `copilot-instructions.md` | Pointers so Gemini CLI (reads `GEMINI.md`; `@./AGENTS.md` imports the file) and Copilot (reads `.github/copilot-instructions.md`) get the same rules as Claude Code / Codex / Cursor, which read `AGENTS.md` / `CLAUDE.md`. |
 | Templates | PR checklist uses `./gradlew build`; the task template's Definition of Done says "works from a fresh database (reset in pgAdmin)". |
 | `.gitignore` / `.gitattributes` | Gradle paths (`build/`, `.gradle/`) with an exception for `gradle-wrapper.jar`; Terraform: `infra/**/.terraform/`, `*.tfplan`, `*.tfstate`, `*.tfstate.backup`, `*.tfvars`; `gradlew text eol=lf` so the script runs on Linux/CI even when committed from Windows. |
 | `Dockerfile` / `.dockerignore` | 3 stages: `node:24-slim` builds `frontend/dist`; `eclipse-temurin:25-jdk` caches Gradle dependencies, copies `dist` into `src/main/resources/static`, runs `bootJar` (no tests, CI ran them); `eclipse-temurin:25-jre-alpine` installs the OS security updates (`apk upgrade`, `46-docker-os-patches.md`) and runs only `app.jar` as non-root user `app`, `SPRING_PROFILES_ACTIVE=prod`, `HEALTHCHECK` on `/actuator/health`, `-XX:MaxRAMPercentage=75`. `.dockerignore` keeps `.git`, `node_modules`, build output and `.env` files out. Details in `19-dockerfile.md`. |
@@ -310,7 +330,7 @@ campus-hub/
 ### Code
 | File | Key points |
 |---|---|
-| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), then `/api/v1/admin/**` → `hasRole("ADMIN")` (must stay above the next rule), `/api/v1/**` → any valid JWT, other `/api/**` and `/actuator/**` → `denyAll()`, then `GET /**` → `permitAll()` (the React build, ADR-002), anything else → `denyAll()`. `bearerTokenResolver` returns `null` on `/api/v1/auth/**`, so an old token can't make login/register fail with 401 (#116, `20-auth-ignores-old-token.md`). `JwtDecoder` and `JwtEncoder` share one HS256 key from `app.jwt.secret` (≥ 32 bytes); defining the decoder also stops Boot from creating a default user with a random password. Since #117 the converter (`activeUserFromToken`) looks the user up through `UserApi.findActiveRole` on every request: missing or disabled → 401, role from the database with the `ROLE_` prefix (`ObjectProvider`, so `@WebMvcTest` slices without `UserApi` still start; `22-token-account-check.md`). `PasswordEncoder` = delegating encoder (`{bcrypt}` hashes). 401/403 go to `SecurityErrorHandler` (wired on both the resource server and `exceptionHandling`). |
+| `SecurityConfig` | One `SecurityFilterChain`. **Stateless** (no session) and **CSRF off**: CSRF abuses cookies the browser sends automatically, and our API uses no cookies, only the `Authorization: Bearer` header. Matchers are checked top to bottom, **first match wins**: `/api/v1/auth/**`, health and Swagger are public, `/error` is public (otherwise a 404 would show as 401), then `/api/v1/admin/**` → `hasRole("ADMIN")` (must stay above the `/api/v1/**` rule), `GET /api/v1/calendar/*` → `permitAll()` (Calin's secret-token `.ics` feed, `53-calendar-feed-security-rule.md`), `/api/v1/**` → any valid JWT, other `/api/**` and `/actuator/**` → `denyAll()`, then `GET /**` → `permitAll()` (the React build, ADR-002), anything else → `denyAll()`. `bearerTokenResolver` returns `null` on `/api/v1/auth/**` and `/api/v1/calendar/**`, so an old token can't make login/register or the public calendar feed fail with 401 (#116, `20-auth-ignores-old-token.md`, `53-calendar-feed-security-rule.md`). `JwtDecoder` and `JwtEncoder` share one HS256 key from `app.jwt.secret` (≥ 32 bytes); defining the decoder also stops Boot from creating a default user with a random password. Since #117 the converter (`activeUserFromToken`) looks the user up through `UserApi.findActiveRole` on every request: missing or disabled → 401, role from the database with the `ROLE_` prefix (`ObjectProvider`, so `@WebMvcTest` slices without `UserApi` still start; `22-token-account-check.md`). `PasswordEncoder` = delegating encoder (`{bcrypt}` hashes). 401/403 go to `SecurityErrorHandler` (wired on both the resource server and `exceptionHandling`). |
 | `SecurityErrorHandler` | Implements `AuthenticationEntryPoint` (401 `UNAUTHORIZED`), `AccessDeniedHandler` (403 `FORBIDDEN`) and `RequestRejectedHandler` (400 `REQUEST_REJECTED` for URLs the firewall blocks; a `@Bean` in `SecurityConfig`, because Spring finds it by type, `21-firewall-error-json.md`), writing `ProblemDetail`-shaped JSON (`application/problem+json`) with Boot's Jackson 3 `JsonMapper`. Needed because filter errors never reach Liviu's `@RestControllerAdvice`. Created with `new` in `SecurityConfig`, so `@WebMvcTest` + `@Import(SecurityConfig.class)` still works. |
 | `AsyncConfig` | `@EnableAsync` + `@EnableScheduling` (both off by default). A `@Profile("test")` `SyncTaskExecutor` bean makes `@Async` run on the caller's thread in tests, and replaces Boot's pool there. |
 | `SpaConfig` | `WebMvcConfigurer` registering `/**` → `classpath:/static/` (replaces Boot's default handler for that pattern) with a `PathResourceResolver` subclass: existing file → the file; path starting `api/` or containing a dot → `null` (404); else `index.html` if present. Resource handlers run only after no controller matched. In dev `static/` is empty, so it changes nothing. Details in `19-dockerfile.md`. |
@@ -331,6 +351,15 @@ campus-hub/
 | `UserService` | `@Service` implementing `UserApi`, so other modules get it when they inject `UserApi`. `getById` maps `User` → `UserSummary` inside a `@Transactional(readOnly = true)` method (open-in-view is off) and throws `NotFoundException("USER_NOT_FOUND", …)`; `exists` = `existsById`. Details in `11-user-service.md`. `me()` (not on `UserApi`, only for the controller) takes the id from the injected `CurrentUser` and returns a `UserResponse`, else `USER_NOT_FOUND`. Details in `17-users-me.md`. |
 | `UserController` | `GET /api/v1/users/me` → `userService.me()`. No parameters at all: the id can only come from the token. Protected by the `/api/v1/**` rule (401 without a token). |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
+
+### Backend: pickup pass (`51-pickup-pass-backend.md`)
+| File | What it does |
+|---|---|
+| `PickupCodes` | Package-private, no Spring: `code(userId, step)` = HMAC-SHA256 over `"pickup-v1|userId|step"`, first 4 bytes as a non-negative int, `% 1_000_000`, zero-padded. Also `timeStep`, `validForSeconds`, `qrText`. A new `Mac` per call (not thread-safe). |
+| `PickupPassService` | `@Service`; key from `app.jwt.secret`; "now" from the shared `Clock`. `verify` is `@Transactional`: enabled-user lookup, current and previous step compared with `MessageDigest.isEqual`, one `PICKUP_CODE_INVALID` (409) for every failure, audit row on success. |
+| `PickupPassController` / `AdminPickupPassController` | `GET /api/v1/users/me/pickup-pass` (any token) and `POST /api/v1/admin/pickup-pass/verify` (`/api/v1/admin/**` rule gives 403 to students). Records only, no entity. |
+| `VerifyPickupPassRequest` | `@NotNull Long userId`, `@NotNull @Pattern("\d{6}") String code`: the pattern also protects the service from a `null` code. |
+| Tests | `PickupCodesTest` (9), `PickupPassServiceTest` (12, fixed `Clock`), `PickupPassControllerTest` (3) and `AdminPickupPassControllerTest` (7) with `@WebMvcTest` + `@Import(SecurityConfig.class)` + `jwt()`. |
 
 ### Prototype mockup
 | File | Key points |
@@ -406,7 +435,7 @@ campus-hub/
 | Test | What it proves |
 |---|---|
 | `CampusHubApplicationTests` | `@SpringBootTest`: the whole app starts, connects to PostgreSQL and runs Flyway. |
-| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. `@Transactional`; each token belongs to a real user saved by the test (rolled back). With real tokens signed by our `JwtEncoder`: a disabled or deleted user gets 401, a token claiming ADMIN for a student gets 403; a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 on other `/api` paths and on a `POST` outside the API; a broken token on `/api/v1/auth/ping` is ignored (200); `/api/v1/auth/ping;x=1` (blocked by the firewall) → 400 `REQUEST_REJECTED` JSON. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
+| `SecurityConfigTest` | `@SpringBootTest` + MockMvc: health and Swagger return 200; a made-up probe path (`/api/v1/_security-probe`, so teammates' real endpoints can't change the result) without a token, or with a fake one, returns 401 with `code = UNAUTHORIZED` JSON. `@Transactional`; each token belongs to a real user saved by the test (rolled back). With real tokens signed by our `JwtEncoder`: a disabled or deleted user gets 401, a token claiming ADMIN for a student gets 403; a student gets 403 (`code = FORBIDDEN`) on `/api/v1/admin/_security-probe`, an admin gets through (404), any token gets 403 on other `/api` paths and on a `POST` outside the API; a broken token on `/api/v1/auth/ping` is ignored (200); `GET /api/v1/calendar/<43 chars>.ics` without a token or with a broken `Authorization` header gets through security (404 until mapped), while `POST` on the same path gets 401 (`53-calendar-feed-security-rule.md`); `/api/v1/auth/ping;x=1` (blocked by the firewall) → 400 `REQUEST_REJECTED` JSON. Also checks BCrypt hashes and the Swagger `bearerAuth` scheme. |
 | `SecurityPassIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back), real users and login tokens, asset + booking created through Liviu's and Calin's REST endpoints: student B gets 404 `RESERVATION_NOT_FOUND` on A's reservation (`GET`, `cancel`), same as for a missing id; B's `/me` lists are empty; `userId` / `reportedById` in the body are ignored. Every `/api/v1/admin/**` mapping read from `RequestMappingHandlerMapping` (16 on `main`) → student 403 `FORBIDDEN`, no token 401 `UNAUTHORIZED`. 9 error cases + a test-only endpoint throwing a `DataIntegrityViolationException` → ProblemDetail with `code`, no stack trace, class name or SQL. |
 | `DemoFlowIT` | `@SpringBootTest` + MockMvc, **not** `@Transactional` (Calin's `AFTER_COMMIT` listener needs a real commit; `@AfterAll` deletes the run's rows with `JdbcTemplate`). 10 `@Order`ed steps in one `PER_CLASS` instance: register + login → admin (inserted with SQL) creates category, lab room, 2 assets of one model → book A 201 → same slot 409 `RESERVATION_CONFLICT` → `/reservations/me` → `POST /incidents` (`HIGH`) 201 → asset A `UNDER_MAINTENANCE` → book A 409 `ASSET_NOT_BOOKABLE` → booking on B, `originalAssetId` A, `CONFIRMED` → `/admin/reassignments` entry `REASSIGNED`, `SameModelStrategy`. Each message names the step, owner and class + the response body; a failed step makes the later ones skip (`assumeTrue`). Booking day = next weekday from the app `Clock`. |
 | `OpenApiDocsIT` | `@SpringBootTest` + MockMvc: `GET /v3/api-docs`, Jackson 3 tree, `SoftAssertions` over every operation: non-blank summary; auth paths `security: []`, others inherit `bearerAuth` and list 401; admin paths list 403; every 4xx/5xx references `ProblemDetail`; no `*/*` success media type. 93 failures with the old config. |

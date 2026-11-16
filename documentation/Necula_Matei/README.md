@@ -72,6 +72,12 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 44 | [44-terraform-network.md](44-terraform-network.md) | Terraform part 1: state bucket, VPC, subnets and firewall (security groups) | #249 |
 | 45 | [45-terraform-data.md](45-terraform-data.md) | Terraform part 2: RDS (off until W7), photo bucket, ECR, server role, secrets in SSM | #250 |
 | 46 | [46-docker-os-patches.md](46-docker-os-patches.md) | First image in ECR; OS security updates in the Docker image (ECR scan found a critical zlib CVE) | #252 |
+| 47 | [47-login-hardening.md](47-login-hardening.md) | Login: passwords over 72 bytes get 401 (BCrypt cut them silently); no transaction held during BCrypt | #271 |
+| 48 | [48-project-search-fixes.md](48-project-search-fixes.md) | Projects: search no longer matches words that only share their first 5 letters ("multiplexer" ≠ "multimeter"); `ProjectService` clean-up | #272 |
+| 49 | [49-project-details-error-fix.md](49-project-details-error-fix.md) | Project details: error cleared after a good reload, campus clock read when needed | #273 |
+| 50 | [50-docs-check.md](50-docs-check.md) | End-of-task docs rule (AGENTS.md §4) + `docs-check` CI job + Gemini/Copilot pointer files | #277, #279 |
+| 51 | [51-pickup-pass-backend.md](51-pickup-pass-backend.md) | Pickup pass (backend): a 6-digit code that changes every 30 s, shown by the student and checked by the admin at the desk | #283 |
+| 53 | [53-calendar-feed-security-rule.md](53-calendar-feed-security-rule.md) | Calendar feed (`SecurityConfig`): open `GET /api/v1/calendar/*` (`permitAll`) and ignore stale `Authorization` headers on `/api/v1/calendar/**` for Calin's `.ics` feed | #295 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done

@@ -96,11 +96,10 @@ class ReservationServiceRulesTest {
     }
 
     @Test
-    void findBusyAssetIdsAsksForActiveReservationsOnly() {
+    void findBusyAssetIdsDelegatesToRepository() {
         LocalDateTime start = now.plusHours(4);
         LocalDateTime end = now.plusHours(6);
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(ASSET_ID, OTHER_ASSET_ID));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(ASSET_ID, OTHER_ASSET_ID));
 
         assertThat(reservationService.findBusyAssetIds(start, end)).containsExactly(ASSET_ID, OTHER_ASSET_ID);
     }
@@ -108,6 +107,7 @@ class ReservationServiceRulesTest {
     @Test
     void unknownReservationIsNotFoundForGetByIdAndReturn() {
         when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.getById(999L))
                 .isInstanceOf(NotFoundException.class)
@@ -153,6 +153,7 @@ class ReservationServiceRulesTest {
     @Test
     void movingAnUnknownOrNotConfirmedReservationDoesNothing() {
         when(reservationRepository.findById(777L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(777L)).thenReturn(Optional.empty());
 
         assertThat(reservationService.moveToAsset(777L, OTHER_ASSET_ID, "reason"))
                 .isFalse();
@@ -165,6 +166,7 @@ class ReservationServiceRulesTest {
     void noShowAndOverdueSkipReservationsInTheWrongStatus() {
         Reservation confirmed = reservation(1L, now.plusHours(1), now.plusHours(2));
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(confirmed));
 
         // A CONFIRMED booking was never checked out, so it can't become OVERDUE.
         assertThat(reservationService.markOverdue(1L)).isFalse();
@@ -190,12 +192,7 @@ class ReservationServiceRulesTest {
         Reservation confirmed = reservation(3L, now.plusHours(4), now.plusHours(6));
         when(reservationRepository.findById(3L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(OTHER_ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        OTHER_ASSET_ID,
-                        confirmed.getStartTime(),
-                        confirmed.getEndTime(),
-                        ReservationStatus.ACTIVE_STATUSES,
-                        3L))
+        when(reservationRepository.existsOverlap(OTHER_ASSET_ID, confirmed.getStartTime(), confirmed.getEndTime(), 3L))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> reservationService.moveToAsset(3L, OTHER_ASSET_ID, "reason"))
@@ -206,7 +203,7 @@ class ReservationServiceRulesTest {
     void checkOutSucceedsWhenTheAssetHolderIsTheSameReservation() {
         Reservation confirmed = reservation(4L, now, now.plusHours(2));
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(4L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
                 .thenReturn(Optional.of(confirmed));

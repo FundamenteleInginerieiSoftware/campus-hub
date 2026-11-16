@@ -55,7 +55,7 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 | 2026-10-06 | Asset status is operational only: `AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED` | ✅ | "Free at a time" is computed from reservations |
 | 2026-10-06 | Assets are never hard-deleted, only retired | ✅ | |
 | 2026-11-07 | A reassigned reservation stays `CONFIRMED` (+ `original_asset_id`, `reassignment_log`) instead of a new status | ✅ | Implemented by Calin; moves are audited in `reassignment_log` and flagged in the UI |
-| – | Retired asset future bookings: automatically reassigned using Calin's engine (Strategy pattern), with fallback to force-cancel | 🟡 | Proposed for W7. Liviu: AssetService would publish AssetRetiredEvent, and a migration will make reassignment_log.incident_id nullable. Liviu + team to confirm |
+| – | Retired asset future bookings: automatically reassigned using Calin's engine (Strategy pattern), with fallback to force-cancel | 🟡 | Agreed by Liviu & Calin in #245 (`AssetRetiredEvent` + nullable `reassignment_log.incident_id`); awaiting Stefania/Matei confirmation at next meeting |
 | – | Time types: `LocalDateTime` = campus local time (Europe/Bucharest) for reservation slots, `Instant` for audit/event timestamps | 🟡 | Superseded for table columns on 2026-10-21 (row above). `Instant` stays only in event payloads (`AssetDamagedEvent.occurredAt`): confirm |
 
 ## 5. Business rules (numbers)
@@ -89,3 +89,4 @@ All 🟡: proposed in the plan, **confirm at the next meeting** (Calin leads).
 | 2026-10-21 | W1 = week of **5 Oct 2026**; we are in **W3** and about one week behind (restart) | 🟡 | Confirm real dates and the defense date; W11–12 hit the Christmas holidays |
 | 2026-10-21 | Shared foundations first: Calin's `Clock` (early W3), Liviu's exceptions + handler + `PageResponse` + stubs (mid-W3), Stefania's `CurrentUser` (mid-W3), Matei's login/JWT (end of W3) | ✅ | Small separate PRs, reviewed the same day |
 | – | Milestones: M1 end of W6 (`v0.1.0`), M2 end of W9 (`v0.2.0`), feature freeze start of W10 | 🟡 | Move by one week if needed after the restart |
+| 2026-11-16 | **Four new features, one per member**: pickup pass (Matei), calendar feed (Calin), live notifications (Liviu), equipment reliability (Stefania) | ✅ | Specs + plans in `docs/superpowers/`; issues #289, #290, #291. Done before the feature freeze (7 Dec); cut lines per feature if a teammate's part is not on `main` by 30 Nov (`docs/whats-left.md` §7a) |

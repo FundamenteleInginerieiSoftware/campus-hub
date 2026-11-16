@@ -160,6 +160,25 @@ class AdminAuditLogControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    @DisplayName(
+            "GET /api/v1/admin/audit-logs returns 400 INVALID_PARAMETER when timestamp contains timezone offset (Z or numeric)")
+    void getAuditLogsRejectsTimezoneOffset() throws Exception {
+        // AGENTS.md §5 & Issue #241: ISO-8601 local times without offset only; Z and +05:00 must be rejected
+        mockMvc.perform(get("/api/v1/admin/audit-logs").param("from", "2026-11-09T20:09:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+                .andExpect(jsonPath("$.detail").value("Invalid value for parameter 'from'"));
+
+        mockMvc.perform(get("/api/v1/admin/audit-logs").param("to", "2026-11-09T20:09:00+05:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+                .andExpect(jsonPath("$.detail").value("Invalid value for parameter 'to'"));
+
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     @DisplayName("GET /api/v1/admin/audit-logs converts InvalidParameterException into 400 ProblemDetail")
     void getAuditLogsInvalidParameterHandledByGlobalExceptionHandler() throws Exception {
         when(auditService.search(any(), any(), any(), any(), any(), any(), anyInt(), anyInt(), any()))

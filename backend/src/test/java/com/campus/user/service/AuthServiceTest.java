@@ -147,6 +147,29 @@ class AuthServiceTest {
         assertInvalidCredentials(new LoginRequest("old@campus.test", "password"));
     }
 
+    // Rule: a password over 72 bytes is just a wrong password (401), never a 500 from BCrypt; see AuthService.login.
+    @Test
+    void loginRejectsPasswordOver72BytesWithTheSameError() {
+        User user = withId(
+                new User("student1@campus.test", passwordEncoder.encode("password"), "S", Role.STUDENT, now()), 2L);
+        when(userRepository.findByEmailIgnoreCase("student1@campus.test")).thenReturn(Optional.of(user));
+        // 37 x "ș" = 74 bytes but only 37 characters, so a character count would not catch it.
+        String tooLong = "ș".repeat(37);
+
+        assertInvalidCredentials(new LoginRequest("student1@campus.test", tooLong));
+    }
+
+    // BCrypt only reads the first 72 bytes: without the length check, the real password plus any tail would log in.
+    @Test
+    void loginRejectsRealPasswordWithExtraBytesAfter72() {
+        String real = "a".repeat(72);
+        User user =
+                withId(new User("student1@campus.test", passwordEncoder.encode(real), "S", Role.STUDENT, now()), 2L);
+        when(userRepository.findByEmailIgnoreCase("student1@campus.test")).thenReturn(Optional.of(user));
+
+        assertInvalidCredentials(new LoginRequest("student1@campus.test", real + "extra"));
+    }
+
     private void assertInvalidCredentials(LoginRequest request) {
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(UnauthorizedException.class)

@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-09-project-assistant-design.md`
 
+> **Note (10 Nov 2026, #272):** this plan is kept as written. Since #272 the prefix rule also needs the shared start to cover the shorter word except its last 2 letters (`MAX_ENDING = 2`), and "proiect"/"project" are stop words. The current rule is in doc 48 and the spec.
+
 ## Global Constraints
 
 - Base package `com.campus.project`; packages `domain`, `service`, `web` only (no `api`, no `repository`).

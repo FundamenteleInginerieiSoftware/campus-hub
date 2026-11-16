@@ -34,13 +34,14 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**. "Refused" s
 | 1 | `/api/v1/auth/**` (ping, register, login) | public; the `Authorization` header is **not read** here, so an old or broken token never blocks login (#116) | – |
 | 2 | `/actuator/health/**`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html` | public (health check, Swagger UI) | – |
 | 3 | `/error` | public: Spring forwards failures here; protecting it would turn a 404 into a 401 | – |
-| 4 | `/api/v1/admin/**` | role `ADMIN`. Must stay above rule 5, or rule 5 would let students in | `401 UNAUTHORIZED` · student: `403 FORBIDDEN` |
-| 5 | `/api/v1/**` | any logged-in, active user (`STUDENT` or `ADMIN`) | `401 UNAUTHORIZED` |
-| 6 | `/api/**`, `/actuator/**` (other API versions, every actuator endpoint except health) | denied, even for an admin. Must stay above rule 7 | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
-| 7 | `GET /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
-| 8 | anything else (e.g. `POST /something-else`) | denied: a path nobody listed fails closed | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
+| 4 | `/api/v1/admin/**` | role `ADMIN`. Must stay above rule 6, or rule 6 would let students in | `401 UNAUTHORIZED` · student: `403 FORBIDDEN` |
+| 5 | `GET /api/v1/calendar/*` (Calin's `.ics` calendar feed) | public (`permitAll`): the 256-bit secret token in the path is the credential, because calendar apps cannot send our JWT header; the `Authorization` header is **not read** on `/api/v1/calendar/**`. Other HTTP methods fall through to rule 6 | – |
+| 6 | `/api/v1/**` | any logged-in, active user (`STUDENT` or `ADMIN`) | `401 UNAUTHORIZED` |
+| 7 | `/api/**`, `/actuator/**` (other API versions, every actuator endpoint except health) | denied, even for an admin. Must stay above rule 8 | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
+| 8 | `GET /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
+| 9 | anything else (e.g. `POST /something-else`) | denied: a path nobody listed fails closed | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
 
-Checks that run **before** the rules above (the token checks only when a token is sent, on every path except `/api/v1/auth/**`):
+Checks that run **before** the rules above (the token checks only when a token is sent, on every path except `/api/v1/auth/**` and `/api/v1/calendar/**`):
 
 | Check | Result |
 |---|---|
@@ -195,6 +196,10 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 `PROJECT_NOT_FOUND` 404 · `PROJECT_COMPONENT_UNAVAILABLE` 409 (+ `VALIDATION_FAILED` 400, `INVALID_PARAMETER` 400, `MALFORMED_REQUEST` 400 above; `POST /projects/{slug}/reserve` also passes on the Reservations codes from `bookBundle`)
 
+### Pickup pass (Matei)
+
+`PICKUP_CODE_INVALID` 409 (wrong or expired code, unknown user, disabled user: one answer for all four) (+ `VALIDATION_FAILED` 400 above)
+
 Owners: check the status codes above when you implement them, and fix this list if yours differ.
 
 ---
@@ -258,14 +263,14 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 
 | Method & path | Access | Request body | Response | Status & errors |
 |---|---|---|---|---|
-| `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` | `201` + `ReservationResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT` |
+| `POST /api/v1/reservations` | Logged in | `CreateReservationRequest` (optional `Idempotency-Key` header) | `201` + `ReservationResponse` (cached replay returns `Idempotency-Replayed: true`) | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `400 INVALID_IDEMPOTENCY_KEY`, `400 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 RESERVATION_LIMIT_REACHED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 CONCURRENT_IDEMPOTENT_REQUEST` |
 | `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED` (accepts optional `status` filter, supporting single or multiple statuses e.g. `status=CONFIRMED&status=CHECKED_OUT`) |
 | `GET /api/v1/reservations/me/summary` | Logged in | – | `200` + `ReservationSummaryResponse` | `401 UNAUTHORIZED` |
-| `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` (for single-asset checks, if `available` is `false`, `availableAssetIds` lists free same-model substitute IDs sorted same-room first) |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 
-| `POST /api/v1/reservations/bundle` | Logged in | `CreateMultiAssetReservationRequest` | `201` + `MultiAssetReservationResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `404 ASSET_NOT_FOUND`, `409 RESERVATION_CONFLICT`, `409 SLOT_HELD`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_LIMIT_REACHED`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` |
+| `POST /api/v1/reservations/bundle` | Logged in | `CreateMultiAssetReservationRequest` (optional `Idempotency-Key` header) | `201` + `MultiAssetReservationResponse` (cached replay returns `Idempotency-Replayed: true`) | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `400 INVALID_IDEMPOTENCY_KEY`, `400 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`, `404 ASSET_NOT_FOUND`, `409 RESERVATION_CONFLICT`, `409 SLOT_HELD`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_LIMIT_REACHED`, `409 INVALID_TIME_RANGE`, `409 INVALID_DURATION`, `409 SLOT_NOT_ALIGNED`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD`, `409 CONCURRENT_IDEMPOTENT_REQUEST` |
 | `GET /api/v1/reservations/bundle/{bundleId}` | Owner or Admin | – | `200` + `MultiAssetReservationResponse` | `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
 | `POST /api/v1/reservations/bundle/{bundleId}/cancel` | Owner or Admin | optional `?reason=...` | `200` + `List<ReservationResponse>` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `404 BUNDLE_NOT_FOUND` |
 
@@ -284,6 +289,7 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 | `GET /api/v1/admin/reservations` | Admin | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` (optional filters `status`, `userId`, `assetId`, `date`, `page`, `size`, and `sortDir=asc\|desc`) |
 | `POST /api/v1/admin/reservations/{id}/check-out` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CHECKOUT_WINDOW_CLOSED`, `409 ASSET_NOT_BOOKABLE`, `409 RESERVATION_CONFLICT`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 | `POST /api/v1/admin/reservations/{id}/return` | Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
+| `POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming` | Admin | – | `200` + `BatchCancelResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 USER_NOT_FOUND` (optional query param `reason`, max 255 chars; cancels upcoming CONFIRMED bookings and auto-cancels pending transfer offers) |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 
@@ -486,6 +492,32 @@ Query parameters:
 
 ---
 
+### Pickup pass (Matei)
+
+A 6-digit code that changes every 30 seconds proves at the lab desk that the person owns the account (like a bank's authenticator app). Nothing is stored: the code is `HMAC-SHA256(app.jwt.secret, "pickup-v1|userId|timeStep")` cut to 6 digits. Verification is a separate step; check-out and return (Calin) do not require it.
+
+| Method & Path | Access | Request | Response | Errors |
+|---|---|---|---|---|
+| `GET /api/v1/users/me/pickup-pass` | any logged-in user | – | `200` `PickupPassResponse` | `401 UNAUTHORIZED` |
+| `POST /api/v1/admin/pickup-pass/verify` | `ADMIN` | `VerifyPickupPassRequest` | `200` `PickupPassVerifiedResponse` + audit row `PICKUP_PASS_VERIFIED` (actor = the admin, entity `USER`) | `400 VALIDATION_FAILED` (no `userId`, or `code` not exactly 6 digits), `401 UNAUTHORIZED`, `403 FORBIDDEN`, `409 PICKUP_CODE_INVALID` |
+
+`GET` response. `code` is a JSON **string** (leading zeros); `validForSeconds` counts down from 30 to 1:
+
+```json
+{ "code": "493027", "qrText": "campus-pickup:1:12:493027", "validForSeconds": 17 }
+```
+
+`POST` request and response. The current and the previous 30-second step are accepted, so a code is good for at most 60 seconds:
+
+```json
+{ "userId": 12, "code": "493027" }
+```
+```json
+{ "userId": 12, "fullName": "Ana Pop", "email": "ana@campus.test" }
+```
+
+`409 PICKUP_CODE_INVALID` ("The code is wrong or has expired") is the one answer for a wrong code, an old code, an unknown user and a disabled user, so the endpoint does not reveal which accounts exist.
+
 ### Catalog endpoints — Categories & Lab Rooms (Liviu)
 
 All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/**` endpoints require `ADMIN` (`403 FORBIDDEN` for `STUDENT`).
@@ -518,9 +550,9 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 | Method & Path | Access | Response | Errors |
 |---|---|---|---|
 | `GET /api/v1/assets` | `STUDENT`, `ADMIN` | `200` `PageResponse<AssetResponse>` | `400 INVALID_PARAMETER` |
-| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
+| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` (retired assets return 404 for students) |
 | `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
-| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
+| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` / `STALE_VERSION` (optional `version`; when sent, mismatch gives 409) |
 | `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
 
 `GET /api/v1/assets` optional query parameters:
@@ -554,6 +586,7 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "labRoomId": 1,
   "labRoomCode": "EC105",
   "labRoomName": "Electronics Lab",
+  "version": 0,
   "createdAt": "2026-10-29T12:00:00",
   "updatedAt": "2026-10-29T12:00:00"
 }
@@ -574,8 +607,8 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 - `action`: machine-readable action code, e.g. `ASSET_RETIRED`, `USER_DISABLED` (case-insensitive)
 - `entityType`: target domain type, e.g. `ASSET`, `USER`, `INCIDENT`, `RESERVATION` (case-insensitive)
 - `entityId`: ID of the affected entity (numeric)
-- `from`: start timestamp filter (ISO-8601, e.g. `2026-11-01T00:00:00`, inclusive)
-- `to`: end timestamp filter (ISO-8601, e.g. `2026-11-08T23:59:59`, inclusive; rejected if `from > to`)
+- `from`: start timestamp filter (ISO-8601 local time without offset, e.g. `2026-11-01T00:00:00`, inclusive; timezone offsets like `Z` or `+05:00` rejected with `400 INVALID_PARAMETER`)
+- `to`: end timestamp filter (ISO-8601 local time without offset, e.g. `2026-11-08T23:59:59`, inclusive; timezone offsets rejected with `400 INVALID_PARAMETER`; rejected if `from > to`)
 - `page`: zero-based page index (default `0`, `>= 0`)
 - `size`: page size (default `20`, `1..100`)
 - `sort`: sort property and direction (default `createdAt,desc`; whitelisted fields: `createdAt`, `id`, `action`, `entityType`, `actorId`, `entityId`, direction `asc` or `desc`; deterministic secondary tie-breaking on `id`)
@@ -591,4 +624,24 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "details": "Retired damaged multimeter",
   "createdAt": "2026-11-08T10:00:00"
 }
+```
+
+---
+
+### Calendar feed (Calin)
+
+Authenticated settings endpoints for the logged-in user's private iCalendar subscription link (the user ID comes from `CurrentUser.id()`). Only the SHA-256 hash of the 32-byte random token is persisted in `calendar_feeds`, so the full path is returned once on creation.
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/reservations/me/calendar-feed` | any logged-in user | `200` `CalendarFeedStatusResponse` (`{ "enabled": boolean }`) | `401 UNAUTHORIZED` |
+| `POST /api/v1/reservations/me/calendar-feed` | any logged-in user | `201` `CalendarFeedCreatedResponse` (`{ "path": "/api/v1/calendar/<token>.ics" }`); replaces any existing link and writes audit `CALENDAR_FEED_CREATED` (entity `USER`) | `401 UNAUTHORIZED` |
+| `DELETE /api/v1/reservations/me/calendar-feed` | any logged-in user | `204` No Content (idempotent when no link exists); writes audit `CALENDAR_FEED_REVOKED` (entity `USER`) only when a link existed | `401 UNAUTHORIZED` |
+
+```json
+// CalendarFeedStatusResponse (GET /api/v1/reservations/me/calendar-feed)
+{ "enabled": true }
+
+// CalendarFeedCreatedResponse (POST /api/v1/reservations/me/calendar-feed)
+{ "path": "/api/v1/calendar/aB3dEf...43chars...XyZ.ics" }
 ```

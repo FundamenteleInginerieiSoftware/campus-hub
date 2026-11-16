@@ -33,19 +33,7 @@ import { useAuth } from '../auth/useAuth.ts'
 import { getAsset, retireAsset, type Asset, type AssetStatus } from '../api/catalog.ts'
 import CalendarBookingView from '../components/CalendarBookingView.tsx'
 import ErrorAlert from '../components/ErrorAlert.tsx'
-
-function statusBadgeColor(status: AssetStatus): string {
-  switch (status) {
-    case 'AVAILABLE':
-      return 'teal'
-    case 'UNDER_MAINTENANCE':
-      return 'yellow'
-    case 'RETIRED':
-      return 'gray'
-    default:
-      return 'blue'
-  }
-}
+import { statusBadgeColor } from './catalog/assetStatus.ts'
 
 function statusLabel(status: AssetStatus): string {
   switch (status) {
@@ -80,17 +68,30 @@ export default function AssetDetailsPage() {
     if (assetId === null) return
 
     let active = true
+
+    // Bug fixed (#268): reset loading and error on assetId change to prevent flashing previous asset details.
+    // Microtask avoids React cascading render / linter warnings when updating state inside an effect.
+    void Promise.resolve().then(() => {
+      if (active) {
+        setLoading(true)
+        setError(null)
+      }
+    })
+
     getAsset(assetId)
       .then((data) => {
         if (active) {
           setAsset(data)
           setError(null)
-          setLoading(false)
         }
       })
       .catch((err) => {
         if (active) {
           setError(err)
+        }
+      })
+      .finally(() => {
+        if (active) {
           setLoading(false)
         }
       })

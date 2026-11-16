@@ -66,6 +66,12 @@ public class SecurityConfig {
                         // and let students in.
                         .requestMatchers("/api/v1/admin/**")
                         .hasRole("ADMIN")
+                        // Calin's CalendarFeedController: calendar apps (Google, Apple, Outlook) fetch the
+                        // .ics feed by URL and cannot send our JWT header, so the 256-bit secret token in the
+                        // path is the credential. Only GET is open; other methods still fall through to
+                        // "/api/v1/**" below and require a login.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/calendar/*")
+                        .permitAll()
                         .requestMatchers("/api/v1/**")
                         .authenticated()
                         // Other API paths and actuator endpoints stay closed. This must stay above
@@ -140,12 +146,14 @@ public class SecurityConfig {
     // Bug fixed (#116): login and register answered 401 when the browser still sent an old token.
     // The token filter runs before the permitAll() rules and rejects any invalid token it finds, and
     // Stefania's API client sends the saved token on every call, so an expired one blocked the login
-    // that would replace it. Fix: on /api/v1/auth/** don't read the header at all (these paths need
-    // no token); everywhere else read it as before.
+    // that would replace it. Fix: on /api/v1/auth/** and /api/v1/calendar/** (Calin's secret-token
+    // calendar feed, which a browser with a stale session may also open directly) don't read the
+    // header at all; everywhere else read it as before.
     private static BearerTokenResolver ignoreTokenOnAuthPaths() {
         RequestMatcher authPaths = PathPatternRequestMatcher.withDefaults().matcher("/api/v1/auth/**");
+        RequestMatcher calendarPaths = PathPatternRequestMatcher.withDefaults().matcher("/api/v1/calendar/**");
         DefaultBearerTokenResolver header = new DefaultBearerTokenResolver();
-        return request -> authPaths.matches(request) ? null : header.resolve(request);
+        return request -> authPaths.matches(request) || calendarPaths.matches(request) ? null : header.resolve(request);
     }
 
     // Turns a valid token into the logged-in user. Runs after the signature and expiry checks.
