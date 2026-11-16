@@ -192,6 +192,7 @@ export default function AdminInventoryPage() {
           description: assetFormDescription.trim() || undefined,
           categoryId: Number(assetFormCategoryId),
           labRoomId: Number(assetFormLabRoomId),
+          version: editingAsset.version,
         })
       } else {
         await createAsset({
