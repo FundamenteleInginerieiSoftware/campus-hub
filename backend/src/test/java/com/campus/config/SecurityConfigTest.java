@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -43,6 +44,8 @@ class SecurityConfigTest {
     // Fix: probe paths that no controller will ever map, so 404 always means "security let it through".
     private static final String PROBE = "/api/v1/_security-probe";
     private static final String ADMIN_PROBE = "/api/v1/admin/_security-probe";
+    private static final String CALENDAR_FEED_PROBE =
+            "/api/v1/calendar/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.ics";
 
     @Autowired
     MockMvc mockMvc;
@@ -104,6 +107,49 @@ class SecurityConfigTest {
     void authEndpointsIgnoreAnInvalidToken() throws Exception {
         mockMvc.perform(get("/api/v1/auth/ping").header("Authorization", "Bearer expired-or-broken"))
                 .andExpect(status().isOk());
+    }
+
+    // Calin's calendar feed carries a 256-bit secret token in the URL because calendar apps cannot
+    // send our JWT header. Until CalendarFeedController is mapped, 404 proves security let GET through.
+    @Test
+    void calendarFeedIsPublic() throws Exception {
+        MockHttpServletResponse response =
+                mockMvc.perform(get(CALENDAR_FEED_PROBE)).andReturn().getResponse();
+
+        assertThat(response.getStatus())
+                .as(
+                        "GET /api/v1/calendar/*.ics is open without a JWT (404 until mapped); see SecurityConfig.apiChain; body: %s",
+                        response.getContentAsString())
+                .isEqualTo(404);
+    }
+
+    @Test
+    void calendarFeedIgnoresStaleToken() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(
+                        get(CALENDAR_FEED_PROBE).header("Authorization", "Bearer not-a-jwt"))
+                .andReturn()
+                .getResponse();
+
+        assertThat(response.getStatus())
+                .as(
+                        "an expired or broken Authorization header must not turn the public calendar feed into 401; see SecurityConfig.ignoreTokenOnAuthPaths; body: %s",
+                        response.getContentAsString())
+                .isEqualTo(404);
+    }
+
+    @Test
+    void postOnCalendarPathStillNeedsLogin() throws Exception {
+        MockHttpServletResponse response =
+                mockMvc.perform(post(CALENDAR_FEED_PROBE)).andReturn().getResponse();
+
+        assertThat(response.getStatus())
+                .as(
+                        "only GET is open on /api/v1/calendar/*, so POST without a token is 401; see SecurityConfig.apiChain; body: %s",
+                        response.getContentAsString())
+                .isEqualTo(401);
+        assertThat(response.getContentAsString())
+                .as("the 401 carries ProblemDetail code UNAUTHORIZED; see SecurityErrorHandler")
+                .contains("\"code\":\"UNAUTHORIZED\"");
     }
 
     @Test
