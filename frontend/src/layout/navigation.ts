@@ -4,6 +4,7 @@ import {
   IconBox,
   IconBulb,
   IconCalendarEvent,
+  IconCalendarShare,
   IconClipboardList,
   IconHistory,
   IconLayoutGrid,
@@ -28,6 +29,7 @@ const STUDENT_MENU: NavGroup[] = [
     title: 'Mine',
     items: [
       { label: 'My reservations', path: '/reservations', icon: IconCalendarEvent },
+      { label: 'Calendar sync', path: '/calendar-sync', icon: IconCalendarShare },
       { label: 'My incidents', path: '/incidents', icon: IconAlertTriangle },
     ],
   },

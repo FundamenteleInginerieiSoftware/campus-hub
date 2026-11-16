@@ -4,6 +4,7 @@ import RequireAuth from './auth/RequireAuth.tsx'
 import AppLayout from './layout/AppLayout.tsx'
 import AdminInventoryPage from './pages/AdminInventoryPage.tsx'
 import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
+import CalendarSyncPage from './pages/CalendarSyncPage.tsx'
 import CatalogPage from './pages/CatalogPage.tsx'
 import IncidentQueuePage from './pages/IncidentQueuePage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="catalog/:id" element={<AssetDetailsPage />} />
         <Route path="reservations" element={<MyReservationsPage />} />
+        <Route path="calendar-sync" element={<CalendarSyncPage />} />
         <Route path="incidents" element={<MyIncidentsPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:slug" element={<ProjectDetailsPage />} />
