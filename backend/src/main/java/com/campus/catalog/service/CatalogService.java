@@ -29,10 +29,7 @@ public class CatalogService implements CatalogApi {
     @Override
     @Transactional(readOnly = true)
     public AssetSummary getAsset(Long assetId) {
-        Asset asset = assetRepository
-                .findById(assetId)
-                .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
-        return toSummary(asset);
+        return toSummary(findOrThrow(assetId));
     }
 
     @Override
@@ -65,25 +62,31 @@ public class CatalogService implements CatalogApi {
     @Override
     @Transactional
     public void markUnderMaintenance(Long assetId) {
-        Asset asset = assetRepository
-                .findByIdForUpdate(assetId)
-                .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
+        Asset asset = findForUpdateOrThrow(assetId);
         asset.markUnderMaintenance(LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
     }
 
     @Override
     @Transactional
     public void markAvailable(Long assetId) {
-        Asset asset = assetRepository
-                .findByIdForUpdate(assetId)
-                .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
+        Asset asset = findForUpdateOrThrow(assetId);
         asset.markAvailable(LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
     }
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void lockForBooking(Long assetId) {
-        assetRepository
+        findForUpdateOrThrow(assetId);
+    }
+
+    private Asset findOrThrow(Long assetId) {
+        return assetRepository
+                .findById(assetId)
+                .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
+    }
+
+    private Asset findForUpdateOrThrow(Long assetId) {
+        return assetRepository
                 .findByIdForUpdate(assetId)
                 .orElseThrow(() -> new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found"));
     }

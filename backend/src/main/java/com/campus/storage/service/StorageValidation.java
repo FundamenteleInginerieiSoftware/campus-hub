@@ -12,8 +12,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Shared validation rules for {@link LocalStorageService} and Matei's future
- * {@code S3StorageService} so dev disk storage and AWS S3 enforce identical security checks (#71).
+ * Shared validation rules for {@link LocalStorageService} and {@link S3StorageService} so dev
+ * disk storage and AWS S3 enforce identical security checks.
  */
 public final class StorageValidation {
 
