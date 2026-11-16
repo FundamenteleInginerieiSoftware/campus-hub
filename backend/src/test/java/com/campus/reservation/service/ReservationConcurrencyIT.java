@@ -7,6 +7,7 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.CreateReservationRequest;
+import com.campus.reservation.web.ExtendReservationRequest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -47,6 +48,7 @@ class ReservationConcurrencyIT {
     private static final Long ASSET_ID_3 = 603L;
     private static final Long USER_1_ID = 101L;
     private static final Long USER_2_ID = 102L;
+    private static final Long ADMIN_ID = 103L;
 
     @Autowired
     private ReservationService reservationService;
@@ -71,7 +73,8 @@ class ReservationConcurrencyIT {
         jdbcTemplate.update("""
             INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
             VALUES (101, 'student101@campus.test', '{bcrypt}hash', 'Student 101', 'STUDENT', true, NOW()),
-                   (102, 'student102@campus.test', '{bcrypt}hash', 'Student 102', 'STUDENT', true, NOW())
+                   (102, 'student102@campus.test', '{bcrypt}hash', 'Student 102', 'STUDENT', true, NOW()),
+                   (103, 'admin103@campus.test', '{bcrypt}hash', 'Admin 103', 'ADMIN', true, NOW())
             ON CONFLICT (id) DO NOTHING
             """);
 
@@ -99,11 +102,11 @@ class ReservationConcurrencyIT {
     @AfterEach
     void tearDown() {
         reservationRepository.deleteAll();
-        jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?)", USER_1_ID, USER_2_ID);
+        jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
         jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?, ?)", ASSET_ID, ASSET_ID_2, ASSET_ID_3);
         jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 600");
         jdbcTemplate.update("DELETE FROM categories WHERE id = 600");
-        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", USER_1_ID, USER_2_ID);
+        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
     }
 
     @Test
@@ -264,11 +267,92 @@ class ReservationConcurrencyIT {
         assertThat(activeCount).isEqualTo(2L);
     }
 
+    @Test
+    @DisplayName(
+            "Consistent lock ordering prevents deadlock between concurrent desk return and student extension (#270 review)")
+    void returnAndExtendConcurrentExecutionIsDeadlockFree() throws Exception {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 4, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 4, 12, 0);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 11, 3, 10, 0);
+
+        // Seed an active CHECKED_OUT reservation on ASSET_ID (valid for both return and extension)
+        Reservation r = new Reservation(USER_1_ID, ASSET_ID, start, end, createdAt);
+        r.checkOut(start);
+        Reservation created = reservationRepository.save(r);
+
+        Long reservationId = created.getId();
+        LocalDateTime extendedEnd = end.plusHours(1);
+
+        int threads = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch readyLatch = new CountDownLatch(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+
+        List<Throwable> unexpectedExceptions = new CopyOnWriteArrayList<>();
+        AtomicInteger returnSuccess = new AtomicInteger(0);
+        AtomicInteger extendSuccess = new AtomicInteger(0);
+        AtomicInteger extendRejected = new AtomicInteger(0);
+
+        Runnable returnTask = () -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                reservationService.returnReservation(reservationId);
+                returnSuccess.incrementAndGet();
+            } catch (Throwable t) {
+                unexpectedExceptions.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        };
+
+        Runnable extendTask = () -> {
+            setupSecurityContext(USER_1_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                reservationService.extendReservation(reservationId, new ExtendReservationRequest(extendedEnd));
+                extendSuccess.incrementAndGet();
+            } catch (com.campus.common.error.InvalidStateTransitionException ex) {
+                extendRejected.incrementAndGet();
+            } catch (Throwable t) {
+                unexpectedExceptions.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        };
+
+        try {
+            Future<?> f1 = executor.submit(returnTask);
+            Future<?> f2 = executor.submit(extendTask);
+
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+            startLatch.countDown();
+
+            f1.get(10, TimeUnit.SECONDS);
+            f2.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpectedExceptions).isEmpty();
+        assertThat(returnSuccess.get()).isEqualTo(1);
+        assertThat(extendSuccess.get() + extendRejected.get()).isEqualTo(1);
+
+        Reservation finalRes = reservationRepository.findById(reservationId).orElseThrow();
+        assertThat(finalRes.getStatus()).isEqualTo(ReservationStatus.RETURNED);
+    }
+
     private void setupSecurityContext(Long userId) {
+        setupSecurityContext(userId, "STUDENT");
+    }
+
+    private void setupSecurityContext(Long userId, String role) {
         Jwt jwt = Jwt.withTokenValue("mock-token")
                 .header("alg", "none")
                 .subject(String.valueOf(userId))
-                .claim("roles", List.of("ROLE_STUDENT"))
+                .claim("roles", List.of("ROLE_" + role))
                 .build();
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(new JwtAuthenticationToken(jwt));
