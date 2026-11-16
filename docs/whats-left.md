@@ -68,7 +68,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 
 | When | Task | Waits on |
 |---|---|---|
-| W6 | ~~**`CatalogSeeder`**~~ (✅ #193) | – |
+| W6 | ~~**`CatalogSeeder`**~~ (✅ #193) · ~~student-kit models seeded for Projects (#140)~~ (✅ #275) | – |
 | ~~W6~~ | ~~Catalog, asset details, admin inventory pages~~ (✅ #196) · ~~`docs/modules/common.md`~~ (✅ #197) · ~~Swagger error codes + PIT survivors~~ (✅ #220, closes #187) | – |
 | W6 | ~~Audit date filters~~ (✅ #244) · work through #268 (lost updates on edit, retired asset by id, duplicated paging checks) | – |
 | W7 | **Retire flow**: agree with Calin + Stefania what happens to a retired asset's future bookings (recommended: `AssetRetiredEvent`, handled by Calin's engine) | Team decision |
