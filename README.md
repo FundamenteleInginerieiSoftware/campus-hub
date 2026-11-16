@@ -42,7 +42,7 @@ npm run dev                        # sends every /api call on to :8080, so start
 
 **Dev accounts** (password `password` for all): `student1@campus.test`, `student2@campus.test`, `admin@campus.test`. On an empty database the app also creates demo equipment (categories, lab rooms, several assets of the same model) and a few bookings.
 
-**What works in the browser today:** login, **My reservations** with the booking calendar (students), the **Reservations desk** for pickups and returns (admin, `/admin/reservations`). The catalog, incident and inventory pages are still placeholders (open PRs); use Swagger for those.
+**What works in the browser today:** login and register; catalog + asset details with quick booking, **My reservations** with the booking calendar, **My incidents** + report form, **Projects** pages (students); admin inventory, incident queue, audit log and the **Reservations desk** for pickups and returns (admin).
 
 **5. Run the tests**
 
@@ -78,7 +78,7 @@ Reports after `build`: tests in `backend/build/reports/tests/test/index.html`, c
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (9 Nov 2026, week 6):** on `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the **Projects** feature (search, details, Reserve all), the Docker image, the S3/SES adapters and the **Terraform** for the AWS network, photo bucket, ECR and instance role (applied; EC2 and CloudFront come in W7). **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk, Projects pages. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (M1 is due 15 Nov). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
+> **Status (16 Nov 2026, week 7):** **M1 done: `v0.1.0` tagged on 11 Nov.** On `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the **Projects** feature (search, details, Reserve all), the backend of the **pickup pass** (rotating desk code), the Docker image, the S3/SES adapters and the **Terraform** for the AWS network, photo bucket, ECR and instance role (applied; EC2, CloudFront and RDS come with the W7 deploy). **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk, Projects pages. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (next: M2 `v0.2.0` by 6 Dec, everything also on AWS). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
 
 ---
 
@@ -247,7 +247,7 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 9 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
+What is on `main` and what is still in review, per member. **As of 16 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
 
 ### Matei Necula: cloud, security & auth
 
@@ -272,7 +272,7 @@ What is on `main` and what is still in review, per member. **As of 9 Nov 2026**;
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
 | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136, #144 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136, #144, #218, #237, #251 |
 | Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
 | No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
 | Old tokens ignored on the public `/api/v1/auth/**` endpoints | #126 |
@@ -292,9 +292,14 @@ What is on `main` and what is still in review, per member. **As of 9 Nov 2026**;
 | README quick start (run, open, test) at the top | #200 |
 | Projects feature (#140): design + plan; engine with bilingual search and free units per model (`GET /api/v1/projects`, `/projects/{slug}`); 10 projects; Projects pages; Reserve all; confirmation banner | #232, #236, #239, #238, #243, #248 |
 | Terraform part 1 (state bucket, VPC, subnets, security groups) and part 2 (photo bucket, ECR, instance role, SSM parameters; RDS off until W7), applied; first image pushed to ECR | #249, #250 |
-| Personal docs 01-45 + README index of them | #14 + each PR above, #137 |
+| Docker image with OS security updates; clean ECR scan noted | #252, #253 |
+| Login rejects passwords over 72 bytes; project search false hits and details page errors fixed | #271, #272, #273 |
+| End-of-task docs rule (AGENTS.md §4) + required `docs-check` CI job | #277, #279 |
+| Pickup pass backend: rotating 6-digit desk code, `/users/me/pickup-pass` + admin verify | #283 |
+| Public calendar feed path in `SecurityConfig` (for Calin's calendar feed) | #295 |
+| Personal docs 01-53 + README index of them | #14 + each PR above, #137 |
 
-**Next:** run the M1 flow and tag `v0.1.0`; W7 deploy: EC2 + Elastic IP + CloudFront, RDS on, verified SES sender, admin credentials in SSM; W8 `deploy.yml`. Full list: `docs/whats-left.md` §4.
+**Next:** W7 deploy: EC2 + Elastic IP + CloudFront, RDS on, verified SES sender, admin credentials in SSM; W8 `deploy.yml`. Pickup pass pages (#284, waits for Stefania's review) and QR scan (after Stefania adds the QR libraries). Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
