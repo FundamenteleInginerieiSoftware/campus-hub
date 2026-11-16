@@ -25,6 +25,7 @@ Every document has two parts:
 | 03 | [`03-frontend-foundation.md`](./03-frontend-foundation.md) | The React app everyone builds on | #84, #85, #86, #111 | Vite + React + TS + Mantine, `apiFetch`, `AuthProvider`, role-based routes, shared components, ADR-002 |
 | 04 | [`04-frontend-register-and-auth-fixes.md`](./04-frontend-register-and-auth-fixes.md) | Register page and login robustness | #107, #142, #145 | Register + auto-login, BCrypt 72-byte limit, keep the token when the backend restarts, unique React keys |
 | 05 | [`05-incident-triage-and-concurrency.md`](./05-incident-triage-and-concurrency.md) | Admin triage, My incidents, race fixes | #108 | State machine, row lock before the check, retired assets, IDOR 404, paging limits, 85 tests |
+| 06 | [`06-incident-severity.md`](./06-incident-severity.md) | Only serious incidents take equipment out of use | #263 (#229) | HIGH/CRITICAL vs LOW/MEDIUM, start repair as confirmation, one "keeps out of use" rule, max 3 open reports |
 
 ---
 

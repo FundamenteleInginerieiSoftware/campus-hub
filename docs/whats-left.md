@@ -105,7 +105,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 |---|---|---|
 | ~~W5~~ | ~~ADR-002 ✅~~ (#111) · ~~photo upload + view~~ (#210) · ~~start repair, reject~~ (#108) · ~~`GET /incidents/me`, `GET /incidents/{id}`~~ (#108) · ~~user admin endpoints~~ (#206) · ~~register page~~ (#107) | ✅ |
 | ~~W6~~ | ~~Report-incident form + My incidents page~~ (✅ #216) | – |
-| W6 | Merge **#263** (approved) · work through #269 (concurrency tests, `ci.yml` guards, small incident fixes) | – |
+| W6 | ~~Merge **#263**~~ (✅ #263: only HIGH/CRITICAL take the asset out of use, max 3 open reports, part 1 of #229) · **#229 part 2:** `UserDisabledEvent` so disabling a user cancels their upcoming bookings through #266 · work through #269 (concurrency tests, `ci.yml` guards, small incident fixes) | – |
 | W6 | Wire all M1 pages together · run the full M1 flow with the team · workload retro (re-split the frontend if it is behind) | Section 2 |
 | Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · two QR libraries in `package.json` for Matei's last pickup-pass PR | Section 7a |
 | W7 | **Incident details** page · ~~admin incident queue~~ (✅ #223) | – |
