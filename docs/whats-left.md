@@ -76,7 +76,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 |---|---|---|
 | W6 | ~~**`CatalogSeeder`**~~ (✅ #193) · ~~student-kit models seeded for Projects (#140)~~ (✅ #275) | – |
 | ~~W6~~ | ~~Catalog, asset details, admin inventory pages~~ (✅ #196) · ~~`docs/modules/common.md`~~ (✅ #197) · ~~Swagger error codes + PIT survivors~~ (✅ #220, closes #187) | – |
-| W6 | ~~Audit date filters~~ (✅ #244) · ~~#268 bugs: asset version on edit, retired asset by id, audit diffs, details flicker~~ (✅ #278) · ~~#268 backend cleanup (`PageRequests`, `CatalogPersistence`, `CatalogService.findOrThrow`, Javadoc)~~ (✅) · remaining #268 cleanup (frontend split, optional `category`/`labRoom` version) | – |
+| W6 | ~~Audit date filters~~ (✅ #244) · ~~#268 bugs: asset version on edit, retired asset by id, audit diffs, details flicker~~ (✅ #278) · ~~#268 backend cleanup (`PageRequests`, `CatalogPersistence`, `CatalogService.findOrThrow`, Javadoc)~~ (✅ #287) · remaining #268 cleanup (frontend split, optional `category`/`labRoom` version) | – |
 | W7 | **Retire flow**: agree with Calin + Stefania (✅ agreed in #245) · publish `AssetRetiredEvent` in `catalog.api` for reassignment flow (✅ #280) | Calin's listener in reassignment |
 | ~~W7–W8~~ | ~~`STALE_VERSION` test~~ (✅ #220) · ~~audit log endpoint + page~~ (✅ #217, #221) · ~~class + ER diagrams, report chapter~~ (✅ #222, keep them current) | – |
 | Proposed, not agreed | Build **live notifications** in your `notification` module (spec + plan `docs/superpowers/*/2026-11-10-live-notifications*`) · optional: add `PICKUP_PASS_VERIFIED` to the audit page's action filter (Matei's pickup pass) | Section 7a |
