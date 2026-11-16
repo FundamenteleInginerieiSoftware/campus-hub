@@ -23,6 +23,9 @@ public interface ReservationApi {
     boolean moveToAsset(Long reservationId, Long newAssetId, String reason);
     boolean forceCancel(Long reservationId, String reason);
     Optional<ReservationSummary> findCurrentCheckout(Long assetId);
+    UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end);
+    int cancelUpcomingReservationsForUser(Long userId, String reason);
+    Map<Long, Long> usedMinutesByAsset(LocalDateTime from, LocalDateTime to);
 }
 ```
 

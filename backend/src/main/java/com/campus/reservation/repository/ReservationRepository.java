@@ -149,4 +149,14 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
         """)
     List<Reservation> findByUserIdOverlappingRange(
             @Param("userId") Long userId, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    // Used by ReservationService.usedMinutesByAsset for Stefania's Equipment Reliability feature (#289).
+    // Returns only reservations that were physically picked up (checkedOutAt != null) and overlap [from, to].
+    @Query("""
+        select r from Reservation r
+        where r.checkedOutAt is not null
+          and r.checkedOutAt < :to
+          and (r.returnedAt is null or r.returnedAt > :from)
+        """)
+    List<Reservation> findCheckedOutOverlapping(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 }

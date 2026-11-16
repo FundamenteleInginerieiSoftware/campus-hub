@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -3730,5 +3731,200 @@ class ReservationServiceTest {
 
         verify(reservationRepository, never()).lockUserQuota(any());
         verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("usedMinutesByAsset: counts full minutes of a returned reservation inside [from, to]")
+    void usedMinutesByAsset_countsReturnedInsideWindow() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 1, 8, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 2, 10, 0);
+
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 1, 10, 0),
+                LocalDateTime.of(2026, 11, 1, 12, 0),
+                LocalDateTime.of(2026, 10, 31, 9, 0));
+        r.checkOut(LocalDateTime.of(2026, 11, 1, 10, 5));
+        r.returnItem(LocalDateTime.of(2026, 11, 1, 11, 50));
+
+        when(reservationRepository.findCheckedOutOverlapping(from, to)).thenReturn(List.of(r));
+
+        Map<Long, Long> result = reservationService.usedMinutesByAsset(from, to);
+
+        assertThat(result)
+                .as(
+                        "returned reservation inside window (10:05..11:50) must count 105 minutes; see ReservationService.usedMinutesByAsset")
+                .containsExactlyInAnyOrderEntriesOf(Map.of(ASSET_ID, 105L));
+    }
+
+    @Test
+    @DisplayName("usedMinutesByAsset: clips returned reservations extending outside [from, to]")
+    void usedMinutesByAsset_clipsAtFromAndToBoundaries() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 1, 10, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 1, 16, 0);
+
+        // Crosses 'from': 09:00 -> 10:40 => 40 minutes inside window
+        Reservation crossesFrom = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 1, 9, 0),
+                LocalDateTime.of(2026, 11, 1, 11, 0),
+                LocalDateTime.of(2026, 10, 31, 9, 0));
+        crossesFrom.checkOut(LocalDateTime.of(2026, 11, 1, 9, 0));
+        crossesFrom.returnItem(LocalDateTime.of(2026, 11, 1, 10, 40));
+
+        // Crosses 'to': 15:15 -> 17:00 => 45 minutes inside window
+        Reservation crossesTo = new Reservation(
+                USER_ID,
+                20L,
+                LocalDateTime.of(2026, 11, 1, 15, 0),
+                LocalDateTime.of(2026, 11, 1, 17, 0),
+                LocalDateTime.of(2026, 10, 31, 9, 0));
+        crossesTo.checkOut(LocalDateTime.of(2026, 11, 1, 15, 15));
+        crossesTo.returnItem(LocalDateTime.of(2026, 11, 1, 17, 0));
+
+        when(reservationRepository.findCheckedOutOverlapping(from, to)).thenReturn(List.of(crossesFrom, crossesTo));
+
+        Map<Long, Long> result = reservationService.usedMinutesByAsset(from, to);
+
+        assertThat(result)
+                .as(
+                        "usage extending past window bounds must be clipped to [from, to]; see ReservationService.usedMinutesByAsset")
+                .containsExactlyInAnyOrderEntriesOf(Map.of(10L, 40L, 20L, 45L));
+    }
+
+    @Test
+    @DisplayName("usedMinutesByAsset: active CHECKED_OUT and OVERDUE bookings count up to min(now, to)")
+    void usedMinutesByAsset_activeCheckoutCountedUpToMinOfNowAndTo() {
+        // Fixed clock in test is 2026-11-02T10:00:00 Europe/Bucharest.
+        // Window 1: [08:00, 14:00] -> min(now=10:00, to=14:00) = 10:00
+        LocalDateTime fromFutureTo = LocalDateTime.of(2026, 11, 2, 8, 0);
+        LocalDateTime toFutureTo = LocalDateTime.of(2026, 11, 2, 14, 0);
+
+        // Checked out at 08:30 -> 08:30..10:00 = 90 minutes
+        Reservation active = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 8, 30),
+                LocalDateTime.of(2026, 11, 2, 11, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        active.checkOut(LocalDateTime.of(2026, 11, 2, 8, 30));
+
+        // Checked out at 10:30 (after now=10:00) -> 0 minutes
+        Reservation checkedOutAfterNow = new Reservation(
+                USER_ID,
+                30L,
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        checkedOutAfterNow.checkOut(LocalDateTime.of(2026, 11, 2, 10, 30));
+
+        when(reservationRepository.findCheckedOutOverlapping(fromFutureTo, toFutureTo))
+                .thenReturn(List.of(active, checkedOutAfterNow));
+
+        Map<Long, Long> cappedByNow = reservationService.usedMinutesByAsset(fromFutureTo, toFutureTo);
+        assertThat(cappedByNow)
+                .as(
+                        "active checkout with to > now must be capped at clock now (90m), ignoring checkouts at/after now; see ReservationService.usedMinutesByAsset")
+                .containsExactlyInAnyOrderEntriesOf(Map.of(10L, 90L));
+
+        // Window 2: [08:00, 09:15] where to < now -> min(now=10:00, to=09:15) = 09:15
+        LocalDateTime toBeforeNow = LocalDateTime.of(2026, 11, 2, 9, 15);
+        Reservation overdue = new Reservation(
+                USER_ID,
+                20L,
+                LocalDateTime.of(2026, 11, 2, 8, 30),
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 1, 9, 0));
+        overdue.checkOut(LocalDateTime.of(2026, 11, 2, 8, 30));
+        overdue.markOverdue();
+
+        when(reservationRepository.findCheckedOutOverlapping(fromFutureTo, toBeforeNow))
+                .thenReturn(List.of(overdue));
+
+        Map<Long, Long> cappedByTo = reservationService.usedMinutesByAsset(fromFutureTo, toBeforeNow);
+        assertThat(cappedByTo)
+                .as(
+                        "active overdue checkout with to < now must be capped at window 'to' (45m); see ReservationService.usedMinutesByAsset")
+                .containsExactlyInAnyOrderEntriesOf(Map.of(20L, 45L));
+    }
+
+    @Test
+    @DisplayName("usedMinutesByAsset: sums multiple reservations for the same asset")
+    void usedMinutesByAsset_sumsMultipleReservationsPerAsset() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 1, 8, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 2, 10, 0);
+
+        Reservation first = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 1, 9, 0),
+                LocalDateTime.of(2026, 11, 1, 11, 0),
+                LocalDateTime.of(2026, 10, 31, 9, 0));
+        first.checkOut(LocalDateTime.of(2026, 11, 1, 9, 0));
+        first.returnItem(LocalDateTime.of(2026, 11, 1, 10, 30)); // 90m
+
+        Reservation second = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 1, 14, 0),
+                LocalDateTime.of(2026, 11, 1, 15, 0),
+                LocalDateTime.of(2026, 10, 31, 9, 0));
+        second.checkOut(LocalDateTime.of(2026, 11, 1, 14, 0));
+        second.returnItem(LocalDateTime.of(2026, 11, 1, 14, 45)); // 45m
+
+        Reservation subMinute = new Reservation(
+                USER_ID,
+                99L,
+                LocalDateTime.of(2026, 11, 1, 16, 0),
+                LocalDateTime.of(2026, 11, 1, 16, 30),
+                LocalDateTime.of(2026, 10, 31, 9, 0));
+        subMinute.checkOut(LocalDateTime.of(2026, 11, 1, 16, 0, 0));
+        subMinute.returnItem(LocalDateTime.of(2026, 11, 1, 16, 0, 45)); // 0 full minutes
+
+        when(reservationRepository.findCheckedOutOverlapping(from, to)).thenReturn(List.of(first, second, subMinute));
+
+        Map<Long, Long> result = reservationService.usedMinutesByAsset(from, to);
+
+        assertThat(result)
+                .as(
+                        "multiple checkouts on the same asset must sum (90 + 45 = 135m) and sub-minute rows must be omitted; see ReservationService.usedMinutesByAsset")
+                .containsExactlyInAnyOrderEntriesOf(Map.of(ASSET_ID, 135L));
+    }
+
+    @Test
+    @DisplayName("usedMinutesByAsset: returns empty map without querying when to <= from")
+    void usedMinutesByAsset_returnsEmptyMapWhenToNotAfterFrom() {
+        LocalDateTime point = LocalDateTime.of(2026, 11, 2, 10, 0);
+
+        assertThat(reservationService.usedMinutesByAsset(point, point))
+                .as(
+                        "to == from must return empty map without querying repository; see ReservationService.usedMinutesByAsset")
+                .isEmpty();
+        assertThat(reservationService.usedMinutesByAsset(point, point.minusMinutes(1)))
+                .as(
+                        "to < from must return empty map without querying repository; see ReservationService.usedMinutesByAsset")
+                .isEmpty();
+
+        verify(reservationRepository, never()).findCheckedOutOverlapping(any(), any());
+    }
+
+    @Test
+    @DisplayName("usedMinutesByAsset: throws InvalidParameterException when from or to is null")
+    void usedMinutesByAsset_throwsInvalidParameterWhenBoundsNull() {
+        LocalDateTime bound = LocalDateTime.of(2026, 11, 2, 10, 0);
+
+        assertThatThrownBy(() -> reservationService.usedMinutesByAsset(null, bound))
+                .as("null 'from' must throw InvalidParameterException; see ReservationService.usedMinutesByAsset")
+                .isInstanceOf(InvalidParameterException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
+
+        assertThatThrownBy(() -> reservationService.usedMinutesByAsset(bound, null))
+                .as("null 'to' must throw InvalidParameterException; see ReservationService.usedMinutesByAsset")
+                .isInstanceOf(InvalidParameterException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
+
+        verify(reservationRepository, never()).findCheckedOutOverlapping(any(), any());
     }
 }
