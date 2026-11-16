@@ -390,15 +390,7 @@ public class ReservationService implements ReservationApi {
         }
 
         // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
-        boolean isAdmin = false;
-        if (currentUser != null) {
-            try {
-                if (currentUser.id().equals(userId) && currentUser.isAdmin()) {
-                    isAdmin = true;
-                }
-            } catch (Exception ignored) {
-            }
-        }
+        boolean isAdmin = isCurrentUserAdmin(userId);
         if (!isAdmin && userApi != null) {
             isAdmin = userApi.findActiveRole(userId).map(r -> r == Role.ADMIN).orElse(false);
         }
@@ -1085,11 +1077,7 @@ public class ReservationService implements ReservationApi {
             }
 
             if (reservationHoldRepository != null) {
-                Long currentUserId = null;
-                try {
-                    currentUserId = currentUser != null ? currentUser.id() : null;
-                } catch (Exception ignored) {
-                }
+                Long currentUserId = currentUserIdOrNull();
                 if (reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, currentUserId)) {
                     List<Long> substitutes = findFreeSameModelSubstitutes(asset, start, end);
                     return AvailabilityResponse.forAsset(
@@ -1245,30 +1233,47 @@ public class ReservationService implements ReservationApi {
 
     @Override
     public boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
-        return isAssetFreeExceptHoldsOf(assetId, start, end, ignoreReservationId, null);
+        if (hasReservationOverlap(assetId, start, end, ignoreReservationId)) {
+            return false;
+        }
+        if (reservationHoldRepository == null) {
+            return true;
+        }
+        // Reassignment strategies pass ignoreReservationId so we exclude the booking owner's own hold
+        // (just like moveToAsset). Unscoped checks (e.g. Project "Reserve all") exclude the caller's own hold.
+        Long holdOwnerId = ignoreReservationId != null
+                ? reservationRepository
+                        .findById(ignoreReservationId)
+                        .map(Reservation::getUserId)
+                        .orElse(null)
+                : currentUserIdOrNull();
+        return !hasActiveHoldOverlap(assetId, start, end, holdOwnerId);
     }
 
     // Active holds count as busy, so the engine doesn't move a booking into a slot another student holds (#267).
-    // Only moveToAsset passes the booking owner's id: their own hold on the substitute shouldn't block them.
+    // moveToAsset already holds the Reservation entity, so it passes r.getUserId() directly without a redundant query.
     private boolean isAssetFreeExceptHoldsOf(
             Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId, Long holdOwnerId) {
+        return !hasReservationOverlap(assetId, start, end, ignoreReservationId)
+                && !hasActiveHoldOverlap(assetId, start, end, holdOwnerId);
+    }
+
+    private boolean hasReservationOverlap(
+            Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId) {
         long ignore = ignoreReservationId == null ? -1L : ignoreReservationId;
-        if (reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore)) {
-            return false;
-        }
-        return reservationHoldRepository == null
-                || !reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, holdOwnerId);
+        return reservationRepository.existsOverlap(assetId, start, end, ReservationStatus.ACTIVE_STATUSES, ignore);
+    }
+
+    private boolean hasActiveHoldOverlap(Long assetId, LocalDateTime start, LocalDateTime end, Long holdOwnerId) {
+        return reservationHoldRepository != null
+                && reservationHoldRepository.existsActiveOverlap(assetId, start, end, now(), null, holdOwnerId);
     }
 
     public List<Long> findBusyAssetIds(LocalDateTime start, LocalDateTime end) {
         Set<Long> busy = new LinkedHashSet<>(
                 reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES));
         if (reservationHoldRepository != null) {
-            Long currentUserId = null;
-            try {
-                currentUserId = currentUser != null ? currentUser.id() : null;
-            } catch (Exception ignored) {
-            }
+            Long currentUserId = currentUserIdOrNull();
             busy.addAll(reservationHoldRepository.findHeldAssetIds(start, end, now(), currentUserId));
         }
         return new ArrayList<>(busy);
@@ -1335,6 +1340,102 @@ public class ReservationService implements ReservationApi {
                         assetId, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE))
                 .map(r -> new ReservationSummary(
                         r.getId(), r.getUserId(), r.getAssetId(), r.getStartTime(), r.getEndTime(), r.getStatus()));
+    }
+
+    private boolean isCurrentUserAdmin(Long userId) {
+        if (currentUser == null) {
+            return false;
+        }
+        try {
+            return currentUser.id().equals(userId) && currentUser.isAdmin();
+        } catch (Exception ignored) {
+            // Background execution or non-web context
+            return false;
+        }
+    }
+
+    private Long currentUserIdOrNull() {
+        if (currentUser == null) {
+            return null;
+        }
+        try {
+            return currentUser.id();
+        } catch (Exception ignored) {
+            // Background execution or non-web context
+            return null;
+        }
+    }
+
+    /**
+     * Cancels all upcoming CONFIRMED reservations for the specified user (e.g. when an admin disables their account).
+     *
+     * <p>Auto-cancels any pending outgoing transfer offers for those reservations so they do not remain orphaned.
+     * Active 1-minute slot holds expire on their own, and incoming transfer offers where the disabled user is the
+     * recipient remain {@code PENDING} (accepting is blocked by the disabled account).
+     * Equipment already checked out (CHECKED_OUT or OVERDUE) is not modified as physical return is required at the desk.
+     *
+     * @param userId the ID of the user whose upcoming bookings should be cancelled
+     * @param reason the cancellation explanation (max 255 characters)
+     * @return the number of upcoming reservations cancelled
+     */
+    @Override
+    @Transactional
+    public int cancelUpcomingReservationsForUser(Long userId, String reason) {
+        if (reason != null && reason.length() > 255) {
+            throw new InvalidParameterException("Cancellation reason must not exceed 255 characters");
+        }
+        if (userId == null) {
+            return 0;
+        }
+        if (userApi != null && !userApi.exists(userId)) {
+            throw new NotFoundException("USER_NOT_FOUND", "User not found: " + userId);
+        }
+
+        // Serialize against concurrent bookings, holds, or transfers for the same student.
+        reservationRepository.lockUserQuota(userId);
+
+        LocalDateTime now = now();
+        String effectiveReason = (reason != null && !reason.isBlank()) ? reason : "Account disabled by administrator";
+
+        List<Reservation> upcoming = reservationRepository.findUpcomingConfirmedByUser(userId, now);
+        if (upcoming.isEmpty()) {
+            return 0;
+        }
+
+        Long actorId = currentUserIdOrNull();
+        Set<UUID> notifiedBundles = new HashSet<>();
+
+        for (Reservation r : upcoming) {
+            r.cancel(now, effectiveReason);
+            cancelPendingTransferIfExists(
+                    r.getId(),
+                    now,
+                    actorId,
+                    "Auto-cancelled due to account status: " + effectiveReason,
+                    "The transfer offer for reservation #" + r.getId() + " was cancelled: " + effectiveReason);
+            auditService.record(actorId, "CANCEL_RESERVATION", "Reservation", r.getId(), effectiveReason);
+            // Send one summary notification per bundle instead of N emails for an N-asset kit.
+            if (r.getBundleId() == null) {
+                notifyUserAfterCommit(
+                        r.getUserId(),
+                        "Reservation Cancelled",
+                        "Your reservation #" + r.getId() + " has been cancelled. Reason: " + effectiveReason);
+            } else if (notifiedBundles.add(r.getBundleId())) {
+                notifyUserAfterCommit(
+                        r.getUserId(),
+                        "Reservation Bundle Cancelled",
+                        "Your reservation bundle #" + r.getBundleId() + " was cancelled. Reason: " + effectiveReason);
+            }
+        }
+
+        reservationRepository.saveAll(upcoming);
+        log.info(
+                "Cancelled {} upcoming reservation(s) for user {} (actorId: {}): {}",
+                upcoming.size(),
+                userId,
+                actorId,
+                effectiveReason);
+        return upcoming.size();
     }
 
     /**

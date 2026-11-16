@@ -345,6 +345,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     ) > maxBookingDate
 
   function handlePrevWeek() {
+    if (holdLoading || bookingLoading) return
     if (isPrevWeekDisabled) return
     const prevMon = new Date(currentMonday)
     prevMon.setDate(prevMon.getDate() - 7)
@@ -370,6 +371,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleNextWeek() {
+    if (holdLoading || bookingLoading) return
     if (isNextWeekDisabled) return
     const nextMon = new Date(currentMonday)
     nextMon.setDate(nextMon.getDate() + 7)
@@ -390,6 +392,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   // which immediately failed availability with OUTSIDE_OPENING_HOURS or BOOKING_IN_PAST.
   // Fix: recompute the schedule from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
   function handleToday() {
+    if (holdLoading || bookingLoading) return
     const freshToday = nowInBucharest()
     const schedule = getInitialSchedule(freshToday)
     setToday(freshToday)
@@ -600,19 +603,24 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="lg"
                   onClick={handlePrevWeek}
-                  disabled={isPrevWeekDisabled}
+                  disabled={isPrevWeekDisabled || holdLoading || bookingLoading}
                   aria-label="Previous week"
                 >
                   <IconChevronLeft size={18} />
                 </ActionIcon>
-                <Button variant="default" size="xs" onClick={handleToday}>
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={handleToday}
+                  disabled={holdLoading || bookingLoading}
+                >
                   Today
                 </Button>
                 <ActionIcon
                   variant="default"
                   size="lg"
                   onClick={handleNextWeek}
-                  disabled={isNextWeekDisabled}
+                  disabled={isNextWeekDisabled || holdLoading || bookingLoading}
                   aria-label="Next week"
                 >
                   <IconChevronRight size={18} />

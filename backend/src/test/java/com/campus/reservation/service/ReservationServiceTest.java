@@ -935,18 +935,108 @@ class ReservationServiceTest {
 
     @Test
     @DisplayName(
-            "isAssetFree: holds do not block isAssetFree so confirmed bookings take precedence on reassignment (#228 point 8)")
+            "isAssetFree: excludes reservation owner's own active hold when ignoreReservationId is provided (#267)")
     void isAssetFree_holdsDoNotBlockReassignment() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation existing = new Reservation(USER_ID, 99L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(existing, "id", 55L);
 
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 55L))
+                .thenReturn(false);
+        when(reservationRepository.findById(55L)).thenReturn(Optional.of(existing));
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 55L))
+                .as(
+                        "reassignment holds: booking owner's own hold must not block isAssetFree; see ReservationService.isAssetFree")
+                .isTrue();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName(
+            "isAssetFree: blocks when another student holds substitute while ignoreReservationId is provided (#267)")
+    void isAssetFree_blocksAnotherStudentsHoldWhenIgnoreReservationIdProvided() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        Reservation existing = new Reservation(USER_ID, 99L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(existing, "id", 55L);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 55L))
+                .thenReturn(false);
+        when(reservationRepository.findById(55L)).thenReturn(Optional.of(existing));
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 55L))
+                .as(
+                        "reassignment holds: another student's active hold must block isAssetFree; see ReservationService.isAssetFree")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("isAssetFree: passes null holdOwnerId when ignoreReservationId is not found (#267)")
+    void isAssetFree_fallsBackToNullHoldOwnerWhenIgnoredReservationNotFound() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 999L))
+                .thenReturn(false);
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 999L))
+                .as(
+                        "reassignment holds: unknown ignoreReservationId must fall back to null holdOwnerId; see ReservationService.isAssetFree")
+                .isFalse();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull());
+    }
+
+    @Test
+    @DisplayName("isAssetFree: excludes current user's own active hold when ignoreReservationId is null (#267)")
+    void isAssetFree_excludesCurrentUsersHoldWhenIgnoreReservationIdIsNull() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
 
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
                 .as(
-                        "reassignment priority: browsing holds must not block isAssetFree; see ReservationService.isAssetFree")
+                        "project reserve-all holds: caller's own active hold must not block isAssetFree; see ReservationService.isAssetFree")
                 .isTrue();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName("isAssetFree: blocks another student's active hold when ignoreReservationId is null (#267)")
+    void isAssetFree_blocksAnotherStudentsHoldWhenIgnoreReservationIdIsNull() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
+                .as(
+                        "project reserve-all holds: another student's active hold must block isAssetFree; see ReservationService.isAssetFree")
+                .isFalse();
     }
 
     @Test
@@ -3477,7 +3567,7 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("moveToAsset: reassignment succeeds even if substitute asset has a browsing hold (#228 point 8)")
+    @DisplayName("moveToAsset: excludes booking owner's own active hold on substitute asset (#267, #270)")
     void moveToAsset_succeedsEvenIfSubstituteAssetHasActiveHold() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -3491,13 +3581,43 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(200L)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
                 .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
 
         boolean moved = reservationService.moveToAsset(100L, 200L, "Reassigned");
 
         assertThat(moved)
                 .as(
-                        "reassignment priority: confirmed booking takes precedence over browsing holds; see ReservationService.moveToAsset")
+                        "active holds: booking owner's own hold on substitute must not block move; see ReservationService.moveToAsset")
                 .isTrue();
+        verify(reservationHoldRepository)
+                .existsActiveOverlap(eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID));
+    }
+
+    @Test
+    @DisplayName("moveToAsset: throws SubstituteNoLongerFreeException when another student holds substitute (#270)")
+    void moveToAsset_throwsWhenAnotherStudentHoldsSubstitute() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(200L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> reservationService.moveToAsset(100L, 200L, "Reassigned"))
+                .as(
+                        "active holds: another student's hold on substitute must abort move; see ReservationService.moveToAsset")
+                .isInstanceOf(SubstituteNoLongerFreeException.class);
     }
 
     @Test
@@ -3900,5 +4020,309 @@ class ReservationServiceTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
+    }
+
+    @Test
+    @DisplayName(
+            "cancelUpcomingReservationsForUser: cancels all confirmed upcoming bookings and locks user quota (#229)")
+    void cancelUpcomingReservationsForUser_cancelsConfirmedBookingsAndSaves() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+
+        Reservation r2 = new Reservation(
+                USER_ID,
+                11L,
+                now.plusDays(2).withHour(14).withMinute(0),
+                now.plusDays(2).withHour(16).withMinute(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r1, r2));
+        when(reservationTransferRepository.findByReservationIdAndStatus(anyLong(), eq(TransferStatus.PENDING)))
+                .thenReturn(Optional.empty());
+        when(currentUser.id()).thenReturn(99L);
+
+        int cancelledCount =
+                reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
+
+        assertThat(cancelledCount)
+                .as(
+                        "Should report exactly 2 cancelled reservations; see ReservationService.cancelUpcomingReservationsForUser")
+                .isEqualTo(2);
+        assertThat(r1.getStatus())
+                .as("First upcoming reservation must transition to CANCELLED")
+                .isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r1.getCancelReason())
+                .as("First upcoming reservation must store the cancellation reason")
+                .isEqualTo("Account disabled by administrator");
+        assertThat(r2.getStatus())
+                .as("Second upcoming reservation must transition to CANCELLED")
+                .isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r2.getCancelReason())
+                .as("Second upcoming reservation must store the cancellation reason")
+                .isEqualTo("Account disabled by administrator");
+
+        InOrder order = inOrder(reservationRepository);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(reservationRepository).findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class));
+        order.verify(reservationRepository).saveAll(List.of(r1, r2));
+    }
+
+    @Test
+    @DisplayName(
+            "cancelUpcomingReservationsForUser: auto-cancels pending outgoing transfers and notifies recipient after commit (#229)")
+    void cancelUpcomingReservationsForUser_autoCancelsPendingOutgoingTransfers() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r1));
+
+        ReservationTransfer pendingTransfer = new ReservationTransfer(101L, USER_ID, 42L, now.minusMinutes(30));
+        ReflectionTestUtils.setField(pendingTransfer, "id", 501L);
+        when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
+                .thenReturn(Optional.of(pendingTransfer));
+        when(currentUser.id()).thenReturn(99L);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            int cancelledCount =
+                    reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
+
+            assertThat(cancelledCount)
+                    .as("Should cancel the booking that had a pending outgoing transfer")
+                    .isEqualTo(1);
+            assertThat(pendingTransfer.getStatus())
+                    .as("Pending outgoing transfer must be auto-cancelled to avoid orphaned offers")
+                    .isEqualTo(TransferStatus.CANCELLED);
+
+            verify(reservationTransferRepository).save(pendingTransfer);
+            verify(auditService)
+                    .record(
+                            eq(99L),
+                            eq("TRANSFER_CANCELLED"),
+                            eq("ReservationTransfer"),
+                            eq(501L),
+                            contains("Auto-cancelled due to account status"));
+
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            verify(notificationService)
+                    .notifyUser(
+                            eq(42L),
+                            eq("Reservation Transfer Cancelled"),
+                            contains("transfer offer for reservation #101 was cancelled"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: records audit entries and notifies user only after commit (#229)")
+    void cancelUpcomingReservationsForUser_recordsAuditAndNotifiesUserAfterCommit() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r1));
+        when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(currentUser.id()).thenReturn(99L);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            int cancelledCount =
+                    reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
+
+            assertThat(cancelledCount)
+                    .as("Should cancel 1 reservation and register after-commit notification")
+                    .isEqualTo(1);
+            verify(auditService)
+                    .record(
+                            eq(99L),
+                            eq("CANCEL_RESERVATION"),
+                            eq("Reservation"),
+                            eq(101L),
+                            eq("Account disabled by administrator"));
+            verify(notificationService, never()).notifyUser(anyLong(), anyString(), anyString());
+
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            verify(notificationService)
+                    .notifyUser(
+                            eq(USER_ID), eq("Reservation Cancelled"), contains("reservation #101 has been cancelled"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName(
+            "cancelUpcomingReservationsForUser: sends one summary notification per bundle instead of one per asset (#229)")
+    void cancelUpcomingReservationsForUser_groupsNotificationsPerBundle() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        UUID bundleId = UUID.randomUUID();
+        Reservation b1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        b1.assignBundle(bundleId);
+        ReflectionTestUtils.setField(b1, "id", 201L);
+
+        Reservation b2 = new Reservation(
+                USER_ID,
+                11L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        b2.assignBundle(bundleId);
+        ReflectionTestUtils.setField(b2, "id", 202L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(b1, b2));
+        when(reservationTransferRepository.findByReservationIdAndStatus(anyLong(), eq(TransferStatus.PENDING)))
+                .thenReturn(Optional.empty());
+        when(currentUser.id()).thenReturn(99L);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            int cancelledCount =
+                    reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
+
+            assertThat(cancelledCount)
+                    .as("Both reservations in the bundle must be cancelled; see cancelUpcomingReservationsForUser")
+                    .isEqualTo(2);
+            verify(auditService, org.mockito.Mockito.times(2))
+                    .record(
+                            eq(99L),
+                            eq("CANCEL_RESERVATION"),
+                            eq("Reservation"),
+                            anyLong(),
+                            eq("Account disabled by administrator"));
+
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            verify(notificationService, org.mockito.Mockito.times(1))
+                    .notifyUser(
+                            eq(USER_ID),
+                            eq("Reservation Bundle Cancelled"),
+                            contains("bundle #" + bundleId + " was cancelled"));
+            verify(notificationService, never()).notifyUser(eq(USER_ID), eq("Reservation Cancelled"), anyString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: returns 0 when user has no upcoming confirmed bookings")
+    void cancelUpcomingReservationsForUser_returnsZeroWhenEmpty() {
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+
+        int count = reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled");
+        assertThat(count)
+                .as("Should return 0 when the user has no upcoming CONFIRMED reservations")
+                .isEqualTo(0);
+        verify(reservationRepository).lockUserQuota(USER_ID);
+        verify(reservationRepository, never()).saveAll(any());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: returns 0 when userId is null")
+    void cancelUpcomingReservationsForUser_returnsZeroWhenUserIdNull() {
+        int count = reservationService.cancelUpcomingReservationsForUser(null, "Account disabled");
+        assertThat(count)
+                .as("Null userId must return 0 without querying repositories")
+                .isEqualTo(0);
+        verify(userApi, never()).exists(any());
+        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: falls back to default reason when reason is null or blank")
+    void cancelUpcomingReservationsForUser_usesDefaultReasonWhenBlank() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation r = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r, "id", 101L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r));
+
+        int count = reservationService.cancelUpcomingReservationsForUser(USER_ID, "   ");
+        assertThat(count)
+                .as("Blank reason must fall back to default reason and cancel the reservation")
+                .isEqualTo(1);
+        assertThat(r.getStatus()).as("Reservation status must become CANCELLED").isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r.getCancelReason())
+                .as("Blank reason must default to 'Account disabled by administrator'")
+                .isEqualTo("Account disabled by administrator");
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: rejects reason longer than 255 characters with INVALID_PARAMETER")
+    void cancelUpcomingReservationsForUser_rejectsOverlongReason() {
+        String overlongReason = "a".repeat(256);
+
+        assertThatThrownBy(() -> reservationService.cancelUpcomingReservationsForUser(USER_ID, overlongReason))
+                .as("Reason exceeding 255 characters must fail with InvalidParameterException before touching DB")
+                .isInstanceOf(InvalidParameterException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
+
+        verify(userApi, never()).exists(any());
+        verify(reservationRepository, never()).lockUserQuota(any());
+        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: throws USER_NOT_FOUND when user does not exist")
+    void cancelUpcomingReservationsForUser_throwsNotFoundWhenUserMissing() {
+        when(userApi.exists(USER_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled"))
+                .as("Unknown userId must throw NotFoundException with code USER_NOT_FOUND")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_NOT_FOUND");
+
+        verify(reservationRepository, never()).lockUserQuota(any());
+        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
     }
 }

@@ -61,7 +61,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W9 | ~~Frontend: **admin reservations desk page**~~ (✅ #138, #194) | – |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
 | W10 | ~~Security pass~~ (✅ `SecurityPassIT`, #139) · ~~PIT survivors in my code~~ (✅ #182) · load smoke test · restore an RDS snapshot once · cost check | – |
-| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`): PR 1 (backend, both endpoints) is done in #283, PR 2 (pages) next · small asks from teammates' features: the `SecurityConfig` rule for Calin's calendar feed (land it first), the live push call in `SesNotificationService` for Liviu's live notifications, maybe one async-dispatch line in `SecurityConfig` | Section 7a |
+| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`): PR 1 (backend, both endpoints) is done in #283, PR 2 (pages) next · small asks from teammates' features: ~~the `SecurityConfig` rule for Calin's calendar feed (land it first)~~ (✅ #295), the live push call in `SesNotificationService` for Liviu's live notifications, maybe one async-dispatch line in `SecurityConfig` | Section 7a |
 | W11–W12 | ~~Deployment + component diagrams~~ (✅ #186; update the AWS one after the deploy) · ~~security chapter~~ (✅ #185) · CI/CD description · runbook · demo on AWS + local fallback + video · `terraform destroy` after grading | – |
 
 ## 5. Liviu Nedelcu: catalog + shared services
@@ -85,7 +85,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
 | ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
 | **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PR: idempotency **#262** (#255, #256, #258, #260, #265 closed) | Team decision |
-| W6 | ~~Review and merge **#270**~~ (✅ #270: fixes for #267) · **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
+| W6 | ~~Review and merge **#270**~~ (✅ #270: fixes for #267) · **#266** (`cancelUpcomingReservationsForUser` facade + admin endpoint, Refs #229 — waiting on `UserDisabledEvent` in `user.api` for automatic wiring) · work through the rest of #267 (`isAssetFree` hold owner exclusion, `CalendarBookingView` week-nav guard, test & ArchUnit hardening done on `fix/reservation-hold-prefilter-and-calendar-nav`; remaining: reassignment error handling, hold races, size of `ReservationService`) | Reviews |
 | W6 | **#262** (idempotency key): backend review fixes done (FAILED retry, 60 s takeover, doc 31) and `frontend/src/api/reservations.ts` now sends a slot-scoped `Idempotency-Key` on `POST /reservations`; left open: the team decision on this off-plan feature | Team decision |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
