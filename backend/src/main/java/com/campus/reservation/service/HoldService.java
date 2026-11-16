@@ -31,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class HoldService {
 
     private final ReservationHoldRepository reservationHoldRepository;
@@ -206,6 +205,7 @@ public class HoldService {
     /**
      * Lists current active unexpired reservation holds for the authenticated user.
      */
+    @Transactional(readOnly = true)
     public List<ReservationHoldResponse> getMyActiveHolds() {
         Long userId = currentUser.id();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
