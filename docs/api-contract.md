@@ -34,13 +34,14 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**. "Refused" s
 | 1 | `/api/v1/auth/**` (ping, register, login) | public; the `Authorization` header is **not read** here, so an old or broken token never blocks login (#116) | – |
 | 2 | `/actuator/health/**`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html` | public (health check, Swagger UI) | – |
 | 3 | `/error` | public: Spring forwards failures here; protecting it would turn a 404 into a 401 | – |
-| 4 | `/api/v1/admin/**` | role `ADMIN`. Must stay above rule 5, or rule 5 would let students in | `401 UNAUTHORIZED` · student: `403 FORBIDDEN` |
-| 5 | `/api/v1/**` | any logged-in, active user (`STUDENT` or `ADMIN`) | `401 UNAUTHORIZED` |
-| 6 | `/api/**`, `/actuator/**` (other API versions, every actuator endpoint except health) | denied, even for an admin. Must stay above rule 7 | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
-| 7 | `GET /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
-| 8 | anything else (e.g. `POST /something-else`) | denied: a path nobody listed fails closed | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
+| 4 | `/api/v1/admin/**` | role `ADMIN`. Must stay above rule 6, or rule 6 would let students in | `401 UNAUTHORIZED` · student: `403 FORBIDDEN` |
+| 5 | `GET /api/v1/calendar/*` (Calin's `.ics` calendar feed) | public (`permitAll`): the 256-bit secret token in the path is the credential, because calendar apps cannot send our JWT header; the `Authorization` header is **not read** on `/api/v1/calendar/**`. Other HTTP methods fall through to rule 6 | – |
+| 6 | `/api/v1/**` | any logged-in, active user (`STUDENT` or `ADMIN`) | `401 UNAUTHORIZED` |
+| 7 | `/api/**`, `/actuator/**` (other API versions, every actuator endpoint except health) | denied, even for an admin. Must stay above rule 8 | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
+| 8 | `GET /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
+| 9 | anything else (e.g. `POST /something-else`) | denied: a path nobody listed fails closed | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
 
-Checks that run **before** the rules above (the token checks only when a token is sent, on every path except `/api/v1/auth/**`):
+Checks that run **before** the rules above (the token checks only when a token is sent, on every path except `/api/v1/auth/**` and `/api/v1/calendar/**`):
 
 | Check | Result |
 |---|---|
