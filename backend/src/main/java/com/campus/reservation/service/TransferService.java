@@ -301,7 +301,7 @@ public class TransferService {
      * @param actorId the ID of the user triggering the cancellation, or null for system events
      */
     @Transactional
-    void cancelPendingTransferIfExists(
+    public void cancelPendingTransferIfExists(
             Long reservationId, LocalDateTime now, Long actorId, String auditReason, String notificationMessage) {
         reservationTransferRepository
                 .findByReservationIdAndStatus(reservationId, TransferStatus.PENDING)
