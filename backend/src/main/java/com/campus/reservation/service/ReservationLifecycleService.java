@@ -42,6 +42,7 @@ public class ReservationLifecycleService {
 
     private final ReservationRepository reservationRepository;
     private final ReservationService reservationService;
+    private final HoldService holdService;
     private final CatalogApi catalogApi;
     private final NotificationService notificationService;
     private final Clock clock;
@@ -76,7 +77,7 @@ public class ReservationLifecycleService {
             initialDelayString = "${app.reservation.hold-initial-delay-ms:30000}")
     public int sweepExpiredHolds() {
         LocalDateTime now = now();
-        return reservationService.sweepExpiredHolds(now);
+        return holdService.sweepExpiredHolds(now);
     }
 
     private LocalDateTime now() {

@@ -17,8 +17,10 @@ import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.ReservationResponse;
+import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -64,12 +66,29 @@ class ReservationServiceRulesTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private TransferService transferService;
+
+    @Mock
+    private UserApi userApi;
+
+    @Mock
+    private ReservationHoldRepository reservationHoldRepository;
+
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
         reservationService = new ReservationService(
-                reservationRepository, catalogApi, currentUser, auditService, notificationService, clock);
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                clock,
+                transferService,
+                userApi,
+                reservationHoldRepository);
     }
 
     private Reservation reservation(long id, LocalDateTime start, LocalDateTime end) {

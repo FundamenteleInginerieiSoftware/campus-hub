@@ -5,6 +5,7 @@ import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.TransferService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final TransferService transferService;
     private final CurrentUser currentUser;
     private final IdempotencyService idempotencyService;
 
@@ -248,7 +250,7 @@ public class ReservationController {
     @PostMapping("/{id}/transfers")
     public ResponseEntity<ReservationTransferResponse> initiateTransfer(
             @PathVariable Long id, @Valid @RequestBody InitiateTransferRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.initiateTransfer(id, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(transferService.initiateTransfer(id, request));
     }
 
     @Operation(
@@ -260,7 +262,7 @@ public class ReservationController {
     })
     @GetMapping("/transfers/pending")
     public ResponseEntity<List<ReservationTransferResponse>> getPendingTransfers() {
-        return ResponseEntity.ok(reservationService.getMyPendingTransfers());
+        return ResponseEntity.ok(transferService.getMyPendingTransfers());
     }
 
     @Operation(
@@ -274,7 +276,7 @@ public class ReservationController {
     })
     @PostMapping("/transfers/{transferId}/accept")
     public ResponseEntity<ReservationTransferResponse> acceptTransfer(@PathVariable Long transferId) {
-        return ResponseEntity.ok(reservationService.acceptTransfer(transferId));
+        return ResponseEntity.ok(transferService.acceptTransfer(transferId));
     }
 
     @Operation(summary = "Reject reservation transfer", description = "Declines an incoming reservation transfer offer")
@@ -286,7 +288,7 @@ public class ReservationController {
     })
     @PostMapping("/transfers/{transferId}/reject")
     public ResponseEntity<ReservationTransferResponse> rejectTransfer(@PathVariable Long transferId) {
-        return ResponseEntity.ok(reservationService.rejectTransfer(transferId));
+        return ResponseEntity.ok(transferService.rejectTransfer(transferId));
     }
 
     @Operation(
@@ -300,6 +302,6 @@ public class ReservationController {
     })
     @PostMapping("/transfers/{transferId}/cancel")
     public ResponseEntity<ReservationTransferResponse> cancelTransfer(@PathVariable Long transferId) {
-        return ResponseEntity.ok(reservationService.cancelTransfer(transferId));
+        return ResponseEntity.ok(transferService.cancelTransfer(transferId));
     }
 }

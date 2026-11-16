@@ -24,6 +24,8 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.TransferService;
+import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -52,6 +54,7 @@ import org.springframework.transaction.support.TransactionTemplate;
     ReassignmentService.class,
     ReassignmentBookingProcessor.class,
     ReservationService.class,
+    TransferService.class,
     SameModelStrategy.class,
     SameCategoryStrategy.class,
     ReassignmentRollbackIT.TestClockConfig.class
@@ -103,6 +106,9 @@ class ReassignmentRollbackIT {
 
     @MockitoBean
     private AuditService auditService;
+
+    @MockitoBean
+    private UserApi userApi;
 
     @BeforeEach
     void setUp() {

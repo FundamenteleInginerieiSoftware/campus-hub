@@ -10,8 +10,10 @@ import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.web.ReservationResponse;
+import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -75,7 +77,10 @@ class ReservationAdminSearchTest {
                 mock(CurrentUser.class),
                 mock(AuditService.class),
                 mock(NotificationService.class),
-                clock);
+                clock,
+                mock(TransferService.class),
+                mock(UserApi.class),
+                mock(ReservationHoldRepository.class));
     }
 
     private PageResponse<ReservationResponse> search(
