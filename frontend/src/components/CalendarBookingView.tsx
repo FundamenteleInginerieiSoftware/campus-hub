@@ -525,6 +525,10 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   const substituteAssets =
     substituteKey && substituteState.key === substituteKey ? substituteState.items : []
+  const totalAvailableSubstitutes = Math.max(
+    availability.data?.availableAssetIds.length ?? 0,
+    substituteAssets.length,
+  )
 
   function handleSwitchToSubstitute(sub: AssetSummary) {
     if (holdLoading || bookingLoading) return
@@ -951,7 +955,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         Free units of model {asset.model} for this slot:
                       </Text>
                       <Badge size="xs" color="teal" variant="light">
-                        {substituteAssets.length} available
+                        {totalAvailableSubstitutes} available
                       </Badge>
                     </Group>
                     {substituteAssets.map((sub) => (
@@ -993,6 +997,11 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         </Button>
                       </Group>
                     ))}
+                    {totalAvailableSubstitutes > substituteAssets.length && (
+                      <Text size="xs" c="dimmed">
+                        Showing the first {substituteAssets.length} of {totalAvailableSubstitutes} free units.
+                      </Text>
+                    )}
                   </Stack>
                 </Paper>
               )}
