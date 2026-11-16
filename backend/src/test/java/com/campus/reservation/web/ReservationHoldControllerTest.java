@@ -11,7 +11,7 @@ import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.HoldStatus;
-import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.HoldService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +33,7 @@ class ReservationHoldControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private ReservationService reservationService;
+    private HoldService holdService;
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 2, 10, 0);
     private static final LocalDateTime START = LocalDateTime.of(2026, 11, 2, 14, 0);
@@ -45,7 +45,7 @@ class ReservationHoldControllerTest {
         ReservationHoldResponse response =
                 new ReservationHoldResponse(1L, 10L, 42L, START, END, NOW.plusMinutes(1), HoldStatus.ACTIVE, NOW, 60);
 
-        when(reservationService.createHold(any(CreateHoldRequest.class))).thenReturn(response);
+        when(holdService.createHold(any(CreateHoldRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/holds")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -99,7 +99,7 @@ class ReservationHoldControllerTest {
         ReservationResponse res = new ReservationResponse(
                 100L, 42L, 10L, null, START, END, ReservationStatus.CONFIRMED, NOW, null, null, null, null);
 
-        when(reservationService.confirmHold(1L)).thenReturn(res);
+        when(holdService.confirmHold(1L)).thenReturn(res);
 
         mockMvc.perform(post("/api/v1/reservations/holds/1/confirm"))
                 .andExpect(status().isOk())
@@ -113,7 +113,7 @@ class ReservationHoldControllerTest {
         ReservationHoldResponse response =
                 new ReservationHoldResponse(1L, 10L, 42L, START, END, NOW.plusMinutes(1), HoldStatus.RELEASED, NOW, 0);
 
-        when(reservationService.releaseHold(1L)).thenReturn(response);
+        when(holdService.releaseHold(1L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/holds/1/release"))
                 .andExpect(status().isOk())
@@ -127,7 +127,7 @@ class ReservationHoldControllerTest {
         ReservationHoldResponse response =
                 new ReservationHoldResponse(1L, 10L, 42L, START, END, NOW.plusMinutes(1), HoldStatus.ACTIVE, NOW, 55);
 
-        when(reservationService.getMyActiveHolds()).thenReturn(List.of(response));
+        when(holdService.getMyActiveHolds()).thenReturn(List.of(response));
 
         mockMvc.perform(get("/api/v1/reservations/holds/active"))
                 .andExpect(status().isOk())

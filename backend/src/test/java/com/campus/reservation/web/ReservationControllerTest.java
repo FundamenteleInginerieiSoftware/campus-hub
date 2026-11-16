@@ -21,6 +21,7 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.service.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.TransferService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -46,6 +47,9 @@ class ReservationControllerTest {
 
     @MockitoBean
     private ReservationService reservationService;
+
+    @MockitoBean
+    private TransferService transferService;
 
     @MockitoBean
     private CurrentUser currentUser;
@@ -505,7 +509,7 @@ class ReservationControllerTest {
         ReservationTransferResponse response = new ReservationTransferResponse(
                 500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
 
-        when(reservationService.initiateTransfer(eq(100L), any())).thenReturn(response);
+        when(transferService.initiateTransfer(eq(100L), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/100/transfers")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -521,7 +525,7 @@ class ReservationControllerTest {
         ReservationTransferResponse response = new ReservationTransferResponse(
                 500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
 
-        when(reservationService.getMyPendingTransfers()).thenReturn(List.of(response));
+        when(transferService.getMyPendingTransfers()).thenReturn(List.of(response));
 
         mockMvc.perform(get("/api/v1/reservations/transfers/pending"))
                 .andExpect(status().isOk())
@@ -540,7 +544,7 @@ class ReservationControllerTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 15));
 
-        when(reservationService.acceptTransfer(500L)).thenReturn(response);
+        when(transferService.acceptTransfer(500L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/transfers/500/accept"))
                 .andExpect(status().isOk())
@@ -559,7 +563,7 @@ class ReservationControllerTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 15));
 
-        when(reservationService.rejectTransfer(500L)).thenReturn(response);
+        when(transferService.rejectTransfer(500L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/transfers/500/reject"))
                 .andExpect(status().isOk())
@@ -578,7 +582,7 @@ class ReservationControllerTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 15));
 
-        when(reservationService.cancelTransfer(500L)).thenReturn(response);
+        when(transferService.cancelTransfer(500L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/transfers/500/cancel"))
                 .andExpect(status().isOk())
