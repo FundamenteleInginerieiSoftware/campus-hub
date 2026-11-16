@@ -3566,7 +3566,7 @@ class ReservationServiceTest {
 
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(200L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), eq(100L)))
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
