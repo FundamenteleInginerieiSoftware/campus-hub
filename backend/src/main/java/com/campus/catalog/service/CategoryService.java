@@ -40,18 +40,12 @@ public class CategoryService {
         }
 
         Category category = new Category(trimmedName, request.description());
-        Category saved;
-        try {
-            saved = categoryRepository.saveAndFlush(category);
-        } catch (DataIntegrityViolationException ex) {
-            // Check if the name was actually taken by a concurrent insert; otherwise rethrow (#167).
-            if (categoryRepository.existsByNameIgnoreCase(trimmedName)) {
-                throw nameTaken(trimmedName);
-            }
-            throw ex;
-        }
+        Category saved = CatalogPersistence.saveOrThrowConflict(
+                () -> categoryRepository.saveAndFlush(category),
+                () -> categoryRepository.existsByNameIgnoreCase(trimmedName),
+                () -> nameTaken(trimmedName));
 
-        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate name (#120).
+        // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate name.
         auditService.record(
                 currentUser.id(), "CATEGORY_CREATED", "CATEGORY", saved.getId(), "Created category " + saved.getName());
         return CategoryResponse.from(saved);
@@ -66,18 +60,12 @@ public class CategoryService {
         }
 
         category.update(trimmedName, request.description());
-        Category saved;
-        try {
-            saved = categoryRepository.saveAndFlush(category);
-        } catch (DataIntegrityViolationException ex) {
-            // Check if the name was actually taken by a concurrent insert/update; otherwise rethrow (#167).
-            if (categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmedName, id)) {
-                throw nameTaken(trimmedName);
-            }
-            throw ex;
-        }
+        Category saved = CatalogPersistence.saveOrThrowConflict(
+                () -> categoryRepository.saveAndFlush(category),
+                () -> categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmedName, id),
+                () -> nameTaken(trimmedName));
 
-        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate name (#120).
+        // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate name.
         auditService.record(
                 currentUser.id(), "CATEGORY_UPDATED", "CATEGORY", saved.getId(), "Updated category " + saved.getName());
         return CategoryResponse.from(saved);
