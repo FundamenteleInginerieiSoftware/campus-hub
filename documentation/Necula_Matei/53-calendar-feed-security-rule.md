@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth (owner of `config/SecurityConfig`)
 **Date:** 2026-11-16
-**Branch / PR:** `feat/config-calendar-feed-public` (#PR)
+**Branch / PR:** `feat/config-calendar-feed-public` (#295)
 **See also:** `docs/superpowers/specs/2026-11-10-calendar-feed-design.md`, `docs/superpowers/plans/2026-11-10-calendar-feed.md` (Task 0), `20-auth-ignores-old-token.md`
 
 ---
