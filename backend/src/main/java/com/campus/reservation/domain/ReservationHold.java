@@ -84,7 +84,8 @@ public class ReservationHold {
                     "INVALID_HOLD_STATUS_TRANSITION", "Cannot confirm hold in status " + this.status);
         }
         if (now.isAfter(this.expiresAt)) {
-            this.status = HoldStatus.EXPIRED;
+            // Do not mutate status before throwing: the outer transaction rolls back anyway,
+            // and the 1-minute sweep persists EXPIRED holds.
             throw new ConflictException("HOLD_EXPIRED", "The reservation hold has expired");
         }
         this.status = HoldStatus.CONFIRMED;

@@ -3,6 +3,7 @@ package com.campus.reservation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -225,7 +227,7 @@ class ReservationConcurrencyIT {
         List<Throwable> unexpectedExceptions = new CopyOnWriteArrayList<>();
 
         // Both threads run the same booking code; only the asset differs.
-        java.util.function.Consumer<CreateReservationRequest> bookAs = request -> {
+        Consumer<CreateReservationRequest> bookAs = request -> {
             setupSecurityContext(USER_1_ID);
             readyLatch.countDown();
             try {
@@ -314,7 +316,7 @@ class ReservationConcurrencyIT {
                 startLatch.await();
                 reservationService.extendReservation(reservationId, new ExtendReservationRequest(extendedEnd));
                 extendSuccess.incrementAndGet();
-            } catch (com.campus.common.error.InvalidStateTransitionException ex) {
+            } catch (InvalidStateTransitionException ex) {
                 extendRejected.incrementAndGet();
             } catch (Throwable t) {
                 unexpectedExceptions.add(t);

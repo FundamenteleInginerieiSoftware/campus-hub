@@ -63,7 +63,7 @@ public class ReservationLifecycleService {
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
-        reservationService.sweepExpiredHolds(now);
+        // Expired holds are swept by the dedicated 1-minute sweepExpiredHolds() job below.
 
         return new LifecycleSweepSummary(now, noShowCount, overdueCount, cascadedIds.size(), cascadedIds);
     }
