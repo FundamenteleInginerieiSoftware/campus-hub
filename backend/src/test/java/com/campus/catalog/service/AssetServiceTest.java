@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.domain.Asset;
 import com.campus.catalog.domain.Category;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -73,6 +75,9 @@ class AssetServiceTest {
     private AuditService auditService;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private CurrentUser currentUser;
 
     private AssetService assetService;
@@ -86,6 +91,7 @@ class AssetServiceTest {
                 categoryRepository,
                 labRoomRepository,
                 auditService,
+                eventPublisher,
                 currentUser,
                 Clock.fixed(FIXED_INSTANT, CAMPUS_ZONE));
         category = new Category("Oscilloscopes", "Signal lab");
@@ -367,6 +373,7 @@ class AssetServiceTest {
     @Test
     void retireMarksAssetRetiredAndRecordsAudit() {
         Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "id", 7L);
         when(assetRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(asset));
         when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
         when(currentUser.id()).thenReturn(3L);
@@ -375,7 +382,8 @@ class AssetServiceTest {
 
         assertEquals(AssetStatus.RETIRED, response.status());
         assertEquals(EXPECTED_NOW, response.updatedAt());
-        verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", null, "Retired asset Rigol #1 (S/N DS1ZA-001)");
+        verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", 7L, "Retired asset Rigol #1 (S/N DS1ZA-001)");
+        verify(eventPublisher).publishEvent(new AssetRetiredEvent(7L, EXPECTED_NOW, 3L));
     }
 
     @Test
@@ -385,6 +393,7 @@ class AssetServiceTest {
         NotFoundException ex = assertThrows(NotFoundException.class, () -> assetService.retire(404L));
 
         assertEquals("ASSET_NOT_FOUND", ex.getCode());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -398,6 +407,7 @@ class AssetServiceTest {
 
         assertEquals("ASSET_RETIRED", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
