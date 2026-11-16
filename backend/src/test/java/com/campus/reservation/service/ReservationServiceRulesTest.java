@@ -96,11 +96,10 @@ class ReservationServiceRulesTest {
     }
 
     @Test
-    void findBusyAssetIdsAsksForActiveReservationsOnly() {
+    void findBusyAssetIdsDelegatesToRepository() {
         LocalDateTime start = now.plusHours(4);
         LocalDateTime end = now.plusHours(6);
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(ASSET_ID, OTHER_ASSET_ID));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(ASSET_ID, OTHER_ASSET_ID));
 
         assertThat(reservationService.findBusyAssetIds(start, end)).containsExactly(ASSET_ID, OTHER_ASSET_ID);
     }
@@ -193,12 +192,7 @@ class ReservationServiceRulesTest {
         Reservation confirmed = reservation(3L, now.plusHours(4), now.plusHours(6));
         when(reservationRepository.findById(3L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(OTHER_ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        OTHER_ASSET_ID,
-                        confirmed.getStartTime(),
-                        confirmed.getEndTime(),
-                        ReservationStatus.ACTIVE_STATUSES,
-                        3L))
+        when(reservationRepository.existsOverlap(OTHER_ASSET_ID, confirmed.getStartTime(), confirmed.getEndTime(), 3L))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> reservationService.moveToAsset(3L, OTHER_ASSET_ID, "reason"))

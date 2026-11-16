@@ -51,8 +51,11 @@ import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -143,8 +146,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -161,8 +163,7 @@ class ReservationServiceTest {
         InOrder inOrder = inOrder(catalogApi, reservationRepository, auditService);
         inOrder.verify(catalogApi).lockForBooking(ASSET_ID);
         inOrder.verify(catalogApi).isBookable(ASSET_ID);
-        inOrder.verify(reservationRepository)
-                .existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L);
+        inOrder.verify(reservationRepository).existsOverlap(ASSET_ID, start, end, -1L);
         inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
         inOrder.verify(reservationRepository)
                 .countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
@@ -180,8 +181,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(true);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ReservationResponse response = reservationService.createReservation(req);
@@ -274,8 +274,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -295,8 +294,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -316,8 +314,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -336,8 +333,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -385,8 +381,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -480,7 +475,7 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.createReservation(req)).isInstanceOf(NotFoundException.class);
 
         verify(catalogApi, never()).isBookable(anyLong());
-        verify(reservationRepository, never()).existsOverlap(anyLong(), any(), any(), any(), anyLong());
+        verify(reservationRepository, never()).existsOverlap(anyLong(), any(), any(), anyLong());
     }
 
     @Test
@@ -497,7 +492,7 @@ class ReservationServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasFieldOrPropertyWithValue("code", "ASSET_NOT_BOOKABLE");
 
-        verify(reservationRepository, never()).existsOverlap(anyLong(), any(), any(), any(), anyLong());
+        verify(reservationRepository, never()).existsOverlap(anyLong(), any(), any(), anyLong());
     }
 
     @Test
@@ -509,8 +504,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(true);
 
         assertThatThrownBy(() -> reservationService.createReservation(req))
                 .isInstanceOf(ConflictException.class)
@@ -529,8 +523,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L);
 
@@ -857,7 +850,7 @@ class ReservationServiceTest {
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.checkOutReservation(1L))
-                .isInstanceOf(com.campus.common.error.InvalidStateTransitionException.class)
+                .isInstanceOf(InvalidStateTransitionException.class)
                 .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
     }
 
@@ -867,8 +860,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
-        when(reservationRepository.existsOverlap(
-                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), eq(null), any()))
                 .thenReturn(true);
@@ -924,8 +916,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
 
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, null))
                 .as(
@@ -942,8 +933,7 @@ class ReservationServiceTest {
         Reservation existing = new Reservation(USER_ID, 99L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
         ReflectionTestUtils.setField(existing, "id", 55L);
 
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 55L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, 55L)).thenReturn(false);
         when(reservationRepository.findById(55L)).thenReturn(Optional.of(existing));
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
@@ -966,8 +956,7 @@ class ReservationServiceTest {
         Reservation existing = new Reservation(USER_ID, 99L, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
         ReflectionTestUtils.setField(existing, "id", 55L);
 
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 55L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, 55L)).thenReturn(false);
         when(reservationRepository.findById(55L)).thenReturn(Optional.of(existing));
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
@@ -985,8 +974,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 999L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, 999L)).thenReturn(false);
         when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), isNull(), isNull()))
                 .thenReturn(true);
@@ -1006,8 +994,7 @@ class ReservationServiceTest {
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
@@ -1027,8 +1014,7 @@ class ReservationServiceTest {
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(true);
@@ -1046,10 +1032,8 @@ class ReservationServiceTest {
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
         when(catalogApi.getAsset(ASSET_ID))
-                .thenReturn(new com.campus.catalog.api.AssetSummary(
-                        ASSET_ID, "Oscilloscope", "Tektronix", 1L, 101L, com.campus.catalog.api.AssetStatus.AVAILABLE));
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+                .thenReturn(new AssetSummary(ASSET_ID, "Oscilloscope", "Tektronix", 1L, 101L, AssetStatus.AVAILABLE));
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
@@ -1067,8 +1051,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, 5L))
-                .thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, 5L)).thenReturn(true);
 
         assertThat(reservationService.isAssetFree(ASSET_ID, start, end, 5L))
                 .as(
@@ -1090,8 +1073,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(newAssetId)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        eq(newAssetId), any(), any(), eq(ReservationStatus.ACTIVE_STATUSES), anyLong()))
+        when(reservationRepository.existsOverlap(eq(newAssetId), any(), any(), anyLong()))
                 .thenReturn(false);
 
         boolean moved = reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
@@ -1234,7 +1216,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
-                        ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
+                        ASSET_ID, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
                 .thenReturn(Optional.of(r));
 
         Optional<ReservationSummary> current = reservationService.findCurrentCheckout(ASSET_ID);
@@ -1255,7 +1237,7 @@ class ReservationServiceTest {
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0));
         r.markOverdue();
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
-                        ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
+                        ASSET_ID, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE)))
                 .thenReturn(Optional.of(r));
 
         Optional<ReservationSummary> current = reservationService.findCurrentCheckout(ASSET_ID);
@@ -1512,7 +1494,7 @@ class ReservationServiceTest {
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 20), 1));
 
         PageResponse<ReservationResponse> page = reservationService.getAdminReservations(
-                ReservationStatus.CONFIRMED, USER_ID, ASSET_ID, java.time.LocalDate.of(2026, 11, 2), 0, 20);
+                ReservationStatus.CONFIRMED, USER_ID, ASSET_ID, LocalDate.of(2026, 11, 2), 0, 20);
 
         assertThat(page.content()).hasSize(1);
         assertThat(page.content().get(0).id()).isEqualTo(301L);
@@ -1574,8 +1556,7 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(reservationRepository.existsOverlap(
-                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
 
         AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
@@ -1595,8 +1576,7 @@ class ReservationServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Microscope", "MC100", 1L, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
-        when(reservationRepository.existsOverlap(
-                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), eq(start), eq(end), eq(-1L)))
                 .thenReturn(true);
 
         AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
@@ -1636,13 +1616,11 @@ class ReservationServiceTest {
         AssetSummary sameRoomFreeLowId = new AssetSummary(19L, "Scope 0", "DS1054Z", 1L, 10L, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(requested);
-        when(reservationRepository.existsOverlap(
-                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), eq(start), eq(end), eq(-1L)))
                 .thenReturn(true);
         when(catalogApi.findAvailableByModel("DS1054Z", ASSET_ID))
                 .thenReturn(List.of(otherRoomLowId, sameRoomBusy, sameRoomFreeHighId, sameRoomFreeLowId));
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(ASSET_ID, 21L));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(ASSET_ID, 21L));
 
         AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
 
@@ -1667,8 +1645,7 @@ class ReservationServiceTest {
 
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(broken);
         when(catalogApi.findAvailableByModel("DS1054Z", ASSET_ID)).thenReturn(List.of(heldSubstitute, freeSubstitute));
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of());
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of());
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationHoldRepository.findHeldAssetIds(eq(start), eq(end), any(), eq(USER_ID)))
                 .thenReturn(List.of(25L));
@@ -1710,8 +1687,7 @@ class ReservationServiceTest {
         AssetSummary a3 = new AssetSummary(30L, "Scope 3", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
 
         when(catalogApi.findAvailableByCategory(categoryId, -1L)).thenReturn(List.of(a1, a2, a3));
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(20L));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(20L));
 
         AvailabilityResponse response = reservationService.checkAvailability(null, categoryId, start, end);
 
@@ -1731,8 +1707,7 @@ class ReservationServiceTest {
 
         AssetSummary a1 = new AssetSummary(10L, "Scope 1", "M1", categoryId, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.findAvailableByCategory(categoryId, -1L)).thenReturn(List.of(a1));
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(10L));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(10L));
 
         AvailabilityResponse response = reservationService.checkAvailability(null, categoryId, start, end);
 
@@ -1746,8 +1721,7 @@ class ReservationServiceTest {
     void findBusyAssetIdsDelegates() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(10L, 20L));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(10L, 20L));
 
         List<Long> busy = reservationService.findBusyAssetIds(start, end);
         assertThat(busy).containsExactly(10L, 20L);
@@ -1839,8 +1813,7 @@ class ReservationServiceTest {
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
@@ -1878,11 +1851,9 @@ class ReservationServiceTest {
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        eq(10L), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(10L), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
-        when(reservationRepository.existsOverlap(
-                        eq(20L), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(20L), eq(start), eq(end), eq(-1L)))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
@@ -2008,8 +1979,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
@@ -2033,8 +2003,7 @@ class ReservationServiceTest {
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
@@ -2070,8 +2039,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
@@ -2108,7 +2076,7 @@ class ReservationServiceTest {
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("between 1 and 5 assets");
 
-        List<Long> listWithNull = new java.util.ArrayList<>();
+        List<Long> listWithNull = new ArrayList<>();
         listWithNull.add(1L);
         listWithNull.add(null);
         assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, listWithNull, start, end))
@@ -2151,8 +2119,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -2176,8 +2143,7 @@ class ReservationServiceTest {
         when(currentUser.isAdmin()).thenReturn(false);
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.ADMIN));
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -2222,8 +2188,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(999L);
         when(currentUser.isAdmin()).thenReturn(true);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -2246,8 +2211,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(100L)))
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -2272,8 +2236,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(
-                        eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(100L)))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
@@ -2941,8 +2904,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L); // Boundary: 1 active reservation (1 + 1 <= 2) -> allowed!
-        when(reservationRepository.existsOverlap(
-                        anyLong(), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -3164,8 +3126,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(true);
 
@@ -3193,8 +3154,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -3240,8 +3200,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, ReservationStatus.ACTIVE_STATUSES, -1L))
-                .thenReturn(false);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -3320,8 +3279,7 @@ class ReservationServiceTest {
     void findBusyAssetIds_safeWhenCurrentUserNull() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
-                .thenReturn(List.of(10L));
+        when(reservationRepository.findBusyAssetIds(start, end)).thenReturn(List.of(10L));
         when(reservationHoldRepository.findHeldAssetIds(eq(start), eq(end), any(), isNull()))
                 .thenReturn(List.of(20L));
 
@@ -3550,7 +3508,7 @@ class ReservationServiceTest {
 
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(200L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), eq(100L)))
                 .thenReturn(false);
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
@@ -3579,7 +3537,7 @@ class ReservationServiceTest {
 
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(200L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(eq(200L), any(), any(), any(), eq(100L)))
+        when(reservationRepository.existsOverlap(eq(200L), any(), any(), eq(100L)))
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
@@ -3768,7 +3726,7 @@ class ReservationServiceTest {
         when(catalogApi.isBookable(20L)).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
-        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), any(), eq(-1L)))
+        when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         // Asset 10 is free from holds, but Asset 20 is held by another user
         when(reservationHoldRepository.existsActiveOverlap(eq(10L), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
@@ -3803,9 +3761,9 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
-        when(reservationRepository.existsOverlap(eq(10L), eq(start), eq(end), any(), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(10L), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
-        when(reservationRepository.existsOverlap(eq(20L), eq(start), eq(end), any(), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(20L), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(10L), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
@@ -3874,7 +3832,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, oldEnd, newEnd, ReservationStatus.ACTIVE_STATUSES, 100L))
+        when(reservationRepository.existsOverlap(ASSET_ID, oldEnd, newEnd, 100L))
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(oldEnd), eq(newEnd), any(), isNull(), eq(USER_ID)))
@@ -3898,7 +3856,7 @@ class ReservationServiceTest {
 
         Reservation r = new Reservation(USER_ID, ASSET_ID, start, end, createdAt);
         ReflectionTestUtils.setField(r, "id", 100L);
-        r.assignBundle(java.util.UUID.randomUUID());
+        r.assignBundle(UUID.randomUUID());
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
@@ -3926,7 +3884,7 @@ class ReservationServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(100L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), eq(100L)))
                 .thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -3952,7 +3910,7 @@ class ReservationServiceTest {
     void quota_bundleCountsAsOneSessionForNextBooking() {
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(-1L)))
+        when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), eq(-1L)))
                 .thenReturn(false);
         // Student already has 1 active booking session (e.g. a bundle of 2 items).
         // ReservationService checks countBookingSessionsByUserIdAndStatusIn <= 2;

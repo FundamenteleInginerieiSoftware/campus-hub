@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,11 +68,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 1: completely before (10:00 - 12:00) does not overlap")
     void case1_completelyBeforeDoesNotOverlap() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 10, 0),
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 10, 0), LocalDateTime.of(2026, 11, 2, 12, 0), -1L);
         assertThat(overlap).isFalse();
     }
 
@@ -79,11 +77,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 2: abutting before / back-to-back (12:00 - 14:00) does not overlap")
     void case2_abuttingBeforeDoesNotOverlap() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 12, 0),
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 12, 0), LocalDateTime.of(2026, 11, 2, 14, 0), -1L);
         assertThat(overlap).isFalse();
     }
 
@@ -92,11 +86,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 3: overlapping start (13:00 - 15:00) overlaps")
     void case3_overlappingStartOverlaps() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 13, 0),
-                LocalDateTime.of(2026, 11, 2, 15, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 13, 0), LocalDateTime.of(2026, 11, 2, 15, 0), -1L);
         assertThat(overlap).isTrue();
     }
 
@@ -105,11 +95,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 4: starts before, ends at existing end (13:00 - 16:00) overlaps")
     void case4_startsBeforeEndsAtExistingEndOverlaps() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 13, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 13, 0), LocalDateTime.of(2026, 11, 2, 16, 0), -1L);
         assertThat(overlap).isTrue();
     }
 
@@ -118,11 +104,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 5: exact match (14:00 - 16:00) overlaps")
     void case5_exactMatchOverlaps() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 14, 0), LocalDateTime.of(2026, 11, 2, 16, 0), -1L);
         assertThat(overlap).isTrue();
     }
 
@@ -131,11 +113,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 6: enclosed inside existing (14:30 - 15:30) overlaps")
     void case6_enclosedInsideOverlaps() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 30),
-                LocalDateTime.of(2026, 11, 2, 15, 30),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 14, 30), LocalDateTime.of(2026, 11, 2, 15, 30), -1L);
         assertThat(overlap).isTrue();
     }
 
@@ -144,11 +122,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 7: starts at existing start, ends after (14:00 - 17:00) overlaps")
     void case7_startsAtExistingStartEndsAfterOverlaps() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 17, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 14, 0), LocalDateTime.of(2026, 11, 2, 17, 0), -1L);
         assertThat(overlap).isTrue();
     }
 
@@ -157,11 +131,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 8: enclosing existing (13:00 - 17:00) overlaps")
     void case8_enclosingExistingOverlaps() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 13, 0),
-                LocalDateTime.of(2026, 11, 2, 17, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 13, 0), LocalDateTime.of(2026, 11, 2, 17, 0), -1L);
         assertThat(overlap).isTrue();
     }
 
@@ -170,11 +140,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 9: abutting after / back-to-back (16:00 - 18:00) does not overlap")
     void case9_abuttingAfterDoesNotOverlap() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 18, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 16, 0), LocalDateTime.of(2026, 11, 2, 18, 0), -1L);
         assertThat(overlap).isFalse();
     }
 
@@ -183,11 +149,7 @@ class ReservationRepositoryTest {
     @DisplayName("Case 10: completely after (17:00 - 19:00) does not overlap")
     void case10_completelyAfterDoesNotOverlap() {
         boolean overlap = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 17, 0),
-                LocalDateTime.of(2026, 11, 2, 19, 0),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 17, 0), LocalDateTime.of(2026, 11, 2, 19, 0), -1L);
         assertThat(overlap).isFalse();
     }
 
@@ -198,7 +160,6 @@ class ReservationRepositoryTest {
                 ASSET_ID,
                 LocalDateTime.of(2026, 11, 2, 14, 0),
                 LocalDateTime.of(2026, 11, 2, 16, 0),
-                ReservationStatus.ACTIVE_STATUSES,
                 existingReservation.getId());
         assertThat(overlap).isFalse();
     }
@@ -238,7 +199,7 @@ class ReservationRepositoryTest {
 
         // existingReservation from setUp is CONFIRMED at 14:00 - 16:00
         var holder = reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(
-                ASSET_ID, java.util.EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE));
+                ASSET_ID, EnumSet.of(ReservationStatus.CHECKED_OUT, ReservationStatus.OVERDUE));
 
         assertThat(holder).isPresent();
         assertThat(holder.get().getId()).isEqualTo(savedR1.getId());
@@ -266,19 +227,14 @@ class ReservationRepositoryTest {
         LocalDateTime slotStart = LocalDateTime.of(2026, 11, 2, 16, 30);
         LocalDateTime slotEnd = LocalDateTime.of(2026, 11, 2, 18, 0);
 
-        boolean overlapSubsequent = reservationRepository.existsOverlap(
-                ASSET_ID, slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES, -1L);
+        boolean overlapSubsequent = reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, -1L);
         assertThat(overlapSubsequent)
                 .as("Overdue equipment must block upcoming slot even if slotStart is after original endTime")
                 .isTrue();
 
         // Slot completely before the overdue booking started (08:00 - 09:30) does not overlap
         boolean overlapPrior = reservationRepository.existsOverlap(
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 8, 0),
-                LocalDateTime.of(2026, 11, 2, 9, 30),
-                ReservationStatus.ACTIVE_STATUSES,
-                -1L);
+                ASSET_ID, LocalDateTime.of(2026, 11, 2, 8, 0), LocalDateTime.of(2026, 11, 2, 9, 30), -1L);
         assertThat(overlapPrior).isFalse();
 
         // Once returned, the overdue reservation no longer blocks future slots
@@ -286,8 +242,7 @@ class ReservationRepositoryTest {
         reservationRepository.saveAndFlush(savedOverdue);
 
         // Same slot 16:30 - 18:00 now returns false because the overdue equipment was returned
-        boolean overlapAfterReturn = reservationRepository.existsOverlap(
-                ASSET_ID, slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES, -1L);
+        boolean overlapAfterReturn = reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, -1L);
         assertThat(overlapAfterReturn)
                 .as("Same slot must become free immediately after overdue equipment is returned")
                 .isFalse();
@@ -309,16 +264,41 @@ class ReservationRepositoryTest {
         LocalDateTime slotStart = LocalDateTime.of(2026, 11, 2, 16, 30);
         LocalDateTime slotEnd = LocalDateTime.of(2026, 11, 2, 18, 0);
 
-        List<Long> busyIds =
-                reservationRepository.findBusyAssetIds(slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES);
+        List<Long> busyIds = reservationRepository.findBusyAssetIds(slotStart, slotEnd);
         assertThat(busyIds).contains(ASSET_ID);
 
         savedOverdue.returnItem(LocalDateTime.of(2026, 11, 2, 13, 25));
         reservationRepository.saveAndFlush(savedOverdue);
 
-        List<Long> busyIdsAfterReturn =
-                reservationRepository.findBusyAssetIds(slotStart, slotEnd, ReservationStatus.ACTIVE_STATUSES);
+        List<Long> busyIdsAfterReturn = reservationRepository.findBusyAssetIds(slotStart, slotEnd);
         assertThat(busyIdsAfterReturn).doesNotContain(ASSET_ID);
+    }
+
+    @Test
+    @DisplayName("existsOverlap & findBusyAssetIds: ignore terminal statuses (CANCELLED, NO_SHOW, FORCE_CANCELLED)")
+    void overlapAndBusyQueriesIgnoreTerminalStatuses() {
+        LocalDateTime slotStart = LocalDateTime.of(2026, 11, 3, 10, 0);
+        LocalDateTime slotEnd = LocalDateTime.of(2026, 11, 3, 12, 0);
+        LocalDateTime created = LocalDateTime.of(2026, 11, 2, 8, 0);
+
+        Reservation cancelled = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, created);
+        cancelled.cancel(created.plusHours(1), "Cancelled");
+        reservationRepository.saveAndFlush(cancelled);
+
+        Reservation noShow = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, created);
+        noShow.markNoShow();
+        reservationRepository.saveAndFlush(noShow);
+
+        Reservation forceCancelled = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, created);
+        forceCancelled.forceCancel(created.plusHours(1), "Asset damaged");
+        reservationRepository.saveAndFlush(forceCancelled);
+
+        assertThat(reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, -1L))
+                .as("terminal statuses must not block slots; see ReservationRepository.existsOverlap")
+                .isFalse();
+        assertThat(reservationRepository.findBusyAssetIds(slotStart, slotEnd))
+                .as("terminal statuses must not mark assets busy; see ReservationRepository.findBusyAssetIds")
+                .doesNotContain(ASSET_ID);
     }
 
     @Test
@@ -349,7 +329,7 @@ class ReservationRepositoryTest {
     @Test
     @DisplayName("countBookingSessionsByUserIdAndStatusIn: treats multi-item bundle as 1 session")
     void countBookingSessions_countsBundleAsOneSession() {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
 
         // existingReservation is a single booking (userId = 100) -> 1 session
         long initialCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
