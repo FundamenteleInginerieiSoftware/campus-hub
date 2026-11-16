@@ -33,19 +33,7 @@ import { useAuth } from '../auth/useAuth.ts'
 import { getAsset, retireAsset, type Asset, type AssetStatus } from '../api/catalog.ts'
 import CalendarBookingView from '../components/CalendarBookingView.tsx'
 import ErrorAlert from '../components/ErrorAlert.tsx'
-
-function statusBadgeColor(status: AssetStatus): string {
-  switch (status) {
-    case 'AVAILABLE':
-      return 'teal'
-    case 'UNDER_MAINTENANCE':
-      return 'yellow'
-    case 'RETIRED':
-      return 'gray'
-    default:
-      return 'blue'
-  }
-}
+import { statusBadgeColor } from './catalog/assetStatus.ts'
 
 function statusLabel(status: AssetStatus): string {
   switch (status) {
