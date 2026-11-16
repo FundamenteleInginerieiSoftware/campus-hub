@@ -830,7 +830,6 @@ class ReservationServiceTest {
     @DisplayName("cancelReservation rejects cancelling a non-CONFIRMED reservation")
     void cancelReservationNonConfirmedFails() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         Reservation r = new Reservation(
                 USER_ID,
                 ASSET_ID,
@@ -843,6 +842,40 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.cancelReservation(1L))
                 .isInstanceOf(ConflictException.class)
                 .hasFieldOrPropertyWithValue("code", "CANCELLATION_NOT_ALLOWED");
+    }
+
+    @Test
+    @DisplayName("checkOutReservation checks status before checking time window")
+    void checkOutReservationChecksStatusBeforeWindow() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "status", ReservationStatus.CANCELLED);
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(1L))
+                .isInstanceOf(com.campus.common.error.InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName("isAssetFree returns false when active hold exists from another student")
+    void isAssetFree_returnsFalseWhenActiveHoldExists() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), eq(null), any()))
+                .thenReturn(true);
+
+        boolean free = reservationService.isAssetFree(ASSET_ID, start, end, null);
+
+        assertThat(free).isFalse();
     }
 
     @Test
@@ -1060,12 +1093,24 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 1, 12, 0));
         ReflectionTestUtils.setField(checkedOut, "id", 11L);
         checkedOut.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
-        when(reservationRepository.findById(11L)).thenReturn(Optional.of(checkedOut));
+        when(reservationRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(checkedOut));
 
         assertThat(reservationService.markOverdue(11L)).isTrue();
         assertThat(checkedOut.getStatus()).isEqualTo(ReservationStatus.OVERDUE);
+        verify(catalogApi).lockForBooking(ASSET_ID);
         verify(auditService).record(isNull(), eq("MARK_OVERDUE"), eq("Reservation"), eq(11L), any());
         assertThat(reservationService.markOverdue(11L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("markOverdue: returns false when reservation does not exist (#270 review 1)")
+    void markOverdue_returnsFalseWhenNotFound() {
+        when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThat(reservationService.markOverdue(999L))
+                .as("markOverdue must return false when reservation row is missing; see ReservationService.markOverdue")
+                .isFalse();
+        verify(catalogApi, never()).lockForBooking(anyLong());
     }
 
     @Test
@@ -1144,7 +1189,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 101L);
 
-        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(currentUser.id()).thenReturn(1L);
 
@@ -1166,7 +1211,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 101L);
 
-        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> reservationService.checkOutReservation(101L))
@@ -1200,7 +1245,7 @@ class ReservationServiceTest {
         priorHolder.checkOut(LocalDateTime.of(2026, 11, 2, 8, 0));
         priorHolder.markOverdue();
 
-        when(reservationRepository.findById(101L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
                 .thenReturn(Optional.of(priorHolder));
@@ -1226,7 +1271,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 102L);
 
-        when(reservationRepository.findById(102L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.checkOutReservation(102L))
                 .isInstanceOf(BusinessRuleException.class)
@@ -1248,7 +1293,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 103L);
 
-        when(reservationRepository.findById(103L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(103L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.checkOutReservation(103L))
                 .isInstanceOf(BusinessRuleException.class)
@@ -1259,7 +1304,7 @@ class ReservationServiceTest {
     @Test
     @DisplayName("checkOutReservation: throws NotFoundException when reservation does not exist")
     void checkOutReservationNotFound() {
-        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.checkOutReservation(999L))
                 .isInstanceOf(NotFoundException.class)
@@ -1280,7 +1325,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 104L);
         r.cancel(LocalDateTime.of(2026, 11, 1, 12, 0), "Cancelled");
 
-        when(reservationRepository.findById(104L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(104L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.checkOutReservation(104L))
                 .isInstanceOf(InvalidStateTransitionException.class)
@@ -1300,13 +1345,14 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 201L);
         r.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
 
-        when(reservationRepository.findById(201L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(201L)).thenReturn(Optional.of(r));
         when(currentUser.id()).thenReturn(1L);
 
         ReservationResponse response = reservationService.returnReservation(201L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.RETURNED);
         assertThat(response.returnedAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
+        verify(catalogApi).lockForBooking(ASSET_ID);
         verify(auditService).record(eq(1L), eq("RETURN_RESERVATION"), eq("Reservation"), eq(201L), any());
     }
 
@@ -1323,12 +1369,13 @@ class ReservationServiceTest {
         r.checkOut(LocalDateTime.of(2026, 11, 2, 8, 5));
         r.markOverdue();
 
-        when(reservationRepository.findById(202L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(202L)).thenReturn(Optional.of(r));
         when(currentUser.id()).thenReturn(1L);
 
         ReservationResponse response = reservationService.returnReservation(202L);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.RETURNED);
+        verify(catalogApi).lockForBooking(ASSET_ID);
     }
 
     @Test
@@ -1342,7 +1389,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 10, 30, 10, 0));
         ReflectionTestUtils.setField(r, "id", 203L);
 
-        when(reservationRepository.findById(203L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(203L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.returnReservation(203L))
                 .isInstanceOf(InvalidStateTransitionException.class)
@@ -1353,7 +1400,7 @@ class ReservationServiceTest {
     @Test
     @DisplayName("returnReservation: throws NotFoundException if reservation does not exist")
     void returnReservationNotFound() {
-        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.returnReservation(999L))
                 .isInstanceOf(NotFoundException.class)
@@ -2046,7 +2093,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
@@ -2072,7 +2119,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(
                         eq(ASSET_ID), eq(oldEnd), eq(newEnd), eq(ReservationStatus.ACTIVE_STATUSES), eq(100L)))
@@ -2096,7 +2143,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
@@ -2118,7 +2165,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .isInstanceOf(ConflictException.class)
@@ -2138,7 +2185,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .isInstanceOf(ConflictException.class)
@@ -2157,7 +2204,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .isInstanceOf(BusinessRuleException.class)
@@ -2176,7 +2223,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .isInstanceOf(BusinessRuleException.class)
@@ -2195,7 +2242,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .isInstanceOf(BusinessRuleException.class)
@@ -2216,7 +2263,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
@@ -2251,7 +2298,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
@@ -2281,7 +2328,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
@@ -2305,7 +2352,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(USER_ID)))
                 .isInstanceOf(ConflictException.class)
@@ -3086,7 +3133,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .as(
@@ -3108,7 +3155,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
                 .as(
@@ -3211,7 +3258,7 @@ class ReservationServiceTest {
         r.assignBundle(UUID.randomUUID());
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
                 .as(
@@ -3232,7 +3279,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.ADMIN)); // Admin recipient
 
         assertThatThrownBy(() -> reservationService.initiateTransfer(100L, new InitiateTransferRequest(99L)))
@@ -3255,7 +3302,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID); // Admin ID
         when(currentUser.isAdmin()).thenReturn(true);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
@@ -3407,7 +3454,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
                 .thenReturn(Optional.empty());
@@ -3556,6 +3603,61 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("Bundle: auto-confirms student's active hold matching booked bundle assets and slot (#267 point 4)")
+    void createMultiAssetReservation_autoConfirmsActiveHoldOwnedByStudent() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+
+        ReservationHold matchingHold =
+                new ReservationHold(10L, USER_ID, start, end, now.plusMinutes(1), now.minusMinutes(1));
+        ReflectionTestUtils.setField(matchingHold, "id", 701L);
+
+        ReservationHold unrelatedHold =
+                new ReservationHold(99L, USER_ID, start, end, now.plusMinutes(1), now.minusMinutes(1));
+        ReflectionTestUtils.setField(unrelatedHold, "id", 702L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(reservationRepository.existsOverlap(eq(10L), eq(start), eq(end), any(), eq(-1L)))
+                .thenReturn(false);
+        when(reservationRepository.existsOverlap(eq(20L), eq(start), eq(end), any(), eq(-1L)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(10L), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(20L), eq(start), eq(end), any(), isNull(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 801L);
+            return r;
+        });
+        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
+                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+                .thenReturn(List.of(matchingHold, unrelatedHold));
+
+        MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
+
+        assertThat(response).isNotNull();
+        assertThat(matchingHold.getStatus())
+                .as(
+                        "matching active hold for asset in bundle must transition to CONFIRMED; see ReservationService.executeBundleBooking")
+                .isEqualTo(HoldStatus.CONFIRMED);
+        verify(reservationHoldRepository).save(matchingHold);
+
+        assertThat(unrelatedHold.getStatus())
+                .as(
+                        "hold for asset not part of the bundle must remain ACTIVE; see ReservationService.executeBundleBooking")
+                .isEqualTo(HoldStatus.ACTIVE);
+        verify(reservationHoldRepository, never()).save(unrelatedHold);
+    }
+
+    @Test
     @DisplayName("Bundle: rejects null element in assetIds (#228 point 11)")
     void createMultiAssetReservation_rejectsNullElementInAssetIds() {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -3589,7 +3691,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, oldEnd, newEnd, ReservationStatus.ACTIVE_STATUSES, 100L))
                 .thenReturn(false);
@@ -3618,7 +3720,7 @@ class ReservationServiceTest {
         r.assignBundle(java.util.UUID.randomUUID());
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         LocalDateTime newEnd = start.plusHours(4);
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
@@ -3641,7 +3743,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(ASSET_ID), any(), any(), any(), eq(100L)))
                 .thenReturn(false);

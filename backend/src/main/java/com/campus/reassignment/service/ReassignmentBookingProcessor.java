@@ -8,6 +8,7 @@ import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -18,6 +19,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -115,7 +117,19 @@ class ReassignmentBookingProcessor {
                     log.warn(
                             "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
                             candidate.id(),
-                            booking.id());
+                            booking.id(),
+                            e);
+                } catch (RuntimeException e) {
+                    // Bug fixed (#267): a lock/version conflict now tries the next candidate. Any other error is
+                    // rethrown (ReassignmentService.handle logs it), so a bug never force-cancels a student's booking.
+                    if (!isConcurrencyConflict(e)) {
+                        throw e;
+                    }
+                    log.warn(
+                            "Concurrency conflict moving reservation #{} to candidate asset {}, trying next candidate",
+                            booking.id(),
+                            candidate.id(),
+                            e);
                 }
             }
         }
@@ -145,5 +159,25 @@ class ReassignmentBookingProcessor {
 
     private <T> T inRequiresNewTransaction(Supplier<T> action) {
         return requiresNewTx.execute(status -> action.get());
+    }
+
+    private static boolean isConcurrencyConflict(Throwable t) {
+        if (t instanceof SubstituteNoLongerFreeException || t instanceof ConcurrencyFailureException) {
+            return true;
+        }
+        Throwable cause = t.getCause();
+        while (cause != null) {
+            if (cause instanceof ConcurrencyFailureException || cause instanceof SubstituteNoLongerFreeException) {
+                return true;
+            }
+            if (cause instanceof SQLException sqlEx) {
+                String sqlState = sqlEx.getSQLState();
+                if ("40P01".equals(sqlState) || "55P03".equals(sqlState) || "40001".equals(sqlState)) {
+                    return true;
+                }
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }
