@@ -31,15 +31,18 @@ import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -808,6 +811,39 @@ public class ReservationService implements ReservationApi {
                 actorId,
                 effectiveReason);
         return upcoming.size();
+    }
+
+    /**
+     * Computes real equipment usage minutes per asset within {@code [from, to]} for Stefania's
+     * Equipment Reliability report (#289).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, Long> usedMinutesByAsset(LocalDateTime from, LocalDateTime to) {
+        if (from == null || to == null) {
+            throw new InvalidParameterException("'from' and 'to' must not be null");
+        }
+        if (!to.isAfter(from)) {
+            return Map.of();
+        }
+
+        List<Reservation> checkedOut = reservationRepository.findCheckedOutOverlapping(from, to);
+        // Read the shared Clock once so every active (unreturned) checkout is capped at the same instant.
+        LocalDateTime now = now();
+        Map<Long, Long> totals = new HashMap<>();
+
+        for (Reservation r : checkedOut) {
+            LocalDateTime rawEnd = r.getReturnedAt() != null ? r.getReturnedAt() : now;
+            LocalDateTime effectiveStart = r.getCheckedOutAt().isAfter(from) ? r.getCheckedOutAt() : from;
+            LocalDateTime effectiveEnd = rawEnd.isBefore(to) ? rawEnd : to;
+            if (effectiveEnd.isAfter(effectiveStart)) {
+                long minutes = Duration.between(effectiveStart, effectiveEnd).toMinutes();
+                if (minutes > 0) {
+                    totals.merge(r.getAssetId(), minutes, Long::sum);
+                }
+            }
+        }
+        return totals;
     }
 
     /**
