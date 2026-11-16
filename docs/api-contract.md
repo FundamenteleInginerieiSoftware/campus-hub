@@ -637,6 +637,7 @@ Authenticated settings endpoints for the logged-in user's private iCalendar subs
 | `GET /api/v1/reservations/me/calendar-feed` | any logged-in user | `200` `CalendarFeedStatusResponse` (`{ "enabled": boolean }`) | `401 UNAUTHORIZED` |
 | `POST /api/v1/reservations/me/calendar-feed` | any logged-in user | `201` `CalendarFeedCreatedResponse` (`{ "path": "/api/v1/calendar/<token>.ics" }`); replaces any existing link and writes audit `CALENDAR_FEED_CREATED` (entity `USER`) | `401 UNAUTHORIZED` |
 | `DELETE /api/v1/reservations/me/calendar-feed` | any logged-in user | `204` No Content (idempotent when no link exists); writes audit `CALENDAR_FEED_REVOKED` (entity `USER`) only when a link existed | `401 UNAUTHORIZED` |
+| `GET /api/v1/calendar/{token}.ics` | public (secret token in path; `SecurityConfig` `permitAll`) | `200` `text/calendar;charset=UTF-8`, `Cache-Control: no-store`, RFC 5545 `VCALENDAR` of reservations overlapping `[now - 30d, now + 30d]` (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, `RETURNED`) with UTC timestamps | `404 CALENDAR_FEED_NOT_FOUND` (malformed, unknown, replaced, revoked token, or disabled/deleted user) |
 
 ```json
 // CalendarFeedStatusResponse (GET /api/v1/reservations/me/calendar-feed)

@@ -447,4 +447,157 @@ class ReservationRepositoryTest {
                 .extracting(Reservation::getStatus)
                 .containsOnly(ReservationStatus.CONFIRMED);
     }
+
+    @Test
+    @DisplayName(
+            "findByUserIdOverlappingRange: uses half-open overlap (abutting edges excluded, 1-second overlap included)")
+    void findByUserIdOverlappingRange_respectsHalfOpenEdgeBoundaries() {
+        LocalDateTime from = LocalDateTime.of(2026, 11, 10, 10, 0, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 11, 20, 10, 0, 0);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 11, 1, 9, 0, 0);
+
+        // endTime == from -> abutting before, excluded by r.endTime > :from
+        Reservation abuttingBefore = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 10, 8, 0, 0),
+                LocalDateTime.of(2026, 11, 10, 10, 0, 0),
+                createdAt);
+        reservationRepository.saveAndFlush(abuttingBefore);
+
+        // startTime == to -> abutting after, excluded by r.startTime < :to
+        Reservation abuttingAfter = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 20, 10, 0, 0),
+                LocalDateTime.of(2026, 11, 20, 12, 0, 0),
+                createdAt);
+        reservationRepository.saveAndFlush(abuttingAfter);
+
+        // 1-second overlap at start: endTime = from + 1s
+        Reservation overlapStart = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 10, 9, 0, 0),
+                LocalDateTime.of(2026, 11, 10, 10, 0, 1),
+                createdAt);
+        Reservation savedOverlapStart = reservationRepository.saveAndFlush(overlapStart);
+
+        // 1-second overlap at end: startTime = to - 1s
+        Reservation overlapEnd = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 20, 9, 59, 59),
+                LocalDateTime.of(2026, 11, 20, 11, 0, 0),
+                createdAt);
+        Reservation savedOverlapEnd = reservationRepository.saveAndFlush(overlapEnd);
+
+        List<Reservation> results = reservationRepository.findByUserIdOverlappingRange(USER_ID, from, to);
+
+        assertThat(results)
+                .as(
+                        "findByUserIdOverlappingRange must exclude abutting [end==from] and [start==to] and include 1-second overlaps; see ReservationRepository.findByUserIdOverlappingRange")
+                .extracting(Reservation::getId)
+                .containsExactly(savedOverlapStart.getId(), savedOverlapEnd.getId());
+    }
+
+    @Test
+    @DisplayName("findByUserIdOverlappingRange: returns every status ordered by startTime asc and excludes other users")
+    void findByUserIdOverlappingRange_returnsAllStatusesOrderedAndExcludesOtherUsers() {
+        jdbcTemplate.update("""
+            INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
+            VALUES (101, 'student101@campus.test', '{bcrypt}hash', 'Student 101', 'STUDENT', true, NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+
+        LocalDateTime createdAt = LocalDateTime.of(2026, 11, 1, 9, 0, 0);
+
+        Reservation otherUser = new Reservation(
+                101L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 12, 12, 0),
+                LocalDateTime.of(2026, 11, 12, 14, 0),
+                createdAt);
+        reservationRepository.saveAndFlush(otherUser);
+
+        Reservation confirmed = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 15, 10, 0),
+                LocalDateTime.of(2026, 11, 15, 12, 0),
+                createdAt);
+        Reservation savedConfirmed = reservationRepository.saveAndFlush(confirmed);
+
+        Reservation checkedOut = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 12, 10, 0),
+                LocalDateTime.of(2026, 11, 12, 12, 0),
+                createdAt);
+        checkedOut.checkOut(LocalDateTime.of(2026, 11, 12, 10, 0));
+        Reservation savedCheckedOut = reservationRepository.saveAndFlush(checkedOut);
+
+        Reservation overdue = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 11, 10, 0),
+                LocalDateTime.of(2026, 11, 11, 12, 0),
+                createdAt);
+        overdue.checkOut(LocalDateTime.of(2026, 11, 11, 10, 0));
+        overdue.markOverdue();
+        Reservation savedOverdue = reservationRepository.saveAndFlush(overdue);
+
+        Reservation returned = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 13, 10, 0),
+                LocalDateTime.of(2026, 11, 13, 12, 0),
+                createdAt);
+        returned.checkOut(LocalDateTime.of(2026, 11, 13, 10, 0));
+        returned.returnItem(LocalDateTime.of(2026, 11, 13, 11, 30));
+        Reservation savedReturned = reservationRepository.saveAndFlush(returned);
+
+        Reservation cancelled = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 14, 10, 0),
+                LocalDateTime.of(2026, 11, 14, 12, 0),
+                createdAt);
+        cancelled.cancel(LocalDateTime.of(2026, 11, 13, 15, 0), "No longer needed");
+        Reservation savedCancelled = reservationRepository.saveAndFlush(cancelled);
+
+        Reservation forceCancelled = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 16, 10, 0),
+                LocalDateTime.of(2026, 11, 16, 12, 0),
+                createdAt);
+        forceCancelled.forceCancel(LocalDateTime.of(2026, 11, 15, 12, 0), "Asset damaged");
+        Reservation savedForceCancelled = reservationRepository.saveAndFlush(forceCancelled);
+
+        Reservation noShow = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 17, 10, 0),
+                LocalDateTime.of(2026, 11, 17, 12, 0),
+                createdAt);
+        noShow.markNoShow();
+        Reservation savedNoShow = reservationRepository.saveAndFlush(noShow);
+
+        List<Reservation> results = reservationRepository.findByUserIdOverlappingRange(
+                USER_ID, LocalDateTime.of(2026, 11, 10, 0, 0), LocalDateTime.of(2026, 11, 20, 0, 0));
+
+        assertThat(results)
+                .as(
+                        "findByUserIdOverlappingRange must return all statuses for USER_ID ordered by startTime asc and exclude other users; see ReservationRepository.findByUserIdOverlappingRange")
+                .extracting(Reservation::getId)
+                .containsExactly(
+                        savedOverdue.getId(),
+                        savedCheckedOut.getId(),
+                        savedReturned.getId(),
+                        savedCancelled.getId(),
+                        savedConfirmed.getId(),
+                        savedForceCancelled.getId(),
+                        savedNoShow.getId());
+    }
 }
