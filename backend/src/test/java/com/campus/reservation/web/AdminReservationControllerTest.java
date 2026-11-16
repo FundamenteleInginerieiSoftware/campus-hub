@@ -2,6 +2,7 @@ package com.campus.reservation.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -226,5 +227,66 @@ class AdminReservationControllerTest {
         mockMvc.perform(post("/api/v1/admin/reservations/1/return"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INVALID_RESERVATION_STATUS_TRANSITION"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 200 with batch cancel summary")
+    void cancelUpcomingForUserReturns200WithCount() throws Exception {
+        when(reservationService.cancelUpcomingReservationsForUser(42L, "Disciplinary suspension"))
+                .thenReturn(3);
+
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming")
+                        .param("reason", "Disciplinary suspension"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(3))
+                .andExpect(jsonPath("$.message").value("Successfully cancelled 3 upcoming reservation(s)"));
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 403 for student")
+    void cancelUpcomingForUserForbiddenForStudent() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 401 when unauthenticated")
+    void cancelUpcomingForUserUnauthorizedWithoutAuth() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName(
+            "POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 400 VALIDATION_FAILED when reason exceeds 255 chars")
+    void cancelUpcomingForUserReturns400WhenReasonTooLong() throws Exception {
+        String overlongReason = "a".repeat(256);
+
+        mockMvc.perform(post("/api/v1/admin/reservations/users/42/cancel-upcoming")
+                        .param("reason", overlongReason))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName(
+            "POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming returns 404 USER_NOT_FOUND when user does not exist")
+    void cancelUpcomingForUserReturns404WhenUserNotFound() throws Exception {
+        when(reservationService.cancelUpcomingReservationsForUser(eq(999L), any()))
+                .thenThrow(new NotFoundException("USER_NOT_FOUND", "User not found: 999"));
+
+        mockMvc.perform(post("/api/v1/admin/reservations/users/999/cancel-upcoming"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
 }
