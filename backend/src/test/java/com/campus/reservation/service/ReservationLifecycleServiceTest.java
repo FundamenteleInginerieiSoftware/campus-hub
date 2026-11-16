@@ -122,7 +122,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L);
 
         verify(reservationService).moveToAsset(eq(33L), eq(SUB_ASSET_ID), any());
-        verify(reservationService, never()).sweepExpiredHolds(any());
+        verify(holdService, never()).sweepExpiredHolds(any());
         verify(notificationService).notifyUser(eq(101L), eq("Reservation Marked as No-Show"), any());
         verify(notificationService).notifyUser(eq(102L), eq("Equipment Overdue"), any());
         verify(notificationService).notifyUser(eq(103L), eq("Proactive Reservation Reassignment"), any());

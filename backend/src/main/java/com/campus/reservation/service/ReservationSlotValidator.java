@@ -3,7 +3,6 @@ package com.campus.reservation.service;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
-import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import java.time.DayOfWeek;
