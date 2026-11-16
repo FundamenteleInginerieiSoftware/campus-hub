@@ -134,7 +134,7 @@ public class AssetService {
             throw new InvalidStateTransitionException("ASSET_RETIRED", "Retired asset cannot be modified");
         }
 
-        // Optimistic locking protection against concurrent lost updates (#268).
+        // Two admins editing the same asset: the second save must not silently overwrite the first.
         if (request.version() != null
                 && asset.getVersion() != null
                 && !request.version().equals(asset.getVersion())) {
@@ -144,28 +144,24 @@ public class AssetService {
         Category category = findCategoryOrThrow(request.categoryId());
         LabRoom labRoom = findLabRoomOrThrow(request.labRoomId());
 
-        // Track field diffs for comprehensive audit trails (#268).
+        // Compare against trimmed values (matching Asset.updateDetails) so whitespace-only edits
+        // are not recorded as spurious field changes in the audit log.
+        String nextName = request.name().trim();
+        String nextModel = request.model().trim();
         List<String> changes = new ArrayList<>();
-        if (!asset.getName().equals(request.name())) {
-            changes.add("name: '" + asset.getName() + "' -> '" + request.name() + "'");
+        if (!asset.getName().equals(nextName)) {
+            changes.add("name: '" + asset.getName() + "' -> '" + nextName + "'");
         }
-        if (!asset.getModel().equals(request.model())) {
-            changes.add("model: '" + asset.getModel() + "' -> '" + request.model() + "'");
+        if (!asset.getModel().equals(nextModel)) {
+            changes.add("model: '" + asset.getModel() + "' -> '" + nextModel + "'");
         }
         if (!Objects.equals(asset.getDescription(), request.description())) {
             changes.add("description updated");
         }
-        boolean categoryChanged = (asset.getCategory().getId() != null && category.getId() != null)
-                ? !asset.getCategory().getId().equals(category.getId())
-                : !Objects.equals(asset.getCategory().getName(), category.getName());
-        if (categoryChanged) {
+        if (!Objects.equals(asset.getCategory().getId(), category.getId())) {
             changes.add("category: " + asset.getCategory().getName() + " -> " + category.getName());
         }
-
-        boolean labRoomChanged = (asset.getLabRoom().getId() != null && labRoom.getId() != null)
-                ? !asset.getLabRoom().getId().equals(labRoom.getId())
-                : !Objects.equals(asset.getLabRoom().getCode(), labRoom.getCode());
-        if (labRoomChanged) {
+        if (!Objects.equals(asset.getLabRoom().getId(), labRoom.getId())) {
             changes.add("room: " + asset.getLabRoom().getCode() + " -> " + labRoom.getCode());
         }
 

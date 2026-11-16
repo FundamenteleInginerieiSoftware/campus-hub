@@ -89,7 +89,9 @@ class AssetServiceTest {
                 currentUser,
                 Clock.fixed(FIXED_INSTANT, CAMPUS_ZONE));
         category = new Category("Oscilloscopes", "Signal lab");
+        org.springframework.test.util.ReflectionTestUtils.setField(category, "id", 1L);
         labRoom = new LabRoom("EC105", "Electronics Lab", "EC");
+        org.springframework.test.util.ReflectionTestUtils.setField(labRoom, "id", 1L);
     }
 
     @Test
@@ -277,7 +279,9 @@ class AssetServiceTest {
         LocalDateTime createdAt = LocalDateTime.of(2026, 10, 20, 9, 0, 0);
         Asset asset = new Asset("Old Name", "Old Model", "DS1ZA-001", "Old desc", category, labRoom, createdAt);
         Category newCategory = new Category("Multimeters", "Bench meters");
+        org.springframework.test.util.ReflectionTestUtils.setField(newCategory, "id", 2L);
         LabRoom newRoom = new LabRoom("EC202", "Power Lab", "EC");
+        org.springframework.test.util.ReflectionTestUtils.setField(newRoom, "id", 3L);
 
         when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
         when(categoryRepository.findById(2L)).thenReturn(Optional.of(newCategory));
