@@ -1535,6 +1535,67 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("checkAvailability: suggests free same-model substitutes sorted same-room first when slot conflicts")
+    void checkAvailabilitySuggestsFreeSameModelSubstitutesSortedBySameRoomFirst() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary requested = new AssetSummary(ASSET_ID, "Scope 1", "DS1054Z", 1L, 10L, AssetStatus.AVAILABLE);
+        AssetSummary otherRoomLowId = new AssetSummary(20L, "Scope 2", "DS1054Z", 1L, 20L, AssetStatus.AVAILABLE);
+        AssetSummary sameRoomBusy = new AssetSummary(21L, "Scope 3", "DS1054Z", 1L, 10L, AssetStatus.AVAILABLE);
+        AssetSummary sameRoomFreeHighId = new AssetSummary(22L, "Scope 4", "DS1054Z", 1L, 10L, AssetStatus.AVAILABLE);
+        AssetSummary sameRoomFreeLowId = new AssetSummary(19L, "Scope 0", "DS1054Z", 1L, 10L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(requested);
+        when(reservationRepository.existsOverlap(
+                        eq(ASSET_ID), eq(start), eq(end), eq(ReservationStatus.ACTIVE_STATUSES), eq(-1L)))
+                .thenReturn(true);
+        when(catalogApi.findAvailableByModel("DS1054Z", ASSET_ID))
+                .thenReturn(List.of(otherRoomLowId, sameRoomBusy, sameRoomFreeHighId, sameRoomFreeLowId));
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(ASSET_ID, 21L));
+
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
+
+        assertThat(response.available())
+                .as("booked unit itself must stay unavailable; see ReservationService.checkAvailability")
+                .isFalse();
+        assertThat(response.conflictReason()).isEqualTo("RESERVATION_CONFLICT");
+        assertThat(response.availableAssetIds())
+                .as(
+                        "same-model substitutes must exclude busy units and sort same-room first then ID ascending; see ReservationService.findFreeSameModelSubstitutes")
+                .containsExactly(19L, 22L, 20L);
+    }
+
+    @Test
+    @DisplayName("checkAvailability: suggests free same-model substitutes when asset is under maintenance")
+    void checkAvailabilitySuggestsFreeSameModelSubstitutesWhenUnderMaintenance() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary broken = new AssetSummary(ASSET_ID, "Scope 1", "DS1054Z", 1L, 10L, AssetStatus.UNDER_MAINTENANCE);
+        AssetSummary heldSubstitute = new AssetSummary(25L, "Scope 2", "DS1054Z", 1L, 10L, AssetStatus.AVAILABLE);
+        AssetSummary freeSubstitute = new AssetSummary(26L, "Scope 3", "DS1054Z", 1L, 20L, AssetStatus.AVAILABLE);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(broken);
+        when(catalogApi.findAvailableByModel("DS1054Z", ASSET_ID)).thenReturn(List.of(heldSubstitute, freeSubstitute));
+        when(reservationRepository.findBusyAssetIds(start, end, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of());
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.findHeldAssetIds(eq(start), eq(end), any(), eq(USER_ID)))
+                .thenReturn(List.of(25L));
+
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
+
+        assertThat(response.available())
+                .as("asset under maintenance must report unavailable; see ReservationService.checkAvailability")
+                .isFalse();
+        assertThat(response.conflictReason()).isEqualTo("ASSET_NOT_BOOKABLE");
+        assertThat(response.availableAssetIds())
+                .as(
+                        "free same-model substitutes excluding held units should be returned; see ReservationService.findFreeSameModelSubstitutes")
+                .containsExactly(26L);
+    }
+
+    @Test
     @DisplayName("checkAvailability: throws ASSET_NOT_FOUND when assetId is unknown")
     void checkAvailabilityThrowsWhenAssetNotFound() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);

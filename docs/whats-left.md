@@ -84,12 +84,13 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Align `ReservationSeeder` with `CatalogSeeder`~~: ✅ it books asset 1, a DS1054Z with 2 more units of the same model (#193) | – |
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
 | ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
-| **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PRs: analytics #255, #256; optimal reassignment #258; chain shifting #260; idempotency #262; retry #265 | Team decision |
-| W6 | Review and merge **#270** (fixes for #267: all 10 points done, Matei's review fixes pushed) and **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
+| **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PR: idempotency **#262** (#255, #256, #258, #260, #265 closed) | Team decision |
+| W6 | ~~Review and merge **#270**~~ (✅ #270: fixes for #267) · **#266** (cancel a user's upcoming reservations, for #229) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
+| W6 | **#262** (idempotency key): backend review fixes done (FAILED retry, 60 s takeover, doc 31) and `frontend/src/api/reservations.ts` now sends a slot-scoped `Idempotency-Key` on `POST /reservations`; left open: the team decision on this off-plan feature | Team decision |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
 | Proposed, not agreed | Build the **calendar feed** in your `reservation` module (spec + plan `docs/superpowers/*/2026-11-10-calendar-feed*`) · for Stefania's reliability page: a read method on `ReservationApi` for the minutes each asset was really in use (proposed `usedMinutesByAsset`) | Section 7a |
-| After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) | – |
+| After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) · **#286** (#285) same-model substitute suggestions on booking conflict in `checkAvailability` + `CalendarBookingView` (in-place unit switch) | – |
 | W10–W12 | **Test lead**: keep `docs/testing/test-plan.md` current (#101, #199), JaCoCo results, **test report** · full-flow integration tests · ~~PIT survivors~~ (✅ #201) · reservation state diagram · ~~booking sequence diagram~~ (✅ #204) · ~~**Strategy pattern doc**~~ (✅ #205) · ~~report section~~ (✅ #203, keep it current) · demo part | – |
 
 ## 7. Stefania: incidents, user admin, frontend lead
