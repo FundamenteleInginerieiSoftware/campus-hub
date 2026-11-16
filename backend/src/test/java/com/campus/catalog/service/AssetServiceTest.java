@@ -373,6 +373,7 @@ class AssetServiceTest {
     @Test
     void retireMarksAssetRetiredAndRecordsAudit() {
         Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "id", 7L);
         when(assetRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(asset));
         when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
         when(currentUser.id()).thenReturn(3L);
@@ -381,8 +382,8 @@ class AssetServiceTest {
 
         assertEquals(AssetStatus.RETIRED, response.status());
         assertEquals(EXPECTED_NOW, response.updatedAt());
-        verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", null, "Retired asset Rigol #1 (S/N DS1ZA-001)");
-        verify(eventPublisher).publishEvent(new AssetRetiredEvent(null, EXPECTED_NOW, 3L));
+        verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", 7L, "Retired asset Rigol #1 (S/N DS1ZA-001)");
+        verify(eventPublisher).publishEvent(new AssetRetiredEvent(7L, EXPECTED_NOW, 3L));
     }
 
     @Test

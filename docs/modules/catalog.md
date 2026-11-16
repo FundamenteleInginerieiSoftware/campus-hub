@@ -28,7 +28,7 @@ Other modules (`reservation`, `incident`, `reassignment`) interact with the cata
 
 | Event | Published when | Consumed by | Description |
 |---|---|---|---|
-| `AssetRetiredEvent(Long assetId, LocalDateTime retiredAt, Long actorId)` | Admin retires an asset (`POST /api/v1/admin/assets/{id}/retire`) | `reassignment` (Calin's engine) | Triggers automatic reassignment (or force-cancellation) of future bookings of the decommissioned asset (#245) |
+| `AssetRetiredEvent(Long assetId, LocalDateTime retiredAt, Long actorId)` | Admin retires an asset (`POST /api/v1/admin/assets/{id}/retire`, inside `@Transactional`) | `reassignment` (Calin's engine; listener pending) | Published inside the retire transaction; listeners must use `@TransactionalEventListener(phase = AFTER_COMMIT)` so they only run once `RETIRED` is committed (#245) |
 
 ## REST Endpoints (`com.campus.catalog.web`)
 
