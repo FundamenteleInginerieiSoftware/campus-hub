@@ -131,7 +131,7 @@ public class IdempotencyService {
     // Returns a replay if the key already has an answer, or empty once this request owns the key.
     private <T> Optional<ResponseEntity<T>> claimKey(
             String key, Long userId, String fingerprint, LocalDateTime now, Class<T> responseType) {
-        Optional<IdempotencyRecord> found = repository.findByIdempotencyKeyAndUserId(key, userId);
+        Optional<IdempotencyRecord> found = repository.findWithLockByIdempotencyKeyAndUserId(key, userId);
         if (found.isEmpty()) {
             repository.saveAndFlush(new IdempotencyRecord(key, userId, fingerprint, now, now.plus(KEY_LIFETIME)));
             return Optional.empty();

@@ -191,6 +191,59 @@ class IdempotencyServiceIT {
         assertThat(statusOf(key)).as("key COMPLETED after the retry").isEqualTo("COMPLETED");
     }
 
+    @Test
+    @DisplayName("Concurrent retries of a FAILED key serialize on the row lock and run once")
+    void concurrentRetriesOfFailedKeyExecuteActionExactlyOnce() throws InterruptedException {
+        String key = "failed-race-" + UUID.randomUUID();
+        DummyPayload payload = new DummyPayload("BOOK", 42L);
+        insertRecord(key, payload, "FAILED", null, null, now().minusSeconds(10));
+
+        int threadCount = 6;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch ready = new CountDownLatch(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threadCount);
+        AtomicInteger runs = new AtomicInteger();
+        List<String> outcomes = Collections.synchronizedList(new ArrayList<>());
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    ResponseEntity<DummyResponse> response = run(key, payload, () -> {
+                        runs.incrementAndGet();
+                        sleep(40);
+                        return created("CONF-RETRY");
+                    });
+                    outcomes.add(isReplay(response) ? "REPLAYED" : "ORIGINAL");
+                } catch (ConflictException e) {
+                    outcomes.add("CONFLICT_409");
+                } catch (Exception e) {
+                    outcomes.add("UNEXPECTED_" + e.getClass().getSimpleName());
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        ready.await(5, TimeUnit.SECONDS);
+        start.countDown();
+        boolean finished = done.await(15, TimeUnit.SECONDS);
+        executor.shutdownNow();
+
+        assertThat(finished).as("all retry threads must finish within 15 s").isTrue();
+        assertThat(runs.get())
+                .as("SELECT ... FOR UPDATE in claimKey must serialize concurrent FAILED retries")
+                .isEqualTo(1);
+        assertThat(outcomes.stream().filter("ORIGINAL"::equals).count())
+                .as("only one thread restarts the FAILED row, outcomes: %s", outcomes)
+                .isEqualTo(1);
+        assertThat(outcomes)
+                .as("the remaining threads get 409 or a replay, never a second run or 500")
+                .allSatisfy(o -> assertThat(o).isIn("ORIGINAL", "REPLAYED", "CONFLICT_409"));
+    }
+
     private ResponseEntity<DummyResponse> run(
             String key, DummyPayload payload, Supplier<ResponseEntity<DummyResponse>> action) {
         return idempotencyService.execute(key, userId, "POST", PATH, payload, DummyResponse.class, action);

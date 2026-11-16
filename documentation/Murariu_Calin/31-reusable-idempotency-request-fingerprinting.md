@@ -47,13 +47,13 @@ The UNIQUE constraint already creates the `(idempotency_key, user_id)` lookup in
 
 ### 2. Architecture & Components
 - `com.campus.reservation.domain`: `IdempotencyRecord` (entity; state changes only through `markCompleted`, `markFailed`, `restart`) and `IdempotencyStatus` (`IN_PROGRESS`, `COMPLETED`, `FAILED`).
-- `com.campus.reservation.repository`: `IdempotencyRecordRepository` with `findByIdempotencyKeyAndUserId(key, userId)` and `deleteExpiredRecords(cutoff)`.
+- `com.campus.reservation.repository`: `IdempotencyRecordRepository` with `findByIdempotencyKeyAndUserId(key, userId)`, `findWithLockByIdempotencyKeyAndUserId(key, userId)` (`@Lock(LockModeType.PESSIMISTIC_WRITE)` for `claimKey`), and `deleteExpiredRecords(cutoff)`.
 - `com.campus.reservation.service.IdempotencyService`:
   - `computeFingerprint(userId, method, path, payload)`: SHA-256 (hex) of user id, upper-cased method, path and the payload as JSON.
   - `execute(key, userId, method, path, payload, responseType, action)`:
     1. No key (null or blank): runs `action` directly.
     2. Key longer than 128 characters, or not printable ASCII without spaces: `400 INVALID_IDEMPOTENCY_KEY` (a too-long key used to fail the INSERT and look like a 409).
-    3. `claimKey`, in its own `REQUIRES_NEW` transaction so a parallel request sees the row at once:
+    3. `claimKey`, in its own `REQUIRES_NEW` transaction so a parallel request sees the row at once (using `SELECT ... FOR UPDATE` so concurrent retries of the same `FAILED` or abandoned `IN_PROGRESS` row serialize cleanly):
        - no row: insert `IN_PROGRESS` (flushed immediately; a lost race on the unique index becomes `409 CONCURRENT_IDEMPOTENT_REQUEST`);
        - expired row: `restart` it;
        - other fingerprint: `400 IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`;
@@ -89,5 +89,6 @@ Integration tests on real PostgreSQL, `IdempotencyServiceIT` (flush order and th
 - `failedKeyCanBeRetried`: FAILED, then the same key runs again.
 - `completedWithUnreadableBodyIsNotRunAgain`: status-only replay, no second run.
 - `freshInProgressIsConflict` and `staleInProgressIsTakenOver`: the 60 s rule.
+- `concurrentRetriesOfFailedKeyExecuteActionExactlyOnce`: 6 threads retrying a `FAILED` row serialize on `SELECT ... FOR UPDATE` and run the action once.
 
 `ReservationControllerTest` checks header binding and status codes with a mocked `IdempotencyService`.
