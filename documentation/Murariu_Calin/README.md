@@ -54,6 +54,7 @@ Each document is structured in two parts:
 | 35 | [`35-hold-prefilter-calendar-nav-and-test-hardening.md`](./35-hold-prefilter-calendar-nav-and-test-hardening.md) | Hold Prefilter Alignment, Calendar Week Nav Guard & Test Hardening | `isAssetFree` own-hold exclusion, `CalendarBookingView` week-nav loading guard, stale hold tests, 3-item bundle count, ArchUnit Rule 1 strictness |
 | 38 | [`38-reservation-lifecycle-and-code-cleanup.md`](./38-reservation-lifecycle-and-code-cleanup.md) | Reservation Lifecycle & Code Cleanup (#267) | Single 1-minute hold sweep, unified `ReservationRepository` active overlap queries, clean `ReservationHold.confirm()`, `NO_RESERVATION_ID`, `Objects::isNull` |
 | 40 | [`40-calendar-feed-token-and-ics-writer.md`](./40-calendar-feed-token-and-ics-writer.md) | Calendar Feed Token Management & iCalendar Writer | `calendar_feeds` SHA-256 token hash, `CalendarTokenService`, `/me/calendar-feed` endpoints, RFC 5545 `IcsWriter` |
+| 41 | [`41-calendar-feed-endpoint.md`](./41-calendar-feed-endpoint.md) | Calendar Feed Endpoint & Service | `findByUserIdOverlappingRange`, `CalendarFeedService` 30-day window + catalog caching, `GET /api/v1/calendar/{token}.ics` |
 
 
 
