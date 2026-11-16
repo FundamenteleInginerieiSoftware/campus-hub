@@ -72,13 +72,21 @@ public class IdempotencyRecord {
         this.expiresAt = expiresAt;
     }
 
-    public void markCompleted(int responseStatus, String responseBody) {
+    // Guarded by attemptStartedAt so a stalled attempt waking up after a > 60 s takeover cannot
+    // overwrite the newer attempt's IN_PROGRESS or COMPLETED record back to FAILED.
+    public void markCompleted(int responseStatus, String responseBody, LocalDateTime attemptStartedAt) {
+        if (this.status != IdempotencyStatus.IN_PROGRESS || !this.createdAt.equals(attemptStartedAt)) {
+            return;
+        }
         this.status = IdempotencyStatus.COMPLETED;
         this.responseStatus = responseStatus;
         this.responseBody = responseBody;
     }
 
-    public void markFailed() {
+    public void markFailed(LocalDateTime attemptStartedAt) {
+        if (this.status != IdempotencyStatus.IN_PROGRESS || !this.createdAt.equals(attemptStartedAt)) {
+            return;
+        }
         this.status = IdempotencyStatus.FAILED;
     }
 

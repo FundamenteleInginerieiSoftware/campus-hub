@@ -115,16 +115,17 @@ public class IdempotencyService {
             response = action.get();
         } catch (RuntimeException e) {
             // FAILED lets the student fix the cause and retry with the same key.
+            // Guarded with row lock + attempt timestamp so a stalled attempt never overwrites a takeover.
             requiresNewTx.executeWithoutResult(status -> repository
-                    .findByIdempotencyKeyAndUserId(idempotencyKey, userId)
-                    .ifPresent(IdempotencyRecord::markFailed));
+                    .findWithLockByIdempotencyKeyAndUserId(idempotencyKey, userId)
+                    .ifPresent(rec -> rec.markFailed(now)));
             throw e;
         }
 
         String json = toJson(response.getBody());
         requiresNewTx.executeWithoutResult(status -> repository
-                .findByIdempotencyKeyAndUserId(idempotencyKey, userId)
-                .ifPresent(rec -> rec.markCompleted(response.getStatusCode().value(), json)));
+                .findWithLockByIdempotencyKeyAndUserId(idempotencyKey, userId)
+                .ifPresent(rec -> rec.markCompleted(response.getStatusCode().value(), json, now)));
         return response;
     }
 

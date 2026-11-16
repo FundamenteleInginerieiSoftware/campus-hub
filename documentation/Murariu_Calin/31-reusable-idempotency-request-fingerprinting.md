@@ -60,7 +60,7 @@ The UNIQUE constraint already creates the `(idempotency_key, user_id)` lookup in
        - `COMPLETED`: replay (see below). A COMPLETED row is never deleted or restarted, because that would run the booking twice;
        - `IN_PROGRESS` younger than 60 s: `409 CONCURRENT_IDEMPOTENT_REQUEST`; older than 60 s: treated as abandoned and restarted;
        - `FAILED`: `restart` it.
-    4. Runs `action`. On success the row becomes `COMPLETED` with the status and JSON body (own `REQUIRES_NEW` transaction). On a `RuntimeException` the row becomes `FAILED` and the exception is rethrown unchanged.
+    4. Runs `action`. On success the row becomes `COMPLETED` with the status and JSON body (own `REQUIRES_NEW` transaction). On a `RuntimeException` the row becomes `FAILED` and the exception is rethrown unchanged. Both transitions lock the row and verify `status == IN_PROGRESS && createdAt.equals(attemptStartedAt)` so a stalled first attempt waking up after a `> 60 s` takeover can never overwrite the newer attempt's `COMPLETED` record.
   - Retrying a FAILED key (and taking over an abandoned one) **updates the existing row** back to `IN_PROGRESS` (`IdempotencyRecord.restart`). An earlier version deleted the row and inserted a new one in the same transaction; Hibernate sent the INSERT before the DELETE and hit `uq_idempotency_key_user`, so a retry after FAILED got a 409 for 24 hours.
   - Replay: stored status plus the `Idempotency-Replayed: true` header. If the body cannot be read back (for example the response record changed between deploys) only the status is replayed.
   - **Design choice for a crash between the booking commit and the final save:** the key and the booking are not in one transaction. We chose the simpler option: an `IN_PROGRESS` row older than 60 s (`ABANDONED_AFTER`) counts as abandoned and the key may be used again. Trade-off: if the app died after the booking committed, the retry books again. We accept that instead of locking the student out for 24 h; a booking takes well under a second, so 60 s is far above a real run.
@@ -90,5 +90,6 @@ Integration tests on real PostgreSQL, `IdempotencyServiceIT` (flush order and th
 - `completedWithUnreadableBodyIsNotRunAgain`: status-only replay, no second run.
 - `freshInProgressIsConflict` and `staleInProgressIsTakenOver`: the 60 s rule.
 - `concurrentRetriesOfFailedKeyExecuteActionExactlyOnce`: 6 threads retrying a `FAILED` row serialize on `SELECT ... FOR UPDATE` and run the action once.
+- `staleAttemptDoesNotOverwriteTakenOverCompletedRecord`: a stalled attempt failing after a takeover cannot overwrite the `COMPLETED` record back to `FAILED`.
 
 `ReservationControllerTest` checks header binding and status codes with a mocked `IdempotencyService`.

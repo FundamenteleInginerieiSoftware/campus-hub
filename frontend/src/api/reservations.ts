@@ -184,7 +184,7 @@ export async function createReservation(
 
   if (!response.ok) {
     const problem = await response.json().catch(() => null)
-    if (response.status === 400 && pendingBookingAttempt?.key === key) {
+    if ((response.status === 400 || response.status === 401) && pendingBookingAttempt?.key === key) {
       pendingBookingAttempt = null
     }
     if (response.status === 401 && token) {

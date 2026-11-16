@@ -244,6 +244,41 @@ class IdempotencyServiceIT {
                 .allSatisfy(o -> assertThat(o).isIn("ORIGINAL", "REPLAYED", "CONFLICT_409"));
     }
 
+    @Test
+    @DisplayName("A stalled first attempt failing after a takeover never overwrites the COMPLETED record")
+    void staleAttemptDoesNotOverwriteTakenOverCompletedRecord() {
+        String key = "stale-fail-" + UUID.randomUUID();
+        DummyPayload payload = new DummyPayload("BOOK", 77L);
+
+        assertThatThrownBy(() -> run(key, payload, () -> {
+                    // Simulate Request 2 taking over after > 60s and completing while Request 1 was stalled
+                    jdbcTemplate.update("""
+                            UPDATE idempotency_records
+                            SET status = 'COMPLETED',
+                                response_status = 201,
+                                response_body = '{"confirmationId":"CONF-REQ2","status":"SUCCESS"}',
+                                created_at = ?
+                            WHERE idempotency_key = ? AND user_id = ?
+                            """, Timestamp.valueOf(now().plusSeconds(90)), key, userId);
+                    throw new ConflictException("RESERVATION_CONFLICT", "slot taken by Request 2");
+                }))
+                .as("the failed attempt still surfaces its error to the stalled caller")
+                .isInstanceOf(ConflictException.class);
+
+        assertThat(statusOf(key))
+                .as(
+                        "stalled Request 1 must not overwrite Request 2's COMPLETED row back to FAILED; see IdempotencyRecord.markFailed")
+                .isEqualTo("COMPLETED");
+        String body = jdbcTemplate.queryForObject(
+                "SELECT response_body FROM idempotency_records WHERE idempotency_key = ? AND user_id = ?",
+                String.class,
+                key,
+                userId);
+        assertThat(body)
+                .as("Request 2's stored response payload must remain intact")
+                .contains("CONF-REQ2");
+    }
+
     private ResponseEntity<DummyResponse> run(
             String key, DummyPayload payload, Supplier<ResponseEntity<DummyResponse>> action) {
         return idempotencyService.execute(key, userId, "POST", PATH, payload, DummyResponse.class, action);
