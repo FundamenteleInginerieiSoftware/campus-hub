@@ -16,13 +16,13 @@
 5. **E-mail and first admin:** Terraform registers the sender address for e-mails (AWS sends a verification link to it) and stores the first admin's login. The admin password is random; only Matei reads it with one command.
 6. **Cost:** about $30 to $35 a month for everything (database ~$16, server ~$17.5, the fixed address ~$3.6). The $100 AWS credits cover it.
 
-**Result:** the infrastructure for the first live deploy is written and checked (`validate`, `plan`). Applying it and opening the live URL is the next step (status below).
+**Result:** the infrastructure for the first live deploy was written, checked (`validate`, `plan`), applied on 17 Nov 2026 (11 resources added) and tested live (status below).
 
 | Status | |
 |---|---|
 | Written, `terraform validate` + `terraform plan` | done |
-| `terraform apply` | **applied: pending** |
-| Live URL opened, admin login, first booking on AWS | **pending** |
+| `terraform apply` (17 Nov 2026) | **done, 11 resources added** |
+| Live checks: HTTPS, health, admin login | **done** (table in Part 2); a first booking on AWS is not tried yet |
 
 ---
 
@@ -73,8 +73,17 @@
 |---|---|
 | `terraform validate` (in `infra/`) | Success |
 | `terraform plan` | 11 to add, 0 to change, 0 to destroy |
-| `terraform apply` | applied: pending |
-| Open `app_url`, log in as the admin, `/actuator/health`, one booking | pending |
+| `terraform apply` (17 Nov 2026) | 11 added |
+| CloudFront | Deployed; HTTP to HTTPS answers 301 |
+| Server boot (checked through SSM) | cloud-init finished; container from image `cffc1c3` running; `/etc/campus.env` mode 600 with the 9 expected names |
+| App log | Started with profile `prod` in about 133 s (slow first start on `t3.small`; the Docker HEALTHCHECK start-period of 60 s plus 3 retries still passed, health UP). Flyway applied all 15 migrations on RDS PostgreSQL 18.3 over SSL. `AdminBootstrap` created the admin. No ERROR lines |
+| `/actuator/health` through CloudFront | 200 UP |
+| Response headers | HSTS `max-age=31536000`, `Cache-Control: no-cache, no-store`, `X-Cache: Miss`, `nosniff` |
+| Admin login through CloudFront | 200 with a token; `GET /api/v1/users/me` 200 with role ADMIN (so the `Authorization` header passes CloudFront); an admin endpoint 200 with the token, 401 without |
+| SES sender identity | Verified (link clicked) |
+| ECR image scan | 0 findings |
+
+The address is the `*.cloudfront.net` one from `terraform output app_url` (not written in the repo).
 
 ### Cost (monthly, covered by the $100 credits)
 
@@ -105,7 +114,9 @@
 
 | Item | Note |
 |---|---|
-| Swagger "Try it out" | Needs `@Server(url = "/")` in `OpenApiConfig` (separate PR) |
+| Swagger "Try it out" | Confirmed broken: `/v3/api-docs` `servers` is the EC2 host over http. Fix: `@Server(url = "/")` in `OpenApiConfig` (next small PR) |
+| `HEAD /` | Answers 401 while `GET /` is 200 (`SecurityConfig` permits only GET for the static pages). Low impact, same follow-up PR |
+| Swagger in prod | springdoc logs a WARN that Swagger is on; intended for the demo |
 | CloudFront to EC2 | Plain HTTP |
 | Port 8080 | Accepts any CloudFront distribution (low risk; secret origin header later) |
 | SES sender | A Gmail address, so mail may land in spam (no DKIM alignment) |
@@ -115,4 +126,4 @@ Fresh image `cffc1c3` pushed to ECR on 17 Nov, 0 scan findings.
 
 ### Still open
 
-`terraform apply`, clicking the SES verification link, first live deploy, then W8 `deploy.yml` (GitHub OIDC, calls `campus-deploy`). Update the AWS deployment diagram after the first live check.
+W8 `deploy.yml` (GitHub OIDC, calls `campus-deploy`), the follow-up PR above, a first booking on AWS, and updating the AWS deployment diagram.
