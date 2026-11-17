@@ -81,7 +81,12 @@ public class SecurityConfig {
                         // The React app in prod (ADR-002, SpaConfig): index.html, /assets/*.js and
                         // pages like /reservations. They hold no data (all data comes from /api, which
                         // needs a token), so anyone may load them, like any website's login page.
+                        // HEAD too: uptime checks and CDNs probe pages with HEAD. Bug fixed: HEAD / got 401
+                        // while GET / got 200, because only GET was listed. HEAD returns no body, so it
+                        // opens nothing GET doesn't; the API stays closed by the rules above.
                         .requestMatchers(HttpMethod.GET, "/**")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.HEAD, "/**")
                         .permitAll()
                         // A path nobody listed above is closed by default, so a forgotten rule
                         // fails safe instead of leaving something open.

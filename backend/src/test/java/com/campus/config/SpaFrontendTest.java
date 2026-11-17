@@ -3,6 +3,7 @@ package com.campus.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -34,6 +35,18 @@ class SpaFrontendTest {
     @Test
     void startPageIsPublic() throws Exception {
         mockMvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("index.html"));
+    }
+
+    @Test
+    void headOnStartPageIsPublicButHeadOnApiIsNot() throws Exception {
+        mockMvc.perform(head("/"))
+                .andExpect(result -> assertThat(result.getResponse().getStatus())
+                        .as("HEAD / must not be 401, uptime checks use it; see SecurityConfig HEAD rule")
+                        .isEqualTo(200));
+        mockMvc.perform(head("/api/v1/reservations/me"))
+                .andExpect(result -> assertThat(result.getResponse().getStatus())
+                        .as("HEAD on the API without a token stays 401; see SecurityConfig")
+                        .isEqualTo(401));
     }
 
     @Test
