@@ -15,13 +15,13 @@
 4. **One manual step:** AWS mails a confirmation link when the subscription is created. It must be clicked once, or no alert arrives.
 5. **Cost of a pause:** about $0.25 a day (fixed address, disk, database storage) against about $1.2 a day while everything runs.
 
-**Result:** the alert is written and planned (4 resources to add, 0 changed, 0 destroyed). The `terraform apply` is still to be run by Matei; the confirmation click comes after it.
+**Result:** the alert is applied (17 Nov: 4 added, 0 changed, 0 destroyed). The only manual step left is the e-mail confirmation click.
 
 | Status | |
 |---|---|
 | Written, `terraform plan` | done: 4 to add, 0 to change, 0 to destroy |
-| `terraform apply` | **pending** (Matei runs it) |
-| Click the e-mail confirmation link | **pending**, after the apply |
+| `terraform apply` | done 17 Nov (4 added) |
+| Click the e-mail confirmation link | **pending** (the only manual step left) |
 
 ---
 
@@ -72,7 +72,7 @@ No application code changes. It builds on `rds.tf` (`aws_db_instance.main`, `db_
 | What | Result |
 |---|---|
 | `terraform plan` | 4 to add, 0 to change, 0 to destroy |
-| `terraform apply`, alert e-mail received | not done yet |
+| `terraform apply` done 17 Nov (4 added); alert e-mail confirmed | apply done, confirmation click still to do |
 
 ### Problems and fixes
 
