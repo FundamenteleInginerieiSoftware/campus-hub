@@ -25,3 +25,8 @@ variable "admin_email" {
   description = "Login of the first admin on AWS (ADMIN_EMAIL, AdminBootstrap). Set in terraform.tfvars."
   type        = string
 }
+
+variable "alert_email" {
+  description = "Gets AWS alerts, e.g. RDS restarted itself after 7 days stopped. Set in terraform.tfvars."
+  type        = string
+}
