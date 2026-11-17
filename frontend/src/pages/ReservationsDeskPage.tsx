@@ -17,11 +17,13 @@ import { IconAlertTriangle, IconCheck, IconRefresh } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../api/errorMessages.ts'
 import { checkOutReservation, returnReservation, searchReservations } from '../api/reservationDesk.ts'
+import type { VerifiedStudent } from '../api/pickupPass.ts'
 import { fetchAssetSummary, type AssetSummary, type Reservation, type ReservationStatus } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import PagedTable, { type Column } from '../components/PagedTable.tsx'
+import { VerifiedMark, VerifyStudentDialog } from './ReservationsDeskParts.tsx'
 
 type Tab = 'pickup' | 'out' | 'overdue'
 
@@ -79,6 +81,10 @@ export default function ReservationsDeskPage() {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<{ title: string; error: unknown } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  // Students whose pickup code was checked at the desk, by user id (kept until the page is left).
+  const [verified, setVerified] = useState<Record<number, VerifiedStudent>>({})
+  const [verifyingUserId, setVerifyingUserId] = useState<number | null>(null)
 
   // Adding 1 re-runs both effects below (after an action or a click on "Refresh").
   const [reloadToken, setReloadToken] = useState(0)
@@ -258,9 +264,13 @@ export default function ReservationsDeskPage() {
       },
     },
     {
-      // Only the id: there is no admin endpoint to look up another user's name yet.
+      // Only the id until the desk verifies the student's pickup code: there is no admin endpoint
+      // to look up another user's name.
       header: 'Student',
-      render: (r) => <Text>Student #{r.userId}</Text>,
+      render: (r) => {
+        const student = verified[r.userId]
+        return student ? <VerifiedMark student={student} /> : <Text>Student #{r.userId}</Text>
+      },
     },
     {
       header: 'Status',
@@ -271,14 +281,21 @@ export default function ReservationsDeskPage() {
       render: (r) => {
         if (r.status === 'CONFIRMED') {
           return (
-            <Button
-              size="xs"
-              loading={busyId === r.id}
-              disabled={busyId !== null && busyId !== r.id}
-              onClick={() => runAction(r, 'checkout')}
-            >
-              Check out
-            </Button>
+            <Group gap="xs" justify="flex-end" wrap="nowrap">
+              {!verified[r.userId] && (
+                <Button size="xs" variant="default" onClick={() => setVerifyingUserId(r.userId)}>
+                  Verify
+                </Button>
+              )}
+              <Button
+                size="xs"
+                loading={busyId === r.id}
+                disabled={busyId !== null && busyId !== r.id}
+                onClick={() => runAction(r, 'checkout')}
+              >
+                Check out
+              </Button>
+            </Group>
           )
         }
         if (r.status === 'CHECKED_OUT' || r.status === 'OVERDUE') {
@@ -365,6 +382,14 @@ export default function ReservationsDeskPage() {
           onPageChange={changePage}
           loading={loading}
           emptyText={emptyText}
+        />
+      )}
+
+      {verifyingUserId !== null && (
+        <VerifyStudentDialog
+          userId={verifyingUserId}
+          onClose={() => setVerifyingUserId(null)}
+          onVerified={(student) => setVerified((prev) => ({ ...prev, [student.userId]: student }))}
         />
       )}
     </>

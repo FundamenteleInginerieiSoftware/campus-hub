@@ -11,6 +11,7 @@ import LoginPage from './pages/LoginPage.tsx'
 import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
+import PickupPassPage from './pages/PickupPassPage.tsx'
 import PlaceholderPage from './pages/PlaceholderPage.tsx'
 import ProjectDetailsPage from './pages/ProjectDetailsPage.tsx'
 import ProjectsPage from './pages/ProjectsPage.tsx'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="reservations" element={<MyReservationsPage />} />
         <Route path="calendar-sync" element={<CalendarSyncPage />} />
         <Route path="incidents" element={<MyIncidentsPage />} />
+        <Route path="pickup-pass" element={<PickupPassPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:slug" element={<ProjectDetailsPage />} />
 

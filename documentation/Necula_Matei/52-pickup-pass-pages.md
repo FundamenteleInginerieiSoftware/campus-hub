@@ -1,0 +1,69 @@
+# Pickup pass, pages: the student's code and the desk check (Necula Matei)
+
+**Role:** Member 1, Cloud, Security & Auth
+**Date:** 2026-11-11
+**Branch / PR:** `feat/frontend-pickup-pass` (#284), PR 2 of 3 (the QR image is PR 3)
+**See also:** `51-pickup-pass-backend.md`, `docs/superpowers/specs/2026-11-10-pickup-pass-design.md` (section 7)
+
+---
+
+## Part 1: In simple terms
+
+1. **The student opens "Pickup pass"** in the side menu (group "Mine"). The page shows a 6-digit number, for example `493 027`, and a ring that counts down the seconds.
+2. **When the ring reaches 0**, the page asks the server for the next number by itself. If the phone was locked and the student comes back, the page also asks at once, so the number on screen is never old.
+3. **At the desk**, the admin opens "To pick up", clicks **Verify** on the booking, and types the 6 digits the student reads out.
+4. **Right code:** the dialog closes and the Student column shows the real name with a green check, on every row of that student.
+5. **Wrong or old code:** the dialog says "The code is wrong or has expired. Ask the student for the new one." and empties the boxes to type again.
+6. **Verify is optional.** Check out works with or without it.
+
+**Result:** the desk knows that the person in front of them is the owner of the booking, without a QR scanner yet.
+
+---
+
+## Part 2: Technical details
+
+### Files
+
+| File | What it is |
+|---|---|
+| `api/pickupPass.ts` | `fetchPickupPass()`, `verifyPickupPass(userId, code)`, `parseQrText(text)` (only `campus-pickup:1:<id>:<6 digits>`; used by PR 3) |
+| `pages/PickupPassPage.tsx` | The student page |
+| `pages/ReservationsDeskParts.tsx` | `VerifyStudentDialog` (Mantine `Modal` + `PinInput`) and `VerifiedMark`, outside the desk page so that file grows by ~25 lines |
+| `pages/ReservationsDeskPage.tsx` | `verified` state (by user id), a Verify button next to Check out, the Student column shows the name once verified |
+| `App.tsx`, `layout/navigation.ts` | Route `pickup-pass` and one menu entry (Stefania reviews these two) |
+
+### How the page stays fresh
+
+| Moment | What happens | Why |
+|---|---|---|
+| Open | One `GET /users/me/pickup-pass`; `expiresAt = now + validForSeconds` | The backend decides when a code ends, the page only counts |
+| Every second | A 1 s interval stores the current time; the ring shows `expiresAt - now` | One clock, so the countdown cannot drift and there is no second counter |
+| Reaches 0 | The timer stops and the page refetches (a new code restarts it) | The old code is already dead on the backend |
+| Tab hidden then visible | `visibilitychange` refetches | Browsers slow down timers in hidden tabs, the number could be old |
+| Error | The code is removed; only `ErrorAlert` + "Try again" show; each new request clears the old alert | Bug fixed: an expired code used to stay on screen with "0s" after a failed refresh, so a student could show it at the desk |
+| Leave the page | Interval and listener are removed; a late answer is ignored (`ignore` flag) | No updates on an unmounted page |
+
+### Verify dialog
+
+- `PinInput length={6} type="number"`; whitespace is stripped before sending, so a pasted `493 027` works.
+- The check runs in `onChange` when 6 digits are there. `onComplete` did not fire for a pasted value in the manual test.
+- While a check runs, Cancel and the close button are disabled, so a late success cannot mark a student the admin already cancelled. After a wrong code the focus returns to the first box.
+- `PICKUP_CODE_INVALID` shows the text above and empties the input; any other error goes through `errorMessage`.
+- `verified` lives only in the desk page state: it is a convenience for the person at the desk, not a record. The record is the `PICKUP_PASS_VERIFIED` audit row the backend writes.
+
+### Tested by hand (headless Chromium, real backend on a scratch PostgreSQL)
+
+| Check | Result |
+|---|---|
+| Code refreshes at 0 | A new request after the countdown, a different code |
+| Hidden then visible | Exactly one extra request |
+| Wrong code `000000` | Error shown, input emptied (`pickup-04-invalid.png`) |
+| Backend stopped while the page is open | At 0 the code disappears; only "Request failed with status 502" and "Try again" show |
+| Desk at 390 px | Verify and Check out fit in the card, no sideways scroll (`pickup-05-desk-phone.png`) |
+| Pasted `429 973` (the student's current code) | Dialog closed, "Student One" + green check (`pickup-03-verified.png`) |
+
+Screenshots: `docs/screenshots/pickup-01-pass.png` (390 px wide), `pickup-02-verify-dialog.png`, `pickup-03-verified.png`, `pickup-04-invalid.png`, `pickup-05-desk-phone.png`. `npm run lint && npm run build` are clean.
+
+### Still open
+
+PR 3 adds the QR image and a camera scan at the desk; it needs a QR library, so it waits for Stefania to approve one (`package.json` is hers).
