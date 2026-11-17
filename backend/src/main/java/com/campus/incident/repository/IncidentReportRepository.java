@@ -8,6 +8,8 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface IncidentReportRepository extends JpaRepository<IncidentReport, Long> {
 
@@ -25,6 +27,17 @@ public interface IncidentReportRepository extends JpaRepository<IncidentReport, 
 
     // #229: how many reports of this student are still waiting for an admin.
     long countByReportedByIdAndStatus(Long reportedById, IncidentStatus status);
+
+    // #229 review: transaction-scoped PostgreSQL advisory lock per student, the same trick as Calin's
+    // ReservationRepository.lockUserQuota (#173). Two parallel reports on different assets lock different
+    // asset rows, so without this they both count 2 OPEN reports and both pass the limit.
+    // Key 1 is Calin's reservation quota, key 2 is ours (incident quota), so the two never block each other.
+    // count(*) around it only because pg_advisory_xact_lock returns void, which Spring Data cannot map.
+    @Query(
+            value =
+                    "SELECT count(*) FROM (SELECT pg_advisory_xact_lock(2, CAST(:userId AS integer))) AS incident_quota_lock",
+            nativeQuery = true)
+    long lockReporterQuota(@Param("userId") Long userId);
 
     /**
      * Is any incident still keeping this asset out of use? The same rule as {@link

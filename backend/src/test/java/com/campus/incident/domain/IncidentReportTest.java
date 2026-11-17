@@ -191,12 +191,16 @@ class IncidentReportTest {
         IncidentReport report = new IncidentReport(10L, null, 42L, "Defect", severity, null, CREATED);
         ReflectionTestUtils.setField(report, "status", status);
 
-        assertThat(report.keepsAssetOutOfUse()).isEqualTo(expected);
+        assertThat(report.keepsAssetOutOfUse())
+                .as("%s %s keeps the asset out of use? see IncidentReport.keepsAssetOutOfUse", status, severity)
+                .isEqualTo(expected);
     }
 
     @ParameterizedTest(name = "{0} -> {1}")
     @CsvSource({"LOW, false", "MEDIUM, false", "HIGH, true", "CRITICAL, true"})
     void onlyHighAndCritical_takeTheAssetOutOfUseAtOnce(IncidentSeverity severity, boolean expected) {
-        assertThat(severity.takesAssetOutOfUseAtOnce()).isEqualTo(expected);
+        assertThat(severity.takesAssetOutOfUseAtOnce())
+                .as("only HIGH/CRITICAL take the asset out at once; see IncidentSeverity.takesAssetOutOfUseAtOnce")
+                .isEqualTo(expected);
     }
 }

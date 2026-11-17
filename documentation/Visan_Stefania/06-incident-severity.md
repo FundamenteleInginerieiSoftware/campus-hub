@@ -48,12 +48,17 @@
 
 The asset lock from #164 stays for LOW/MEDIUM too, so a report and a resolve on the same asset still run one after the other.
 
+### The limit under a lock (Matei's review)
+
+Counting alone was not safe: two reports sent at the same moment by one student, on two **different** assets, lock two different asset rows, so they don't wait for each other. Both counted 2 `OPEN` reports and both were saved (4 `OPEN`). Now `reportIncident` first calls `IncidentReportRepository.lockReporterQuota(reporterId)`, a PostgreSQL advisory lock `pg_advisory_xact_lock(2, userId)`, the same trick as Calin's booking limit (#173). The second report waits until the first one commits, then counts again and sees 3. Key `2` means "incident quota"; Calin's reservation quota uses key `1`, so the two limits never block each other. The lock is released by PostgreSQL at commit or rollback, so nothing can stay locked. Admins have no limit, so they take no lock and don't count.
+
 ### Tests
 
 - `IncidentReportTest`: every status × severity combination for `keepsAssetOutOfUse`, and `takesAssetOutOfUseAtOnce` per severity.
-- `IncidentServiceTest` (`OnlyHighAndCriticalTakeTheAssetOutOfUse`): LOW/MEDIUM keep the asset, CRITICAL takes it out, retired and missing assets, the limit at 2 and 3, admin without limit, start repair on LOW (available / already under maintenance / retired), closing an open LOW does not touch the asset, closing a started LOW releases it.
+- `IncidentServiceTest` (`OnlyHighAndCriticalTakeTheAssetOutOfUse`): LOW/MEDIUM keep the asset, CRITICAL takes it out, retired and missing assets, the limit at 2 and 3, the order lock → count → save for a student, admin without limit (no lock, no count), start repair on LOW (available / already under maintenance / retired), closing an open LOW does not touch the asset, closing a started LOW releases it.
 - `IncidentControllerTest`: 409 `TOO_MANY_OPEN_INCIDENTS`, admin flag passed to the service.
 - `IncidentFlowIT` (real PostgreSQL): LOW stays available until start repair; rejecting a MEDIUM leaves it available; an open LOW ticket does not block the asset after the HIGH one is resolved; the limit of 3 per student.
+- `IncidentQuotaConcurrencyIT` (real PostgreSQL, two threads, built like Calin's `ReservationConcurrencyIT`): a student with 2 `OPEN` reports sends two HIGH reports at once on two assets → exactly one is saved, the other gets 409 `TOO_MANY_OPEN_INCIDENTS`, only one asset goes `UNDER_MAINTENANCE`. Not `@Transactional` (each thread must really commit), so it deletes its own rows afterwards. Without the `lockReporterQuota` line it fails 3 runs out of 3 ("expected: 1 but was: 2").
 
 ### Defense questions
 

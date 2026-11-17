@@ -344,15 +344,23 @@ class IncidentFlowIT {
     void aLowReport_isATicketForTheAdmin_andTheAssetStaysAvailable() throws Exception {
         long incidentId = report(studentA, "Scratch on the case", "LOW");
 
-        assertThat(incidentStatus(studentA, incidentId)).isEqualTo("OPEN");
-        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+        assertThat(incidentStatus(studentA, incidentId))
+                .as("a LOW report starts OPEN; see IncidentService.reportIncident")
+                .isEqualTo("OPEN");
+        assertThat(assetStatus())
+                .as("a LOW report must not take the asset out of use; see IncidentSeverity.takesAssetOutOfUseAtOnce")
+                .isEqualTo("AVAILABLE");
 
         // The admin looks at it, finds it really broken and starts the repair: now it is out of use.
         postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/start-repair", null);
-        assertThat(assetStatus()).isEqualTo("UNDER_MAINTENANCE");
+        assertThat(assetStatus())
+                .as("start repair on a LOW report takes the asset out of use; see IncidentService.startRepair")
+                .isEqualTo("UNDER_MAINTENANCE");
 
         postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/resolve", null);
-        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+        assertThat(assetStatus())
+                .as("resolving the started LOW report brings the asset back; see IncidentService.resolveIncident")
+                .isEqualTo("AVAILABLE");
     }
 
     @Test
@@ -361,8 +369,12 @@ class IncidentFlowIT {
 
         MvcResult rejected = postAs(admin, "/api/v1/admin/incidents/" + incidentId + "/reject", null);
 
-        assertThat(rejected.getResponse().getStatus()).isEqualTo(200);
-        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+        assertThat(rejected.getResponse().getStatus())
+                .as("rejecting an OPEN MEDIUM report: " + body(rejected))
+                .isEqualTo(200);
+        assertThat(assetStatus())
+                .as("rejecting a MEDIUM report never touched the asset; see IncidentService.rejectIncident")
+                .isEqualTo("AVAILABLE");
     }
 
     // An OPEN LOW ticket must not keep the asset out of use after the HIGH one is closed.
@@ -370,11 +382,16 @@ class IncidentFlowIT {
     void closingTheHighReport_bringsTheAssetBack_evenWithAnOpenLowTicket() throws Exception {
         long high = report(studentA, "Does not turn on", "HIGH");
         report(studentB, "Knob is loose", "LOW");
-        assertThat(assetStatus()).isEqualTo("UNDER_MAINTENANCE");
+        assertThat(assetStatus())
+                .as("the HIGH report takes the asset out of use")
+                .isEqualTo("UNDER_MAINTENANCE");
 
         postAs(admin, "/api/v1/admin/incidents/" + high + "/resolve", null);
 
-        assertThat(assetStatus()).isEqualTo("AVAILABLE");
+        assertThat(assetStatus())
+                .as("an OPEN LOW ticket must not keep the asset out of use; see "
+                        + "IncidentReportRepository.existsIncidentKeepingAssetOutOfUse")
+                .isEqualTo("AVAILABLE");
     }
 
     @Test
@@ -384,17 +401,20 @@ class IncidentFlowIT {
         }
 
         MvcResult fourth = postAs(studentA, "/api/v1/incidents", reportJson(assetId, "Problem 4", "LOW"));
-        assertThat(fourth.getResponse().getStatus()).isEqualTo(409);
-        assertThat(field(fourth, "$.code")).isEqualTo("TOO_MANY_OPEN_INCIDENTS");
+        assertThat(fourth.getResponse().getStatus())
+                .as("limit: a 4th OPEN report is refused; see IncidentService.MAX_OPEN_REPORTS_PER_STUDENT: "
+                        + body(fourth))
+                .isEqualTo(409);
+        assertThat(field(fourth, "$.code")).as("the 409 names the limit").isEqualTo("TOO_MANY_OPEN_INCIDENTS");
 
         // Another student is not affected, and neither is an admin.
-        assertThat(postAs(studentB, "/api/v1/incidents", reportJson(assetId, "Mine", "LOW"))
-                        .getResponse()
-                        .getStatus())
+        MvcResult other = postAs(studentB, "/api/v1/incidents", reportJson(assetId, "Mine", "LOW"));
+        assertThat(other.getResponse().getStatus())
+                .as("the limit is per student, another student can still report: " + body(other))
                 .isEqualTo(201);
-        assertThat(postAs(admin, "/api/v1/incidents", reportJson(assetId, "Admin", "LOW"))
-                        .getResponse()
-                        .getStatus())
+        MvcResult byAdmin = postAs(admin, "/api/v1/incidents", reportJson(assetId, "Admin", "LOW"));
+        assertThat(byAdmin.getResponse().getStatus())
+                .as("admins have no limit; see IncidentService.reportIncident: " + body(byAdmin))
                 .isEqualTo(201);
     }
 

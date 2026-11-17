@@ -78,7 +78,7 @@ public class IncidentService {
      * works"), and moved or cancelled everyone's bookings on it, so any student could block any asset. Now
      * only HIGH and CRITICAL do that at once; LOW and MEDIUM are tickets that wait for an admin (startRepair).
      * A student can also have at most {@link #MAX_OPEN_REPORTS_PER_STUDENT} OPEN reports (409
-     * TOO_MANY_OPEN_INCIDENTS).
+     * TOO_MANY_OPEN_INCIDENTS), counted under a per-student advisory lock so parallel reports can't slip past it.
      *
      * <p>Bug fixed (#164): the asset row is locked FIRST (SELECT ... FOR UPDATE), which also throws 404
      * ASSET_NOT_FOUND / 409 ASSET_RETIRED, so a report for a missing or retired asset saves nothing, and a
@@ -89,13 +89,18 @@ public class IncidentService {
      */
     @Transactional
     public IncidentResponse reportIncident(CreateIncidentRequest request, Long reporterId, boolean reporterIsAdmin) {
-        if (!reporterIsAdmin
-                && incidentReportRepository.countByReportedByIdAndStatus(reporterId, IncidentStatus.OPEN)
-                        >= MAX_OPEN_REPORTS_PER_STUDENT) {
-            throw new BusinessRuleException(
-                    "TOO_MANY_OPEN_INCIDENTS",
-                    "You already have " + MAX_OPEN_REPORTS_PER_STUDENT
-                            + " open reports; wait until an admin has looked at them");
+        if (!reporterIsAdmin) {
+            // Lock first so two parallel reports from one student can't both pass the count.
+            // The lock is released when this transaction commits or rolls back.
+            incidentReportRepository.lockReporterQuota(reporterId);
+            // Only OPEN reports count, so a slot frees up after start repair or reject.
+            long openReports = incidentReportRepository.countByReportedByIdAndStatus(reporterId, IncidentStatus.OPEN);
+            if (openReports >= MAX_OPEN_REPORTS_PER_STUDENT) {
+                throw new BusinessRuleException(
+                        "TOO_MANY_OPEN_INCIDENTS",
+                        "You already have " + MAX_OPEN_REPORTS_PER_STUDENT
+                                + " open reports; wait until an admin has looked at them");
+            }
         }
 
         boolean outOfUse = request.severity().takesAssetOutOfUseAtOnce();

@@ -677,8 +677,12 @@ class IncidentServiceTest {
 
             IncidentResponse response = incidentService.reportIncident(request(severity), reporterId, false);
 
-            assertThat(response.status()).isEqualTo(IncidentStatus.OPEN);
-            assertThat(response.severity()).isEqualTo(severity);
+            assertThat(response.status())
+                    .as("a new %s report starts OPEN; see IncidentService.reportIncident", severity)
+                    .isEqualTo(IncidentStatus.OPEN);
+            assertThat(response.severity())
+                    .as("the report keeps the severity the student chose")
+                    .isEqualTo(severity);
             // Same lock as a HIGH report, so it still waits for a resolve on the same asset.
             InOrder order = inOrder(catalogApi, incidentReportRepository);
             order.verify(catalogApi).lockForBooking(ASSET_ID);
@@ -703,6 +707,7 @@ class IncidentServiceTest {
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(AssetStatus.RETIRED));
 
             assertThatThrownBy(() -> incidentService.reportIncident(request(IncidentSeverity.LOW), reporterId, false))
+                    .as("a LOW report on a retired asset is refused; see IncidentService.lockAndRefuseRetired")
                     .isInstanceOf(InvalidStateTransitionException.class)
                     .extracting("code")
                     .isEqualTo("ASSET_RETIRED");
@@ -718,6 +723,7 @@ class IncidentServiceTest {
 
             assertThatThrownBy(
                             () -> incidentService.reportIncident(request(IncidentSeverity.MEDIUM), reporterId, false))
+                    .as("a MEDIUM report on a missing asset is a 404 from CatalogApi.lockForBooking")
                     .isInstanceOf(NotFoundException.class)
                     .extracting("code")
                     .isEqualTo("ASSET_NOT_FOUND");
@@ -730,6 +736,7 @@ class IncidentServiceTest {
                     .thenReturn(3L);
 
             assertThatThrownBy(() -> incidentService.reportIncident(request(IncidentSeverity.HIGH), reporterId, false))
+                    .as("limit: 3 OPEN reports block a 4th; see IncidentService.MAX_OPEN_REPORTS_PER_STUDENT")
                     .isInstanceOf(BusinessRuleException.class)
                     .extracting("code")
                     .isEqualTo("TOO_MANY_OPEN_INCIDENTS");
@@ -746,15 +753,31 @@ class IncidentServiceTest {
             assertThat(incidentService
                             .reportIncident(request(IncidentSeverity.HIGH), reporterId, false)
                             .status())
+                    .as("limit: 2 OPEN reports still allow a 3rd; see IncidentService.reportIncident")
                     .isEqualTo(IncidentStatus.OPEN);
         }
 
+        // #229 review: the count must run under the per-student lock, and the lock must come first,
+        // or two parallel reports both read the same count (IncidentQuotaConcurrencyIT shows the race).
         @Test
-        void anAdmin_hasNoLimit() {
+        void aStudentReport_takesTheQuotaLock_thenCounts_thenSaves() {
+            givenSaveReturnsItsArgument();
+
+            incidentService.reportIncident(request(IncidentSeverity.HIGH), reporterId, false);
+
+            InOrder order = inOrder(incidentReportRepository);
+            order.verify(incidentReportRepository).lockReporterQuota(reporterId);
+            order.verify(incidentReportRepository).countByReportedByIdAndStatus(reporterId, IncidentStatus.OPEN);
+            order.verify(incidentReportRepository).save(any(IncidentReport.class));
+        }
+
+        @Test
+        void anAdmin_hasNoLimit_soTakesNoQuotaLockAndDoesNotCount() {
             givenSaveReturnsItsArgument();
 
             incidentService.reportIncident(request(IncidentSeverity.HIGH), adminId, true);
 
+            verify(incidentReportRepository, never()).lockReporterQuota(any());
             verify(incidentReportRepository, never()).countByReportedByIdAndStatus(any(), any());
             verify(incidentReportRepository).save(any(IncidentReport.class));
         }
@@ -767,17 +790,25 @@ class IncidentServiceTest {
 
             IncidentResponse response = incidentService.startRepair(1L, adminId);
 
-            assertThat(response.status()).isEqualTo(IncidentStatus.IN_REPAIR);
+            assertThat(response.status())
+                    .as("start repair moves OPEN to IN_REPAIR; see IncidentService.startRepair")
+                    .isEqualTo(IncidentStatus.IN_REPAIR);
             InOrder order = inOrder(catalogApi, incidentReportRepository, eventPublisher);
             order.verify(catalogApi).lockForBooking(ASSET_ID);
             order.verify(catalogApi).markUnderMaintenance(ASSET_ID);
             order.verify(incidentReportRepository).save(any(IncidentReport.class));
             ArgumentCaptor<AssetDamagedEvent> event = ArgumentCaptor.forClass(AssetDamagedEvent.class);
             order.verify(eventPublisher).publishEvent(event.capture());
-            assertThat(event.getValue().incidentId()).isEqualTo(1L);
-            assertThat(event.getValue().assetId()).isEqualTo(ASSET_ID);
+            assertThat(event.getValue().incidentId())
+                    .as("the event names the started incident")
+                    .isEqualTo(1L);
+            assertThat(event.getValue().assetId())
+                    .as("the event names the asset the reassignment engine must empty")
+                    .isEqualTo(ASSET_ID);
             // The event names the student who reported it, not the admin who started the repair.
-            assertThat(event.getValue().reportedById()).isEqualTo(reporterId);
+            assertThat(event.getValue().reportedById())
+                    .as("the event names the reporter, not the admin; see IncidentService.startRepair")
+                    .isEqualTo(reporterId);
         }
 
         @ParameterizedTest(name = "asset {0}")
@@ -787,7 +818,9 @@ class IncidentServiceTest {
             when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset(status));
             givenSaveReturnsItsArgument();
 
-            assertThat(incidentService.startRepair(1L, adminId).status()).isEqualTo(IncidentStatus.IN_REPAIR);
+            assertThat(incidentService.startRepair(1L, adminId).status())
+                    .as("start repair on a %s asset still moves the incident to IN_REPAIR", status)
+                    .isEqualTo(IncidentStatus.IN_REPAIR);
             verify(catalogApi, never()).markUnderMaintenance(any());
             verifyNoInteractions(eventPublisher);
         }
@@ -800,6 +833,7 @@ class IncidentServiceTest {
             assertThat(incidentService
                             .resolveIncident(1L, "Cleaned it", adminId)
                             .status())
+                    .as("an OPEN LOW report can be resolved directly; see IncidentService.resolveIncident")
                     .isEqualTo(IncidentStatus.RESOLVED);
             verifyNoInteractions(catalogApi);
             verify(incidentReportRepository, never()).existsIncidentKeepingAssetOutOfUse(any());
@@ -811,6 +845,7 @@ class IncidentServiceTest {
             givenSaveReturnsItsArgument();
 
             assertThat(incidentService.rejectIncident(1L, null, adminId).status())
+                    .as("an OPEN MEDIUM report can be rejected; see IncidentService.rejectIncident")
                     .isEqualTo(IncidentStatus.REJECTED);
             verifyNoInteractions(catalogApi);
         }
