@@ -5,7 +5,7 @@
 # first deploy:   terraform apply -var db_enabled=true
 # Turning it back off (false) DELETES the database and its data, without a final snapshot.
 # Careful: once it is on, every later apply must pass -var db_enabled=true too, or that apply
-# deletes it. So the W7 deploy PR flips the default in variables.tf to true.
+# deletes it. The W7 deploy flipped the default in variables.tf to true.
 
 resource "aws_db_subnet_group" "main" {
   name       = "campus-hub"

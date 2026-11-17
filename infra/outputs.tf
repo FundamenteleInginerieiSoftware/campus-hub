@@ -1,4 +1,4 @@
-# Read with `terraform output`. The W7 deploy (EC2 + CloudFront) uses these IDs.
+# Read with `terraform output`.
 
 output "vpc_id" {
   value = aws_vpc.main.id
@@ -37,4 +37,20 @@ output "app_instance_profile" {
 output "db_endpoint" {
   description = "host:port of RDS, or null while db_enabled = false."
   value       = var.db_enabled ? aws_db_instance.main[0].endpoint : null
+}
+
+output "app_url" {
+  description = "The app on AWS: React pages, /api/v1/..., /swagger-ui.html."
+  value       = "https://${aws_cloudfront_distribution.app.domain_name}"
+}
+
+output "app_instance_id" {
+  description = "For a shell on the server:  aws ssm start-session --target <id>"
+  value       = aws_instance.app.id
+}
+
+output "admin_password" {
+  description = "First admin's password (terraform output -raw admin_password)."
+  value       = random_password.admin.result
+  sensitive   = true
 }
