@@ -46,18 +46,12 @@ public class LabRoomService {
         }
 
         LabRoom labRoom = new LabRoom(normalizedCode, request.name(), request.building());
-        LabRoom saved;
-        try {
-            saved = labRoomRepository.saveAndFlush(labRoom);
-        } catch (DataIntegrityViolationException ex) {
-            // Check if the code was actually taken by a concurrent insert; otherwise rethrow (#167).
-            if (labRoomRepository.existsByCodeIgnoreCase(normalizedCode)) {
-                throw codeTaken(normalizedCode);
-            }
-            throw ex;
-        }
+        LabRoom saved = CatalogPersistence.saveOrThrowConflict(
+                () -> labRoomRepository.saveAndFlush(labRoom),
+                () -> labRoomRepository.existsByCodeIgnoreCase(normalizedCode),
+                () -> codeTaken(normalizedCode));
 
-        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate code (#120).
+        // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate code.
         auditService.record(
                 currentUser.id(), "LAB_ROOM_CREATED", "LAB_ROOM", saved.getId(), "Created lab room " + saved.getCode());
         return LabRoomResponse.from(saved);
@@ -76,18 +70,12 @@ public class LabRoomService {
         }
 
         labRoom.update(normalizedCode, request.name(), request.building());
-        LabRoom saved;
-        try {
-            saved = labRoomRepository.saveAndFlush(labRoom);
-        } catch (DataIntegrityViolationException ex) {
-            // Check if the code was actually taken by a concurrent insert/update; otherwise rethrow (#167).
-            if (labRoomRepository.existsByCodeIgnoreCaseAndIdNot(normalizedCode, id)) {
-                throw codeTaken(normalizedCode);
-            }
-            throw ex;
-        }
+        LabRoom saved = CatalogPersistence.saveOrThrowConflict(
+                () -> labRoomRepository.saveAndFlush(labRoom),
+                () -> labRoomRepository.existsByCodeIgnoreCaseAndIdNot(normalizedCode, id),
+                () -> codeTaken(normalizedCode));
 
-        // Recorded outside the try-catch so an audit failure is not falsely reported as a duplicate code (#120).
+        // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate code.
         auditService.record(
                 currentUser.id(), "LAB_ROOM_UPDATED", "LAB_ROOM", saved.getId(), "Updated lab room " + saved.getCode());
         return LabRoomResponse.from(saved);

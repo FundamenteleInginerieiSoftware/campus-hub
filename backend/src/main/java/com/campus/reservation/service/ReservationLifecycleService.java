@@ -42,6 +42,7 @@ public class ReservationLifecycleService {
 
     private final ReservationRepository reservationRepository;
     private final ReservationService reservationService;
+    private final HoldService holdService;
     private final CatalogApi catalogApi;
     private final NotificationService notificationService;
     private final Clock clock;
@@ -63,7 +64,7 @@ public class ReservationLifecycleService {
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
-        reservationService.sweepExpiredHolds(now);
+        // Expired holds are swept by the dedicated 1-minute sweepExpiredHolds() job below.
 
         return new LifecycleSweepSummary(now, noShowCount, overdueCount, cascadedIds.size(), cascadedIds);
     }
@@ -76,7 +77,7 @@ public class ReservationLifecycleService {
             initialDelayString = "${app.reservation.hold-initial-delay-ms:30000}")
     public int sweepExpiredHolds() {
         LocalDateTime now = now();
-        return reservationService.sweepExpiredHolds(now);
+        return holdService.sweepExpiredHolds(now);
     }
 
     private LocalDateTime now() {

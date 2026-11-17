@@ -28,3 +28,7 @@
 | 15 | [15-catalog-spinner-audit-filters-and-seeder-fixes.md](15-catalog-spinner-audit-filters-and-seeder-fixes.md) | Bug fixes: Catalog debounce spinner, audit filter actions/entities, and seeder asset 14 status (#230) |
 | 16 | [16-audit-log-timezone-offset-rejection.md](16-audit-log-timezone-offset-rejection.md) | Reject timezone offsets in audit log date filters with 400 `INVALID_PARAMETER` (#241) |
 | 17 | [17-project-kit-models-seeder.md](17-project-kit-models-seeder.md) | Seed student project hardware kit models for the Projects Assistant (#140) |
+| 18 | [18-optimistic-locking-retired-visibility-and-audit-diff.md](18-optimistic-locking-retired-visibility-and-audit-diff.md) | Optimistic lock on asset edit (`STALE_VERSION`), retired 404 for students, and detailed audit diffs (#268) |
+| 19 | [19-asset-retired-event-w7.md](19-asset-retired-event-w7.md) | Domain event `AssetRetiredEvent` for W7 decommissioning and auto-reassignment flow (Refs #245) |
+| 20 | [20-catalog-common-cleanup.md](20-catalog-common-cleanup.md) | Shared `PageRequests` helper, `CatalogPersistence` conflict helper, `CatalogService.findOrThrow`, and Javadoc cleanup (Refs #268) |
+| 21 | [21-frontend-inventory-split-and-audit-filter.md](21-frontend-inventory-split-and-audit-filter.md) | Split `AdminInventoryPage` into tab components with isolated modal errors, extract `statusBadgeColor`, and add `PICKUP_PASS_VERIFIED` audit filter (Refs #268) |

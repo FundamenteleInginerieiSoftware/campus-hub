@@ -550,9 +550,9 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
 | Method & Path | Access | Response | Errors |
 |---|---|---|---|
 | `GET /api/v1/assets` | `STUDENT`, `ADMIN` | `200` `PageResponse<AssetResponse>` | `400 INVALID_PARAMETER` |
-| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` |
+| `GET /api/v1/assets/{id}` | `STUDENT`, `ADMIN` | `200` `AssetResponse` | `404 ASSET_NOT_FOUND` (retired assets return 404 for students) |
 | `POST /api/v1/admin/assets` | `ADMIN` | `201` `AssetResponse` | `400 VALIDATION_FAILED`, `404 CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 SERIAL_NUMBER_TAKEN` |
-| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` |
+| `PUT /api/v1/admin/assets/{id}` | `ADMIN` | `200` `AssetResponse` | `400 VALIDATION_FAILED`, `404 ASSET_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `LAB_ROOM_NOT_FOUND`, `409 ASSET_RETIRED` / `STALE_VERSION` (optional `version`; when sent, mismatch gives 409) |
 | `POST /api/v1/admin/assets/{id}/retire` | `ADMIN` | `200` `AssetResponse` (`status: "RETIRED"`) | `404 ASSET_NOT_FOUND`, `409 ASSET_RETIRED` |
 
 `GET /api/v1/assets` optional query parameters:
@@ -586,6 +586,7 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "labRoomId": 1,
   "labRoomCode": "EC105",
   "labRoomName": "Electronics Lab",
+  "version": 0,
   "createdAt": "2026-10-29T12:00:00",
   "updatedAt": "2026-10-29T12:00:00"
 }
@@ -623,4 +624,25 @@ All endpoints below require a valid token (`401 UNAUTHORIZED`); `/api/v1/admin/*
   "details": "Retired damaged multimeter",
   "createdAt": "2026-11-08T10:00:00"
 }
+```
+
+---
+
+### Calendar feed (Calin)
+
+Authenticated settings endpoints for the logged-in user's private iCalendar subscription link (the user ID comes from `CurrentUser.id()`). Only the SHA-256 hash of the 32-byte random token is persisted in `calendar_feeds`, so the full path is returned once on creation.
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/reservations/me/calendar-feed` | any logged-in user | `200` `CalendarFeedStatusResponse` (`{ "enabled": boolean }`) | `401 UNAUTHORIZED` |
+| `POST /api/v1/reservations/me/calendar-feed` | any logged-in user | `201` `CalendarFeedCreatedResponse` (`{ "path": "/api/v1/calendar/<token>.ics" }`); replaces any existing link and writes audit `CALENDAR_FEED_CREATED` (entity `USER`) | `401 UNAUTHORIZED` |
+| `DELETE /api/v1/reservations/me/calendar-feed` | any logged-in user | `204` No Content (idempotent when no link exists); writes audit `CALENDAR_FEED_REVOKED` (entity `USER`) only when a link existed | `401 UNAUTHORIZED` |
+| `GET /api/v1/calendar/{token}.ics` | public (secret token in path; `SecurityConfig` `permitAll`) | `200` `text/calendar;charset=UTF-8`, `Cache-Control: no-store`, RFC 5545 `VCALENDAR` of reservations overlapping `[now - 30d, now + 30d]` (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, `RETURNED`) with UTC timestamps | `404 CALENDAR_FEED_NOT_FOUND` (malformed, unknown, replaced, revoked token, or disabled/deleted user) |
+
+```json
+// CalendarFeedStatusResponse (GET /api/v1/reservations/me/calendar-feed)
+{ "enabled": true }
+
+// CalendarFeedCreatedResponse (POST /api/v1/reservations/me/calendar-feed)
+{ "path": "/api/v1/calendar/aB3dEf...43chars...XyZ.ics" }
 ```

@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Tue 10 Nov 2026 (W6).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Mon 16 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -11,25 +11,31 @@
 | When | Milestone | Status |
 |---|---|---|
 | W4 | Prototype demo in Swagger | ✅ runs on `main` since 31 Oct (tag `v0.1.0-prototype`) |
-| **Sun 15 Nov (end of W6)** | **M1 `v0.1.0`**: locally, a student registers, logs in, browses, books (conflicts rejected), sees My reservations; an admin adds assets; CI green; Swagger complete | All parts on `main`; left: run the flow, tag (section 2) |
+| **Sun 15 Nov (end of W6)** | **M1 `v0.1.0`**: locally, a student registers, logs in, browses, books (conflicts rejected), sees My reservations; an admin adds assets; CI green; Swagger complete | ✅ flow run on a fresh database (API + browser), `v0.1.0` tagged on `b81e400` (11 Nov) |
 | **Sun 6 Dec (end of W9)** | **M2 `v0.2.0`**: everything locally **and on AWS**, incl. incident with photo → automatic reassignment → notification | Not started on AWS |
 | Mon 7 Dec (W10) | **Feature freeze**: tests and bugs only | |
 | W11–W12 (14–27 Dec) | Docs, diagrams, report, demo rehearsals, defense `v1.0.0` | Christmas break: finish before it. Real defense date still 🟡 |
 
-## 2. What M1 still needs (by 15 Nov)
+## 2. M1 ✅ (11 Nov)
 
-| Missing | Owner | Waits on |
-|---|---|---|
-| ~~`CatalogSeeder` with several assets of the same model~~ | Liviu | ✅ #193 |
-| ~~Register page~~ | Stefania | ✅ #107 |
-| ~~Catalog page, asset details page, admin inventory page~~ | Liviu | ✅ #196 |
-| ~~Booking on the asset details page~~ | Calin | ✅ #226 |
-| Run the full M1 flow on a fresh database, tag `v0.1.0` | Matei (with Stefania) | everything above |
+Every M1 part is on `main` (seed data #193, register #107, catalog + inventory pages #196, booking on the asset details #226). Matei ran the full flow on a fresh database on 11 Nov (register, login, browse, book, conflict 409, My reservations, admin adds an asset, Swagger) and tagged **`v0.1.0`** on `b81e400`. Next milestone: **M2 by Sun 6 Dec** (section 1).
 
 ## 3. Open PRs right now
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
+| #292, #293, #294, #296 | Calin | Fixes and refactors from the code read-through #267 (slot-hold hook, `isAssetFree` hold owner, OVERDUE queries, `HoldService`/`TransferService`) | Approved: update from `main`, then merge one at a time |
+| #297, #298, #299, #300 | Calin | Calendar feed (#289): sync page, `usedMinutesByAsset`, token settings + `IcsWriter`, iCalendar feed | Approved: #300 can merge now; the others update from `main` first |
+| #278, #280 | Liviu | Version check on update, hide retired, audit diffs (#268); `AssetRetiredEvent` (#245) | Approved: update from `main`, then merge |
+| #287, #288 | Liviu | Catalog paging refactor; split `AdminInventoryPage` | Approved, but **merge conflicts** with `main`: resolve, then ask for a new approval (#288 also needs CI on its last commit) |
+| #263 | Stefania | Only HIGH/CRITICAL incidents take the asset out of use, max 3 open reports per student (#229) | Approved, but the required `docs-check` never ran: push (or update the branch), then ask for a new approval |
+| #284 | Matei | Pickup pass pages (student pass + desk verification) | Approved by Calin; waits for Stefania's review (touches `App.tsx`, `navigation.ts`) |
+
+Merged since the last update: Matei #272, #273 (project search and details fixes), #283 (pickup pass backend), #295 (public calendar feed path); Calin #262 (idempotency keys), #266 (cancel a user's upcoming bookings, #229), #270 (fixes for #267), #286 (same-model suggestions on a slot conflict); Liviu #275 (student project kits in the catalog seed, #140); docs #282. Closed without merging: Calin's drafts #58, #59, #61 and the off-plan #255, #256, #258, #260, #265.
+
+Open issues: **#140** (Projects: left: the app-wide RO/EN choice, Stefania), **#229** (Stefania, PR #263), **#245** (retire flow, PR #280), code read-through findings **#267** (Calin), **#268** (Liviu), **#269** (Stefania), new features **#289** (Calin), **#290** (Liviu), **#291** (Stefania).
+
+---|---|---|---|
 | #263 | Stefania | Only HIGH/CRITICAL incidents take the asset out of use, max 3 open reports per student (#229) | Approved: update branch if behind, then merge |
 | #266 | Calin | Cancel a user's upcoming reservations: `ReservationApi` method + admin endpoint (for #229) | Needs a review |
 | #270 | Calin | Fixes for the code read-through #267 (holds, locking, lifecycle) | Needs a review |
@@ -51,10 +57,10 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | ~~**Terraform part 1** (`infra/`): S3 state bucket, VPC, 1 public subnet + 2 private DB subnets, no NAT, security groups~~ (✅ #249, applied) | – |
 | W6 | ~~**Terraform part 2**: photos bucket, ECR, EC2 instance role, SSM parameters `/campus/*`, log group~~ (✅ #250, applied). RDS is written but **off** (`db_enabled=false`) until the W7 deploy | Part 1 |
 | W6 | ~~Dockerfile~~ (✅ #114) · ~~run the image locally with `prod`~~ (✅ smoke test, #129) · ~~push to ECR~~ (✅ 9 Nov, tagged with the commit SHA) | Terraform part 2 (ECR) |
-| W6 | ~~Swagger check~~ (✅ #184) · run the M1 flow · tag `v0.1.0` · status update | Section 2 |
+| W6 | ~~Swagger check~~ (✅ #184) · ~~run the M1 flow · tag `v0.1.0`~~ (✅ 11 Nov) · ~~status update~~ (✅ 16 Nov) | – |
 | W6–W8 | **Projects (#140)**: ~~design + plan~~ (✅ #232) · ~~engine: library, search, details endpoints~~ (✅ #236) · ~~10 projects~~ (✅ #239) · ~~`/projects` pages with RO/EN switch~~ (✅ #238) · ~~`POST /projects/{slug}/reserve` + "Reserve all"~~ (✅ #243, #248) | Liviu: student-kit models in the seed; Stefania: whole-app i18n choice |
 | W6 | ~~End-of-task docs: AGENTS §4 rule + `docs-check` job, required check on `main`~~ (✅ #277, #279, ruleset 10 Nov) | – |
-| W6 | ~~Login password length~~ (✅ #271) · open PRs #272, #273 (the other fixes from the code read-through) | Reviews |
+| W6 | ~~Login password length~~ (✅ #271) · ~~the other fixes from the code read-through~~ (✅ #272, #273) | – |
 | W7–W8 | **First AWS deploy**: EC2 (Docker) + Elastic IP + CloudFront in front (ADR-002); `Authorization` header must reach Spring through CloudFront · flip `db_enabled` to true (creates RDS) · `MAIL_FROM` with a verified SES sender (the app does not start without it) · `ADMIN_EMAIL` / `ADMIN_PASSWORD` in SSM | Dockerfile, Terraform ✅ |
 | W8 | **`deploy.yml`** with GitHub OIDC (no AWS keys in GitHub) · ~~`S3StorageService`~~ (✅ #129, #177) · first live deploy **by the end of W8** | – |
 | W9 | ~~`SesNotificationService`~~ (✅ #129, #177) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
@@ -70,10 +76,10 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 |---|---|---|
 | W6 | ~~**`CatalogSeeder`**~~ (✅ #193) · ~~student-kit models seeded for Projects (#140)~~ (✅ #275) | – |
 | ~~W6~~ | ~~Catalog, asset details, admin inventory pages~~ (✅ #196) · ~~`docs/modules/common.md`~~ (✅ #197) · ~~Swagger error codes + PIT survivors~~ (✅ #220, closes #187) | – |
-| W6 | ~~Audit date filters~~ (✅ #244) · work through #268 (lost updates on edit, retired asset by id, duplicated paging checks) | – |
-| W7 | **Retire flow**: agree with Calin + Stefania what happens to a retired asset's future bookings (recommended: `AssetRetiredEvent`, handled by Calin's engine) | Team decision |
+| W6 | ~~Audit date filters~~ (✅ #244) · ~~#268 bugs: asset version on edit, retired asset by id, audit diffs, details flicker~~ (✅ #278) · ~~#268 backend cleanup (`PageRequests`, `CatalogPersistence`, `CatalogService.findOrThrow`, Javadoc)~~ (✅ #287) · ~~#268 frontend split (`AdminInventoryPage`, `statusBadgeColor`, isolated modal errors)~~ (✅ #288) · remaining #268 cleanup (optional `category`/`labRoom` version) | – |
+| W7 | **Retire flow**: agree with Calin + Stefania (✅ agreed in #245) · publish `AssetRetiredEvent` in `catalog.api` for reassignment flow (✅ #280) | Calin's listener in reassignment |
 | ~~W7–W8~~ | ~~`STALE_VERSION` test~~ (✅ #220) · ~~audit log endpoint + page~~ (✅ #217, #221) · ~~class + ER diagrams, report chapter~~ (✅ #222, keep them current) | – |
-| Proposed, not agreed | Build **live notifications** in your `notification` module (spec + plan `docs/superpowers/*/2026-11-10-live-notifications*`) · optional: add `PICKUP_PASS_VERIFIED` to the audit page's action filter (Matei's pickup pass) | Section 7a |
+| Proposed, not agreed | Build **live notifications** in your `notification` module (spec + plan `docs/superpowers/*/2026-11-10-live-notifications*`) · ~~optional: add `PICKUP_PASS_VERIFIED` to the audit page's action filter~~ (✅ #288) | Section 7a |
 | W8 | Help Calin with substitute-query edge cases (none, several, retired excluded) | – |
 | W10–W12 | Coverage ≥ 70% (`catalog.service`, `common.audit`, `storage`, handler) · final class, ER and Asset state diagrams · report section · demo part (admin adds an asset, student filters, audit log) | – |
 
@@ -85,11 +91,11 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Booking on the asset details page~~ (✅ #226) · ~~Observer doc~~ (✅ #207) · bundle, extend, transfer, hold backends merged (#212–#214, #219) | – |
 | ~~W6~~ | ~~Finish #224, #225, #227~~ (✅) · ~~#228 security findings~~ (✅ #234) · ~~#231 offsets~~ (✅ #233) · ~~`bookBundle` for Projects~~ (✅ #235) | – |
 | **W6 (now)** | **No new features** until the team agrees which off-plan ones stay for the demo. Open off-plan PR: idempotency **#262** (#255, #256, #258, #260, #265 closed) | Team decision |
-| W6 | ~~Review and merge **#270**~~ (✅ #270: fixes for #267) · **#266** (`cancelUpcomingReservationsForUser` facade + admin endpoint, Refs #229 — waiting on `UserDisabledEvent` in `user.api` for automatic wiring) · work through the rest of #267 (reassignment error handling, hold races, size of `ReservationService`) | Reviews |
+| W6 | ~~Review and merge **#270**~~ (✅ #270: fixes for #267) · ~~**#266**~~ (✅ #266: `cancelUpcomingReservationsForUser` facade + admin endpoint, Refs #229 — waiting on `UserDisabledEvent` in `user.api` for automatic wiring) · ~~`isAssetFree` hold owner exclusion, `CalendarBookingView` week-nav guard, test & ArchUnit hardening~~ (✅ #293, Refs #267) · ~~single hold sweep, repository overlap query simplification, `ReservationHold`/`ReservationService` cleanups~~ (✅ #294, Refs #267) · ~~reservation frontend constants/`useSlotHold`/modals refactor~~ (✅ #292, Refs #267) · extracted `HoldService`, `TransferService`, and `ReservationSlotValidator` and simplified `ReservationService` to one constructor (#296, Refs #267 §2) | Reviews |
 | W6 | **#262** (idempotency key): backend review fixes done (FAILED retry, 60 s takeover, doc 31) and `frontend/src/api/reservations.ts` now sends a slot-scoped `Idempotency-Key` on `POST /reservations`; left open: the team decision on this off-plan feature | Team decision |
 | W7 | Listener for `AssetRetiredEvent` if the team chooses it · **ArchUnit strict** after M1 · Observer doc with Stefania | Retire decision |
 | W9 | Full incident → reassignment flow locally and on AWS · keep `src/api/reservations.ts` current for Matei's desk page · check times on AWS (container runs in UTC) | Matei's deploy |
-| Proposed, not agreed | Build the **calendar feed** in your `reservation` module (spec + plan `docs/superpowers/*/2026-11-10-calendar-feed*`) · for Stefania's reliability page: a read method on `ReservationApi` for the minutes each asset was really in use (proposed `usedMinutesByAsset`) | Section 7a |
+| Proposed, not agreed | **Calendar feed (#289)** (`docs/superpowers/*/2026-11-10-calendar-feed*`): ~~PR 1 (`calendar_feeds` migration, `CalendarTokenService`, `/me/calendar-feed` settings endpoints, `IcsWriter`)~~ (✅ #299) · ~~PR 2 (`ReservationRepository.findByUserIdOverlappingRange`, `CalendarFeedService`, `GET /api/v1/calendar/{token}.ics` in `CalendarFeedController`)~~ (✅ #300) · ~~PR 3 (frontend `CalendarSyncPage`)~~ (✅ #297) · ~~for Stefania's reliability page: a read method on `ReservationApi` for the minutes each asset was really in use (`usedMinutesByAsset`)~~ (✅ #298, Refs #289) | – |
 | After M1 | Decide what to do with drafts #58, #59, #61 (merge only if time and the team agrees) · **#286** (#285) same-model substitute suggestions on booking conflict in `checkAvailability` + `CalendarBookingView` (in-place unit switch) | – |
 | W10–W12 | **Test lead**: keep `docs/testing/test-plan.md` current (#101, #199), JaCoCo results, **test report** · full-flow integration tests · ~~PIT survivors~~ (✅ #201) · reservation state diagram · ~~booking sequence diagram~~ (✅ #204) · ~~**Strategy pattern doc**~~ (✅ #205) · ~~report section~~ (✅ #203, keep it current) · demo part | – |
 
@@ -107,9 +113,9 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |
 | W10–W12 | Coverage ≥ 70% (`incident.service`, user admin) · **manual E2E checklist** · final use case + incident state diagrams · **Observer doc** · **user manual** with screenshots · **demo script** + 2 rehearsals + video backup (you lead the demo) | – |
 
-## 7a. Proposed new features (not agreed yet)
+## 7a. New features, one per member (agreed 16 Nov)
 
-Matei proposes four more features, **one per member**: each goes to the member who owns the data it reads, so every member has a feature beyond CRUD to defend and the asks between members stay small. Specs and plans: `docs/superpowers/specs/2026-11-10-*` and `docs/superpowers/plans/2026-11-10-*` (written by Matei; each owner reads, changes and writes the code of their own). **Proposed only:** nothing is started and the split is **not agreed**: raise it at the next meeting. The four can be built in parallel. All four must be done before the feature freeze (Mon 7 Dec) and must not delay M1 or the W7 deploy. If a teammate part is not on `main` by **30 Nov**, the cut line in the table applies.
+Matei proposes four more features, **one per member**: each goes to the member who owns the data it reads, so every member has a feature beyond CRUD to defend and the asks between members stay small. Specs and plans: `docs/superpowers/specs/2026-11-10-*` and `docs/superpowers/plans/2026-11-10-*` (written by Matei; each owner reads, changes and writes the code of their own). **Agreed by the team on 16 Nov** (`docs/decisions.md` §6); tracking issues #289 (Calin), #290 (Liviu), #291 (Stefania); Matei's pickup pass backend is on `main` (#283). The four can be built in parallel. All four must be done before the feature freeze (Mon 7 Dec) and must not delay M1 or the W7 deploy. If a teammate part is not on `main` by **30 Nov**, the cut line in the table applies.
 
 | # | Feature | What it is | Owner | Needs from | Cut line |
 |---|---|---|---|---|---|

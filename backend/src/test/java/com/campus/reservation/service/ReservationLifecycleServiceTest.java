@@ -20,6 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +44,9 @@ class ReservationLifecycleServiceTest {
     private ReservationService reservationService;
 
     @Mock
+    private HoldService holdService;
+
+    @Mock
     private CatalogApi catalogApi;
 
     @Mock
@@ -56,7 +60,7 @@ class ReservationLifecycleServiceTest {
         // 2026-11-02T10:00:00 Europe/Bucharest
         clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
         lifecycleService = new ReservationLifecycleService(
-                reservationRepository, reservationService, catalogApi, notificationService, clock);
+                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock);
     }
 
     @Test
@@ -118,6 +122,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L);
 
         verify(reservationService).moveToAsset(eq(33L), eq(SUB_ASSET_ID), any());
+        verify(holdService, never()).sweepExpiredHolds(any());
         verify(notificationService).notifyUser(eq(101L), eq("Reservation Marked as No-Show"), any());
         verify(notificationService).notifyUser(eq(102L), eq("Equipment Overdue"), any());
         verify(notificationService).notifyUser(eq(103L), eq("Proactive Reservation Reassignment"), any());
@@ -343,7 +348,7 @@ class ReservationLifecycleServiceTest {
         // --- Sweep 2: at 11:00 (60 minutes later, equipment still OVERDUE) ---
         Clock clock2 = Clock.fixed(Instant.parse("2026-11-02T09:00:00Z"), ZoneId.of("Europe/Bucharest"));
         ReservationLifecycleService service2 = new ReservationLifecycleService(
-                reservationRepository, reservationService, catalogApi, notificationService, clock2);
+                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock2);
 
         LocalDateTime now2 = LocalDateTime.now(clock2); // 11:00
         when(reservationRepository.findConfirmedBeforeCutoff(now2.minusMinutes(30)))
@@ -475,10 +480,10 @@ class ReservationLifecycleServiceTest {
     }
 
     @Test
-    @DisplayName("sweepExpiredHolds: delegates to reservationService and returns count")
+    @DisplayName("sweepExpiredHolds: delegates to holdService and returns count")
     void sweepExpiredHolds_delegatesToServiceAndReturnsCount() {
-        LocalDateTime expectedNow = LocalDateTime.now(clock).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
-        when(reservationService.sweepExpiredHolds(expectedNow)).thenReturn(5);
+        LocalDateTime expectedNow = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        when(holdService.sweepExpiredHolds(expectedNow)).thenReturn(5);
 
         int swept = lifecycleService.sweepExpiredHolds();
 
@@ -486,6 +491,6 @@ class ReservationLifecycleServiceTest {
                 .as(
                         "sweep expired holds: lifecycle scheduled runner must return count of holds swept; see ReservationLifecycleService.sweepExpiredHolds")
                 .isEqualTo(5);
-        verify(reservationService).sweepExpiredHolds(expectedNow);
+        verify(holdService).sweepExpiredHolds(expectedNow);
     }
 }

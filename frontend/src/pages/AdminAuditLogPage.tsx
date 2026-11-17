@@ -72,7 +72,7 @@ const ACTION_OPTIONS = [
   },
   {
     group: 'Users',
-    items: ['USER_DISABLED', 'USER_ENABLED', 'USER_ROLE_CHANGED'],
+    items: ['USER_DISABLED', 'USER_ENABLED', 'USER_ROLE_CHANGED', 'PICKUP_PASS_VERIFIED'],
   },
 ]
 

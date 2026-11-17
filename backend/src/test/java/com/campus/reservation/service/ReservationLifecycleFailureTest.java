@@ -49,6 +49,9 @@ class ReservationLifecycleFailureTest {
     private ReservationService reservationService;
 
     @Mock
+    private HoldService holdService;
+
+    @Mock
     private CatalogApi catalogApi;
 
     @Mock
@@ -59,7 +62,7 @@ class ReservationLifecycleFailureTest {
     @BeforeEach
     void setUp() {
         lifecycleService = new ReservationLifecycleService(
-                reservationRepository, reservationService, catalogApi, notificationService, clock);
+                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock);
     }
 
     private Reservation reservation(long id, long userId, int startHour, int endHour) {

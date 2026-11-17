@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.domain.Asset;
 import com.campus.catalog.domain.Category;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -73,6 +75,9 @@ class AssetServiceTest {
     private AuditService auditService;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private CurrentUser currentUser;
 
     private AssetService assetService;
@@ -86,10 +91,13 @@ class AssetServiceTest {
                 categoryRepository,
                 labRoomRepository,
                 auditService,
+                eventPublisher,
                 currentUser,
                 Clock.fixed(FIXED_INSTANT, CAMPUS_ZONE));
         category = new Category("Oscilloscopes", "Signal lab");
+        org.springframework.test.util.ReflectionTestUtils.setField(category, "id", 1L);
         labRoom = new LabRoom("EC105", "Electronics Lab", "EC");
+        org.springframework.test.util.ReflectionTestUtils.setField(labRoom, "id", 1L);
     }
 
     @Test
@@ -113,6 +121,31 @@ class AssetServiceTest {
         NotFoundException ex = assertThrows(NotFoundException.class, () -> assetService.getById(99L));
 
         assertEquals("ASSET_NOT_FOUND", ex.getCode());
+    }
+
+    @Test
+    void getByIdThrowsNotFoundWhenAssetIsRetiredAndUserIsStudent() {
+        Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
+        retired.retire(EXPECTED_NOW);
+        when(assetRepository.findWithDetailsById(6L)).thenReturn(Optional.of(retired));
+        when(currentUser.isAdmin()).thenReturn(false);
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () -> assetService.getById(6L));
+
+        assertEquals("ASSET_NOT_FOUND", ex.getCode());
+    }
+
+    @Test
+    void getByIdReturnsRetiredAssetWhenUserIsAdmin() {
+        Asset retired = new Asset("Old Uno", "Arduino Uno R3", "UNO-001", null, category, labRoom, EXPECTED_NOW);
+        retired.retire(EXPECTED_NOW);
+        when(assetRepository.findWithDetailsById(6L)).thenReturn(Optional.of(retired));
+        when(currentUser.isAdmin()).thenReturn(true);
+
+        AssetResponse response = assetService.getById(6L);
+
+        assertEquals(AssetStatus.RETIRED, response.status());
+        assertEquals("Old Uno", response.name());
     }
 
     @Test
@@ -252,7 +285,9 @@ class AssetServiceTest {
         LocalDateTime createdAt = LocalDateTime.of(2026, 10, 20, 9, 0, 0);
         Asset asset = new Asset("Old Name", "Old Model", "DS1ZA-001", "Old desc", category, labRoom, createdAt);
         Category newCategory = new Category("Multimeters", "Bench meters");
+        org.springframework.test.util.ReflectionTestUtils.setField(newCategory, "id", 2L);
         LabRoom newRoom = new LabRoom("EC202", "Power Lab", "EC");
+        org.springframework.test.util.ReflectionTestUtils.setField(newRoom, "id", 3L);
 
         when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
         when(categoryRepository.findById(2L)).thenReturn(Optional.of(newCategory));
@@ -270,7 +305,42 @@ class AssetServiceTest {
         assertEquals("Multimeters", response.categoryName());
         assertEquals("EC202", response.labRoomCode());
         assertEquals(EXPECTED_NOW, response.updatedAt());
-        verify(auditService).record(3L, "ASSET_UPDATED", "ASSET", null, "Updated asset New Name");
+        verify(auditService)
+                .record(
+                        3L,
+                        "ASSET_UPDATED",
+                        "ASSET",
+                        null,
+                        "Updated asset New Name (name: 'Old Name' -> 'New Name', model: 'Old Model' -> 'New Model', description updated, category: Oscilloscopes -> Multimeters, room: EC105 -> EC202)");
+    }
+
+    @Test
+    void updateRejectsStaleVersion() {
+        Asset asset = new Asset("Name", "Model", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "version", 2L);
+        when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
+
+        assertThrows(
+                org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+                () -> assetService.update(7L, new UpdateAssetRequest("New Name", "Model", null, 1L, 2L, 1L)));
+        verify(assetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateAcceptsMatchingVersion() {
+        Asset asset = new Asset("Name", "Model", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "version", 2L);
+        when(assetRepository.findWithDetailsById(7L)).thenReturn(Optional.of(asset));
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
+        when(currentUser.id()).thenReturn(3L);
+
+        AssetResponse response = assetService.update(7L, new UpdateAssetRequest("New Name", "Model", null, 1L, 2L, 2L));
+
+        assertNotNull(response);
+        assertEquals("New Name", response.name());
+        verify(assetRepository).saveAndFlush(asset);
     }
 
     @Test
@@ -303,6 +373,7 @@ class AssetServiceTest {
     @Test
     void retireMarksAssetRetiredAndRecordsAudit() {
         Asset asset = new Asset("Rigol #1", "Rigol DS1054Z", "DS1ZA-001", null, category, labRoom, EXPECTED_NOW);
+        org.springframework.test.util.ReflectionTestUtils.setField(asset, "id", 7L);
         when(assetRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(asset));
         when(assetRepository.saveAndFlush(asset)).thenReturn(asset);
         when(currentUser.id()).thenReturn(3L);
@@ -311,7 +382,8 @@ class AssetServiceTest {
 
         assertEquals(AssetStatus.RETIRED, response.status());
         assertEquals(EXPECTED_NOW, response.updatedAt());
-        verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", null, "Retired asset Rigol #1 (S/N DS1ZA-001)");
+        verify(auditService).record(3L, "ASSET_RETIRED", "ASSET", 7L, "Retired asset Rigol #1 (S/N DS1ZA-001)");
+        verify(eventPublisher).publishEvent(new AssetRetiredEvent(7L, EXPECTED_NOW, 3L));
     }
 
     @Test
@@ -321,6 +393,7 @@ class AssetServiceTest {
         NotFoundException ex = assertThrows(NotFoundException.class, () -> assetService.retire(404L));
 
         assertEquals("ASSET_NOT_FOUND", ex.getCode());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -334,6 +407,7 @@ class AssetServiceTest {
 
         assertEquals("ASSET_RETIRED", ex.getCode());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

@@ -24,24 +24,37 @@ import {
   IconLockOpen,
   IconX,
 } from '@tabler/icons-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   checkAvailability,
   confirmHold,
-  createHold,
   createReservation,
   fetchAssetSummary,
   nowInBucharest,
   parseCampusLocalDateTime,
-  releaseHold,
   type AssetSummary,
   type AvailabilityResponse,
   type Reservation,
-  type ReservationHoldResponse,
 } from '../api/reservations.ts'
-import { ApiError } from '../api/client.ts'
 import ErrorAlert from './ErrorAlert.tsx'
+import {
+  BOOKING_DURATIONS,
+  CLOSE_MINUTES,
+  CLOSING_TIME,
+  DEFAULT_DURATION_MINUTES,
+  DEFAULT_START_TIME,
+  HOLD_DURATION_SECONDS,
+  LAST_START_MINUTES,
+  MAX_ACTIVE_RESERVATIONS,
+  MAX_ADVANCE_DAYS,
+  OPEN_HOUR,
+  OPENING_TIME,
+  SLOT_STEP_MINUTES,
+  TIME_STEPS,
+} from './reservation/bookingRules.ts'
+import { formatSlotDate, MONTH_NAMES } from './reservation/reservationFormatters.ts'
+import { useSlotHold } from './reservation/useSlotHold.ts'
 
 type Props = {
   asset: AssetSummary
@@ -49,24 +62,7 @@ type Props = {
   onSuccess?: (reservation: Reservation) => void
 }
 
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-// 30-min steps from 08:00 to 20:00 (closing hour).
-const TIME_STEPS: string[] = []
-for (let h = 8; h < 20; h++) {
-  TIME_STEPS.push(`${String(h).padStart(2, '0')}:00`)
-  TIME_STEPS.push(`${String(h).padStart(2, '0')}:30`)
-}
-
-const ALL_DURATIONS = [
-  { label: '30 min', value: 30 },
-  { label: '1 h', value: 60 },
-  { label: '1.5 h', value: 90 },
-  { label: '2 h', value: 120 },
-  { label: '3 h', value: 180 },
-  { label: '4 h', value: 240 },
-]
+const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
 function getMonday(d: Date): Date {
   const date = new Date(d)
@@ -97,43 +93,34 @@ function addMinutesToTimeString(timeStr: string, minutes: number): string {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`
 }
 
-function formatFriendlyDate(dateKey: string): string {
-  if (!dateKey) return ''
-  const [y, m, d] = dateKey.split('-').map(Number)
-  const dateObj = new Date(y, m - 1, d)
-  const dayName = DAY_NAMES[dateObj.getDay() === 0 ? 4 : dateObj.getDay() - 1] ?? 'Day'
-  const monthName = MONTH_NAMES[m - 1] ?? ''
-  return `${dayName}, ${d} ${monthName} ${y}`
-}
-
 function findFirstValidSlotForDay(targetDay: Date, today: Date): string {
   const isToday = formatDateKey(targetDay) === formatDateKey(today)
   if (!isToday) {
-    return '09:00'
+    return DEFAULT_START_TIME
   }
   const currentTotalMins = today.getHours() * 60 + today.getMinutes()
   for (const step of TIME_STEPS) {
     const [h, m] = step.split(':').map(Number)
     const slotMins = h * 60 + m
-    if (slotMins > currentTotalMins && slotMins <= 19 * 60 + 30) {
+    if (slotMins > currentTotalMins && slotMins <= LAST_START_MINUTES) {
       return step
     }
   }
-  return '09:00'
+  return DEFAULT_START_TIME
 }
 
 function getInitialSchedule(today: Date): { day: string; time: string; monday: Date } {
   const dayOfWeek = today.getDay()
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   const currentTotalMins = today.getHours() * 60 + today.getMinutes()
-  const isTooLateToday = currentTotalMins >= 19 * 60 + 30
+  const isTooLateToday = currentTotalMins >= LAST_START_MINUTES
 
   if (isWeekend) {
     const nextMon = getMonday(today)
     nextMon.setDate(nextMon.getDate() + 7)
     return {
       day: formatDateKey(nextMon),
-      time: '09:00',
+      time: DEFAULT_START_TIME,
       monday: nextMon,
     }
   }
@@ -144,7 +131,7 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
       nextMon.setDate(nextMon.getDate() + 7)
       return {
         day: formatDateKey(nextMon),
-        time: '09:00',
+        time: DEFAULT_START_TIME,
         monday: nextMon,
       }
     }
@@ -152,7 +139,7 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
     tomorrow.setDate(tomorrow.getDate() + 1)
     return {
       day: formatDateKey(tomorrow),
-      time: '09:00',
+      time: DEFAULT_START_TIME,
       monday: getMonday(today),
     }
   }
@@ -185,7 +172,18 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }>({ key: '', items: [] })
   const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
-  const maxBookingDate = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14, today.getHours(), today.getMinutes(), today.getSeconds()), [today])
+  const maxBookingDate = useMemo(
+    () =>
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate() + MAX_ADVANCE_DAYS,
+        today.getHours(),
+        today.getMinutes(),
+        today.getSeconds(),
+      ),
+    [today],
+  )
 
   // Current view's Monday
   const [currentMonday, setCurrentMonday] = useState(() => initialSchedule.monday)
@@ -193,7 +191,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   // Selected slot state
   const [selectedDay, setSelectedDay] = useState<string>(() => initialSchedule.day)
   const [selectedStartTime, setSelectedStartTime] = useState<string>(() => initialSchedule.time)
-  const [durationMinutes, setDurationMinutes] = useState<number>(60)
+  const [durationMinutes, setDurationMinutes] = useState<number>(DEFAULT_DURATION_MINUTES)
 
   const [availability, setAvailability] = useState<{
     checking: boolean
@@ -203,46 +201,6 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
-
-  // 1-minute slot hold state (concurrency locking)
-  const [activeHold, setActiveHold] = useState<ReservationHoldResponse | null>(null)
-  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number>(0)
-  const [holdLoading, setHoldLoading] = useState(false)
-  const [holdError, setHoldError] = useState<unknown>(null)
-  const activeHoldRef = useRef<ReservationHoldResponse | null>(null)
-  const deadlineRef = useRef<number>(0)
-
-  useEffect(() => {
-    activeHoldRef.current = activeHold
-  }, [activeHold])
-
-  // Live countdown timer for active hold using wall-clock deadline to resist background tab throttling
-  useEffect(() => {
-    if (!activeHold) return
-    const updateTimer = () => {
-      const remaining = Math.max(0, Math.round((deadlineRef.current - Date.now()) / 1000))
-      setHoldRemainingSeconds(remaining)
-      if (remaining <= 0) {
-        activeHoldRef.current = null
-        setActiveHold(null)
-      }
-    }
-    updateTimer()
-    const timer = setInterval(updateTimer, 1000)
-    return () => clearInterval(timer)
-  }, [activeHold])
-
-  const isMountedRef = useRef(true)
-  useEffect(() => {
-    isMountedRef.current = true
-    return () => {
-      isMountedRef.current = false
-      if (activeHoldRef.current) {
-        releaseHold(activeHoldRef.current.id).catch(() => {})
-        activeHoldRef.current = null
-      }
-    }
-  }, [])
 
   // Compute the 5 weekdays for the active week view.
   const weekDays = useMemo(() => {
@@ -257,8 +215,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   const maxAvailableMins = useMemo(() => {
     const [h, m] = selectedStartTime.split(':').map(Number)
     const startMins = h * 60 + m
-    const closeMins = 20 * 60 // 20:00 = 1200 mins
-    return Math.max(0, closeMins - startMins)
+    return Math.max(0, CLOSE_MINUTES - startMins)
   }, [selectedStartTime])
 
   // If start is e.g. 19:30, automatically cap duration at 30 min (and grey out longer options).
@@ -266,8 +223,8 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     if (durationMinutes <= maxAvailableMins) {
       return durationMinutes
     }
-    const allowed = ALL_DURATIONS.map((d) => d.value).filter((val) => val <= maxAvailableMins)
-    return allowed[allowed.length - 1] ?? 30
+    const allowed = BOOKING_DURATIONS.map((d) => d.value).filter((val) => val <= maxAvailableMins)
+    return allowed[allowed.length - 1] ?? SLOT_STEP_MINUTES
   }, [durationMinutes, maxAvailableMins])
 
   const startIso = useMemo(() => `${selectedDay}T${selectedStartTime}:00`, [selectedDay, selectedStartTime])
@@ -276,10 +233,16 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     return `${selectedDay}T${endTimeStr}:00`
   }, [selectedDay, selectedStartTime, effectiveDuration])
 
-  const selectionRef = useRef({ startIso, endIso })
-  useEffect(() => {
-    selectionRef.current = { startIso, endIso }
-  }, [startIso, endIso])
+  const {
+    activeHold,
+    holdRemainingSeconds,
+    holdLoading,
+    holdError,
+    handleAcquireHold,
+    handleReleaseHold,
+    discardActiveHold,
+    clearActiveHold,
+  } = useSlotHold({ assetId: asset.id, startIso, endIso })
 
   // Check availability when slot changes
   useEffect(() => {
@@ -308,28 +271,18 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   function selectSlot(day: string, time: string) {
     if (holdLoading || bookingLoading) return
-    if (activeHoldRef.current) {
-      releaseHold(activeHoldRef.current.id).catch(() => {})
-      activeHoldRef.current = null
-      setActiveHold(null)
-    }
+    discardActiveHold()
     setSelectedDay(day)
     setSelectedStartTime(time)
     setBookingError(null)
-    setHoldError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
   function handleDurationChange(val: number) {
     if (holdLoading || bookingLoading) return
-    if (activeHoldRef.current) {
-      releaseHold(activeHoldRef.current.id).catch(() => {})
-      activeHoldRef.current = null
-      setActiveHold(null)
-    }
+    discardActiveHold()
     setDurationMinutes(val)
     setBookingError(null)
-    setHoldError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
   }
 
@@ -339,12 +292,13 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
       currentMonday.getFullYear(),
       currentMonday.getMonth(),
       currentMonday.getDate() + 7,
-      8,
+      OPEN_HOUR,
       0,
       0,
     ) > maxBookingDate
 
   function handlePrevWeek() {
+    if (holdLoading || bookingLoading) return
     if (isPrevWeekDisabled) return
     const prevMon = new Date(currentMonday)
     prevMon.setDate(prevMon.getDate() - 7)
@@ -370,6 +324,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleNextWeek() {
+    if (holdLoading || bookingLoading) return
     if (isNextWeekDisabled) return
     const nextMon = new Date(currentMonday)
     nextMon.setDate(nextMon.getDate() + 7)
@@ -380,85 +335,20 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     const nextSel = new Date(currSel)
     nextSel.setDate(currSel.getDate() + 7)
 
-    const targetDay = toSlotDate(nextSel, '08:00') <= maxBookingDate ? nextSel : nextMon
+    const targetDay = toSlotDate(nextSel, OPENING_TIME) <= maxBookingDate ? nextSel : nextMon
     const targetTime =
-      toSlotDate(targetDay, selectedStartTime) <= maxBookingDate ? selectedStartTime : '08:00'
+      toSlotDate(targetDay, selectedStartTime) <= maxBookingDate ? selectedStartTime : OPENING_TIME
     selectSlot(formatDateKey(targetDay), targetTime)
   }
 
-  // Bug fixed: clicking "Today" on a weekend or after 19:30 previously selected 09:00 on today,
-  // which immediately failed availability with OUTSIDE_OPENING_HOURS or BOOKING_IN_PAST.
-  // Fix: recompute the schedule from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
+  // Recompute from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
   function handleToday() {
+    if (holdLoading || bookingLoading) return
     const freshToday = nowInBucharest()
     const schedule = getInitialSchedule(freshToday)
     setToday(freshToday)
     setCurrentMonday(schedule.monday)
     selectSlot(schedule.day, schedule.time)
-  }
-
-  async function handleAcquireHold() {
-    setHoldLoading(true)
-    setHoldError(null)
-    setBookingError(null)
-    const reqStart = startIso
-    const reqEnd = endIso
-    try {
-      const hold = await createHold({
-        assetId: asset.id,
-        startTime: reqStart,
-        endTime: reqEnd,
-      })
-      if (!isMountedRef.current) {
-        // Component unmounted while createHold was in-flight: release immediately to prevent leaking
-        releaseHold(hold.id).catch(() => {})
-        return
-      }
-      // Bug fixed (#267): drop a hold that isn't for the slot on screen (wrong answer, or the user picked
-      // another slot while the request was running).
-      const matchesServer =
-        hold.assetId === asset.id &&
-        new Date(hold.startTime).getTime() === new Date(reqStart).getTime() &&
-        new Date(hold.endTime).getTime() === new Date(reqEnd).getTime()
-      const matchesCurrentSelection =
-        selectionRef.current.startIso === reqStart &&
-        selectionRef.current.endIso === reqEnd
-
-      if (!matchesServer || !matchesCurrentSelection) {
-        releaseHold(hold.id).catch(() => {})
-        if (!matchesServer) {
-          setHoldError(new ApiError(0, 'HOLD_MISMATCH', 'The server held a different slot. Please try again.'))
-        }
-        return
-      }
-      activeHoldRef.current = hold
-      deadlineRef.current = Date.now() + (hold.remainingSeconds > 0 ? hold.remainingSeconds : 60) * 1000
-      setActiveHold(hold)
-      setHoldRemainingSeconds(hold.remainingSeconds > 0 ? hold.remainingSeconds : 60)
-    } catch (err) {
-      if (isMountedRef.current) {
-        setHoldError(err)
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setHoldLoading(false)
-      }
-    }
-  }
-
-  async function handleReleaseHold() {
-    if (!activeHold) return
-    setHoldLoading(true)
-    try {
-      await releaseHold(activeHold.id)
-      activeHoldRef.current = null
-      setActiveHold(null)
-      setHoldRemainingSeconds(0)
-    } catch (err) {
-      setHoldError(err)
-    } finally {
-      setHoldLoading(false)
-    }
   }
 
   async function handleConfirmBooking() {
@@ -468,17 +358,14 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
       let res: Reservation
       if (activeHold) {
         res = await confirmHold(activeHold.id)
-        activeHoldRef.current = null
-        setActiveHold(null)
       } else {
         res = await createReservation({
           assetId: asset.id,
           startTime: startIso,
           endTime: endIso,
         })
-        activeHoldRef.current = null
-        setActiveHold(null)
       }
+      clearActiveHold()
       if (onSuccess) {
         onSuccess(res)
       } else {
@@ -532,14 +419,8 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   function handleSwitchToSubstitute(sub: AssetSummary) {
     if (holdLoading || bookingLoading) return
-    if (activeHoldRef.current) {
-      releaseHold(activeHoldRef.current.id).catch(() => {})
-      activeHoldRef.current = null
-      setActiveHold(null)
-      setHoldRemainingSeconds(0)
-    }
+    discardActiveHold()
     setBookingError(null)
-    setHoldError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     setSwitchedAsset(sub.id === initialAsset.id ? null : { baseAssetId: initialAsset.id, selected: sub })
   }
@@ -600,19 +481,24 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="lg"
                   onClick={handlePrevWeek}
-                  disabled={isPrevWeekDisabled}
+                  disabled={isPrevWeekDisabled || holdLoading || bookingLoading}
                   aria-label="Previous week"
                 >
                   <IconChevronLeft size={18} />
                 </ActionIcon>
-                <Button variant="default" size="xs" onClick={handleToday}>
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={handleToday}
+                  disabled={holdLoading || bookingLoading}
+                >
                   Today
                 </Button>
                 <ActionIcon
                   variant="default"
                   size="lg"
                   onClick={handleNextWeek}
-                  disabled={isNextWeekDisabled}
+                  disabled={isNextWeekDisabled || holdLoading || bookingLoading}
                   aria-label="Next week"
                 >
                   <IconChevronRight size={18} />
@@ -633,7 +519,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   Duration:
                 </Text>
                 <Group gap={4}>
-                  {ALL_DURATIONS.map((dur) => {
+                  {BOOKING_DURATIONS.map((dur) => {
                     const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading
                     const isSelected = effectiveDuration === dur.value
                     return (
@@ -641,7 +527,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         key={dur.value}
                         label={
                           isDisabled
-                            ? `Labs close at 20:00. At ${selectedStartTime}, max duration is ${maxAvailableMins} min.`
+                            ? `Labs close at ${CLOSING_TIME}. At ${selectedStartTime}, max duration is ${maxAvailableMins} min.`
                             : dur.label
                         }
                         disabled={!isDisabled}
@@ -689,9 +575,8 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 const dayKey = formatDateKey(d)
                 const isSelectedDay = dayKey === selectedDay
                 const isPast = d < new Date(today.getFullYear(), today.getMonth(), today.getDate())
-                // Bug fixed: comparing midnight d > maxBookingDate enabled slots on day +14 after today's current time of day.
-                // Fix: check the day's first slot (08:00) for the header and the exact slot timestamp for each 30-min cell.
-                const isOutOfHorizon = toSlotDate(d, '08:00') > maxBookingDate
+                // Check the day's first slot (08:00) for the header; each 30-min cell checks its exact timestamp.
+                const isOutOfHorizon = toSlotDate(d, OPENING_TIME) > maxBookingDate
                 const isToday = formatDateKey(d) === formatDateKey(today)
 
                 return (
@@ -721,14 +606,14 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                           }
                         }
                         if (toSlotDate(d, newTime) > maxBookingDate) {
-                          newTime = '08:00'
+                          newTime = OPENING_TIME
                         }
                         selectSlot(dayKey, newTime)
                       }
                     }}
                   >
                     <Text size="xs" fw={700} c={isSelectedDay ? 'campus' : 'dimmed'}>
-                      {DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}
+                      {WEEKDAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}
                     </Text>
                     <Text size="sm" fw={isSelectedDay || isToday ? 700 : 500}>
                       {d.getDate()} {MONTH_NAMES[d.getMonth()]}
@@ -831,7 +716,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
             <Group justify="space-between" mt="sm">
               <Text size="xs" c="dimmed">
-                💡 Click any 30-min slot cell on the grid to set your reservation start time.
+                💡 Click any {SLOT_STEP_MINUTES}-min slot cell on the grid to set your reservation start time.
               </Text>
               <Group gap="xs">
                 <Group gap={4}>
@@ -895,7 +780,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 </Text>
                 <Group gap="xs" mt={2}>
                   <IconCalendar size={16} />
-                  <Text fw={600}>{formatFriendlyDate(selectedDay)}</Text>
+                  <Text fw={600}>{formatSlotDate(selectedDay)}</Text>
                 </Group>
               </div>
 
@@ -1009,13 +894,13 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
               {/* Rules reminders */}
               <Stack gap={4} p="xs" style={{ background: 'var(--mantine-color-body)', borderRadius: 6 }}>
                 <Text size="xs" c="dimmed">
-                  ✓ Labs open: <b>08:00 – 20:00 (Mon–Fri)</b>
+                  ✓ Labs open: <b>{OPENING_TIME} – {CLOSING_TIME} (Mon–Fri)</b>
                 </Text>
                 <Text size="xs" c="dimmed">
-                  ✓ Maximum <b>2 active reservations</b> per student
+                  ✓ Maximum <b>{MAX_ACTIVE_RESERVATIONS} active reservations</b> per student
                 </Text>
                 <Text size="xs" c="dimmed">
-                  ✓ Book up to <b>14 days</b> in advance
+                  ✓ Book up to <b>{MAX_ADVANCE_DAYS} days</b> in advance
                 </Text>
               </Stack>
 
@@ -1036,7 +921,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     </Badge>
                   </Group>
                   <Progress
-                    value={(holdRemainingSeconds / 60) * 100}
+                    value={(holdRemainingSeconds / HOLD_DURATION_SECONDS) * 100}
                     color={holdRemainingSeconds < 15 ? 'red' : 'blue'}
                     size="xs"
                     animated
@@ -1052,6 +937,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       leftSection={<IconCheck size={14} />}
                       onClick={handleConfirmBooking}
                       loading={bookingLoading}
+                      disabled={holdLoading}
                     >
                       Confirm reservation
                     </Button>
@@ -1074,9 +960,12 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     color="blue"
                     fullWidth
                     leftSection={<IconLock size={16} />}
-                    onClick={handleAcquireHold}
+                    onClick={() => {
+                      setBookingError(null)
+                      void handleAcquireHold()
+                    }}
                     loading={holdLoading}
-                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE'}
+                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || bookingLoading}
                   >
                     Lock slot (1-min hold)
                   </Button>
@@ -1086,7 +975,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     fullWidth
                     onClick={handleConfirmBooking}
                     loading={bookingLoading}
-                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE'}
+                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || holdLoading}
                   >
                     Confirm booking
                   </Button>

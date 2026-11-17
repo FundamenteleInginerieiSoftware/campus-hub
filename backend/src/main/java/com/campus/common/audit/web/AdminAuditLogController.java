@@ -65,7 +65,9 @@ public class AdminAuditLogController {
                     LocalDateTime to,
             @Parameter(description = "Zero-based page index") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size (1 to 100)") @RequestParam(defaultValue = "20") int size,
-            @Parameter(description = "Sort property and direction (e.g. createdAt,desc)")
+            @Parameter(
+                            description =
+                                    "Sort property and direction (e.g. createdAt,desc; createdAt defaults to desc, other fields default to asc)")
                     @RequestParam(defaultValue = "createdAt,desc")
                     String sort) {
         return auditService.search(actorId, action, entityType, entityId, from, to, page, size, sort);

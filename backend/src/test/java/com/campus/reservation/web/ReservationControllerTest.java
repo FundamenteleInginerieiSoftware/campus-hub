@@ -21,8 +21,11 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.service.IdempotencyService;
 import com.campus.reservation.service.ReservationService;
+import com.campus.reservation.service.TransferService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -46,6 +49,9 @@ class ReservationControllerTest {
     private ReservationService reservationService;
 
     @MockitoBean
+    private TransferService transferService;
+
+    @MockitoBean
     private CurrentUser currentUser;
 
     @MockitoBean
@@ -55,7 +61,7 @@ class ReservationControllerTest {
     void setUpIdempotency() {
         when(currentUser.id()).thenReturn(42L);
         when(idempotencyService.execute(any(), any(), any(), any(), any(), any(), any()))
-                .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(6)).get());
+                .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(6)).get());
     }
 
     private final ReservationResponse sampleResponse = new ReservationResponse(
@@ -412,7 +418,7 @@ class ReservationControllerTest {
     @Test
     @DisplayName("POST /api/v1/reservations/bundle returns 201 CREATED")
     void createBundleReturns201() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         MultiAssetReservationResponse response = new MultiAssetReservationResponse(
                 bundleId,
                 LocalDateTime.of(2026, 11, 2, 14, 0),
@@ -441,7 +447,7 @@ class ReservationControllerTest {
     @Test
     @DisplayName("GET /api/v1/reservations/bundle/{bundleId} returns 200 OK")
     void getBundleReturns200() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         MultiAssetReservationResponse response = new MultiAssetReservationResponse(
                 bundleId,
                 LocalDateTime.of(2026, 11, 2, 14, 0),
@@ -459,7 +465,7 @@ class ReservationControllerTest {
     @Test
     @DisplayName("POST /api/v1/reservations/bundle/{bundleId}/cancel returns 200 OK")
     void cancelBundleReturns200() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         when(reservationService.cancelBundle(eq(bundleId), any())).thenReturn(List.of(sampleResponse));
 
         mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel"))
@@ -471,7 +477,7 @@ class ReservationControllerTest {
     @DisplayName(
             "POST /api/v1/reservations/bundle/{bundleId}/cancel rejects reason over 255 chars with 400 (#240 point 2)")
     void cancelBundle_rejectsOverlongReasonWith400() throws Exception {
-        java.util.UUID bundleId = java.util.UUID.randomUUID();
+        UUID bundleId = UUID.randomUUID();
         String overlongReason = "a".repeat(256);
 
         mockMvc.perform(post("/api/v1/reservations/bundle/" + bundleId + "/cancel")
@@ -503,7 +509,7 @@ class ReservationControllerTest {
         ReservationTransferResponse response = new ReservationTransferResponse(
                 500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
 
-        when(reservationService.initiateTransfer(eq(100L), any())).thenReturn(response);
+        when(transferService.initiateTransfer(eq(100L), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/100/transfers")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -519,7 +525,7 @@ class ReservationControllerTest {
         ReservationTransferResponse response = new ReservationTransferResponse(
                 500L, 100L, 42L, 99L, TransferStatus.PENDING, LocalDateTime.of(2026, 11, 2, 10, 0), null);
 
-        when(reservationService.getMyPendingTransfers()).thenReturn(List.of(response));
+        when(transferService.getMyPendingTransfers()).thenReturn(List.of(response));
 
         mockMvc.perform(get("/api/v1/reservations/transfers/pending"))
                 .andExpect(status().isOk())
@@ -538,7 +544,7 @@ class ReservationControllerTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 15));
 
-        when(reservationService.acceptTransfer(500L)).thenReturn(response);
+        when(transferService.acceptTransfer(500L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/transfers/500/accept"))
                 .andExpect(status().isOk())
@@ -557,7 +563,7 @@ class ReservationControllerTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 15));
 
-        when(reservationService.rejectTransfer(500L)).thenReturn(response);
+        when(transferService.rejectTransfer(500L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/transfers/500/reject"))
                 .andExpect(status().isOk())
@@ -576,7 +582,7 @@ class ReservationControllerTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 15));
 
-        when(reservationService.cancelTransfer(500L)).thenReturn(response);
+        when(transferService.cancelTransfer(500L)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/reservations/transfers/500/cancel"))
                 .andExpect(status().isOk())
