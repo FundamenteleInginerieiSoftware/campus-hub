@@ -299,7 +299,7 @@ The dev and test values are deliberately fake and only work on a laptop database
 
 ## 7. Cloud security (planned, W7–W9)
 
-**Part of this exists, applied with Terraform** (`infra/` on `main`, #249 and #250): the network and security groups, the private photo bucket, the ECR repository, the instance role and the SSM parameters. RDS is written but off until the W7 deploy. **Written for the first deploy (#PR, apply pending):** EC2 `t3.small` with an Elastic IP, CloudFront, RDS on by default, the SES sender and the `MAIL_FROM` / `ADMIN_*` parameters. **Not there yet:** `deploy.yml`. The rest is the design in ADR-002/003/005.
+**Part of this exists, applied with Terraform** (`infra/` on `main`, #249 and #250): the network and security groups, the private photo bucket, the ECR repository, the instance role and the SSM parameters. RDS is written but off until the W7 deploy. **Written for the first deploy (#304, apply pending):** EC2 `t3.small` with an Elastic IP, CloudFront, RDS on by default, the SES sender and the `MAIL_FROM` / `ADMIN_*` parameters. **Not there yet:** `deploy.yml`. The rest is the design in ADR-002/003/005.
 
 | Area | Design | Source |
 |---|---|---|

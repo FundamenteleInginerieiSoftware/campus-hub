@@ -79,7 +79,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 51 | [51-pickup-pass-backend.md](51-pickup-pass-backend.md) | Pickup pass (backend): a 6-digit code that changes every 30 s, shown by the student and checked by the admin at the desk | #283 |
 | 52 | [52-pickup-pass-pages.md](52-pickup-pass-pages.md) | Pickup pass (pages): the student's code page and the Verify dialog on the Reservations desk | #284 |
 | 53 | [53-calendar-feed-security-rule.md](53-calendar-feed-security-rule.md) | Calendar feed (`SecurityConfig`): open `GET /api/v1/calendar/*` (`permitAll`) and ignore stale `Authorization` headers on `/api/v1/calendar/**` for Calin's `.ics` feed | #295 |
-| 54 | [54-terraform-deploy.md](54-terraform-deploy.md) | Terraform part 3: EC2 t3.small + Elastic IP, CloudFront, RDS on, SES sender, `MAIL_FROM`/`ADMIN_*` parameters, `campus-deploy` script | #PR |
+| 54 | [54-terraform-deploy.md](54-terraform-deploy.md) | Terraform part 3: EC2 t3.small + Elastic IP, CloudFront, RDS on, SES sender, `MAIL_FROM`/`ADMIN_*` parameters, `campus-deploy` script | #304 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done

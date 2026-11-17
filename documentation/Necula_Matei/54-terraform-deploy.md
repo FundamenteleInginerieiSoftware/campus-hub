@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-17
-**Branch / PR:** `infra/w7-ec2-cloudfront` (#PR)
+**Branch / PR:** `infra/w7-ec2-cloudfront` (#304)
 **See also:** `44-terraform-network.md`, `45-terraform-data.md`, `46-docker-os-patches.md`, `docs/adr/002-single-ec2-behind-cloudfront.md`, `docs/adr/003-*`
 
 ---
@@ -93,6 +93,25 @@
 | Container could not get AWS credentials (IMDS hop limit 1) | `http_put_response_hop_limit = 2` |
 | The next apply after a new Amazon Linux release would replace the server | `lifecycle { ignore_changes = [ami] }` |
 | `${...}` in the shell script clashes with `templatefile()` | Doubled dollar sign for bash variables in `user-data.sh.tftpl` |
+| EC2 booted in parallel with RDS: the env file had no `DB_URL` and the container restarted in a loop | `depends_on` on the 4 SSM parameters in `compute.tf`, plus a check in `campus-deploy` that the required variables exist |
+| The ECR query could print `None` (empty repo or untagged image) | `--filter tagStatus=TAGGED` and an explicit check |
+| `dnf upgrade` on Amazon Linux 2023 installs nothing (release pinned to the AMI) | Removed; OS updates with `dnf upgrade --releasever=latest` |
+| No container memory limit: `MaxRAMPercentage=75` meant 75% of the whole 2 GB host | `--memory 1536m` on `docker run` |
+| t3 default "unlimited" CPU credits are billed | `cpu_credits = "standard"` |
+| No HSTS: Spring only sends it over HTTPS and sees plain HTTP from CloudFront | CloudFront response headers policy Managed-SecurityHeadersPolicy (`cdn.tf`) |
+| CloudFront caches 5xx for 10 s (e.g. during a redeploy) | `error_caching_min_ttl = 0` |
+
+### Known follow-ups
+
+| Item | Note |
+|---|---|
+| Swagger "Try it out" | Needs `@Server(url = "/")` in `OpenApiConfig` (separate PR) |
+| CloudFront to EC2 | Plain HTTP |
+| Port 8080 | Accepts any CloudFront distribution (low risk; secret origin header later) |
+| SES sender | A Gmail address, so mail may land in spam (no DKIM alignment) |
+| Admin password output | Goes stale once the password is changed in the app |
+
+Fresh image `cffc1c3` pushed to ECR on 17 Nov, 0 scan findings.
 
 ### Still open
 
