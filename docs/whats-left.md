@@ -109,7 +109,7 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | W6 | Wire all M1 pages together · run the full M1 flow with the team · workload retro (re-split the frontend if it is behind) | Section 2 |
 | Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · two QR libraries in `package.json` for Matei's last pickup-pass PR | Section 7a |
 | W7 | **Incident details** page · ~~admin incident queue~~ (✅ #223) | – |
-| W8 | **Reassignment log page** · optional admin users page (endpoints on `main`, #206) · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
+| W8 | **Reassignment log page** (#306) · **admin users page, mandatory** (#305; the only way to promote an admin or disable an account on AWS; endpoints on `main`, #206) · both **by Fri 20 Nov** · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |
 | W10–W12 | Coverage ≥ 70% (`incident.service`, user admin) · **manual E2E checklist** · final use case + incident state diagrams · **Observer doc** · **user manual** with screenshots · **demo script** + 2 rehearsals + video backup (you lead the demo) | – |
 
