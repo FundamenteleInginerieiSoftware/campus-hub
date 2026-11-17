@@ -107,7 +107,8 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Report-incident form + My incidents page~~ (✅ #216) | – |
 | W6 | Merge **#263** (approved) · work through #269 (concurrency tests, `ci.yml` guards, small incident fixes) | – |
 | W6 | Wire all M1 pages together · run the full M1 flow with the team · workload retro (re-split the frontend if it is behind) | Section 2 |
-| Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · two QR libraries in `package.json` for Matei's last pickup-pass PR | Section 7a |
+| Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · ~~two QR libraries in `package.json` for Matei's last pickup-pass PR~~ (✅ `qrcode.react` + `@yudiel/react-qr-scanner`, Refs #291; Matei: PR 3 can start) | Section 7a |
+| W7 | #269 point 2: ~~`hashFiles` guards in `ci.yml`~~ (✅ removed, Refs #269) · rest of #269 still open | – |
 | W7 | **Incident details** page · ~~admin incident queue~~ (✅ #223) | – |
 | W8 | **Reassignment log page** · optional admin users page (endpoints on `main`, #206) · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |

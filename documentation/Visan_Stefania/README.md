@@ -25,6 +25,7 @@ Every document has two parts:
 | 03 | [`03-frontend-foundation.md`](./03-frontend-foundation.md) | The React app everyone builds on | #84, #85, #86, #111 | Vite + React + TS + Mantine, `apiFetch`, `AuthProvider`, role-based routes, shared components, ADR-002 |
 | 04 | [`04-frontend-register-and-auth-fixes.md`](./04-frontend-register-and-auth-fixes.md) | Register page and login robustness | #107, #142, #145 | Register + auto-login, BCrypt 72-byte limit, keep the token when the backend restarts, unique React keys |
 | 05 | [`05-incident-triage-and-concurrency.md`](./05-incident-triage-and-concurrency.md) | Admin triage, My incidents, race fixes | #108 | State machine, row lock before the check, retired assets, IDOR 404, paging limits, 85 tests |
+| 08 | [`08-qr-libraries-and-ci-guards.md`](./08-qr-libraries-and-ci-guards.md) | QR libraries + honest CI steps | Refs #291, #269 | `qrcode.react`, `@yudiel/react-qr-scanner`, React 19 peer ranges, no `hashFiles` guards in `ci.yml` |
 
 ---
 

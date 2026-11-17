@@ -49,10 +49,9 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
 
-      # Backend steps are skipped until the Gradle project exists on main,
-      # so the required `ci` check still passes on docs-only PRs.
+      # No "if: hashFiles(...)" guards on purpose: backend/ and frontend/ exist now, so if one
+      # of them goes missing the build must fail instead of passing green without testing anything.
       - name: Set up Java 25
-        if: hashFiles('backend/gradlew') != ''
         uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -60,26 +59,21 @@ jobs:
 
       # Caches Gradle downloads and build outputs between runs.
       - name: Set up Gradle
-        if: hashFiles('backend/gradlew') != ''
         uses: gradle/actions/setup-gradle@v6
 
       # build = compile, run tests, Spotless format check and JaCoCo coverage report.
       - name: Build and test backend
-        if: hashFiles('backend/gradlew') != ''
         working-directory: backend
         run: ./gradlew build
 
       - name: Upload JaCoCo coverage report
-        if: hashFiles('backend/gradlew') != ''
         uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: backend/build/reports/jacoco/
           if-no-files-found: ignore
 
-      # Frontend steps are skipped until the frontend/ project exists.
       - name: Set up Node 24
-        if: hashFiles('frontend/package.json') != ''
         uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -87,16 +81,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        if: hashFiles('frontend/package.json') != ''
         working-directory: frontend
         run: npm ci
 
       - name: Lint frontend
-        if: hashFiles('frontend/package.json') != ''
         working-directory: frontend
         run: npm run lint
 
       - name: Build frontend
-        if: hashFiles('frontend/package.json') != ''
         working-directory: frontend
         run: npm run build
