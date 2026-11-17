@@ -114,8 +114,8 @@ The address is the `*.cloudfront.net` one from `terraform output app_url` (not w
 
 | Item | Note |
 |---|---|
-| Swagger "Try it out" | Confirmed broken: `/v3/api-docs` `servers` is the EC2 host over http. Fix: `@Server(url = "/")` in `OpenApiConfig` (next small PR) |
-| `HEAD /` | Answers 401 while `GET /` is 200 (`SecurityConfig` permits only GET for the static pages). Low impact, same follow-up PR |
+| Swagger "Try it out" | Confirmed broken: `/v3/api-docs` `servers` is the EC2 host over http. Fixed in #308 (`@Server(url = "/")` in `OpenApiConfig`, doc 55) |
+| `HEAD /` | Answers 401 while `GET /` is 200 (`SecurityConfig` permits only GET for the static pages). Fixed in #308 (`HEAD /**` rule, doc 55) |
 | Swagger in prod | springdoc logs a WARN that Swagger is on; intended for the demo |
 | CloudFront to EC2 | Plain HTTP |
 | Port 8080 | Accepts any CloudFront distribution (low risk; secret origin header later) |
@@ -126,4 +126,4 @@ Fresh image `cffc1c3` pushed to ECR on 17 Nov, 0 scan findings.
 
 ### Still open
 
-W8 `deploy.yml` (GitHub OIDC, calls `campus-deploy`), the follow-up PR above, a first booking on AWS, and updating the AWS deployment diagram.
+W8 `deploy.yml` (GitHub OIDC, calls `campus-deploy`), a first booking on AWS, and updating the AWS deployment diagram.

@@ -1,5 +1,6 @@
 package com.campus.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,6 +27,18 @@ class OpenApiDocsIT {
 
     @Autowired
     JsonMapper jsonMapper;
+
+    @Test
+    void swaggerCallsTheSameOriginAsThePage() throws Exception {
+        String json = mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(jsonMapper.readTree(json).get("servers").get(0).get("url").asString())
+                .as("Try it out must use a relative server URL, not the EC2 host behind CloudFront; see OpenApiConfig")
+                .isEqualTo("/");
+    }
 
     @Test
     void everyEndpointIsDocumentedLikeSecurityConfigBehaves() throws Exception {
