@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) and the pickup pass backend (`51-pickup-pass-backend.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) the pickup pass backend (`51-pickup-pass-backend.md`), the pickup pass pages (`52-pickup-pass-pages.md`) the calendar feed security rule (`53-calendar-feed-security-rule.md`) and Terraform part 3: server, CloudFront, e-mail sender (`54-terraform-deploy.md`) and the Swagger server URL and `HEAD` fix (`55-swagger-server-head-fix.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -25,6 +25,7 @@ campus-hub/
 │                 "Reserve all" button in ProjectDetailsPage.tsx + reserveProject() in api/projects.ts   (42-project-reserve-all.md, 43-project-bundle-banner.md)
 ├── infra/  versions.tf  backend.tf  variables.tf  network.tf  security_groups.tf  outputs.tf  .terraform.lock.hcl   (44-terraform-network.md)
 │   ├── rds.tf  storage.tf  iam.tf  ssm.tf                (45-terraform-data.md)
+│   ├── compute.tf  user-data.sh.tftpl  cdn.tf  ses.tf  terraform.tfvars.example   (54-terraform-deploy.md)
 │   └── bootstrap/  main.tf  .terraform.lock.hcl          (44-terraform-network.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
@@ -171,6 +172,13 @@ campus-hub/
 | `S3StorageServiceTest`, `SesNotificationServiceTest` | Check what we ask S3 and SES to do, without connecting to AWS. |
 | `ProdProfileStartupTest` | Starts the whole app in AWS mode, so a missing piece shows up in CI instead of on the server. |
 
+### Frontend: pickup pass pages (`52-pickup-pass-pages.md`)
+| File | What it does |
+|---|---|
+| `api/pickupPass.ts` | The two calls to the server (get my code, check a code) and a reader for the future QR text. |
+| `PickupPassPage.tsx` | The student's page: the 6-digit code, a countdown ring, and a new code by itself when it runs out. |
+| `ReservationsDeskParts.tsx` | The small window where the admin types the student's code, and the green check next to the name. |
+
 ### Backend: pickup pass (`51-pickup-pass-backend.md`)
 | File | What it does |
 |---|---|
@@ -200,6 +208,16 @@ campus-hub/
 | `infra/storage.tf` | The private bucket for incident photos, the registry for the app's Docker image (last 10 kept), and the app's log folder (7 days). |
 | `infra/iam.tf` | The server's permissions: photos in our bucket, sending e-mails, reading its own settings, pulling its image, writing logs. No AWS keys stored anywhere. |
 | `infra/ssm.tf` | The app's AWS settings and secrets. The database password and the login-token secret are random, made by Terraform, and stored encrypted. |
+
+### `infra/`: AWS as code with Terraform, part 3 (`54-terraform-deploy.md`)
+| File | What it does |
+|---|---|
+| `infra/compute.tf` | The app server (one small EC2 computer, x86) and its fixed public address (Elastic IP). |
+| `infra/user-data.sh.tftpl` | What the server does on its first start: install Docker, then pull and run our newest app image. Also leaves a `campus-deploy` command for the later automatic deploys. |
+| `infra/cdn.tf` | CloudFront: the secure `https://...cloudfront.net` front door. It passes the login header through and caches nothing. |
+| `infra/ses.tf` | Registers the sender address for the app's e-mails; AWS sends a link to confirm it. |
+| `infra/terraform.tfvars.example` | Template for the private file (`terraform.tfvars`, never committed) with the sender and admin e-mail addresses. |
+| `infra/ssm.tf`, `variables.tf`, `outputs.tf`, `rds.tf` (changed) | New settings `MAIL_FROM`, `ADMIN_EMAIL`, random `ADMIN_PASSWORD`; the database is on by default; outputs `app_url`, `app_instance_id`, `admin_password`. |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -352,6 +370,13 @@ campus-hub/
 | `UserController` | `GET /api/v1/users/me` → `userService.me()`. No parameters at all: the id can only come from the token. Protected by the `/api/v1/**` rule (401 without a token). |
 | `package-info.java` | One per module (`catalog`, `common`, `config`, `incident`, `messaging`, `notification`, `reassignment`, `reservation`, `storage`, `user`): purpose, **v2 owner** (for example `common` = Liviu for error/paging/audit, Calin for time, Stefania for security), sub-packages, and which modules it may and may not depend on. |
 
+### Frontend: pickup pass pages (`52-pickup-pass-pages.md`)
+| File | What it does |
+|---|---|
+| `api/pickupPass.ts` | `fetchPickupPass`, `verifyPickupPass` (`apiFetch`), `parseQrText` (regex `^campus-pickup:1:(\d+):(\d{6})$`). |
+| `PickupPassPage.tsx` | Fetch per `reloadToken`; 1 s interval over a ref; refetch at 0 and on `visibilitychange`; cleanup of timer, listener and late answers. |
+| `ReservationsDeskParts.tsx` | `VerifyStudentDialog` (`Modal` + `PinInput`, whitespace stripped, `PICKUP_CODE_INVALID` text) and `VerifiedMark`. The desk page keeps `verified: Record<number, VerifiedStudent>`. |
+
 ### Backend: pickup pass (`51-pickup-pass-backend.md`)
 | File | What it does |
 |---|---|
@@ -386,6 +411,11 @@ campus-hub/
 | `storage.tf` | `random_id` suffix; photo bucket `campus-hub-photos-<hex>` (public access blocked, SSE `AES256`, `force_destroy`); ECR `campus-hub` (`IMMUTABLE` tags = commit SHAs, `scan_on_push`, `force_delete`) + lifecycle "keep 10" (`imageCountMoreThan`, `tagStatus any`); log group `/campus-hub/app`, 7 days |
 | `iam.tf` | Role `campus-hub-app` (trust: `ec2.amazonaws.com`) + instance profile; managed `AmazonSSMManagedInstanceCore` + `AmazonEC2ContainerRegistryReadOnly`; inline: `s3:Put/Get/DeleteObject` on `bucket/*`, `s3:ListBucket` on the bucket (404 not 403, #177), `ses:SendEmail` on `*`, `ssm:GetParameter(s)(ByPath)` on `parameter/campus/*` (account from `aws_caller_identity`), `logs:CreateLogStream/PutLogEvents` on the log group |
 | `ssm.tf` | `random_password` db (32) + jwt (64), both `special = false`; `/campus/DB_PASSWORD`, `/campus/JWT_SECRET` (SecureString, `aws/ssm` key), `/campus/DB_USERNAME`, `/campus/AWS_REGION`, `/campus/PHOTO_BUCKET`, `/campus/DB_URL` (only with `db_enabled`). Names = the env vars of `application-prod.yml`. Not yet: `MAIL_FROM` (required before the first deploy), `ADMIN_EMAIL`/`ADMIN_PASSWORD` (optional) |
+| `compute.tf` | AMI from SSM `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`; `aws_instance.app` `t3.small` in the public subnet, app security group + instance profile, encrypted 20 GB `gp3`, IMDSv2 required + hop limit 2, `user_data` via `templatefile`, `user_data_replace_on_change`, `ignore_changes = [ami]`; `aws_eip.app`. Details in `54-terraform-deploy.md` |
+| `user-data.sh.tftpl` | Root, first boot: `dnf upgrade`, Docker; writes `/usr/local/bin/campus-deploy [tag]` (newest ECR tag by default, ECR login, pull, `/campus/*` SSM params to root-only `/etc/campus.env`, `docker run` with `awslogs`, port 8080) |
+| `cdn.tf` | Cache policy (`Authorization` in key, TTL 0/0/1, all query strings, no cookies); `Managed-AllViewerExceptHostHeader`; distribution `PriceClass_100`, origin `aws_eip.app.public_dns` over HTTP 8080, `redirect-to-https`, default certificate |
+| `ses.tf` | `aws_sesv2_email_identity.sender` from `var.mail_from` |
+| `terraform.tfvars.example` | `mail_from`, `admin_email` placeholders; copy to the gitignored `terraform.tfvars` |
 
 ### `docs/report/` and the JWT diagram
 | File | Key points |

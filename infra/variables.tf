@@ -11,7 +11,17 @@ variable "vpc_cidr" {
 }
 
 variable "db_enabled" {
-  description = "Create the RDS database (costs money while it exists). false until the first deploy in W7; see rds.tf."
+  description = "Create the RDS database (costs money while it exists). true since the W7 deploy; setting it to false DELETES the database (rds.tf)."
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "mail_from" {
+  description = "Sender address of the app's emails (MAIL_FROM). Must be verified in SES: AWS emails a link to it after the first apply (ses.tf). Set in terraform.tfvars, which is never committed."
+  type        = string
+}
+
+variable "admin_email" {
+  description = "Login of the first admin on AWS (ADMIN_EMAIL, AdminBootstrap). Set in terraform.tfvars."
+  type        = string
 }

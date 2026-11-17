@@ -38,7 +38,7 @@ Checked top to bottom in `SecurityConfig`; the **first match wins**. "Refused" s
 | 5 | `GET /api/v1/calendar/*` (Calin's `.ics` calendar feed) | public (`permitAll`): the 256-bit secret token in the path is the credential, because calendar apps cannot send our JWT header; the `Authorization` header is **not read** on `/api/v1/calendar/**`. Other HTTP methods fall through to rule 6 | – |
 | 6 | `/api/v1/**` | any logged-in, active user (`STUDENT` or `ADMIN`) | `401 UNAUTHORIZED` |
 | 7 | `/api/**`, `/actuator/**` (other API versions, every actuator endpoint except health) | denied, even for an admin. Must stay above rule 8 | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
-| 8 | `GET /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
+| 8 | `GET /**` and `HEAD /**` | public: the React app served by `SpaConfig` in prod (ADR-002: `index.html`, JS files, page routes like `/reservations`). It holds no data; all data comes from `/api` | – |
 | 9 | anything else (e.g. `POST /something-else`) | denied: a path nobody listed fails closed | `401 UNAUTHORIZED` · with a token: `403 FORBIDDEN` |
 
 Checks that run **before** the rules above (the token checks only when a token is sent, on every path except `/api/v1/auth/**` and `/api/v1/calendar/**`):
