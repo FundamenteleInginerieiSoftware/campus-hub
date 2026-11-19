@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-19
-**Branch / PR:** `fix/user-active-role-fresh-read` (#TBD)
+**Branch / PR:** `fix/user-active-role-fresh-read` (#312)
 **See also:** `22-token-account-check.md`, Calin's #310, #229, #302
 
 ---
