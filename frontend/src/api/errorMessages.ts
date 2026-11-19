@@ -43,6 +43,7 @@ const MESSAGES: Record<string, string> = {
 
   // Incident error codes (api-contract §5, Stefania)
   INCIDENT_NOT_FOUND: 'Incident was not found.',
+  TOO_MANY_OPEN_INCIDENTS: 'You already have 3 open reports. Wait until an admin has looked at them.',
   INVALID_INCIDENT_STATUS_TRANSITION: 'This incident is already closed or cannot change to that status.',
   ASSET_RETIRED: 'This equipment is retired and cannot be reported or booked.',
   PHOTO_NOT_FOUND: 'This incident has no photo.',

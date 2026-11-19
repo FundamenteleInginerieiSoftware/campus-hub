@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
+import io.swagger.v3.oas.annotations.servers.Server;
 import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.IntegerSchema;
@@ -28,8 +29,13 @@ import org.springframework.context.annotation.Configuration;
  * <p>The scheme applies to all endpoints, so teammates don't annotate their controllers for it.
  */
 @Configuration
+// Bug fixed: springdoc built the "servers" URL from the request, and behind CloudFront the request
+// reaches EC2 as http://ec2-...compute.amazonaws.com, so "Try it out" on the HTTPS page called a blocked
+// http host. Fix: a relative "/" makes the browser call the same origin the page was loaded from.
 @OpenAPIDefinition(
         info = @Info(title = "Campus Equipment & Incident Hub API", version = "v1"),
+        servers =
+                @Server(url = "/", description = "Same origin as the page: CloudFront on AWS, localhost:8080 locally"),
         security = @SecurityRequirement(name = "bearerAuth"))
 @SecurityScheme(name = "bearerAuth", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 public class OpenApiConfig {

@@ -77,7 +77,11 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 49 | [49-project-details-error-fix.md](49-project-details-error-fix.md) | Project details: error cleared after a good reload, campus clock read when needed | #273 |
 | 50 | [50-docs-check.md](50-docs-check.md) | End-of-task docs rule (AGENTS.md §4) + `docs-check` CI job + Gemini/Copilot pointer files | #277, #279 |
 | 51 | [51-pickup-pass-backend.md](51-pickup-pass-backend.md) | Pickup pass (backend): a 6-digit code that changes every 30 s, shown by the student and checked by the admin at the desk | #283 |
+| 52 | [52-pickup-pass-pages.md](52-pickup-pass-pages.md) | Pickup pass (pages): the student's code page and the Verify dialog on the Reservations desk | #284 |
 | 53 | [53-calendar-feed-security-rule.md](53-calendar-feed-security-rule.md) | Calendar feed (`SecurityConfig`): open `GET /api/v1/calendar/*` (`permitAll`) and ignore stale `Authorization` headers on `/api/v1/calendar/**` for Calin's `.ics` feed | #295 |
+| 54 | [54-terraform-deploy.md](54-terraform-deploy.md) | Terraform part 3: EC2 t3.small + Elastic IP, CloudFront, RDS on, SES sender, `MAIL_FROM`/`ADMIN_*` parameters, `campus-deploy` script | #304 |
+| 55 | [55-swagger-server-head-fix.md](55-swagger-server-head-fix.md) | Swagger "Try it out" uses a relative server URL; `HEAD` allowed on the public pages | #308 |
+| 56 | [56-rds-auto-start-alert.md](56-rds-auto-start-alert.md) | AWS paused on 17 Nov (EC2 then RDS stopped); SNS e-mail alert when AWS restarts the stopped database after 7 days; pause/resume commands | #309 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done

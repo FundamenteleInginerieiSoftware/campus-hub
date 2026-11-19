@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (ignored by git: *.tfvars in .gitignore) and fill in.
+mail_from   = "you@example.com"
+admin_email = "admin@example.com"
+alert_email = "you@example.com"

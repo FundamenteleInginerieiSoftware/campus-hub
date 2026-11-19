@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.campus.common.error.BadRequestException;
+import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
@@ -79,7 +80,7 @@ class IncidentControllerTest {
     @DisplayName("POST /api/v1/incidents returns 201 with the new incident, reported by the logged-in user")
     void reportReturns201() throws Exception {
         when(currentUser.id()).thenReturn(1L);
-        when(incidentService.reportIncident(any(CreateIncidentRequest.class), eq(1L)))
+        when(incidentService.reportIncident(any(CreateIncidentRequest.class), eq(1L), eq(false)))
                 .thenReturn(sample);
 
         mockMvc.perform(post("/api/v1/incidents")
@@ -93,7 +94,10 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.status").value("OPEN"));
 
         verify(incidentService)
-                .reportIncident(eq(new CreateIncidentRequest(12L, "Display cracked", IncidentSeverity.HIGH)), eq(1L));
+                .reportIncident(
+                        eq(new CreateIncidentRequest(12L, "Display cracked", IncidentSeverity.HIGH)),
+                        eq(1L),
+                        eq(false));
     }
 
     @Test
@@ -126,10 +130,40 @@ class IncidentControllerTest {
 
     @Test
     @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/incidents returns 409 TOO_MANY_OPEN_INCIDENTS when the student has 3 open reports")
+    void reportWithTooManyOpenReportsReturns409() throws Exception {
+        when(currentUser.id()).thenReturn(1L);
+        when(incidentService.reportIncident(any(CreateIncidentRequest.class), eq(1L), eq(false)))
+                .thenThrow(new BusinessRuleException("TOO_MANY_OPEN_INCIDENTS", "You already have 3 open reports"));
+
+        mockMvc.perform(post("/api/v1/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REPORT))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TOO_MANY_OPEN_INCIDENTS"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/incidents tells the service when an admin reports (no open-report limit)")
+    void reportByAdminPassesIsAdmin() throws Exception {
+        when(currentUser.id()).thenReturn(9L);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(incidentService.reportIncident(any(CreateIncidentRequest.class), eq(9L), eq(true)))
+                .thenReturn(sample);
+
+        mockMvc.perform(post("/api/v1/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REPORT))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
     @DisplayName("POST /api/v1/incidents returns 409 ASSET_RETIRED for a retired asset")
     void reportOnRetiredAssetReturns409() throws Exception {
         when(currentUser.id()).thenReturn(1L);
-        when(incidentService.reportIncident(any(CreateIncidentRequest.class), eq(1L)))
+        when(incidentService.reportIncident(any(CreateIncidentRequest.class), eq(1L), eq(false)))
                 .thenThrow(new InvalidStateTransitionException("ASSET_RETIRED", "Asset is retired"));
 
         mockMvc.perform(post("/api/v1/incidents")
