@@ -7,11 +7,13 @@ import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.user.api.Role;
+import com.campus.user.api.UserDisabledEvent;
 import com.campus.user.domain.User;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -43,12 +45,17 @@ public class AdminUserService {
     private final AdminUserRepository adminUserRepository;
     private final CurrentUser currentUser;
     private final AuditService auditService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AdminUserService(
-            AdminUserRepository adminUserRepository, CurrentUser currentUser, AuditService auditService) {
+            AdminUserRepository adminUserRepository,
+            CurrentUser currentUser,
+            AuditService auditService,
+            ApplicationEventPublisher eventPublisher) {
         this.adminUserRepository = adminUserRepository;
         this.currentUser = currentUser;
         this.auditService = auditService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -70,7 +77,14 @@ public class AdminUserService {
         return AdminUserResponse.from(adminUserRepository.findById(userId).orElseThrow(() -> notFound(userId)));
     }
 
-    /** The account can no longer log in, and a token it already has is refused on the next request (#117). */
+    /**
+     * The account can no longer log in, and a token it already has is refused on the next request (#117).
+     *
+     * <p>#229 (#302): publishes {@link UserDisabledEvent} inside this transaction. Listeners run after the commit
+     * in their own transaction (AFTER_COMMIT + REQUIRES_NEW), so a failing listener can never undo the disable:
+     * the account is switched off first, the bookings are cancelled afterwards. Not published when the account
+     * was already disabled or the request is refused.
+     */
     @Transactional
     public AdminUserResponse disable(Long userId) {
         Long adminId = currentUser.id();
@@ -90,6 +104,7 @@ public class AdminUserService {
 
         user.disable();
         auditService.record(adminId, "USER_DISABLED", "USER", userId, user.getEmail());
+        eventPublisher.publishEvent(new UserDisabledEvent(userId, adminId));
         return AdminUserResponse.from(user);
     }
 

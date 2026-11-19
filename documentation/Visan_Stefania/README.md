@@ -26,6 +26,7 @@ Every document has two parts:
 | 04 | [`04-frontend-register-and-auth-fixes.md`](./04-frontend-register-and-auth-fixes.md) | Register page and login robustness | #107, #142, #145 | Register + auto-login, BCrypt 72-byte limit, keep the token when the backend restarts, unique React keys |
 | 05 | [`05-incident-triage-and-concurrency.md`](./05-incident-triage-and-concurrency.md) | Admin triage, My incidents, race fixes | #108 | State machine, row lock before the check, retired assets, IDOR 404, paging limits, 85 tests |
 | 06 | [`06-incident-severity.md`](./06-incident-severity.md) | Only serious incidents take equipment out of use | #263 (#229) | HIGH/CRITICAL vs LOW/MEDIUM, start repair as confirmation, one "keeps out of use" rule, max 3 open reports |
+| 07 | [`07-user-disabled-event.md`](./07-user-disabled-event.md) | Disabling a user frees their bookings | #302 (#229 part 2, with #266) | `UserDisabledEvent`, why not a direct call (module cycle), why the listener runs after the commit (the disable must never fail) |
 
 ---
 

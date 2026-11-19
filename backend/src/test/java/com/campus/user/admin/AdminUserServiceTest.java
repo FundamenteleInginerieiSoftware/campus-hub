@@ -9,6 +9,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.campus.common.audit.AuditService;
@@ -18,6 +19,7 @@ import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.user.api.Role;
+import com.campus.user.api.UserDisabledEvent;
 import com.campus.user.domain.User;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,6 +34,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -53,11 +56,14 @@ class AdminUserServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private AdminUserService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminUserService(adminUserRepository, currentUser, auditService);
+        service = new AdminUserService(adminUserRepository, currentUser, auditService, eventPublisher);
     }
 
     private static User user(Long id, Role role, boolean enabled) {
@@ -179,6 +185,22 @@ class AdminUserServiceTest {
             verify(auditService).record(ME, "USER_DISABLED", "USER", 5L, "user5@campus.test");
         }
 
+        // #229 (#302): after the commit, the reservation module cancels the user's upcoming bookings.
+        @Test
+        void publishesUserDisabledEvent_withTheUserAndTheAdmin_afterTheChange() {
+            loggedInAs(ME);
+            User student = user(5L, Role.STUDENT, true);
+            givenEnabledAdmins(user(ME, Role.ADMIN, true));
+            givenLockedUser(student);
+
+            service.disable(5L);
+
+            InOrder order = inOrder(auditService, eventPublisher);
+            order.verify(auditService).record(ME, "USER_DISABLED", "USER", 5L, "user5@campus.test");
+            order.verify(eventPublisher).publishEvent(new UserDisabledEvent(5L, ME));
+            verifyNoMoreInteractions(eventPublisher);
+        }
+
         // Admins first, then the target, always: the lock order that prevents deadlocks.
         @Test
         void locksTheAdminsBeforeTheTarget() {
@@ -213,7 +235,7 @@ class AdminUserServiceTest {
                     .hasMessage("You cannot disable your own account")
                     .extracting("code")
                     .isEqualTo("CANNOT_MODIFY_SELF");
-            verifyNoInteractions(adminUserRepository, auditService);
+            verifyNoInteractions(adminUserRepository, auditService, eventPublisher);
         }
 
         // Possible only in a race: the other admin was demoted a moment ago, so this admin is the last one.
@@ -229,7 +251,7 @@ class AdminUserServiceTest {
                     .extracting("code")
                     .isEqualTo("LAST_ADMIN_REQUIRED");
             assertThat(lastAdmin.isEnabled()).isTrue();
-            verifyNoInteractions(auditService);
+            verifyNoInteractions(auditService, eventPublisher);
         }
 
         @Test
@@ -239,7 +261,8 @@ class AdminUserServiceTest {
             givenLockedUser(user(5L, Role.STUDENT, false));
 
             assertThat(service.disable(5L).enabled()).isFalse();
-            verifyNoInteractions(auditService);
+            // Nothing changed, so there is nothing to cancel either.
+            verifyNoInteractions(auditService, eventPublisher);
         }
 
         @Test
@@ -252,7 +275,7 @@ class AdminUserServiceTest {
                     .isInstanceOf(NotFoundException.class)
                     .extracting("code")
                     .isEqualTo("USER_NOT_FOUND");
-            verifyNoInteractions(auditService);
+            verifyNoInteractions(auditService, eventPublisher);
         }
     }
 
