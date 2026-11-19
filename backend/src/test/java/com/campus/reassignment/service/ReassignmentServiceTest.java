@@ -16,6 +16,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetStatus;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
@@ -456,5 +457,67 @@ class ReassignmentServiceTest {
         assertThatCode(() -> reassignmentService.getLogs(0, 1)).doesNotThrowAnyException();
         assertThatCode(() -> reassignmentService.getLogs(0, 100)).doesNotThrowAnyException();
         assertThatCode(() -> reassignmentService.getLogs(Integer.MAX_VALUE, 1)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("handle(AssetRetiredEvent): reassigns upcoming booking with null incidentId and notifies user (#245)")
+    void handleAssetRetiredReassignsWithNullIncidentId() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+        AssetSummary retiredAsset =
+                new AssetSummary(DAMAGED_ASSET_ID, "Scope #1", "DS1054Z", 1L, 1L, AssetStatus.RETIRED);
+        AssetRetiredEvent retiredEvent = new AssetRetiredEvent(DAMAGED_ASSET_ID, FIXED_NOW, 1L);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(retiredAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.name()).thenReturn("SAME_MODEL");
+        when(primaryStrategy.findCandidates(booking, retiredAsset)).thenReturn(List.of(substituteAsset));
+        when(reservationApi.moveToAsset(1L, SUBSTITUTE_ASSET_ID, "Asset retired #" + DAMAGED_ASSET_ID))
+                .thenReturn(true);
+
+        reassignmentService.handle(retiredEvent);
+
+        verify(reassignmentLogRepository)
+                .save(argThat(log -> log.getIncidentId() == null
+                        && log.getReservationId().equals(1L)
+                        && log.getFromAssetId().equals(DAMAGED_ASSET_ID)
+                        && log.getToAssetId().equals(SUBSTITUTE_ASSET_ID)
+                        && log.getOutcome() == ReassignmentOutcome.REASSIGNED
+                        && "SAME_MODEL".equals(log.getStrategy())));
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Reassigned"), contains("retired"));
+    }
+
+    @Test
+    @DisplayName("handle(AssetRetiredEvent): force-cancels with null incidentId when no substitute exists (#245)")
+    void handleAssetRetiredForceCancelsWhenNoSubstituteFound() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+        AssetSummary retiredAsset =
+                new AssetSummary(DAMAGED_ASSET_ID, "Scope #1", "DS1054Z", 1L, 1L, AssetStatus.RETIRED);
+        AssetRetiredEvent retiredEvent = new AssetRetiredEvent(DAMAGED_ASSET_ID, FIXED_NOW, 1L);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(retiredAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.findCandidates(booking, retiredAsset)).thenReturn(List.of());
+        when(secondaryStrategy.findCandidates(booking, retiredAsset)).thenReturn(List.of());
+        when(reservationApi.forceCancel(1L, "Equipment retired (asset #" + DAMAGED_ASSET_ID + ")"))
+                .thenReturn(true);
+
+        reassignmentService.handle(retiredEvent);
+
+        verify(reassignmentLogRepository)
+                .save(argThat(log -> log.getIncidentId() == null
+                        && log.getReservationId().equals(1L)
+                        && log.getFromAssetId().equals(DAMAGED_ASSET_ID)
+                        && log.getToAssetId() == null
+                        && log.getOutcome() == ReassignmentOutcome.FORCE_CANCELLED
+                        && log.getStrategy() == null));
+        verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Cancelled"), contains("retired"));
     }
 }

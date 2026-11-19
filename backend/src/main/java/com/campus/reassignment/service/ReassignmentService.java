@@ -1,5 +1,6 @@
 package com.campus.reassignment.service;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.error.InvalidParameterException;
@@ -84,6 +85,52 @@ public class ReassignmentService {
                 }
             } catch (RuntimeException e) {
                 log.warn("Skipping reassignment for booking #{} due to concurrent update or failure", booking.id(), e);
+            }
+        }
+    }
+
+    /**
+     * Handles an {@link AssetRetiredEvent} (#245) by reassigning all upcoming reservations of the
+     * retired asset to a free substitute (Strategy pattern) or force-cancelling them if none exists.
+     * Each reservation runs in its own isolated {@code REQUIRES_NEW} transaction with {@code incidentId = null}.
+     */
+    public void handle(AssetRetiredEvent event) {
+        AssetSummary retired = catalogApi.getAsset(event.assetId());
+        LocalDateTime now = now();
+        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now);
+
+        List<ReservationSummary> sortedBookings = upcoming.stream()
+                .sorted(Comparator.comparing(ReservationSummary::start))
+                .toList();
+
+        for (ReservationSummary booking : sortedBookings) {
+            try {
+                Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
+                        bookingProcessor.processSingleBooking(event, booking, retired);
+
+                if (resultOpt.isPresent()) {
+                    ReassignmentBookingProcessor.ReassignmentExecutionResult result = resultOpt.get();
+                    if (result.outcome() == ReassignmentOutcome.REASSIGNED) {
+                        sendNotificationSafely(
+                                booking.userId(),
+                                "Reservation Reassigned",
+                                "Your reservation #" + booking.id() + " has been reassigned to asset "
+                                        + result.substituteAssetName()
+                                        + " because the original equipment was retired.");
+                    } else {
+                        sendNotificationSafely(
+                                booking.userId(),
+                                "Reservation Cancelled",
+                                "Your reservation #" + booking.id()
+                                        + " has been cancelled because the assigned equipment was retired"
+                                        + " and no substitute was available.");
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn(
+                        "Skipping retirement reassignment for booking #{} due to concurrent update or failure",
+                        booking.id(),
+                        e);
             }
         }
     }

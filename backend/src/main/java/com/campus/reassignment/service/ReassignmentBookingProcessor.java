@@ -1,5 +1,6 @@
 package com.campus.reassignment.service;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.reassignment.domain.ReassignmentLog;
@@ -83,9 +84,42 @@ class ReassignmentBookingProcessor {
      */
     public Optional<ReassignmentExecutionResult> processSingleBooking(
             AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) {
+        return processSingleBooking(
+                event.incidentId(),
+                event.assetId(),
+                "Incident #" + event.incidentId(),
+                "Equipment failure, incident #" + event.incidentId(),
+                booking,
+                damaged);
+    }
+
+    /**
+     * Processes a single reservation on a retired asset (#245), trying all candidates of each strategy
+     * in order before falling back to force-cancellation. Logs {@code incidentId = null}.
+     *
+     * @return {@link Optional} containing execution details if moved or force-cancelled, or empty if skipped.
+     */
+    public Optional<ReassignmentExecutionResult> processSingleBooking(
+            AssetRetiredEvent event, ReservationSummary booking, AssetSummary retired) {
+        return processSingleBooking(
+                null,
+                event.assetId(),
+                "Asset retired #" + event.assetId(),
+                "Equipment retired (asset #" + event.assetId() + ")",
+                booking,
+                retired);
+    }
+
+    private Optional<ReassignmentExecutionResult> processSingleBooking(
+            Long incidentId,
+            Long sourceAssetId,
+            String moveReason,
+            String cancelReason,
+            ReservationSummary booking,
+            AssetSummary sourceAsset) {
         Set<Long> attemptedCandidateIds = new HashSet<>();
         for (SubstituteStrategy strategy : strategies) {
-            List<AssetSummary> candidates = strategy.findCandidates(booking, damaged);
+            List<AssetSummary> candidates = strategy.findCandidates(booking, sourceAsset);
             for (AssetSummary candidate : candidates) {
                 // Bug fixed (#149): skip candidates that were already tried and threw in an earlier strategy
                 if (!attemptedCandidateIds.add(candidate.id())) {
@@ -93,14 +127,13 @@ class ReassignmentBookingProcessor {
                 }
                 try {
                     return inRequiresNewTransaction(() -> {
-                        boolean moved = reservationApi.moveToAsset(
-                                booking.id(), candidate.id(), "Incident #" + event.incidentId());
+                        boolean moved = reservationApi.moveToAsset(booking.id(), candidate.id(), moveReason);
 
                         if (moved) {
                             ReassignmentLog logEntry = new ReassignmentLog(
-                                    event.incidentId(),
+                                    incidentId,
                                     booking.id(),
-                                    event.assetId(),
+                                    sourceAssetId,
                                     candidate.id(),
                                     ReassignmentOutcome.REASSIGNED,
                                     strategy.name(),
@@ -136,14 +169,13 @@ class ReassignmentBookingProcessor {
 
         // If no strategy found a free substitute, force-cancel the reservation in a fresh REQUIRES_NEW transaction
         return inRequiresNewTransaction(() -> {
-            boolean cancelled =
-                    reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+            boolean cancelled = reservationApi.forceCancel(booking.id(), cancelReason);
 
             if (cancelled) {
                 ReassignmentLog logEntry = new ReassignmentLog(
-                        event.incidentId(),
+                        incidentId,
                         booking.id(),
-                        event.assetId(),
+                        sourceAssetId,
                         null,
                         ReassignmentOutcome.FORCE_CANCELLED,
                         null,

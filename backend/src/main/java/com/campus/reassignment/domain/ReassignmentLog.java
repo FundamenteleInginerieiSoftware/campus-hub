@@ -15,7 +15,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * Audit log recording the outcome of a reservation reassignment attempt triggered by an incident report.
+ * Audit log recording the outcome of a reservation reassignment attempt triggered by an incident report
+ * or administrative asset retirement (#245).
  */
 @Entity
 @Table(name = "reassignment_log")
@@ -27,7 +28,8 @@ public class ReassignmentLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "incident_id", nullable = false)
+    // Nullable for administrative asset retirements (#245), which have no associated incident report.
+    @Column(name = "incident_id")
     private Long incidentId;
 
     @Column(name = "reservation_id", nullable = false)
@@ -57,7 +59,7 @@ public class ReassignmentLog {
             ReassignmentOutcome outcome,
             String strategy,
             LocalDateTime createdAt) {
-        this.incidentId = Objects.requireNonNull(incidentId, "incidentId must not be null");
+        this.incidentId = incidentId;
         this.reservationId = Objects.requireNonNull(reservationId, "reservationId must not be null");
         this.fromAssetId = Objects.requireNonNull(fromAssetId, "fromAssetId must not be null");
         this.toAssetId = toAssetId;
