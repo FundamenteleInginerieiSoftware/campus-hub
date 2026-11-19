@@ -78,6 +78,7 @@ public class HoldService {
             }
 
             reservationRepository.lockUserQuota(userId);
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
 
             long activeHolds =
                     reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now);
@@ -148,6 +149,7 @@ public class HoldService {
                 && userApi.findActiveRole(studentId).map(r -> r == Role.STUDENT).orElse(true);
         if (holdOwnerIsStudent) {
             reservationRepository.lockUserQuota(studentId);
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
             if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                             studentId, ReservationStatus.ACTIVE_STATUSES)
                     >= 2) {

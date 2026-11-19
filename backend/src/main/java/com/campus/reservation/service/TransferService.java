@@ -177,6 +177,7 @@ public class TransferService {
 
         if (!currentUser.isAdmin()) {
             reservationRepository.lockUserQuota(userId);
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
             if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
                     >= 2) {
                 throw new ConflictException(

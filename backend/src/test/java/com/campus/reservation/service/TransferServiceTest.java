@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
@@ -410,6 +412,40 @@ class TransferServiceTest {
         assertThatThrownBy(() -> transferService.acceptTransfer(500L))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Sender account is no longer active");
+    }
+
+    @Test
+    @DisplayName("Transfer: rejects accept if recipient is disabled while waiting on quota lock (#229)")
+    void acceptTransfer_rejectsRecipientDisabledAfterLockingQuota() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+        Reservation reservation = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 0));
+        ReflectionTestUtils.setField(reservation, "id", 100L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT), Optional.empty());
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+
+        assertThatThrownBy(() -> transferService.acceptTransfer(500L))
+                .as("recipient disabled while waiting on lockUserQuota must be rejected with 403 USER_DISABLED; "
+                        + "see TransferService.acceptTransfer")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        var order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(recipientId);
+        order.verify(userApi).findActiveRole(recipientId);
+        verify(reservationRepository, never()).save(any());
     }
 
     @Test

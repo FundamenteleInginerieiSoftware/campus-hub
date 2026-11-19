@@ -106,6 +106,7 @@ public class ReservationService implements ReservationApi {
         // for different assets cannot both pass the < 2 check. Lock order is always asset row -> user lock.
         if (!currentUser.isAdmin()) {
             reservationRepository.lockUserQuota(userId);
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
             if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
                     >= 2) {
                 throw new ConflictException(
@@ -190,6 +191,7 @@ public class ReservationService implements ReservationApi {
 
         if (!isAdmin) {
             reservationRepository.lockUserQuota(userId);
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
             long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                     userId, ReservationStatus.ACTIVE_STATUSES);
             if (activeCount + 1 > 2) {

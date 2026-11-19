@@ -3,6 +3,7 @@ package com.campus.reservation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
@@ -36,6 +37,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Concurrency integration test proving that pessimistic row locking (CatalogApi.lockForBooking)
@@ -60,6 +62,9 @@ class ReservationConcurrencyIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @TestConfiguration
     static class ConcurrencyTestConfig {
@@ -344,6 +349,75 @@ class ReservationConcurrencyIT {
 
         Reservation finalRes = reservationRepository.findById(reservationId).orElseThrow();
         assertThat(finalRes.getStatus()).isEqualTo(ReservationStatus.RETURNED);
+    }
+
+    @Test
+    @DisplayName(
+            "Disabled-user booking race (#229): booking waiting on lockUserQuota is rejected after the account is disabled")
+    void bookingBlockedOnQuotaLockIsRejectedWhenUserIsDisabled() throws Exception {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 4, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 4, 16, 0);
+        CreateReservationRequest request = new CreateReservationRequest(ASSET_ID, start, end);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch quotaLockHeld = new CountDownLatch(1);
+        CountDownLatch bookingStarted = new CountDownLatch(1);
+        AtomicInteger disabledRejected = new AtomicInteger(0);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        // Thread 1 holds the per-user quota lock (the same lock cancelUpcomingReservationsForUser takes),
+        // disables the student, waits until Thread 2 has entered createReservation and blocked on lockUserQuota,
+        // then commits so Thread 2 wakes up against the newly disabled user row.
+        Future<?> disableAndCancel = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+            reservationRepository.lockUserQuota(USER_1_ID);
+            jdbcTemplate.update("UPDATE users SET enabled = false WHERE id = ?", USER_1_ID);
+            quotaLockHeld.countDown();
+            try {
+                bookingStarted.await(5, TimeUnit.SECONDS);
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+
+        Future<?> concurrentBooking = executor.submit(() -> {
+            setupSecurityContext(USER_1_ID);
+            try {
+                assertThat(quotaLockHeld.await(5, TimeUnit.SECONDS))
+                        .as("disable transaction acquired lockUserQuota first")
+                        .isTrue();
+                bookingStarted.countDown();
+                reservationService.createReservation(request);
+            } catch (ForbiddenException ex) {
+                if ("USER_DISABLED".equals(ex.getCode())) {
+                    disabledRejected.incrementAndGet();
+                } else {
+                    unexpected.add(ex);
+                }
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            disableAndCancel.get(10, TimeUnit.SECONDS);
+            concurrentBooking.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpected)
+                .as("no unexpected error during disabled-user booking race; see ReservationService.createReservation")
+                .isEmpty();
+        assertThat(disabledRejected.get())
+                .as("booking that waited on lockUserQuota while the user was disabled must get 403 USER_DISABLED; "
+                        + "see ReservationServiceSupport.requireActiveUserAfterLock")
+                .isEqualTo(1);
+        assertThat(reservationRepository.countByUserIdAndStatusIn(USER_1_ID, ReservationStatus.ACTIVE_STATUSES))
+                .as("disabled student must end with 0 active reservations after the race")
+                .isZero();
     }
 
     private void setupSecurityContext(Long userId) {
