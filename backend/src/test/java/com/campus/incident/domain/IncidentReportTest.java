@@ -170,4 +170,37 @@ class IncidentReportTest {
                 .isEqualTo("INVALID_INCIDENT_STATUS_TRANSITION");
         assertThat(report.getPhotoKey()).isEqualTo("old.jpg");
     }
+
+    // ---- which incidents keep the asset out of use (#229) ------------------------------------
+
+    @ParameterizedTest(name = "{0} {1} -> {2}")
+    @CsvSource({
+        "OPEN, LOW, false",
+        "OPEN, MEDIUM, false",
+        "OPEN, HIGH, true",
+        "OPEN, CRITICAL, true",
+        "IN_REPAIR, LOW, true",
+        "IN_REPAIR, MEDIUM, true",
+        "IN_REPAIR, HIGH, true",
+        "RESOLVED, CRITICAL, false",
+        "REJECTED, HIGH, false",
+        "RESOLVED, LOW, false"
+    })
+    void keepsAssetOutOfUse_dependsOnStatusAndSeverity(
+            IncidentStatus status, IncidentSeverity severity, boolean expected) {
+        IncidentReport report = new IncidentReport(10L, null, 42L, "Defect", severity, null, CREATED);
+        ReflectionTestUtils.setField(report, "status", status);
+
+        assertThat(report.keepsAssetOutOfUse())
+                .as("%s %s keeps the asset out of use? see IncidentReport.keepsAssetOutOfUse", status, severity)
+                .isEqualTo(expected);
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({"LOW, false", "MEDIUM, false", "HIGH, true", "CRITICAL, true"})
+    void onlyHighAndCritical_takeTheAssetOutOfUseAtOnce(IncidentSeverity severity, boolean expected) {
+        assertThat(severity.takesAssetOutOfUseAtOnce())
+                .as("only HIGH/CRITICAL take the asset out at once; see IncidentSeverity.takesAssetOutOfUseAtOnce")
+                .isEqualTo(expected);
+    }
 }
