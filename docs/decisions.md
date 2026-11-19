@@ -75,6 +75,8 @@ All 🟡: proposed in the plan, **confirm at the next meeting** (Calin leads).
 | No-show | not checked out 30 min after start → `NO_SHOW` | Calin |
 | Admins | bypass the per-student limit, not the conflict check | Calin |
 | Photo | optional, max 5 MB, JPEG/PNG/WebP | Stefania |
+| Incident severity (#229) | only `HIGH`/`CRITICAL` take the asset out of use at once and start the reassignment engine; `LOW`/`MEDIUM` are tickets, the asset goes out of use only when an admin starts the repair. Agreed by Matei and Calin in #229 | Stefania |
+| Open reports per student (#229) | max 3 `OPEN` at a time (409 `TOO_MANY_OPEN_INCIDENTS`); admins have no limit | Stefania |
 | Substitute search | same model → same category (same lab room preferred) | Calin |
 | Reassignment scope | all future active reservations of the asset | Calin |
 | User admin | admins can't disable/demote themselves; the last admin can't be removed | Stefania |
