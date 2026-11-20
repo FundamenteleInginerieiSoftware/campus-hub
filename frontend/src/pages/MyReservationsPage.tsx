@@ -375,8 +375,16 @@ export default function MyReservationsPage() {
     {
       header: 'Actions',
       render: (r) => {
-        const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
-        const canShowPickupPass = r.status === 'CONFIRMED'
+        const now = nowInBucharest()
+        const start = parseCampusLocalDateTime(r.startTime)
+        const hasStartedInBucharest = now >= start
+        // Desk check-out only opens near the slot (start - 15 min .. start + 30 min in
+        // ReservationService.checkOutReservation), so only show the pickup pass on today's CONFIRMED rows.
+        const startsTodayInBucharest =
+          start.getFullYear() === now.getFullYear() &&
+          start.getMonth() === now.getMonth() &&
+          start.getDate() === now.getDate()
+        const canShowPickupPass = r.status === 'CONFIRMED' && startsTodayInBucharest
         const canCancel = r.status === 'CONFIRMED' && !hasStartedInBucharest
         const canExtend = r.status === 'CONFIRMED' || r.status === 'CHECKED_OUT'
         const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest
