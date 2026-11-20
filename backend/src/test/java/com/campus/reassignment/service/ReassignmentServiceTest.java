@@ -485,6 +485,7 @@ class ReassignmentServiceTest {
 
         verify(reassignmentLogRepository)
                 .save(argThat(log -> log.getIncidentId() == null
+                        && log.getTrigger() == ReassignmentTrigger.RETIRED
                         && log.getReservationId().equals(1L)
                         && log.getFromAssetId().equals(DAMAGED_ASSET_ID)
                         && log.getToAssetId().equals(SUBSTITUTE_ASSET_ID)
@@ -516,6 +517,7 @@ class ReassignmentServiceTest {
 
         verify(reassignmentLogRepository)
                 .save(argThat(log -> log.getIncidentId() == null
+                        && log.getTrigger() == ReassignmentTrigger.RETIRED
                         && log.getReservationId().equals(1L)
                         && log.getFromAssetId().equals(DAMAGED_ASSET_ID)
                         && log.getToAssetId() == null
