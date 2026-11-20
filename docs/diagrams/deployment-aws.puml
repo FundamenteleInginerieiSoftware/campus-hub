@@ -46,7 +46,7 @@ node "Student / admin device" as client <<device>> {
 }
 
 node "GitHub Actions runner" as gha <<device>> {
-  artifact "deploy.yml\n(planned, W8)" as deploy
+  artifact "deploy.yml\n(after a green ci on main;\nOIDC role campus-hub-github-deploy)" as deploy
 }
 
 rectangle "AWS account mateinpunct" as aws {
@@ -95,10 +95,10 @@ jar -down-> s3 : HTTPS :443\nPut/Get/DeleteObject
 jar -down-> ses : HTTPS :443\nSendEmail (SES v2)
 docker -down-> cw : HTTPS :443\ncontainer logs
 
-' ---- deploy (planned, ADR-002 / ADR-003) ----
+' ---- deploy (deploy.yml, W8; ADR-002 / ADR-003) ----
 deploy -down-> ecr : 1. docker push\n(HTTPS, OIDC role)
 deploy -down-> ssm : 2. Run Command\n(HTTPS, OIDC role)
-ssm -down-> agent : deploy script
+ssm -down-> agent : campus-deploy <sha>
 agent -down-> envfile : writes secrets\n(GetParameters)
 docker -down-> ecr : docker pull\n(HTTPS :443)
 docker ..> envfile : docker run --env-file

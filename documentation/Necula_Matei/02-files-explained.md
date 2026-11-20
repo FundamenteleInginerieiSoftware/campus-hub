@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) the pickup pass backend (`51-pickup-pass-backend.md`), the pickup pass pages (`52-pickup-pass-pages.md`) the calendar feed security rule (`53-calendar-feed-security-rule.md`) and Terraform part 3: server, CloudFront, e-mail sender (`54-terraform-deploy.md`) and the Swagger server URL and `HEAD` fix (`55-swagger-server-head-fix.md`) and the RDS auto-start alert (`56-rds-auto-start-alert.md`), the fresh read in `findActiveRole` (`57-active-role-fresh-read.md`), the pickup pass QR and camera scan (`58-pickup-pass-qr.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) the pickup pass backend (`51-pickup-pass-backend.md`), the pickup pass pages (`52-pickup-pass-pages.md`) the calendar feed security rule (`53-calendar-feed-security-rule.md`) and Terraform part 3: server, CloudFront, e-mail sender (`54-terraform-deploy.md`) and the Swagger server URL and `HEAD` fix (`55-swagger-server-head-fix.md`) and the RDS auto-start alert (`56-rds-auto-start-alert.md`), the fresh read in `findActiveRole` (`57-active-role-fresh-read.md`), the pickup pass QR and camera scan (`58-pickup-pass-qr.md`), the automatic deploy with GitHub OIDC (`59-deploy-workflow.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -11,7 +11,7 @@ campus-hub/
 ├── .github/
 │   ├── CODEOWNERS  pull_request_template.md  copilot-instructions.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
-│   └── workflows/ci.yml  docs-check.yml                  (docs-check: 50-docs-check.md)
+│   └── workflows/ci.yml  docs-check.yml  deploy.yml      (docs-check: 50-docs-check.md, deploy: 59-deploy-workflow.md)
 ├── docs/  decisions.md  api-contract.md  plan-w4-w6.md  whats-left.md
 │   ├── superpowers/specs/ + plans/                       (38-project-assistant-design.md)
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
@@ -27,6 +27,7 @@ campus-hub/
 │   ├── rds.tf  storage.tf  iam.tf  ssm.tf                (45-terraform-data.md)
 │   ├── compute.tf  user-data.sh.tftpl  cdn.tf  ses.tf  terraform.tfvars.example   (54-terraform-deploy.md)
 │   ├── alerts.tf                                         (56-rds-auto-start-alert.md)
+│   ├── github-deploy.tf                                  (59-deploy-workflow.md)
 │   └── bootstrap/  main.tf  .terraform.lock.hcl          (44-terraform-network.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
@@ -95,6 +96,7 @@ campus-hub/
 | `ISSUE_TEMPLATE/` | Forms for new issues: bug, task, user story. |
 | `workflows/ci.yml` | The robot that builds and tests every pull request. It must be green before merging. |
 | `workflows/docs-check.yml` | A second, quick robot: when a pull request changes the app, it checks that the author also updated their personal notes and their lines in the project status (`50-docs-check.md`). |
+| `workflows/deploy.yml` | The robot that puts `main` on AWS after `ci` is green: builds the app's image, uploads it, tells the server to switch to it and waits until the app answers. Logs in to AWS without any stored key (`59-deploy-workflow.md`). |
 | `copilot-instructions.md` | Tells GitHub Copilot to read and follow `AGENTS.md`. |
 
 ### Backend: build (PR #13)
@@ -230,6 +232,12 @@ campus-hub/
 |---|---|
 | `infra/alerts.tf` | An alert mailing list (SNS topic) with one e-mail subscriber, and a rule that sends it the notice AWS gives when it restarts a stopped database by itself after 7 days. |
 | `infra/variables.tf`, `infra/terraform.tfvars.example` (changed) | New setting `alert_email`, the address that gets the alerts (set in the private `terraform.tfvars`). |
+
+### `infra/`: the automatic deploy (`59-deploy-workflow.md`)
+| File | What it does |
+|---|---|
+| `infra/github-deploy.tf` | Lets GitHub's deploy robot log in to AWS without a stored key, only for runs on `main` of our repository, and only to upload our image and run the deploy command on our server. |
+| `infra/outputs.tf` (changed) | Prints the deploy role's address (`github_deploy_role_arn`), which goes into the GitHub variable `AWS_DEPLOY_ROLE_ARN`. |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
