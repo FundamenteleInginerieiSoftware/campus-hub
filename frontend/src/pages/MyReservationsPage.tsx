@@ -382,7 +382,7 @@ export default function MyReservationsPage() {
         const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest
 
         return (
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="wrap">
             {canShowPickupPass && (
               <Tooltip label="Open your rotating 6-digit code and QR pass for the lab desk">
                 <Button
