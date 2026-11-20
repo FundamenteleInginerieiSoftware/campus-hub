@@ -1,0 +1,98 @@
+package com.campus.reservation.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.campus.reservation.api.ReservationApi;
+import com.campus.user.api.UserDisabledEvent;
+import java.lang.reflect.Method;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.support.TransactionTemplate;
+
+@ExtendWith(MockitoExtension.class)
+class UserDisabledReservationListenerTest {
+
+    @Mock
+    private ReservationApi reservationApi;
+
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
+    private UserDisabledReservationListener listener;
+
+    @BeforeEach
+    void setUp() {
+        TransactionStatus txStatus = mock(TransactionStatus.class);
+        lenient().when(transactionManager.getTransaction(any())).thenReturn(txStatus);
+        listener = new UserDisabledReservationListener(reservationApi, transactionManager);
+    }
+
+    @Test
+    @DisplayName("UserDisabledReservationListener (#229): uses AFTER_COMMIT, REQUIRES_NEW, and is not @Async")
+    void listenerContractUsesAfterCommitRequiresNewAndNoAsync() throws NoSuchMethodException {
+        Method method = UserDisabledReservationListener.class.getMethod("onUserDisabled", UserDisabledEvent.class);
+
+        TransactionalEventListener listenerAnnotation = method.getAnnotation(TransactionalEventListener.class);
+        assertThat(listenerAnnotation)
+                .as("listener must be annotated with @TransactionalEventListener(AFTER_COMMIT); "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .isNotNull();
+        assertThat(listenerAnnotation.phase())
+                .as("listener must run AFTER_COMMIT so disabling the account commits first; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .isEqualTo(TransactionPhase.AFTER_COMMIT);
+        assertThat(method.getAnnotation(Async.class))
+                .as("listener must not be @Async so CurrentUser stays available on the request thread for audit; "
+                        + "see UserDisabledEvent Javadoc")
+                .isNull();
+
+        TransactionTemplate tt = (TransactionTemplate) ReflectionTestUtils.getField(listener, "requiresNewTx");
+        assertThat(tt)
+                .as("listener must use a TransactionTemplate for REQUIRES_NEW")
+                .isNotNull();
+        assertThat(tt.getPropagationBehavior())
+                .as("listener must run inside PROPAGATION_REQUIRES_NEW after the disable tx commits; "
+                        + "see UserDisabledReservationListener")
+                .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    @Test
+    @DisplayName("UserDisabledReservationListener (#229): cancels upcoming reservations for the disabled user")
+    void onUserDisabledCancelsUpcomingReservations() {
+        when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
+                .thenReturn(2);
+
+        listener.onUserDisabled(new UserDisabledEvent(42L, 3L));
+
+        verify(reservationApi).cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON);
+    }
+
+    @Test
+    @DisplayName("UserDisabledReservationListener (#229): catches and logs exceptions so disable never fails")
+    void onUserDisabledSwallowsRuntimeException() {
+        when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
+                .thenThrow(new IllegalStateException("DB timeout"));
+
+        assertThatCode(() -> listener.onUserDisabled(new UserDisabledEvent(42L, 3L)))
+                .as("listener must catch and log errors so disabling an account never fails; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .doesNotThrowAnyException();
+    }
+}

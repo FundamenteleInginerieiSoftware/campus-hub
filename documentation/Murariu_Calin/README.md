@@ -64,6 +64,7 @@ Each document is structured in two parts:
 | 45 | [`45-calendar-sync-button-in-my-reservations.md`](./45-calendar-sync-button-in-my-reservations.md) | Calendar Sync Button in My Reservations (#314) | Moved Calendar sync from student sidebar into a header button on `MyReservationsPage`, kept `/calendar-sync` route and top-bar title |
 | 46 | [`46-reassignment-retire-nits.md`](./46-reassignment-retire-nits.md) | Reassignment Retire Flow Review Nits (#311 Follow-up) | Flyway rename `reassignment_log.trigger` → `triggered_by`, generated IDs in `AssetRetiredReassignmentIT`, ER diagram & module doc sync |
 | 47 | [`47-reassignment-source-asset-guard.md`](./47-reassignment-source-asset-guard.md) | Source-Asset Guard on Reassignment Move & Force-Cancel (#319) | `expectedSourceAssetId` + `findByIdForUpdate` in `ReservationApi.moveToAsset`/`forceCancel` to prevent duplicate log/email on concurrent incident + retire |
+| 50 | [`50-user-disabled-event-listener.md`](./50-user-disabled-event-listener.md) | UserDisabledEvent Listener in Reservation Module (#229) | `UserDisabledReservationListener` (`AFTER_COMMIT` + `REQUIRES_NEW` via `TransactionTemplate`, non-`@Async`), unit + PostgreSQL IT, doc 27 contract sync |
 
 
 
