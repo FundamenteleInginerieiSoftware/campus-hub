@@ -20,6 +20,7 @@ import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -240,5 +241,55 @@ class ReassignmentBookingProcessorTest {
         // Crucial (#270 review 3): forceCancel must NEVER be called when an unexpected exception occurs
         verify(reservationApi, never()).forceCancel(any(), any());
         verify(reassignmentLogRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName(
+            "processSingleBooking retries next candidate when cause chain contains ConcurrencyFailureException or Postgres lock/deadlock SQLState")
+    void processSingleBookingRetriesOnWrappedConcurrencyCauses() {
+        AssetSummary c1 = new AssetSummary(20L, "Scope 1", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary c2 = new AssetSummary(21L, "Scope 2", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary c3 = new AssetSummary(22L, "Scope 3", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary c4 = new AssetSummary(23L, "Scope 4", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary c5 = new AssetSummary(24L, "Scope 5", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary winner = new AssetSummary(30L, "Scope Winner", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(c1, c2, c3, c4, c5, winner));
+        when(strategy1.name()).thenReturn("SameModelStrategy");
+        when(reservationApi.moveToAsset(50L, 20L, "Incident #100"))
+                .thenThrow(new RuntimeException("wrap", new CannotAcquireLockException("inner lock")));
+        when(reservationApi.moveToAsset(50L, 21L, "Incident #100"))
+                .thenThrow(new RuntimeException("wrap", new SubstituteNoLongerFreeException("inner taken")));
+        when(reservationApi.moveToAsset(50L, 22L, "Incident #100"))
+                .thenThrow(new RuntimeException("deadlock", new SQLException("deadlock", "40P01")));
+        when(reservationApi.moveToAsset(50L, 23L, "Incident #100"))
+                .thenThrow(new RuntimeException("lock_not_available", new SQLException("lock", "55P03")));
+        when(reservationApi.moveToAsset(50L, 24L, "Incident #100"))
+                .thenThrow(new RuntimeException("serialization", new SQLException("ser", "40001")));
+        when(reservationApi.moveToAsset(50L, 30L, "Incident #100")).thenReturn(true);
+
+        Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> result =
+                processor.processSingleBooking(event, booking, damagedAsset);
+
+        assertThat(result)
+                .as("wrapped concurrency/SQLState causes must retry until a free candidate wins; "
+                        + "see ReassignmentBookingProcessor.isConcurrencyConflict")
+                .isPresent();
+        assertThat(result.get().substituteAssetName()).isEqualTo("Scope Winner");
+    }
+
+    @Test
+    @DisplayName("processSingleBooking rethrows non-concurrency SQLException without force-cancelling")
+    void processSingleBookingRethrowsNonConcurrencySqlException() {
+        AssetSummary candidate = new AssetSummary(20L, "Scope 1", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(candidate));
+        when(reservationApi.moveToAsset(50L, 20L, "Incident #100"))
+                .thenThrow(new RuntimeException("constraint", new SQLException("unique", "23505")));
+
+        assertThatThrownBy(() -> processor.processSingleBooking(event, booking, damagedAsset))
+                .as("non-concurrency SQLState (23505) must be rethrown, not treated as a concurrency retry; "
+                        + "see ReassignmentBookingProcessor.isConcurrencyConflict")
+                .isInstanceOf(RuntimeException.class);
+        verify(reservationApi, never()).forceCancel(any(), any());
     }
 }

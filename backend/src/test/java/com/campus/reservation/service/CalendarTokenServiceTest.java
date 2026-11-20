@@ -115,8 +115,13 @@ class CalendarTokenServiceTest {
         });
 
         String firstToken = extractToken(service.create());
+        CalendarFeed firstFeed = stored.get();
         String secondToken = extractToken(service.create());
 
+        assertThat(stored.get())
+                .as(
+                        "second create() must update the existing CalendarFeed row in place; see CalendarTokenService.create")
+                .isSameAs(firstFeed);
         assertThat(service.findActiveUserId(firstToken))
                 .as("first token must stop working once replaced by second create; see CalendarTokenService.create")
                 .isEmpty();

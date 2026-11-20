@@ -647,4 +647,38 @@ class TransferServiceTest {
         assertThat(list).hasSize(1);
         assertThat(list.get(0).id()).isEqualTo(500L);
     }
+
+    @Test
+    @DisplayName("Transfer: acceptTransfer throws 404 TRANSFER_NOT_FOUND when transfer does not exist")
+    void acceptTransfer_transferNotFound_throws404() {
+        when(currentUser.id()).thenReturn(99L);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transferService.acceptTransfer(500L))
+                .as(
+                        "existence: accepting a missing transfer must throw TRANSFER_NOT_FOUND; see TransferService.acceptTransfer")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "TRANSFER_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("Transfer: acceptTransfer throws 404 RESERVATION_NOT_FOUND when underlying reservation is missing")
+    void acceptTransfer_reservationNotFound_throws404() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer =
+                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transferService.acceptTransfer(500L))
+                .as(
+                        "existence: accepting a transfer whose reservation disappeared must throw RESERVATION_NOT_FOUND; see TransferService.acceptTransfer")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+    }
 }

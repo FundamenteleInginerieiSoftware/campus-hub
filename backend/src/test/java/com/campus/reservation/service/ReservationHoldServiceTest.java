@@ -538,6 +538,47 @@ class ReservationHoldServiceTest {
     }
 
     @Test
+    @DisplayName("confirmHold: throws 404 HOLD_NOT_FOUND when hold does not exist")
+    void confirmHold_notFound_throws404() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> holdService.confirmHold(999L))
+                .as("existence: confirming a non-existent hold must throw HOLD_NOT_FOUND; see HoldService.confirmHold")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "HOLD_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("confirmHold: admin confirming another admin's hold skips student quota check")
+    void confirmHold_adminConfirmingAnotherAdminsHoldSkipsQuotaCheck() {
+        Long otherAdminId = 77L;
+        ReservationHold hold = new ReservationHold(ASSET_ID, otherAdminId, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(otherAdminId)).thenReturn(Optional.of(Role.ADMIN));
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 56L);
+            return r;
+        });
+
+        ReservationResponse response = holdService.confirmHold(1L);
+
+        assertThat(response.id())
+                .as(
+                        "admin-owned hold confirmed by another admin must bypass student quota; see HoldService.confirmHold")
+                .isEqualTo(56L);
+        verify(reservationRepository, never()).lockUserQuota(any());
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(any(), any());
+    }
+
+    @Test
     @DisplayName("releaseHold: admin can release another user's hold")
     void releaseHold_byAdmin_success() {
         ReservationHold hold = new ReservationHold(ASSET_ID, 999L, START, END, NOW.plusMinutes(1), NOW);

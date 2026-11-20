@@ -31,6 +31,11 @@ class IcsWriterTest {
                 .as("empty calendar must declare Campus Hub PRODID; see IcsWriter.write")
                 .contains("PRODID:-//Campus Hub//Reservations//EN\r\n");
         assertThat(ics)
+                .as("empty calendar must declare CALSCALE, METHOD, and X-WR-CALNAME; see IcsWriter.write")
+                .contains("CALSCALE:GREGORIAN\r\n")
+                .contains("METHOD:PUBLISH\r\n")
+                .contains("X-WR-CALNAME:Campus Hub\r\n");
+        assertThat(ics)
                 .as("empty calendar must end with END:VCALENDAR CRLF; see IcsWriter.write")
                 .endsWith("END:VCALENDAR\r\n");
         assertThat(ics)
@@ -163,6 +168,20 @@ class IcsWriterTest {
     }
 
     @Test
+    void escapesCrLfBareCrAndTrailingCrWithoutDoubleNewlines() {
+        assertThat(IcsWriter.escape("a\r\nb"))
+                .as("CRLF must collapse to a single escaped \\n; see IcsWriter.escape")
+                .isEqualTo("a\\nb");
+        assertThat(IcsWriter.escape("a\rb"))
+                .as(
+                        "bare CR followed by another char must escape to \\n without dropping the next char; see IcsWriter.escape")
+                .isEqualTo("a\\nb");
+        assertThat(IcsWriter.escape("a\r"))
+                .as("trailing CR at end of string must escape to \\n without out-of-bounds; see IcsWriter.escape")
+                .isEqualTo("a\\n");
+    }
+
+    @Test
     void foldsLinesLongerThan75Bytes() {
         String original = "SUMMARY:" + "A".repeat(200);
 
@@ -222,5 +241,46 @@ class IcsWriterTest {
         assertThat(physicalLines)
                 .as("line within 75 bytes must stay a single unfolded line; see IcsWriter.fold")
                 .containsExactly(shortLine);
+    }
+
+    @Test
+    void foldHandlesExact75ByteBoundaryEmptyAndThreeAndFourByteUtf8() {
+        assertThat(IcsWriter.fold(""))
+                .as("empty line must fold to a single empty string; see IcsWriter.fold")
+                .containsExactly("");
+        assertThat(IcsWriter.fold("A".repeat(75)))
+                .as("line of exactly 75 UTF-8 bytes must not fold; see IcsWriter.fold")
+                .hasSize(1);
+        assertThat(IcsWriter.fold("A".repeat(76)))
+                .as("line of 76 UTF-8 bytes must fold into 2 physical lines; see IcsWriter.fold")
+                .hasSize(2);
+
+        // 3-byte UTF-8 ('€' = U+20AC, 25 * 3 = 75 bytes fits on 1 line; 26 * 3 = 78 bytes folds)
+        assertThat(IcsWriter.fold("€".repeat(25)))
+                .as("25 three-byte chars = 75 bytes must stay on 1 line; see IcsWriter.utf8ByteLength")
+                .hasSize(1);
+        assertThat(IcsWriter.fold("€".repeat(26)))
+                .as("26 three-byte chars = 78 bytes must fold; see IcsWriter.utf8ByteLength")
+                .hasSize(2);
+
+        // 4-byte UTF-8 ('🔧' = U+1F527, 18 * 4 = 72 bytes fits; 19 * 4 = 76 bytes folds without splitting surrogate
+        // pair)
+        assertThat(IcsWriter.fold("🔧".repeat(18)))
+                .as("18 four-byte emoji = 72 bytes must stay on 1 line; see IcsWriter.utf8ByteLength")
+                .hasSize(1);
+        List<String> foldedEmoji = IcsWriter.fold("🔧".repeat(19));
+        assertThat(foldedEmoji)
+                .as("19 four-byte emoji = 76 bytes must fold into 2 lines; see IcsWriter.utf8ByteLength")
+                .hasSize(2);
+        assertThat(String.join("\r\n", foldedEmoji).replace("\r\n ", ""))
+                .as("unfolding 4-byte emoji must recover original string intact; see IcsWriter.fold")
+                .isEqualTo("🔧".repeat(19));
+
+        // Exact UTF-8 byte-length boundaries: U+007F (1B), U+0080 (2B), U+07FF (2B), U+0800 (3B), U+FFFF (3B)
+        assertThat(IcsWriter.fold("\u007F".repeat(75))).hasSize(1);
+        assertThat(IcsWriter.fold("\u0080".repeat(38))).hasSize(2);
+        assertThat(IcsWriter.fold("\u07FF".repeat(37))).hasSize(1);
+        assertThat(IcsWriter.fold("\u0800".repeat(26))).hasSize(2);
+        assertThat(IcsWriter.fold("\uFFFF".repeat(25))).hasSize(1);
     }
 }
