@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
@@ -452,16 +453,85 @@ class ReservationConcurrencyIT {
                 .isEqualTo(USER_2_ID);
     }
 
+    @Test
+    @DisplayName(
+            "Disable-cancel vs extend race (#229, #322): cancelUpcomingReservationsForUser locks rows FOR UPDATE so concurrent extendReservation never rolls it back")
+    void extendRunningDuringCancelUpcomingDoesNotRollBackCancel() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(1);
+        LocalDateTime extendedEnd = start.plusHours(2);
+
+        Reservation booking = reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger cancelledCount = new AtomicInteger(-1);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> cancelTask = executor.submit(() -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                cancelledCount.set(reservationService.cancelUpcomingReservationsForUser(USER_1_ID, "Account disabled"));
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> extendTask = executor.submit(() -> {
+            setupSecurityContext(USER_1_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                reservationService.extendReservation(booking.getId(), new ExtendReservationRequest(extendedEnd));
+            } catch (InvalidStateTransitionException | ConflictException expected) {
+                // Expected if cancel committed first and transitioned the booking to CANCELLED.
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+            startLatch.countDown();
+            cancelTask.get(10, TimeUnit.SECONDS);
+            extendTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpected)
+                .as("concurrent extendReservation must serialize on FOR UPDATE instead of tripping @Version rollback; "
+                        + "see ReservationService.cancelUpcomingReservationsForUser")
+                .isEmpty();
+        assertThat(cancelledCount.get())
+                .as("cancelUpcomingReservationsForUser must cancel the booking cleanly")
+                .isEqualTo(1);
+        Reservation after = reservationRepository.findById(booking.getId()).orElseThrow();
+        assertThat(after.getStatus())
+                .as("booking must end up CANCELLED regardless of whether extend ran before or after cancel")
+                .isEqualTo(ReservationStatus.CANCELLED);
+    }
+
     /**
-     * Thread 1 acquires lockUserQuota(targetUserId) FIRST, lets Thread 2 enter the booking path and
-     * block on lockUserQuota (so any accidental pre-lock User read would already have populated the
-     * Hibernate L1 cache), and ONLY THEN disables the user and commits.
+     * Thread 1 acquires lockUserQuota(targetUserId) FIRST, polls PostgreSQL {@code pg_stat_activity}
+     * + {@code pg_locks} until Thread 2 is genuinely blocked on the advisory lock (so any accidental
+     * pre-lock User read would already have populated the Hibernate L1 cache), and ONLY THEN disables
+     * the user and commits.
      */
     private void assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
             Long targetUserId, Runnable action, String ownerPath) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch quotaLockHeld = new CountDownLatch(1);
         CountDownLatch actionStarted = new CountDownLatch(1);
+        AtomicBoolean actionDone = new AtomicBoolean(false);
         AtomicInteger disabledRejected = new AtomicInteger(0);
         List<Throwable> unexpected = new CopyOnWriteArrayList<>();
 
@@ -470,7 +540,7 @@ class ReservationConcurrencyIT {
             quotaLockHeld.countDown();
             try {
                 actionStarted.await(5, TimeUnit.SECONDS);
-                Thread.sleep(200);
+                waitUntilBlockedOnUserQuotaLock(targetUserId, actionDone);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -496,6 +566,7 @@ class ReservationConcurrencyIT {
             } catch (Throwable t) {
                 unexpected.add(t);
             } finally {
+                actionDone.set(true);
                 SecurityContextHolder.clearContext();
             }
         });
@@ -516,6 +587,34 @@ class ReservationConcurrencyIT {
                                 + "see ReservationServiceSupport.requireActiveUserAfterLock",
                         ownerPath)
                 .isEqualTo(1);
+    }
+
+    /**
+     * Polls PostgreSQL's {@code pg_stat_activity} joined with {@code pg_locks} until another backend
+     * is actively waiting on {@code pg_advisory_xact_lock(1, targetUserId)} (replaces blind sleep, #322).
+     */
+    private void waitUntilBlockedOnUserQuotaLock(Long targetUserId, AtomicBoolean actionDone)
+            throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
+            Integer waiting = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*)
+                    FROM pg_stat_activity a
+                    JOIN pg_locks l ON l.pid = a.pid
+                    WHERE a.datname = current_database()
+                      AND a.pid <> pg_backend_pid()
+                      AND a.wait_event_type = 'Lock'
+                      AND a.wait_event = 'advisory'
+                      AND l.locktype = 'advisory'
+                      AND l.classid = 1
+                      AND l.objid = ?
+                      AND NOT l.granted
+                    """, Integer.class, targetUserId.intValue());
+            if (waiting != null && waiting > 0) {
+                return;
+            }
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
     }
 
     private void setupSecurityContext(Long userId) {

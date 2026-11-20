@@ -104,6 +104,19 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
         """)
     List<Reservation> findUpcomingConfirmedByUser(@Param("userId") Long userId, @Param("cutoff") LocalDateTime cutoff);
 
+    // Acquires row locks in ascending id order so concurrent extendReservation or acceptTransfer calls
+    // wait instead of tripping @Version and rolling back cancelUpcomingReservationsForUser (#229, #322).
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select r from Reservation r
+        where r.userId = :userId
+          and r.status = com.campus.reservation.api.ReservationStatus.CONFIRMED
+          and r.endTime > :cutoff
+        order by r.id asc
+        """)
+    List<Reservation> findUpcomingConfirmedByUserForUpdate(
+            @Param("userId") Long userId, @Param("cutoff") LocalDateTime cutoff);
+
     // Strictly `< :cutoff` (where cutoff = now - 30m) so a student arriving at exact startTime + 30m
     // can still check out (`!now.isAfter(latest)`), and the sweep only marks NO_SHOW after +30m has passed.
     @Query("""

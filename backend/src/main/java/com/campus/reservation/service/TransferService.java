@@ -158,8 +158,10 @@ public class TransferService {
             throw new ConflictException("TRANSFER_NOT_ALLOWED", "Sender account is no longer active");
         }
 
+        // Lock the reservation row before lockUserQuota(recipient) so a concurrent cancelUpcomingReservationsForUser
+        // on the sender cannot deadlock or race with ownership transfer (#229, #322).
         Reservation reservation = reservationRepository
-                .findById(transfer.getReservationId())
+                .findByIdForUpdate(transfer.getReservationId())
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
 
         if (reservation.getStatus() != ReservationStatus.CONFIRMED || !now.isBefore(reservation.getStartTime())) {
