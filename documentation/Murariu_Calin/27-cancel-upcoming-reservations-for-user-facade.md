@@ -36,7 +36,7 @@ Am adăugat o metodă dedicată în fațada publică `ReservationApi` și un end
 ### 1. Architectural Alignment & Boundaries
 Conform regulilor din `AGENTS.md` și ArchUnit (`ModuleBoundaryArchitectureTest`):
 - `com.campus.reservation` depinde de `com.campus.user.api` (pentru roluri și verificare existență utilizator prin `userApi.exists(userId)`).
-- Păstrăm decuplarea strictă fără cicluri bidirecționale (`no_cycles_between_modules`): modulul `user` **nu trebuie să importe** `reservation` (nici `ReservationApi`). Prin urmare, integrarea din `#229` va fi legată printr-un eveniment `UserDisabledEvent` publicat din `user.api` și consumat sincron printr-un `@EventListener` în modulul `reservation` (care va invoca `cancelUpcomingReservationsForUser`).
+- Păstrăm decuplarea strictă fără cicluri bidirecționale (`no_cycles_between_modules`): modulul `user` **nu trebuie să importe** `reservation` (nici `ReservationApi`). Prin urmare, integrarea din `#229` este legată printr-un eveniment `UserDisabledEvent` publicat din `user.api` (#302) și consumat în `reservation` printr-un `@TransactionalEventListener(phase = AFTER_COMMIT)` care rulează într-o tranzacție nouă `REQUIRES_NEW` (fără `@Async`, astfel încât `CurrentUser` să rămână pe thread-ul request-ului pentru audit), prinde și loghează eventualele erori (ca dezactivarea contului să nu eșueze niciodată) și invocă `cancelUpcomingReservationsForUser`.
 - La începutul execuției, `cancelUpcomingReservationsForUser` validează lungimea motivului (`<= 255` caractere), verifică existența utilizatorului (`404 USER_NOT_FOUND` dacă lipsește) și achiziționează blocarea `reservationRepository.lockUserQuota(userId)` pentru a serializa anularea față de eventuale rezervări/hold-uri/transferuri concurente.
 
 ```mermaid
