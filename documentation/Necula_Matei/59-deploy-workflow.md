@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-20
-**Branch / PR:** `infra/deploy-workflow` (#TBD)
+**Branch / PR:** `infra/deploy-workflow` (#320)
 **See also:** `54-terraform-deploy.md` (server, `campus-deploy`), `56-rds-auto-start-alert.md` (pause/resume), `50-docs-check.md`, ADR-002
 
 ---
