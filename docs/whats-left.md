@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Mon 16 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Thu 19 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -12,7 +12,7 @@
 |---|---|---|
 | W4 | Prototype demo in Swagger | ✅ runs on `main` since 31 Oct (tag `v0.1.0-prototype`) |
 | **Sun 15 Nov (end of W6)** | **M1 `v0.1.0`**: locally, a student registers, logs in, browses, books (conflicts rejected), sees My reservations; an admin adds assets; CI green; Swagger complete | ✅ flow run on a fresh database (API + browser), `v0.1.0` tagged on `b81e400` (11 Nov) |
-| **Sun 6 Dec (end of W9)** | **M2 `v0.2.0`**: everything locally **and on AWS**, incl. incident with photo → automatic reassignment → notification | Not started on AWS |
+| **Sun 6 Dec (end of W9)** | **M2 `v0.2.0`**: everything locally **and on AWS**, incl. incident with photo → automatic reassignment → notification | First AWS deploy live on 17 Nov (#304), paused to save credits; left: `deploy.yml`, M2 flow on AWS |
 | Mon 7 Dec (W10) | **Feature freeze**: tests and bugs only | |
 | W11–W12 (14–27 Dec) | Docs, diagrams, report, demo rehearsals, defense `v1.0.0` | Christmas break: finish before it. Real defense date still 🟡 |
 
@@ -24,29 +24,16 @@ Every M1 part is on `main` (seed data #193, register #107, catalog + inventory p
 
 | PR | Owner | What | Next step |
 |---|---|---|---|
-| #292, #293, #294, #296 | Calin | Fixes and refactors from the code read-through #267 (slot-hold hook, `isAssetFree` hold owner, OVERDUE queries, `HoldService`/`TransferService`) | Approved: update from `main`, then merge one at a time |
-| #297, #298, #299, #300 | Calin | Calendar feed (#289): sync page, `usedMinutesByAsset`, token settings + `IcsWriter`, iCalendar feed | Approved: #300 can merge now; the others update from `main` first |
-| #278, #280 | Liviu | Version check on update, hide retired, audit diffs (#268); `AssetRetiredEvent` (#245) | Approved: update from `main`, then merge |
-| #287, #288 | Liviu | Catalog paging refactor; split `AdminInventoryPage` | Approved, but **merge conflicts** with `main`: resolve, then ask for a new approval (#288 also needs CI on its last commit) |
-| #263 | Stefania | Only HIGH/CRITICAL incidents take the asset out of use, max 3 open reports per student (#229) | Approved, but the required `docs-check` never ran: push (or update the branch), then ask for a new approval |
-| #284 | Matei | Pickup pass pages (student pass + desk verification) | Approved by Calin; waits for Stefania's review (touches `App.tsx`, `navigation.ts`) |
+| #310 | Calin | Re-check the active user right after the quota lock (#229) | Changes requested: bundle, `confirmHold` and `acceptTransfer` read the user before the lock; lock first, then check, and add them to the two-thread IT |
+| #311 | Calin | Retired asset → reassignment engine, nullable `reassignment_log.incident_id` (#245) | API contract + `docs/modules/reassignment.md`; Stefania's OK on the 🟡 row before `Closes #245`; update from `main` |
+| #302 | Stefania | `UserDisabledEvent` when an admin disables a user (#229) | Approved by Matei; waits for Calin to re-check his 17 Nov "changes requested" |
+| #303 | Stefania | QR libraries for the pickup pass; CI `hashFiles` guards removed (#269) | Approved: merge |
+| #312 | Matei | `findActiveRole` reads the row fresh (makes Calin's #310 re-check work) | Needs a review |
 
-Merged since the last update: Matei #272, #273 (project search and details fixes), #283 (pickup pass backend), #295 (public calendar feed path); Calin #262 (idempotency keys), #266 (cancel a user's upcoming bookings, #229), #270 (fixes for #267), #286 (same-model suggestions on a slot conflict); Liviu #275 (student project kits in the catalog seed, #140); docs #282. Closed without merging: Calin's drafts #58, #59, #61 and the off-plan #255, #256, #258, #260, #265.
+Merged since the last update: Matei #284 (pickup pass pages), #304 (first AWS deploy), #307, #308 (Swagger server URL, `HEAD` on public pages), #309 (RDS restart alert), #301 (status); Calin #292, #293, #294, #296 (#267 fixes and refactors), #297, #298, #299, #300 (calendar feed, #289); Liviu #278, #280, #287, #288 (#268, #245); Stefania #263 (#229). Closed issues: #267, #289.
 
-Open issues: **#140** (Projects: left: the app-wide RO/EN choice, Stefania), **#229** (Stefania, PR #263), **#245** (retire flow, PR #280), code read-through findings **#267** (Calin), **#268** (Liviu), **#269** (Stefania), new features **#289** (Calin), **#290** (Liviu), **#291** (Stefania).
+Open issues: **#140** (Projects: left: the app-wide RO/EN choice, Stefania), **#229** (Stefania; PRs #302, #310), **#245** (retire flow: Calin's #311, 🟡 decision), code read-through findings **#268** (Liviu), **#269** (Stefania), new features **#290** (Liviu), **#291** (Stefania), admin pages **#305** (mandatory) and **#306** (Stefania, due Fri 20 Nov).
 
----|---|---|---|
-| #263 | Stefania | Only HIGH/CRITICAL incidents take the asset out of use, max 3 open reports per student (#229) | Approved: update branch if behind, then merge |
-| #266 | Calin | Cancel a user's upcoming reservations: `ReservationApi` method + admin endpoint (for #229) | Needs a review |
-| #270 | Calin | Fixes for the code read-through #267 (holds, locking, lifecycle) | Needs a review |
-| #272, #273 | Matei | Project search false hits; project details page errors | Need a review |
-| #255, #256 | Calin | Admin equipment analytics: backend + page (#254) | Needs a review; off-plan, see section 6 |
-| #258, #260, #262, #265 | Calin | Optimal reassignment (min-cost max-flow, #257), chain-shifting resolver (#259), idempotency (#261), retry with backoff (#264) | Need a review; off-plan, see section 6 |
-| #58, #59, #61 | Calin | Simulator, waitlist, recommender (drafts) | Parked: off-plan, look again only after M1 |
-
-Merged since the last update: Calin #247 (fixes for #240, closes it); Liviu #244 (audit date filters, closes #241); Matei #251, #252, #253 (status refresh, image security updates, ECR scan note), #271 (login rejects passwords over 72 bytes).
-
-Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are on `main`; left: student-kit models in the catalog seed (Liviu) and the app-wide RO/EN choice (Stefania)), **#229** (Stefania + team decision, PRs #263 and #266), **#245** (retire flow, team decision), code read-through findings per owner: **#267** (Calin), **#268** (Liviu), **#269** (Stefania), feature issues for Calin's PRs: #254, #257, #259, #261, #264.
 
 ---
 
@@ -109,7 +96,8 @@ Open issues: **#140** (Projects: engine, 10 projects, pages and Reserve all are 
 | ~~W6~~ | ~~Report-incident form + My incidents page~~ (✅ #216) | – |
 | W6 | ~~Merge **#263**~~ (✅ #263: only HIGH/CRITICAL take the asset out of use, max 3 open reports, part 1 of #229) · **#229 part 2:** `UserDisabledEvent` so disabling a user cancels their upcoming bookings through #266 · work through #269 (concurrency tests, `ci.yml` guards, small incident fixes) | – |
 | W6 | Wire all M1 pages together · run the full M1 flow with the team · workload retro (re-split the frontend if it is behind) | Section 2 |
-| Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · two QR libraries in `package.json` for Matei's last pickup-pass PR | Section 7a |
+| Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · ~~two QR libraries in `package.json` for Matei's last pickup-pass PR~~ (✅ `qrcode.react` + `@yudiel/react-qr-scanner`, Refs #291; Matei: PR 3 can start) | Section 7a |
+| W7 | #269 point 2: ~~`hashFiles` guards in `ci.yml`~~ (✅ removed, Refs #269) · rest of #269 still open | – |
 | W7 | **Incident details** page · ~~admin incident queue~~ (✅ #223) | – |
 | W8 | **Reassignment log page** (#306) · **admin users page, mandatory** (#305; the only way to promote an admin or disable an account on AWS; endpoints on `main`, #206) · both **by Fri 20 Nov** · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |
