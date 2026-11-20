@@ -1,4 +1,4 @@
-# 52 — Review Follow-ups & PIT Mutation Hardening: cancelReservation Row Lock, Deterministic Transfer Race IT, ArchUnit Rule 15 & Docs (#329, #333)
+# 52 — Review Follow-ups & PIT Mutation Hardening: cancelReservation Row Lock, Deterministic Transfer Race IT, ArchUnit Rule 15 & Docs (#329, #333, #336)
 
 ## Part 1: In simple terms
 
