@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-20
-**Branch / PR:** `feat/user-pickup-pass-qr` (#TBD), PR 3 of 3
+**Branch / PR:** `feat/user-pickup-pass-qr` (#318), PR 3 of 3
 **See also:** `51-pickup-pass-backend.md` (#283), `52-pickup-pass-pages.md` (#284), `docs/superpowers/specs/2026-11-10-pickup-pass-design.md`
 
 ---
