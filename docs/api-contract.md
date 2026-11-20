@@ -648,3 +648,18 @@ Authenticated settings endpoints for the logged-in user's private iCalendar subs
 // CalendarFeedCreatedResponse (POST /api/v1/reservations/me/calendar-feed)
 { "path": "/api/v1/calendar/aB3dEf...43chars...XyZ.ics" }
 ```
+
+### Live updates (Liviu)
+
+Server-Sent Events (SSE) stream for pushing notifications to open browser tabs in real time. Clients connect using `fetch` with the normal `Authorization: Bearer <token>` header (never placing JWTs in query parameters).
+
+| Method & Path | Access | Response | Errors |
+|---|---|---|---|
+| `GET /api/v1/live/stream` | any logged-in user | `200` `text/event-stream`, `Cache-Control: no-store` (response stays open up to 10 minutes; `:hb` comment heartbeat every 20 s; `event: notification` JSON frames) | `401 UNAUTHORIZED`, `409 LIVE_STREAM_LIMIT` (more than 5 open streams for the same user) |
+
+```text
+:hb
+
+event: notification
+data: {"type":"NOTIFICATION","title":"Reservation Reassigned","message":"Your reservation #12 has been reassigned to asset Oscilloscope DS1054Z #3 due to equipment maintenance.","at":"2026-11-20T10:42:07"}
+```
