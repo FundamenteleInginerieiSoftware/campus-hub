@@ -203,6 +203,11 @@ public interface NotificationService {
 | `@Profile("!prod")` (Default / Dev / CI) | `LoggingNotificationService` | Emits structured SLF4J logs at `INFO` level. No external network dependencies. |
 | `@Profile("prod")` (AWS) | `SesNotificationService` | Managed by Matei Necula via AWS SES (Simple Email Service). |
 
+### Live Browser Stream (SSE)
+
+- `LiveStreams` (`com.campus.notification.service`) keeps an in-memory registry of open `SseEmitter` streams per user (max 5 per user → `409 LIVE_STREAM_LIMIT`, 10 min lifetime, 20 s `:hb` heartbeat, `@Async send(...)`).
+- `LiveStreamController` (`com.campus.notification.web`) exposes `GET /api/v1/live/stream` (`text/event-stream`, `Cache-Control: no-store`), authenticated through the normal JWT filter.
+
 ---
 
 ## 7. How to Test
