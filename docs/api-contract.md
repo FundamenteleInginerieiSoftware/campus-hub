@@ -50,6 +50,7 @@ Checks that run **before** the rules above (the token checks only when a token i
 | Token `sub` missing or not a number | `401 UNAUTHORIZED` (#158; was a 500) |
 | Token valid, but the account is disabled or deleted | `401 UNAUTHORIZED` on the next request: the account is looked up on every request (`UserApi.findActiveRole`, #117) |
 | Role | read from the **database** on every request, not from the token's `roles` claim, so a role change counts at once (#117) |
+| Account disabled while a request is already running | the next request with the token gets `401 UNAUTHORIZED`. The request in flight can get `403 USER_DISABLED` from the booking paths that re-check the account (Calin's #310: bundle booking incl. Projects "Reserve all", confirm hold, accept transfer). `findActiveRole` reads the row fresh, so the re-check sees the change (#312) |
 
 - The API is **stateless**: no session, no cookies, every request carries `Authorization: Bearer <token>`. CSRF protection is off for that reason.
 - Frontend and API share one origin (Vite proxy in dev, CloudFront in prod), so **no CORS**.

@@ -43,10 +43,15 @@ public class UserService implements UserApi {
     }
 
     // One primary-key lookup per request with a token (see SecurityConfig).
+    // Bug fixed: this used findById, which inside the caller's transaction returned the User that was
+    // already loaded, so Calin's re-check after the per-user quota lock (ReservationService, HoldService,
+    // TransferService) still saw enabled = true for an account disabled in the meantime.
+    // Fix: a scalar query reads the row from the database every time, and it is still one
+    // primary-key lookup per request.
     @Override
     @Transactional(readOnly = true)
     public Optional<Role> findActiveRole(Long id) {
-        return userRepository.findById(id).filter(User::isEnabled).map(User::getRole);
+        return userRepository.findActiveRoleById(id);
     }
 
     // GET /api/v1/users/me. The id comes from the token (Stefania's CurrentUser), never from the request,
