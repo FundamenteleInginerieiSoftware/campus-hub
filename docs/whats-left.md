@@ -99,7 +99,7 @@ Open issues: **#140** (Projects: left: the app-wide RO/EN choice, Stefania), **#
 | Proposed, not agreed | Build **equipment reliability** in your `incident` module (spec + plan `docs/superpowers/*/2026-11-10-equipment-reliability*`) · mount Liviu's `<LiveToasts />` once in `AppLayout.tsx` · OK for the routes and menu entries `pickup-pass` (Matei) and `calendar-sync` (Calin) · ~~two QR libraries in `package.json` for Matei's last pickup-pass PR~~ (✅ `qrcode.react` + `@yudiel/react-qr-scanner`, Refs #291; Matei: PR 3 can start) | Section 7a |
 | W7 | #269 point 2: ~~`hashFiles` guards in `ci.yml`~~ (✅ removed, Refs #269) · rest of #269 still open | – |
 | W7 | **Incident details** page · ~~admin incident queue~~ (✅ #223) | – |
-| W8 | **Reassignment log page** (#306) · **admin users page, mandatory** (#305; the only way to promote an admin or disable an account on AWS; endpoints on `main`, #206) · both **by Fri 20 Nov** · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
+| W8 | ~~**Reassignment log page** (#306)~~ ✅ · ~~**admin users page, mandatory** (#305; the only way to promote an admin or disable an account on AWS; endpoints on `main`, #206)~~ ✅ (both in my Users + Reassignment log PR, 20 Nov) · polish (loading/empty states, error messages by `code`) | – (`/admin/reassignments` on `main`, #96) |
 | W9 | Full flow locally and on AWS · responsive layout · give Matei the prod build command and output folder | Matei's deploy |
 | W10–W12 | Coverage ≥ 70% (`incident.service`, user admin) · **manual E2E checklist** · final use case + incident state diagrams · **Observer doc** · **user manual** with screenshots · **demo script** + 2 rehearsals + video backup (you lead the demo) | – |
 
