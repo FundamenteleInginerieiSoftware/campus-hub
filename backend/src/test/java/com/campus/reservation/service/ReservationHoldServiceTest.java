@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
@@ -86,6 +89,7 @@ class ReservationHoldServiceTest {
                 notificationService,
                 userApi,
                 clock);
+        lenient().when(userApi.findActiveRole(anyLong())).thenReturn(Optional.of(Role.STUDENT));
     }
 
     @Test
@@ -605,5 +609,60 @@ class ReservationHoldServiceTest {
                         "hold cooldown: student cannot repeatedly hold and release overlapping slots; see HoldService.createHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("You recently held an overlapping slot on this equipment");
+    }
+
+    @Test
+    @DisplayName("createHold: rejects disabled student after acquiring quota lock (#229)")
+    void createHold_rejectsDisabledUserAfterLockingQuota() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(START), eq(END), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsRecentHoldOverlap(eq(USER_ID), eq(ASSET_ID), any(), any(), any()))
+                .thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        CreateHoldRequest req = new CreateHoldRequest(ASSET_ID, START, END);
+
+        assertThatThrownBy(() -> holdService.createHold(req))
+                .as("disabled user after lockUserQuota must be rejected with 403 USER_DISABLED; "
+                        + "see HoldService.createHold")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        var order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationHoldRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("confirmHold: rejects disabled hold owner after acquiring quota lock (#229)")
+    void confirmHold_rejectsDisabledHoldOwnerAfterLockingQuota() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 77L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationHoldRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(START), eq(END), any(), eq(77L), eq(USER_ID)))
+                .thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> holdService.confirmHold(77L))
+                .as("disabled hold owner after lockUserQuota must be rejected with 403 USER_DISABLED; "
+                        + "see HoldService.confirmHold")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        var order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationRepository, never()).save(any());
     }
 }

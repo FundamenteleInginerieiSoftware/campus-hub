@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
@@ -136,6 +138,7 @@ class ReservationServiceTest {
                 transferService,
                 userApi,
                 reservationHoldRepository);
+        lenient().when(userApi.findActiveRole(anyLong())).thenReturn(Optional.of(Role.STUDENT));
     }
 
     @AfterEach
@@ -2161,7 +2164,9 @@ class ReservationServiceTest {
                 .as(
                         "admin bypass: user with ADMIN role in userApi must bypass quota in bookBundle; see ReservationService.bookBundle")
                 .isNotNull();
-        verify(reservationRepository, never()).lockUserQuota(anyLong());
+        // #310: lockUserQuota runs before userApi.findActiveRole to avoid L1-cache stale reads;
+        // once ADMIN is resolved after the lock, the student quota count query is bypassed.
+        verify(reservationRepository).lockUserQuota(USER_ID);
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
@@ -3926,5 +3931,52 @@ class ReservationServiceTest {
                 .hasFieldOrPropertyWithValue("code", "INVALID_PARAMETER");
 
         verify(reservationRepository, never()).findCheckedOutOverlapping(any(), any());
+    }
+
+    @Test
+    @DisplayName("createReservation: rejects disabled student after acquiring quota lock (#229)")
+    void createReservation_rejectsDisabledUserAfterLockingQuota() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.createReservation(req))
+                .as("disabled user after lockUserQuota must be rejected with 403 USER_DISABLED; "
+                        + "see ReservationService.createReservation")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        InOrder order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("bookBundle: rejects disabled student after acquiring quota lock (#229)")
+    void bookBundle_rejectsDisabledUserAfterLockingQuota() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        when(catalogApi.isBookable(10L)).thenReturn(true);
+        when(catalogApi.isBookable(20L)).thenReturn(true);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(10L, 20L), start, end))
+                .as("disabled user after lockUserQuota in bundle path must be rejected with 403 USER_DISABLED; "
+                        + "see ReservationService.executeBundleBooking")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        InOrder order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationRepository, never()).save(any());
     }
 }
