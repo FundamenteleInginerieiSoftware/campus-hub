@@ -780,7 +780,9 @@ public class ReservationService implements ReservationApi {
         LocalDateTime now = now();
         String effectiveReason = (reason != null && !reason.isBlank()) ? reason : "Account disabled by administrator";
 
-        List<Reservation> upcoming = reservationRepository.findUpcomingConfirmedByUser(userId, now);
+        // Lock upcoming rows FOR UPDATE so a concurrent extendReservation waits instead of tripping
+        // @Version and rolling back the entire disable-cancel batch (#229, #322).
+        List<Reservation> upcoming = reservationRepository.findUpcomingConfirmedByUserForUpdate(userId, now);
         if (upcoming.isEmpty()) {
             return 0;
         }

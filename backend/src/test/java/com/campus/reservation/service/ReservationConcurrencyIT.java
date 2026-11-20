@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
@@ -452,16 +453,178 @@ class ReservationConcurrencyIT {
                 .isEqualTo(USER_2_ID);
     }
 
+    @Test
+    @DisplayName(
+            "Disable-cancel vs extend race (#229, #322): cancelUpcomingReservationsForUser locks rows FOR UPDATE so concurrent extendReservation never rolls it back")
+    void extendRunningDuringCancelUpcomingDoesNotRollBackCancel() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(1);
+        LocalDateTime extendedEnd = start.plusHours(2);
+
+        Reservation booking = reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger cancelledCount = new AtomicInteger(-1);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> cancelTask = executor.submit(() -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                cancelledCount.set(reservationService.cancelUpcomingReservationsForUser(USER_1_ID, "Account disabled"));
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> extendTask = executor.submit(() -> {
+            setupSecurityContext(USER_1_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                reservationService.extendReservation(booking.getId(), new ExtendReservationRequest(extendedEnd));
+            } catch (InvalidStateTransitionException expected) {
+                // Expected if cancel committed first and transitioned the booking to CANCELLED.
+                if (!"INVALID_RESERVATION_STATUS_TRANSITION".equals(expected.getCode())) {
+                    unexpected.add(expected);
+                }
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                    .as("both cancel and extend worker threads must reach the start gate")
+                    .isTrue();
+            startLatch.countDown();
+            cancelTask.get(10, TimeUnit.SECONDS);
+            extendTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpected)
+                .as("concurrent extendReservation must serialize on FOR UPDATE instead of tripping @Version rollback; "
+                        + "see ReservationService.cancelUpcomingReservationsForUser")
+                .isEmpty();
+        assertThat(cancelledCount.get())
+                .as("cancelUpcomingReservationsForUser must cancel the booking cleanly")
+                .isEqualTo(1);
+        Reservation after = reservationRepository.findById(booking.getId()).orElseThrow();
+        assertThat(after.getStatus())
+                .as("booking must end up CANCELLED regardless of whether extend ran before or after cancel")
+                .isEqualTo(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName(
+            "Disable-cancel vs acceptTransfer race (#229, #329): reservation -> transfer lock order prevents deadlocks and @Version rollbacks")
+    void acceptTransferRunningDuringCancelUpcomingSenderDoesNotDeadlockOrRollBack() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation booking = reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now));
+        ReservationTransfer transfer =
+                reservationTransferRepository.save(new ReservationTransfer(booking.getId(), USER_1_ID, USER_2_ID, now));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger cancelledCount = new AtomicInteger(-1);
+        AtomicBoolean transferAccepted = new AtomicBoolean(false);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> cancelSenderTask = executor.submit(() -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                cancelledCount.set(reservationService.cancelUpcomingReservationsForUser(USER_1_ID, "Account disabled"));
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> acceptTask = executor.submit(() -> {
+            setupSecurityContext(USER_2_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                transferService.acceptTransfer(transfer.getId());
+                transferAccepted.set(true);
+            } catch (InvalidStateTransitionException expected) {
+                if (!"INVALID_TRANSFER_STATUS_TRANSITION".equals(expected.getCode())) {
+                    unexpected.add(expected);
+                }
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                    .as("both cancelSender and acceptTransfer threads must reach the start gate")
+                    .isTrue();
+            startLatch.countDown();
+            cancelSenderTask.get(10, TimeUnit.SECONDS);
+            acceptTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpected)
+                .as("reservation -> transfer lock order must prevent deadlocks and @Version rollbacks; "
+                        + "see TransferService.acceptTransfer and ReservationService.cancelUpcomingReservationsForUser")
+                .isEmpty();
+
+        Reservation after = reservationRepository.findById(booking.getId()).orElseThrow();
+        if (transferAccepted.get()) {
+            assertThat(cancelledCount.get())
+                    .as("if acceptTransfer committed first, sender has 0 remaining bookings to cancel")
+                    .isZero();
+            assertThat(after.getUserId())
+                    .as("accepted transfer moves ownership to recipient")
+                    .isEqualTo(USER_2_ID);
+            assertThat(after.getStatus())
+                    .as("accepted transfer keeps booking CONFIRMED")
+                    .isEqualTo(ReservationStatus.CONFIRMED);
+        } else {
+            assertThat(cancelledCount.get())
+                    .as("if cancelUpcoming committed first, sender's booking must be cancelled cleanly")
+                    .isEqualTo(1);
+            assertThat(after.getStatus())
+                    .as("booking must be CANCELLED when cancelUpcoming wins")
+                    .isEqualTo(ReservationStatus.CANCELLED);
+        }
+    }
+
     /**
-     * Thread 1 acquires lockUserQuota(targetUserId) FIRST, lets Thread 2 enter the booking path and
-     * block on lockUserQuota (so any accidental pre-lock User read would already have populated the
-     * Hibernate L1 cache), and ONLY THEN disables the user and commits.
+     * Thread 1 acquires lockUserQuota(targetUserId) FIRST, polls PostgreSQL {@code pg_stat_activity}
+     * + {@code pg_locks} until Thread 2 is genuinely blocked on the advisory lock (so any accidental
+     * pre-lock User read would already have populated the Hibernate L1 cache), and ONLY THEN disables
+     * the user and commits.
      */
     private void assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
             Long targetUserId, Runnable action, String ownerPath) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch quotaLockHeld = new CountDownLatch(1);
         CountDownLatch actionStarted = new CountDownLatch(1);
+        AtomicBoolean actionDone = new AtomicBoolean(false);
+        AtomicBoolean thread2BlockedOnLock = new AtomicBoolean(false);
         AtomicInteger disabledRejected = new AtomicInteger(0);
         List<Throwable> unexpected = new CopyOnWriteArrayList<>();
 
@@ -470,7 +633,7 @@ class ReservationConcurrencyIT {
             quotaLockHeld.countDown();
             try {
                 actionStarted.await(5, TimeUnit.SECONDS);
-                Thread.sleep(200);
+                thread2BlockedOnLock.set(waitUntilBlockedOnUserQuotaLock(targetUserId, actionDone));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -496,6 +659,7 @@ class ReservationConcurrencyIT {
             } catch (Throwable t) {
                 unexpected.add(t);
             } finally {
+                actionDone.set(true);
                 SecurityContextHolder.clearContext();
             }
         });
@@ -507,6 +671,12 @@ class ReservationConcurrencyIT {
             executor.shutdownNow();
         }
 
+        assertThat(thread2BlockedOnLock.get())
+                .as(
+                        "%s must actually block on pg_advisory_xact_lock(1, userId) before disable commits; "
+                                + "see ReservationRepository.lockUserQuota",
+                        ownerPath)
+                .isTrue();
         assertThat(unexpected)
                 .as("no unexpected error during disabled-user race; see %s", ownerPath)
                 .isEmpty();
@@ -516,6 +686,35 @@ class ReservationConcurrencyIT {
                                 + "see ReservationServiceSupport.requireActiveUserAfterLock",
                         ownerPath)
                 .isEqualTo(1);
+    }
+
+    /**
+     * Polls PostgreSQL's {@code pg_stat_activity} joined with {@code pg_locks} until another backend
+     * is actively waiting on {@code pg_advisory_xact_lock(1, targetUserId)} (replaces blind sleep, #322).
+     */
+    private boolean waitUntilBlockedOnUserQuotaLock(Long targetUserId, AtomicBoolean actionDone)
+            throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
+            Integer waiting = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*)
+                    FROM pg_stat_activity a
+                    JOIN pg_locks l ON l.pid = a.pid
+                    WHERE a.datname = current_database()
+                      AND a.pid <> pg_backend_pid()
+                      AND a.wait_event_type = 'Lock'
+                      AND a.wait_event = 'advisory'
+                      AND l.locktype = 'advisory'
+                      AND l.classid = 1
+                      AND l.objid = ?
+                      AND NOT l.granted
+                    """, Integer.class, targetUserId.intValue());
+            if (waiting != null && waiting > 0) {
+                return true;
+            }
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
+        return false;
     }
 
     private void setupSecurityContext(Long userId) {

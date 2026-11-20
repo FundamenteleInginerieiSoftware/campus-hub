@@ -3507,7 +3507,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r2, "id", 102L);
 
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of(r1, r2));
         when(reservationTransferRepository.findByReservationIdAndStatus(anyLong(), eq(TransferStatus.PENDING)))
                 .thenReturn(Optional.empty());
@@ -3535,7 +3535,7 @@ class ReservationServiceTest {
 
         InOrder order = inOrder(reservationRepository);
         order.verify(reservationRepository).lockUserQuota(USER_ID);
-        order.verify(reservationRepository).findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class));
+        order.verify(reservationRepository).findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class));
         order.verify(reservationRepository).saveAll(List.of(r1, r2));
     }
 
@@ -3553,7 +3553,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r1, "id", 101L);
 
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of(r1));
 
         ReservationTransfer pendingTransfer = new ReservationTransfer(101L, USER_ID, 42L, now.minusMinutes(30));
@@ -3610,7 +3610,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r1, "id", 101L);
 
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of(r1));
         when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
                 .thenReturn(Optional.empty());
@@ -3679,7 +3679,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(b3, "id", 203L);
 
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of(b1, b2, b3));
         when(reservationTransferRepository.findByReservationIdAndStatus(anyLong(), eq(TransferStatus.PENDING)))
                 .thenReturn(Optional.empty());
@@ -3720,7 +3720,7 @@ class ReservationServiceTest {
     @DisplayName("cancelUpcomingReservationsForUser: returns 0 when user has no upcoming confirmed bookings")
     void cancelUpcomingReservationsForUser_returnsZeroWhenEmpty() {
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of());
 
         int count = reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled");
@@ -3740,7 +3740,7 @@ class ReservationServiceTest {
                 .as("Null userId must return 0 without querying repositories")
                 .isEqualTo(0);
         verify(userApi, never()).exists(any());
-        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+        verify(reservationRepository, never()).findUpcomingConfirmedByUserForUpdate(any(), any());
     }
 
     @Test
@@ -3756,7 +3756,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 101L);
 
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of(r));
 
         int count = reservationService.cancelUpcomingReservationsForUser(USER_ID, "   ");
@@ -3781,7 +3781,7 @@ class ReservationServiceTest {
 
         verify(userApi, never()).exists(any());
         verify(reservationRepository, never()).lockUserQuota(any());
-        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+        verify(reservationRepository, never()).findUpcomingConfirmedByUserForUpdate(any(), any());
     }
 
     @Test
@@ -3795,7 +3795,7 @@ class ReservationServiceTest {
                 .hasFieldOrPropertyWithValue("code", "USER_NOT_FOUND");
 
         verify(reservationRepository, never()).lockUserQuota(any());
-        verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+        verify(reservationRepository, never()).findUpcomingConfirmedByUserForUpdate(any(), any());
     }
 
     @Test
@@ -3820,7 +3820,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r2, "id", 102L);
 
         when(userApi.exists(USER_ID)).thenReturn(true);
-        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+        when(reservationRepository.findUpcomingConfirmedByUserForUpdate(eq(USER_ID), any(LocalDateTime.class)))
                 .thenReturn(List.of(r1), List.of(r2));
 
         int countCustom = reservationService.cancelUpcomingReservationsForUser(USER_ID, exact255);

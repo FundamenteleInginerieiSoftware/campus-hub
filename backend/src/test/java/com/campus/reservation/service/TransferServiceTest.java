@@ -254,7 +254,7 @@ class TransferServiceTest {
         when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                         recipientId, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
@@ -284,7 +284,7 @@ class TransferServiceTest {
         when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                         recipientId, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L);
@@ -312,7 +312,7 @@ class TransferServiceTest {
         when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.ADMIN));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         ReservationTransferResponse response = transferService.acceptTransfer(500L);
 
@@ -334,7 +334,7 @@ class TransferServiceTest {
         when(currentUser.id()).thenReturn(recipientId);
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> transferService.acceptTransfer(500L))
                 .isInstanceOf(ConflictException.class)
@@ -377,7 +377,7 @@ class TransferServiceTest {
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(userApi.findActiveRole(recipientId)).thenReturn(Optional.empty());
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(reservation));
 
         assertThatThrownBy(() -> transferService.acceptTransfer(500L))
                 .as("recipient disabled while waiting on lockUserQuota must be rejected with 403 USER_DISABLED; "
@@ -607,7 +607,7 @@ class TransferServiceTest {
         when(currentUser.id()).thenReturn(recipientId);
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
-        when(reservationRepository.findById(100L)).thenReturn(Optional.empty());
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transferService.acceptTransfer(500L))
                 .as(
