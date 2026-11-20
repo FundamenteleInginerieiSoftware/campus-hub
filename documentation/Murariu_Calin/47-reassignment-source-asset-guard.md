@@ -14,7 +14,7 @@ Now, both `moveToAsset` and `forceCancel` take a row lock on the reservation and
 
 | File | Change |
 |---|---|
-| `ReservationApi.java` | Added `moveToAsset(reservationId, expectedSourceAssetId, newAssetId, reason)` and `forceCancel(reservationId, expectedSourceAssetId, reason)`; kept the existing 3-arg / 2-arg methods as `default` delegates passing `null` so no existing caller breaks. |
+| `ReservationApi.java` | Added `moveToAsset(reservationId, expectedSourceAssetId, newAssetId, reason)` and `forceCancel(reservationId, expectedSourceAssetId, reason)`; the temporary 3-arg / 2-arg `default` delegates were later removed in #333 (see doc 51) because interface `default` self-invocation bypasses Spring `@Transactional` proxies. |
 | `ReservationService.java` | Switched `moveToAsset` and `forceCancel` to `reservationRepository.findByIdForUpdate(reservationId)` (preserving the `reservation -> asset` lock order from #270) and added the `expectedSourceAssetId != null && !expectedSourceAssetId.equals(r.getAssetId())` early-return guard. |
 | `ReassignmentBookingProcessor.java` | Passes `sourceAssetId` into `reservationApi.moveToAsset(...)` and `reservationApi.forceCancel(...)`. |
 | `ReservationLifecycleService.java` | Passes `overdueAssetId` into `reservationService.moveToAsset(...)` in `tryPreventiveMove`. |

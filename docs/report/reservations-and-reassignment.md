@@ -162,7 +162,7 @@ flowchart TD
     G -->|Order 1| H["SameModelStrategy<br/>(Same model, same room preferred, AVAILABLE, free)"]
     G -->|Order 2| I["SameCategoryStrategy<br/>(Same category, same room preferred, AVAILABLE, free)"]
     
-    H -->|Found Candidate| J["reservationApi.moveToAsset(bookingId, candidateId)"]
+    H -->|Found Candidate| J["reservationApi.moveToAsset(bookingId, sourceAssetId, candidateId, reason)"]
     I -->|Found Candidate| J
     
     J -->|Success| K["Insert REASSIGNED Log & Return to ReassignmentService (notifies student)"]
@@ -171,7 +171,7 @@ flowchart TD
     L -->|Candidates exhausted| I
     
     H -->|No Candidates Free| I
-    I -->|No Candidates Free| M["reservationApi.forceCancel(bookingId, 'Equipment failure, incident #' + incidentId)"]
+    I -->|No Candidates Free| M["reservationApi.forceCancel(bookingId, sourceAssetId, 'Equipment failure, incident #' + incidentId)"]
     M --> N["Insert FORCE_CANCELLED Log & Return to ReassignmentService (notifies student)"]
 ```
 

@@ -283,12 +283,12 @@ sequenceDiagram
     S1-->>Engine: [Candidate 102, Candidate 103]
 
     Note over Engine: Attempt Candidate 102
-    Engine->>Res: moveToAsset(bookingId, 102)
+    Engine->>Res: moveToAsset(bookingId, sourceAssetId, 102, reason)
     Res-->>Engine: throws SubstituteNoLongerFreeException<br/>(Another student just booked 102)
 
     Note over Engine: Catch exception, add 102 to attemptedCandidateIds
     Note over Engine: Retry next candidate from S1: Candidate 103
-    Engine->>Res: moveToAsset(bookingId, 103)
+    Engine->>Res: moveToAsset(bookingId, sourceAssetId, 103, reason)
     Res-->>Engine: SUCCESS (Moved to 103)
 ```
 
@@ -300,8 +300,8 @@ Inside `ReassignmentBookingProcessor.processSingleBooking`:
 ```java
 // Fallback when no strategy finds a free substitute:
 return inRequiresNewTransaction(() -> {
-    boolean cancelled =
-            reservationApi.forceCancel(booking.id(), "Equipment failure, incident #" + event.incidentId());
+    boolean cancelled = reservationApi.forceCancel(
+            booking.id(), sourceAssetId, "Equipment failure, incident #" + event.incidentId());
 
     if (cancelled) {
         ReassignmentLog logEntry = new ReassignmentLog(

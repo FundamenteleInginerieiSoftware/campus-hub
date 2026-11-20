@@ -253,6 +253,7 @@ class TransferServiceTest {
         when(currentUser.id()).thenReturn(recipientId);
         when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findReservationIdById(500L)).thenReturn(Optional.of(100L));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
@@ -261,7 +262,14 @@ class TransferServiceTest {
 
         ReservationTransferResponse response = transferService.acceptTransfer(500L);
 
-        assertThat(response).isNotNull();
+        var lockOrder = inOrder(reservationTransferRepository, reservationRepository);
+        lockOrder.verify(reservationTransferRepository).findReservationIdById(500L);
+        lockOrder.verify(reservationRepository).findByIdForUpdate(100L);
+        lockOrder.verify(reservationTransferRepository).findByIdForUpdate(500L);
+
+        assertThat(response)
+                .as("acceptTransfer must return the accepted transfer; see TransferService.acceptTransfer")
+                .isNotNull();
         assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
         assertThat(r.getUserId()).isEqualTo(recipientId); // Ownership transferred!
         verify(reservationRepository).save(r);
@@ -399,12 +407,20 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
+        when(reservationTransferRepository.findReservationIdById(500L)).thenReturn(Optional.of(100L));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ReservationTransferResponse response = transferService.rejectTransfer(500L);
 
-        assertThat(response.status()).isEqualTo(TransferStatus.REJECTED);
+        var lockOrder = inOrder(reservationTransferRepository, reservationRepository);
+        lockOrder.verify(reservationTransferRepository).findReservationIdById(500L);
+        lockOrder.verify(reservationRepository).findByIdForUpdate(100L);
+        lockOrder.verify(reservationTransferRepository).findByIdForUpdate(500L);
+
+        assertThat(response.status())
+                .as("rejectTransfer must mark the transfer as REJECTED; see TransferService.rejectTransfer")
+                .isEqualTo(TransferStatus.REJECTED);
         assertThat(transfer.getStatus()).isEqualTo(TransferStatus.REJECTED);
         verify(auditService)
                 .record(
@@ -485,12 +501,20 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationTransferRepository.findReservationIdById(500L)).thenReturn(Optional.of(100L));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationTransferRepository.save(any(ReservationTransfer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ReservationTransferResponse response = transferService.cancelTransfer(500L);
 
-        assertThat(response.status()).isEqualTo(TransferStatus.CANCELLED);
+        var lockOrder = inOrder(reservationTransferRepository, reservationRepository);
+        lockOrder.verify(reservationTransferRepository).findReservationIdById(500L);
+        lockOrder.verify(reservationRepository).findByIdForUpdate(100L);
+        lockOrder.verify(reservationTransferRepository).findByIdForUpdate(500L);
+
+        assertThat(response.status())
+                .as("cancelTransfer must mark the transfer as CANCELLED; see TransferService.cancelTransfer")
+                .isEqualTo(TransferStatus.CANCELLED);
         verify(reservationTransferRepository).save(transfer);
         verify(notificationService)
                 .notifyUser(
