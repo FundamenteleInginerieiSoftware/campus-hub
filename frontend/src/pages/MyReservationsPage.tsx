@@ -20,6 +20,7 @@ import {
   IconClockPlus,
   IconPackage,
   IconPlus,
+  IconQrcode,
   IconUser,
   IconUserShare,
 } from '@tabler/icons-react'
@@ -374,13 +375,37 @@ export default function MyReservationsPage() {
     {
       header: 'Actions',
       render: (r) => {
-        const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
+        const now = nowInBucharest()
+        const start = parseCampusLocalDateTime(r.startTime)
+        const hasStartedInBucharest = now >= start
+        // Desk check-out only opens near the slot (start - 15 min .. start + 30 min in
+        // ReservationService.checkOutReservation), so only show the pickup pass on today's CONFIRMED rows.
+        const startsTodayInBucharest =
+          start.getFullYear() === now.getFullYear() &&
+          start.getMonth() === now.getMonth() &&
+          start.getDate() === now.getDate()
+        const canShowPickupPass = r.status === 'CONFIRMED' && startsTodayInBucharest
         const canCancel = r.status === 'CONFIRMED' && !hasStartedInBucharest
         const canExtend = r.status === 'CONFIRMED' || r.status === 'CHECKED_OUT'
         const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest
 
         return (
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="wrap">
+            {canShowPickupPass && (
+              <Tooltip label="Open your rotating 6-digit code and QR pass for the lab desk">
+                <Button
+                  component={Link}
+                  to="/pickup-pass"
+                  size="xs"
+                  variant="light"
+                  color="teal"
+                  leftSection={<IconQrcode size={14} />}
+                >
+                  Show pickup pass
+                </Button>
+              </Tooltip>
+            )}
+
             {canExtend && (
               <Tooltip label="Extend duration of this active reservation">
                 <Button
