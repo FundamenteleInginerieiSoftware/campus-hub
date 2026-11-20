@@ -683,11 +683,14 @@ public class ReservationService implements ReservationApi {
     // SubstituteNoLongerFreeException and moves on to the next substitute.
     @Override
     @Transactional(noRollbackFor = SubstituteNoLongerFreeException.class)
-    public boolean moveToAsset(Long reservationId, Long newAssetId, String reason) {
-        Reservation r = reservationRepository.findById(reservationId).orElse(null);
-        // Rare race: if the booking was cancelled or checked out right after findUpcomingActiveByAsset,
-        // return false so the caller does not log a false reassignment or send a misleading email.
-        if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
+    public boolean moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason) {
+        // Lock the reservation row before the substitute asset (reservation -> asset order, #270) so two
+        // concurrent handlers (e.g. HIGH incident + retire, #319) serialize and the second one sees the
+        // updated assetId instead of logging a duplicate move.
+        Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
+        if (r == null
+                || r.getStatus() != ReservationStatus.CONFIRMED
+                || (expectedSourceAssetId != null && !expectedSourceAssetId.equals(r.getAssetId()))) {
             return false;
         }
 
@@ -713,9 +716,13 @@ public class ReservationService implements ReservationApi {
 
     @Override
     @Transactional
-    public boolean forceCancel(Long reservationId, String reason) {
-        Reservation r = reservationRepository.findById(reservationId).orElse(null);
-        if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
+    public boolean forceCancel(Long reservationId, Long expectedSourceAssetId, String reason) {
+        // Lock the reservation row so a stale concurrent handler cannot force-cancel a booking that
+        // another handler just moved to a healthy substitute (#319).
+        Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
+        if (r == null
+                || r.getStatus() != ReservationStatus.CONFIRMED
+                || (expectedSourceAssetId != null && !expectedSourceAssetId.equals(r.getAssetId()))) {
             return false;
         }
 

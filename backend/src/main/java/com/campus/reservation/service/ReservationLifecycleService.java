@@ -202,6 +202,7 @@ public class ReservationLifecycleService {
             try {
                 boolean moved = reservationService.moveToAsset(
                         threatened.getId(),
+                        overdueAssetId,
                         sub.id(),
                         "Preventive cascade reassignment: previous holder on asset #" + overdueAssetId + " is OVERDUE");
                 if (moved) {

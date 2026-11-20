@@ -1083,7 +1083,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         // The database sets the id on insert; there's no database here, so set it by hand.
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(newAssetId)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(newAssetId), any(), any(), anyLong()))
                 .thenReturn(false);
@@ -1109,7 +1109,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         // The database sets the id on insert; there's no database here, so set it by hand.
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(newAssetId)).thenReturn(false);
 
         assertThatThrownBy(() -> reservationService.moveToAsset(1L, newAssetId, "Damaged"))
@@ -1126,12 +1126,38 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         boolean moved = reservationService.moveToAsset(1L, 20L, "Damaged");
 
         assertThat(moved).isFalse();
         verify(catalogApi, never()).lockForBooking(anyLong());
+    }
+
+    @Test
+    @DisplayName(
+            "ReservationApi: moveToAsset returns false when booking was already moved off expectedSourceAssetId (#319)")
+    void moveToAssetReturnsFalseWhenSourceAssetMismatch() {
+        Reservation r = new Reservation(
+                USER_ID,
+                20L, // already moved to substitute 20L by an earlier concurrent handler
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
+
+        boolean moved = reservationService.moveToAsset(1L, ASSET_ID, 30L, "Asset retired #" + ASSET_ID);
+
+        assertThat(moved)
+                .as("concurrent incident/retire guard (#319): moveToAsset must return false when booking is no longer "
+                        + "on expectedSourceAssetId; see ReservationService.moveToAsset")
+                .isFalse();
+        assertThat(r.getAssetId())
+                .as("booking must remain on substitute 20L when stale handler returns false")
+                .isEqualTo(20L);
+        verify(catalogApi, never()).lockForBooking(anyLong());
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -1144,12 +1170,37 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         boolean cancelled = reservationService.forceCancel(1L, "Damaged");
 
         assertThat(cancelled).isFalse();
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName(
+            "ReservationApi: forceCancel returns false when booking was already moved off expectedSourceAssetId (#319)")
+    void forceCancelReturnsFalseWhenSourceAssetMismatch() {
+        Reservation r = new Reservation(
+                USER_ID,
+                20L, // already moved to substitute 20L by an earlier concurrent handler
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 1L);
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
+
+        boolean cancelled = reservationService.forceCancel(1L, ASSET_ID, "Equipment retired");
+
+        assertThat(cancelled)
+                .as("concurrent incident/retire guard (#319): forceCancel must return false when booking is no longer "
+                        + "on expectedSourceAssetId; see ReservationService.forceCancel")
+                .isFalse();
+        assertThat(r.getStatus())
+                .as("booking already moved to substitute 20L must stay CONFIRMED")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+        verify(auditService, never()).record(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -1208,7 +1259,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         // The database sets the id on insert; there's no database here, so set it by hand.
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         boolean cancelled = reservationService.forceCancel(1L, "Damaged beyond repair");
 
@@ -2899,7 +2950,7 @@ class ReservationServiceTest {
                 new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
@@ -2960,7 +3011,7 @@ class ReservationServiceTest {
                 new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(200L)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(200L), any(), any(), eq(100L)))
                 .thenReturn(false);
@@ -2989,7 +3040,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         ReflectionTestUtils.setField(r, "id", 100L);
 
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(200L)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(200L), any(), any(), eq(100L)))
                 .thenReturn(false);
@@ -3018,7 +3069,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         ReflectionTestUtils.setField(r, "id", 100L);
 
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(200L)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(200L), any(), any(), eq(100L)))
                 .thenReturn(false);
