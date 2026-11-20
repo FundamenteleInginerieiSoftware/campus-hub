@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
+import com.campus.user.api.UserDisabledEvent;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional // MockMvc runs on the test thread, so every user and audit row is rolled back
+@RecordApplicationEvents
 class AdminUserFlowIT {
 
     @Autowired
@@ -38,6 +42,9 @@ class AdminUserFlowIT {
 
     @Autowired
     PasswordEncoder passwordEncoder;
+
+    @Autowired
+    ApplicationEvents events;
 
     // "Bearer <token>" header values, from a real login.
     String admin;
@@ -156,6 +163,18 @@ class AdminUserFlowIT {
 
         assertThat(again.getResponse().getStatus()).isEqualTo(200);
         assertThat(auditCount("USER_DISABLED", studentId)).isEqualTo(1);
+    }
+
+    // #229 (#302): after the commit, the reservation module cancels the user's upcoming bookings.
+    @Test
+    void disabling_publishesUserDisabledEvent_once_withTheUserAndTheAdmin() throws Exception {
+        postAs(admin, "/api/v1/admin/users/" + studentId + "/disable");
+        postAs(admin, "/api/v1/admin/users/" + studentId + "/disable");
+        postAs(admin, "/api/v1/admin/users/" + adminId + "/disable"); // refused: yourself
+
+        assertThat(events.stream(UserDisabledEvent.class))
+                .as("one real disable = one event; the repeat and the refused self-disable publish nothing")
+                .containsExactly(new UserDisabledEvent(studentId, adminId));
     }
 
     @Test
