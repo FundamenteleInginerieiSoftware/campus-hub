@@ -33,3 +33,4 @@
 | 20 | [20-catalog-common-cleanup.md](20-catalog-common-cleanup.md) | Shared `PageRequests` helper, `CatalogPersistence` conflict helper, `CatalogService.findOrThrow`, and Javadoc cleanup (Refs #268) |
 | 21 | [21-frontend-inventory-split-and-audit-filter.md](21-frontend-inventory-split-and-audit-filter.md) | Split `AdminInventoryPage` into tab components with isolated modal errors, extract `statusBadgeColor`, and add `PICKUP_PASS_VERIFIED` audit filter (Refs #268) |
 | 22 | [22-live-notification-stream.md](22-live-notification-stream.md) | Live notifications PR 1: in-memory SSE stream registry (`LiveStreams`), `GET /api/v1/live/stream`, heartbeat, and tests (Refs #290) |
+| 23 | [23-live-toasts-frontend.md](23-live-toasts-frontend.md) | Live notifications PR 2: SSE fetch client (`live.ts`) and floating Mantine toast stack (`LiveToasts.tsx`) (Refs #290) |
