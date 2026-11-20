@@ -1,9 +1,10 @@
-import { Alert, Button, Modal, PinInput, Stack, Text } from '@mantine/core'
+import { Alert, Button, Modal, PinInput, SegmentedControl, Stack, Text } from '@mantine/core'
 import { IconAlertTriangle, IconCircleCheckFilled } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client.ts'
 import { errorMessage } from '../api/errorMessages.ts'
 import { verifyPickupPass, type VerifiedStudent } from '../api/pickupPass.ts'
+import { ScanPassPanel } from './ScanPassPanel.tsx'
 
 type Props = {
   userId: number
@@ -11,12 +12,13 @@ type Props = {
   onVerified: (student: VerifiedStudent) => void
 }
 
-// The admin types the 6 digits the student shows. The backend answers with the student's name,
+// The admin types the 6 digits the student shows, or scans the QR on the student's Pickup pass page. The backend answers with the student's name,
 // so the desk knows the person in front of them owns the booking (the Student column only has an id).
 export function VerifyStudentDialog({ userId, onClose, onVerified }: Props) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<'type' | 'scan'>('type') // typing stays the default and the fallback
   const firstBox = useRef<HTMLInputElement>(null)
 
   // The boxes are disabled while checking, which drops the focus: after a wrong code put it back on
@@ -64,24 +66,47 @@ export function VerifyStudentDialog({ userId, onClose, onVerified }: Props) {
       centered
     >
       <Stack align="center">
-        <Text size="sm" c="dimmed" ta="center">
-          Ask the student for the 6-digit code on their Pickup pass page.
-        </Text>
-        <PinInput
-          length={6}
-          type="number"
-          oneTimeCode
-          autoFocus
-          ref={firstBox}
-          value={value}
-          onChange={(next) => {
-            setValue(next)
-            // Checked here, not in onComplete: a pasted code did not trigger onComplete in testing.
-            void submit(next)
-          }}
+        <SegmentedControl
+          value={mode}
+          onChange={(next) => setMode(next as 'type' | 'scan')}
+          data={[
+            { label: 'Type code', value: 'type' },
+            { label: 'Scan QR', value: 'scan' },
+          ]}
           disabled={busy}
-          aria-label="Pickup code"
         />
+        {mode === 'scan' ? (
+          <ScanPassPanel
+            userId={userId}
+            paused={busy}
+            onCode={(code) => void submit(code)}
+            onUnavailable={(message) => {
+              setError(message)
+              setMode('type')
+            }}
+          />
+        ) : (
+          <>
+            <Text size="sm" c="dimmed" ta="center">
+              Ask the student for the 6-digit code on their Pickup pass page.
+            </Text>
+            <PinInput
+              length={6}
+              type="number"
+              oneTimeCode
+              autoFocus
+              ref={firstBox}
+              value={value}
+              onChange={(next) => {
+                setValue(next)
+                // Checked here, not in onComplete: a pasted code did not trigger onComplete in testing.
+                void submit(next)
+              }}
+              disabled={busy}
+              aria-label="Pickup code"
+            />
+          </>
+        )}
         {error && (
           <Alert color="red" icon={<IconAlertTriangle size={18} />}>
             {error}

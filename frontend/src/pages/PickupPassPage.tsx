@@ -1,4 +1,5 @@
 import { Button, Center, Loader, Paper, RingProgress, Stack, Text } from '@mantine/core'
+import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useState } from 'react'
 import { fetchPickupPass, type PickupPass } from '../api/pickupPass.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
@@ -88,7 +89,7 @@ export default function PickupPassPage() {
     <>
       <PageHeader
         title="Pickup pass"
-        description="Show this code at the desk when you collect your equipment. It changes every 30 seconds."
+        description="Show this QR or code at the desk when you collect your equipment. It changes every 30 seconds."
       />
       <ErrorAlert error={error} />
       {error !== null && (
@@ -104,6 +105,12 @@ export default function PickupPassPage() {
       {pass && (
         <Paper withBorder p="xl" maw={420} bg="var(--app-surface)">
           <Stack align="center" gap="md">
+            {/* Always dark on white, also in the dark theme: cameras read inverted QR codes badly.
+                The key makes React draw a new image whenever the code rotates. The digits below stay
+                as the fallback for a desk without a camera. */}
+            <div style={{ background: '#fff', padding: 12, borderRadius: 8 }}>
+              <QRCodeSVG key={pass.qrText} value={pass.qrText} size={220} level="M" marginSize={0} aria-label="Pickup QR code" />
+            </div>
             <Text fz={48} fw={700} ff="monospace" aria-label="Pickup code">
               {spaced(pass.code)}
             </Text>
