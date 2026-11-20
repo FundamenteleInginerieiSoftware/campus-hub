@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Thu 19 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Fri 20 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 
@@ -22,17 +22,11 @@ Every M1 part is on `main` (seed data #193, register #107, catalog + inventory p
 
 ## 3. Open PRs right now
 
-| PR | Owner | What | Next step |
-|---|---|---|---|
-| #310 | Calin | Re-check the active user right after the quota lock (#229) | Changes requested: bundle, `confirmHold` and `acceptTransfer` read the user before the lock; lock first, then check, and add them to the two-thread IT |
-| #311 | Calin | Retired asset → reassignment engine, nullable `reassignment_log.incident_id` (#245) | API contract + `docs/modules/reassignment.md`; Stefania's OK on the 🟡 row before `Closes #245`; update from `main` |
-| #302 | Stefania | `UserDisabledEvent` when an admin disables a user (#229) | Approved by Matei; waits for Calin to re-check his 17 Nov "changes requested" |
-| #303 | Stefania | QR libraries for the pickup pass; CI `hashFiles` guards removed (#269) | Approved: merge |
-| #312 | Matei | `findActiveRole` reads the row fresh (makes Calin's #310 re-check work) | Needs a review |
+None right now (20 Nov afternoon).
 
-Merged since the last update: Matei #284 (pickup pass pages), #304 (first AWS deploy), #307, #308 (Swagger server URL, `HEAD` on public pages), #309 (RDS restart alert), #301 (status); Calin #292, #293, #294, #296 (#267 fixes and refactors), #297, #298, #299, #300 (calendar feed, #289); Liviu #278, #280, #287, #288 (#268, #245); Stefania #263 (#229). Closed issues: #267, #289.
+Merged since the last update: Matei #312 (`findActiveRole` reads the row fresh), #318 (QR pickup pass, desk camera scan), #320 (`deploy.yml` with GitHub OIDC), #321, #323 (team decisions, 20 Nov), #332 (SES notifications live to open tabs); Calin #310 (re-check after quota lock), #311 (retired asset → reassignment), #315 (Calendar sync button), #316 (PIT survivors), #326 (`triggered_by` rename), #327 (source-asset guard on moves), #328 ("Show pickup pass" button), #329 (row lock on disable cancel), #330 (cancel bookings of disabled users), #333 (`ReservationApi` overload cleanup); Stefania #302 (`UserDisabledEvent` on disable), #331 (admin Users and Reassignment log pages); Liviu #317 (live notifications stream). Closed issues: #245, #289, #305, #306, #314, #319.
 
-Open issues: **#140** (Projects: left: the app-wide RO/EN choice, Stefania), **#229** (Stefania; PRs #302, #310), **#245** (retire flow: Calin's #311, 🟡 decision), code read-through findings **#268** (Liviu), **#269** (Stefania), new features **#290** (Liviu), **#291** (Stefania), admin pages **#305** (mandatory) and **#306** (Stefania, due Fri 20 Nov).
+Open issues: **#140** (Matei, Projects: left: the app-wide RO/EN choice, Stefania), **#229** (Stefania: all its PRs are merged, can be closed), **#268** (Liviu, code read-through), **#269** (Stefania, code read-through), **#290** (Liviu, live notifications: frontend left), **#291** (Stefania, equipment reliability), **#322** (Calin), **#324** (Liviu), **#325** (Stefania): what's left until the defense (decisions of 20 Nov).
 
 
 ---
@@ -54,9 +48,9 @@ Open issues: **#140** (Projects: left: the app-wide RO/EN choice, Stefania), **#
 | W9 | ~~`SesNotificationService`~~ (✅ #129, #177) · SES sandbox + verified team emails · all prod secrets in SSM · M2 flow on AWS with Calin + Stefania · tag `v0.2.0` | – |
 | W9 | ~~Frontend: **admin reservations desk page**~~ (✅ #138, #194) | – |
 | W9 (stretch) | SQS bridge + consumer + DLQ, only if M2 is done and there is time | – |
-| W7 | ~~`UserApi.findActiveRole` reads the row fresh~~ (✅ #312; found in the review of Calin's #310, so a disable is seen by the re-check after the quota lock). **Left:** Calin fixes the order in his own paths (lock first, then the check) in #310 | Calin #310 |
+| W7 | ~~`UserApi.findActiveRole` reads the row fresh~~ (✅ #312; found in the review of Calin's #310, so a disable is seen by the re-check after the quota lock). Calin fixed the order in his paths (✅ #310) | – |
 | W10 | ~~Security pass~~ (✅ `SecurityPassIT`, #139) · ~~PIT survivors in my code~~ (✅ #182) · load smoke test · restore an RDS snapshot once · cost check | – |
-| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`): PR 1 (backend, both endpoints) is done in #283, PR 2 (student page + desk Verify dialog) is done in #284, PR 3 (QR image on the pass page + camera scan in the Verify dialog) is done in #318 (libraries from #303); left: Calin's "Show pickup pass" shortcut in My reservations · small asks from teammates' features: ~~the `SecurityConfig` rule for Calin's calendar feed (land it first)~~ (✅ #295), ~~the live push call in `SesNotificationService` for Liviu's live notifications~~ (✅ #332), maybe one async-dispatch line in `SecurityConfig` | Section 7a |
+| W6–W10 | **Proposed, not agreed (section 7a):** build the **pickup pass** (spec + plan in `docs/superpowers/`): PR 1 (backend, both endpoints) is done in #283, PR 2 (student page + desk Verify dialog) is done in #284, PR 3 (QR image on the pass page + camera scan in the Verify dialog) is done in #318 (libraries from #303); Calin's "Show pickup pass" button in My reservations is done (✅ #328) · small asks from teammates' features: ~~the `SecurityConfig` rule for Calin's calendar feed (land it first)~~ (✅ #295), ~~the live push call in `SesNotificationService` for Liviu's live notifications~~ (✅ #332), maybe one async-dispatch line in `SecurityConfig` | Section 7a |
 | W11–W12 | ~~Deployment + component diagrams~~ (✅ #186; update the AWS one after the deploy) · ~~security chapter~~ (✅ #185) · CI/CD description · runbook · demo on AWS + local fallback + video · `terraform destroy` after grading | – |
 
 ## 5. Liviu Nedelcu: catalog + shared services
