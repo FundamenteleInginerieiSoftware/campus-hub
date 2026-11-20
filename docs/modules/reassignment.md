@@ -37,11 +37,11 @@ The module employs the **Observer Pattern** (via Spring Application Events) to d
   - `false` (default / Dev / CI): In-memory Spring Application Events.
   - `true` (AWS Prod): SQS message bridge managed by Matei Necula (planned stretch goal; only `messaging/package-info.java` exists today).
 
-#### 🔄 Retirement Triggering Architecture (Planned W7 Integration)
+#### 🔄 Retirement Triggering Architecture (#245, #280, #311)
 When an admin retires equipment (`POST /api/v1/admin/assets/{id}/retire`), the asset is permanently decommissioned. Future bookings must not remain orphaned on a retired asset.
-- **Trigger Event:** `AssetService` will publish an `AssetRetiredEvent(Long assetId, Long retiredById, Instant occurredAt)`.
-- **Engine Reaction:** A corresponding `@TransactionalEventListener(phase = AFTER_COMMIT)` will invoke the reassignment engine for the retired asset ID.
-- **Audit Logging Alignment:** A Flyway migration will alter `reassignment_log.incident_id` to `BIGINT NULL` (or introduce a trigger source column), allowing retirement reassignments to record an immutable audit trail without requiring a dummy incident.
+- **Trigger Event:** `AssetService.retire` publishes `AssetRetiredEvent(Long assetId, LocalDateTime retiredAt, Long actorId)` from `com.campus.catalog.api` (#280).
+- **Engine Reaction:** `LocalAssetRetiredListener` (`@Async` + `@TransactionalEventListener(phase = AFTER_COMMIT)`, always local — no `app.messaging.sqs.enabled` condition) invokes `ReassignmentService.handle(AssetRetiredEvent)` (#311).
+- **Audit Logging Alignment:** Flyway migration `V2026_11_19_1245__reassignment_nullable_incident_id.sql` makes `reassignment_log.incident_id` nullable and adds `trigger VARCHAR(32) NOT NULL DEFAULT 'INCIDENT'` (`INCIDENT` | `RETIRED`), so retirement reassignments record an explicit audit trail without a dummy incident.
 
 ---
 
@@ -104,7 +104,7 @@ sequenceDiagram
     participant Log as ReassignmentLogRepository
     participant Notif as NotificationService
 
-    Reporter->>Inc: Report incident / Retire asset (retire planned W7)
+    Reporter->>Inc: Report incident / Retire asset (#245)
     activate Inc
     Inc->>Cat: markUnderMaintenance(assetId)
     Inc->>Pub: publishEvent(AssetDamagedEvent / AssetRetiredEvent)

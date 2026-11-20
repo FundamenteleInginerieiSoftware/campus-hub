@@ -1,5 +1,6 @@
 package com.campus.reassignment.service;
 
+import com.campus.catalog.api.AssetRetiredEvent;
 import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.error.InvalidParameterException;
@@ -18,6 +19,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -51,9 +54,47 @@ public class ReassignmentService {
      * persisted log entries, and notifications are only dispatched after successful transaction commit.
      */
     public void handle(AssetDamagedEvent event) {
-        AssetSummary damaged = catalogApi.getAsset(event.assetId());
+        processAssetUnavailable(
+                event.assetId(),
+                (booking, damaged) -> bookingProcessor.processSingleBooking(event, booking, damaged),
+                (booking, substituteName) -> "Your reservation #" + booking.id() + " has been reassigned to asset "
+                        + substituteName + " due to equipment maintenance.",
+                booking -> "Your reservation #" + booking.id()
+                        + " has been cancelled due to equipment failure (incident #" + event.incidentId() + ").",
+                "reassignment");
+    }
+
+    /**
+     * Handles an {@link AssetRetiredEvent} (#245) by reassigning all upcoming reservations of the
+     * retired asset to a free substitute (Strategy pattern) or force-cancelling them if none exists.
+     * Each reservation runs in its own isolated {@code REQUIRES_NEW} transaction with {@code incidentId = null}.
+     */
+    public void handle(AssetRetiredEvent event) {
+        processAssetUnavailable(
+                event.assetId(),
+                (booking, retired) -> bookingProcessor.processSingleBooking(event, booking, retired),
+                (booking, substituteName) -> "Your reservation #" + booking.id()
+                        + " has been reassigned to asset " + substituteName
+                        + " because the original equipment was retired.",
+                booking -> "Your reservation #" + booking.id()
+                        + " has been cancelled because the assigned equipment was retired"
+                        + " and no substitute was available.",
+                "retirement reassignment");
+    }
+
+    private void processAssetUnavailable(
+            Long assetId,
+            BiFunction<
+                            ReservationSummary,
+                            AssetSummary,
+                            Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult>>
+                    processor,
+            BiFunction<ReservationSummary, String, String> reassignedMessage,
+            Function<ReservationSummary, String> cancelledMessage,
+            String logContext) {
+        AssetSummary sourceAsset = catalogApi.getAsset(assetId);
         LocalDateTime now = now();
-        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(event.assetId(), now);
+        List<ReservationSummary> upcoming = reservationApi.findUpcomingActiveByAsset(assetId, now);
 
         List<ReservationSummary> sortedBookings = upcoming.stream()
                 .sorted(Comparator.comparing(ReservationSummary::start))
@@ -62,7 +103,7 @@ public class ReassignmentService {
         for (ReservationSummary booking : sortedBookings) {
             try {
                 Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
-                        bookingProcessor.processSingleBooking(event, booking, damaged);
+                        processor.apply(booking, sourceAsset);
 
                 if (resultOpt.isPresent()) {
                     ReassignmentBookingProcessor.ReassignmentExecutionResult result = resultOpt.get();
@@ -70,20 +111,16 @@ public class ReassignmentService {
                         sendNotificationSafely(
                                 booking.userId(),
                                 "Reservation Reassigned",
-                                "Your reservation #" + booking.id() + " has been reassigned to asset "
-                                        + result.substituteAssetName() + " due to equipment maintenance.");
+                                reassignedMessage.apply(booking, result.substituteAssetName()));
                     } else {
                         // The only other outcome is FORCE_CANCELLED.
                         sendNotificationSafely(
-                                booking.userId(),
-                                "Reservation Cancelled",
-                                "Your reservation #" + booking.id()
-                                        + " has been cancelled due to equipment failure (incident #"
-                                        + event.incidentId() + ").");
+                                booking.userId(), "Reservation Cancelled", cancelledMessage.apply(booking));
                     }
                 }
             } catch (RuntimeException e) {
-                log.warn("Skipping reassignment for booking #{} due to concurrent update or failure", booking.id(), e);
+                log.warn(
+                        "Skipping {} for booking #{} due to concurrent update or failure", logContext, booking.id(), e);
             }
         }
     }
