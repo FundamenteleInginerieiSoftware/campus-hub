@@ -6,11 +6,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.campus.catalog.api.AssetRetiredEvent;
+import com.campus.catalog.api.AssetStatus;
+import com.campus.catalog.api.AssetSummary;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.domain.ReassignmentTrigger;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
 import java.time.Clock;
@@ -48,6 +51,9 @@ class AssetRetiredReassignmentIT {
     private ReassignmentService reassignmentService;
 
     @Autowired
+    private ReassignmentBookingProcessor reassignmentBookingProcessor;
+
+    @Autowired
     private ReservationRepository reservationRepository;
 
     @Autowired
@@ -69,6 +75,7 @@ class AssetRetiredReassignmentIT {
     private Long labRoomId;
     private Long retiredAssetId;
     private Long substituteAssetId;
+    private String assetModel;
 
     @TestConfiguration
     static class FixedClockConfig {
@@ -83,6 +90,7 @@ class AssetRetiredReassignmentIT {
     void setUp() {
         String tag = UUID.randomUUID().toString().substring(0, 8);
         String model = "RETIRE-DS1054Z-" + tag;
+        this.assetModel = model;
 
         studentId = jdbcTemplate.queryForObject("""
                 INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
@@ -290,5 +298,52 @@ class AssetRetiredReassignmentIT {
         assertThat(logs.get(0).getTrigger())
                 .as("listener-driven retirement must record trigger = RETIRED")
                 .isEqualTo(ReassignmentTrigger.RETIRED);
+    }
+
+    @Test
+    @DisplayName(
+            "Concurrent incident + retire guard (#319): stale snapshot after first move logs only one reassignment and never double-moves or force-cancels")
+    void staleConcurrentHandlerAfterMoveDoesNotLogDuplicateMoveOrForceCancel() {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime createdAt = now.minusHours(1);
+        LocalDateTime start = now.plusDays(1).withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation saved =
+                reservationRepository.save(new Reservation(studentId, retiredAssetId, start, end, createdAt));
+
+        // Capture the booking snapshot BEFORE the first handler runs (simulating two handlers that
+        // both called findUpcomingActiveByAsset before either committed its move).
+        ReservationSummary staleSnapshot = new ReservationSummary(
+                saved.getId(), studentId, retiredAssetId, start, end, ReservationStatus.CONFIRMED);
+        AssetSummary sourceAsset = new AssetSummary(
+                retiredAssetId, "Retired Scope #1", assetModel, categoryId, labRoomId, AssetStatus.RETIRED);
+
+        // First handler moves the booking from retiredAssetId to substituteAssetId.
+        reassignmentService.handle(new AssetRetiredEvent(retiredAssetId, now, adminId));
+
+        // Second handler arrives late with its pre-move snapshot of the same booking on retiredAssetId.
+        var secondResult = reassignmentBookingProcessor.processSingleBooking(
+                new AssetRetiredEvent(retiredAssetId, now, adminId), staleSnapshot, sourceAsset);
+
+        assertThat(secondResult)
+                .as("second handler with stale snapshot must skip the already-moved booking; "
+                        + "see ReservationService.moveToAsset / forceCancel (#319)")
+                .isEmpty();
+
+        Reservation afterBoth = reservationRepository.findById(saved.getId()).orElseThrow();
+        assertThat(afterBoth.getStatus())
+                .as("booking moved by the first handler must stay CONFIRMED")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(afterBoth.getAssetId())
+                .as("booking must remain on substituteAssetId")
+                .isEqualTo(substituteAssetId);
+
+        List<ReassignmentLog> logs = reassignmentLogRepository.findAll().stream()
+                .filter(l -> l.getReservationId().equals(saved.getId()))
+                .toList();
+        assertThat(logs)
+                .as("concurrent handlers targeting the same asset must produce exactly one reassignment_log row (#319)")
+                .hasSize(1);
     }
 }

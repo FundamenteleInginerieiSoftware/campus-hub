@@ -35,24 +35,58 @@ public interface ReservationApi {
     boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId);
 
     /**
-     * Reassigns an existing confirmed reservation to a new substitute asset.
+     * Reassigns an existing confirmed reservation to a new substitute asset without filtering by
+     * its current asset. Prefer {@link #moveToAsset(Long, Long, Long, String)} when reacting to
+     * an event on a specific source asset.
      *
      * @param reservationId the ID of the reservation to move
      * @param newAssetId the target substitute asset ID
      * @param reason the reason for reassignment (e.g., incident report ID or note)
      * @return {@code true} if the reservation was moved, or {@code false} if it was no longer CONFIRMED
      */
-    boolean moveToAsset(Long reservationId, Long newAssetId, String reason);
+    default boolean moveToAsset(Long reservationId, Long newAssetId, String reason) {
+        return moveToAsset(reservationId, null, newAssetId, reason);
+    }
+
+    /**
+     * Reassigns an existing confirmed reservation to a new substitute asset only if it is still on
+     * {@code expectedSourceAssetId} (when non-null). Acquires a row lock on the reservation first
+     * so concurrent incident/retire handlers cannot move the same booking twice (#319).
+     *
+     * @param reservationId the ID of the reservation to move
+     * @param expectedSourceAssetId the asset ID the booking must currently belong to (nullable to skip check)
+     * @param newAssetId the target substitute asset ID
+     * @param reason the reason for reassignment (e.g., incident report ID or note)
+     * @return {@code true} if the reservation was moved, or {@code false} if it was no longer CONFIRMED
+     *     or no longer on {@code expectedSourceAssetId}
+     */
+    boolean moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason);
 
     /**
      * Force-cancels a reservation (e.g., during reassignment when no substitute asset is free).
-     * Idempotent if already cancelled or no longer CONFIRMED.
+     * Idempotent if already cancelled or no longer CONFIRMED. Prefer
+     * {@link #forceCancel(Long, Long, String)} when reacting to an event on a specific source asset.
      *
      * @param reservationId the ID of the reservation to force-cancel
      * @param reason the cancellation explanation
      * @return {@code true} if the reservation was force-cancelled, or {@code false} if it was no longer CONFIRMED
      */
-    boolean forceCancel(Long reservationId, String reason);
+    default boolean forceCancel(Long reservationId, String reason) {
+        return forceCancel(reservationId, null, reason);
+    }
+
+    /**
+     * Force-cancels a confirmed reservation only if it is still on {@code expectedSourceAssetId}
+     * (when non-null), preventing a stale concurrent handler from cancelling a booking that another
+     * handler already moved to a healthy substitute (#319).
+     *
+     * @param reservationId the ID of the reservation to force-cancel
+     * @param expectedSourceAssetId the asset ID the booking must currently belong to (nullable to skip check)
+     * @param reason the cancellation explanation
+     * @return {@code true} if the reservation was force-cancelled, or {@code false} if it was no longer CONFIRMED
+     *     or no longer on {@code expectedSourceAssetId}
+     */
+    boolean forceCancel(Long reservationId, Long expectedSourceAssetId, String reason);
 
     /**
      * Finds the active check-out summary for an asset if currently checked out or overdue.

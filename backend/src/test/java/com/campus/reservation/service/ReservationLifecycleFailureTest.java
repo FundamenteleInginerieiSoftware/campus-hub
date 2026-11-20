@@ -127,9 +127,10 @@ class ReservationLifecycleFailureTest {
     @Test
     void preventiveMoveTriesTheNextSubstituteWhenTheFirstWasTakenMeanwhile() {
         threatenedBookingWithTwoSubstitutes();
-        when(reservationService.moveToAsset(eq(6L), eq(20L), any()))
+        when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
                 .thenThrow(new SubstituteNoLongerFreeException("taken"));
-        when(reservationService.moveToAsset(eq(6L), eq(21L), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(21L), any()))
+                .thenReturn(true);
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -140,18 +141,20 @@ class ReservationLifecycleFailureTest {
     @Test
     void preventiveMoveGivesUpOnThatBookingWhenSomethingElseFails() {
         threatenedBookingWithTwoSubstitutes();
-        when(reservationService.moveToAsset(eq(6L), eq(20L), any())).thenThrow(new RuntimeException("cancelled"));
+        when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
+                .thenThrow(new RuntimeException("cancelled"));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
         assertThat(summary.preventivelyReassignedCount()).isZero();
-        verify(reservationService, never()).moveToAsset(eq(6L), eq(21L), any());
+        verify(reservationService, never()).moveToAsset(eq(6L), eq(ASSET_ID), eq(21L), any());
     }
 
     @Test
     void aFailingEmailNeverBreaksTheSweep() {
         threatenedBookingWithTwoSubstitutes();
-        when(reservationService.moveToAsset(eq(6L), eq(20L), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
+                .thenReturn(true);
         doThrow(new RuntimeException("SES down")).when(notificationService).notifyUser(anyLong(), any(), any());
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();

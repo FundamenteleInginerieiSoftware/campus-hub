@@ -198,7 +198,7 @@ class ReservationServiceRulesTest {
     @Test
     void moveToAnAssetThatIsNotBookableAnymoreIsRejected() {
         Reservation confirmed = reservation(2L, now.plusHours(4), now.plusHours(6));
-        when(reservationRepository.findById(2L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(OTHER_ASSET_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> reservationService.moveToAsset(2L, OTHER_ASSET_ID, "reason"))
@@ -209,7 +209,7 @@ class ReservationServiceRulesTest {
     @Test
     void moveToAnAssetThatIsBookedMeanwhileIsRejected() {
         Reservation confirmed = reservation(3L, now.plusHours(4), now.plusHours(6));
-        when(reservationRepository.findById(3L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(OTHER_ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(OTHER_ASSET_ID, confirmed.getStartTime(), confirmed.getEndTime(), 3L))
                 .thenReturn(true);

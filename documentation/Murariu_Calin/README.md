@@ -63,6 +63,7 @@ Each document is structured in two parts:
 | 44 | [`44-asset-retired-reassignment-flow.md`](./44-asset-retired-reassignment-flow.md) | Asset Retirement Reassignment Flow (#245) | Flyway nullable `reassignment_log.incident_id`, `LocalAssetRetiredListener`, `ReassignmentService.handle(AssetRetiredEvent)`, PostgreSQL IT |
 | 45 | [`45-calendar-sync-button-in-my-reservations.md`](./45-calendar-sync-button-in-my-reservations.md) | Calendar Sync Button in My Reservations (#314) | Moved Calendar sync from student sidebar into a header button on `MyReservationsPage`, kept `/calendar-sync` route and top-bar title |
 | 46 | [`46-reassignment-retire-nits.md`](./46-reassignment-retire-nits.md) | Reassignment Retire Flow Review Nits (#311 Follow-up) | Flyway rename `reassignment_log.trigger` → `triggered_by`, generated IDs in `AssetRetiredReassignmentIT`, ER diagram & module doc sync |
+| 47 | [`47-reassignment-source-asset-guard.md`](./47-reassignment-source-asset-guard.md) | Source-Asset Guard on Reassignment Move & Force-Cancel (#319) | `expectedSourceAssetId` + `findByIdForUpdate` in `ReservationApi.moveToAsset`/`forceCancel` to prevent duplicate log/email on concurrent incident + retire |
 
 
 
