@@ -54,3 +54,8 @@ output "admin_password" {
   value       = random_password.admin.result
   sensitive   = true
 }
+
+output "github_deploy_role_arn" {
+  description = "For deploy.yml:  gh variable set AWS_DEPLOY_ROLE_ARN --body \"$(terraform output -raw github_deploy_role_arn)\""
+  value       = aws_iam_role.github_deploy.arn
+}

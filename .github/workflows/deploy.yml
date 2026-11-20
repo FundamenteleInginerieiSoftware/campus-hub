@@ -1,0 +1,178 @@
+name: deploy
+
+# Puts main on AWS (ADR-002): build the Docker image, push it to ECR tagged with the commit SHA,
+# then run `campus-deploy <sha>` on the server through SSM Run Command (infra/user-data.sh.tftpl)
+# and wait until /actuator/health on CloudFront says UP.
+# AWS access: GitHub OIDC, the role in infra/github-deploy.tf. No AWS keys in GitHub.
+# Kept apart from Stefania's ci.yml: it only starts after ci has passed on main.
+
+on:
+  # Every push to main runs ci; when that run ends green, this one deploys the same commit.
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  # By hand (Actions tab or `gh workflow run deploy`): redeploy, or roll back to an older commit.
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit on main to deploy (empty = newest main)
+        required: false
+        default: ''
+
+# id-token: write lets the job ask GitHub for the OIDC token that AWS checks.
+permissions:
+  id-token: write
+  contents: read
+
+# One deploy at a time, and never stopped halfway: a cancelled run could leave the server
+# between two containers. A newer run waits for the running one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-1 # infra/variables.tf (ADR-005: Frankfurt)
+  ECR_REPOSITORY: campus-hub # infra/storage.tf
+  INSTANCE_NAME: campus-hub-app # Name tag of the server, infra/compute.tf
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # By hand: only from main (AWS would refuse another branch's token anyway).
+    # Automatic: only after a green ci run of a push to main in this repository. ci also runs for
+    # pull requests, and a PR from a fork can have a branch called "main" too; event == push and
+    # the repository check keep those out.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+
+    steps:
+      - name: Check out main with its history
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0 # the checks below need main's history
+
+      - name: Pick the commit to deploy
+        id: commit
+        # Values come in through env vars, never pasted into the script, so an input can't run
+        # as shell code.
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+          ROLE: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Until the two repository variables are set (doc 59), skip instead of turning every
+          # merge red.
+          if [ -z "$ROLE" ] || [ -z "$APP_URL" ]; then
+            echo "::notice::Repository variables AWS_DEPLOY_ROLE_ARN / APP_URL not set: deploy skipped."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT" = workflow_run ]; then wanted="$RUN_SHA"; else wanted="${INPUT_SHA:-origin/main}"; fi
+          sha=$(git rev-parse --verify --quiet "$wanted^{commit}") \
+            || { echo "::error::$wanted is not a commit"; exit 1; }
+          # Only reviewed code reaches AWS: the commit must be on main. Without this, anyone who can
+          # start the workflow could deploy an unmerged PR commit.
+          git merge-base --is-ancestor "$sha" origin/main \
+            || { echo "::error::$sha is not on main"; exit 1; }
+          # Two quick merges: the ci runs can finish in any order. Only the newest commit deploys
+          # automatically, so an older one never replaces it. By hand, any main commit (rollback).
+          if [ "$EVENT" = workflow_run ] && [ "$sha" != "$(git rev-parse origin/main)" ]; then
+            echo "::notice::$sha is no longer the newest commit on main: skipped, the newer commit's ci run deploys it."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git checkout --quiet --detach "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $sha"
+
+      - name: Log in to AWS with OIDC
+        if: steps.commit.outputs.skip != 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Find the server
+        id: server
+        if: steps.commit.outputs.skip != 'true'
+        run: |
+          id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$INSTANCE_NAME" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          # AWS is paused to save credits (documentation/Necula_Matei/56-rds-auto-start-alert.md).
+          # That is not an error: skip, and deploy by hand after the resume.
+          if [ -z "$id" ]; then
+            echo "::notice::Server $INSTANCE_NAME is not running (AWS paused), deploy skipped. After the resume: gh workflow run deploy"
+            echo "running=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "instance=$id" >> "$GITHUB_OUTPUT"
+            echo "running=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to ECR
+        id: ecr
+        if: steps.server.outputs.running == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the image
+        if: steps.server.outputs.running == 'true'
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.commit.outputs.sha }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          # Tags are immutable (infra/storage.tf): a re-run or rollback reuses the image already
+          # pushed for that commit instead of failing on a second push.
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$SHA" > /dev/null 2>&1; then
+            echo "Image for $SHA is already in ECR, not built again."
+          else
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
+          fi
+
+      - name: Run campus-deploy on the server
+        if: steps.server.outputs.running == 'true'
+        env:
+          INSTANCE: ${{ steps.server.outputs.instance }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          id=$(aws ssm send-command --instance-ids "$INSTANCE" --document-name AWS-RunShellScript \
+            --comment "deploy.yml $SHA" \
+            --parameters "{\"commands\":[\"/usr/local/bin/campus-deploy $SHA\"]}" \
+            --query Command.CommandId --output text)
+          echo "SSM command $id"
+          # The script pulls the image and swaps the container: usually under a minute.
+          # Poll for up to 10 minutes; `aws ssm wait` gives up after 100 seconds.
+          for _ in $(seq 1 120); do
+            sleep 5
+            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in Pending|InProgress|Delayed) continue ;; *) break ;; esac
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          [ "$status" = Success ] || { echo "::error::campus-deploy ended with status $status"; exit 1; }
+
+      - name: Wait until the app is UP
+        if: steps.server.outputs.running == 'true'
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Through CloudFront, like a user. Spring needs about a minute to start on the t3.small.
+          for _ in $(seq 1 36); do
+            if curl -fsS --max-time 5 "$APP_URL/actuator/health" | grep -q '"status":"UP"'; then
+              echo "App is UP at $APP_URL"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::$APP_URL/actuator/health not UP after 3 minutes. Logs: CloudWatch /campus-hub/app"
+          exit 1
