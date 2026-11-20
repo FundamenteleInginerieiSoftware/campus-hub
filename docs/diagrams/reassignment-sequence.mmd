@@ -43,12 +43,12 @@ sequenceDiagram
         deactivate Strat
 
         alt Substitute asset found
-            Reass->>Res: moveToAsset(bookingId, candidateId, reason)
+            Reass->>Res: moveToAsset(bookingId, sourceAssetId, candidateId, reason)
             Reass->>Log: save(ReassignmentLog[outcome=REASSIGNED, strategy=...])
             Note over Reass: Booking transaction commits
             Reass->>Notif: notifyUser(userId, "Reservation moved to substitute asset")
         else No substitute available
-            Reass->>Res: forceCancel(bookingId, reason)
+            Reass->>Res: forceCancel(bookingId, sourceAssetId, reason)
             Reass->>Log: save(ReassignmentLog[outcome=FORCE_CANCELLED, reason=...])
             Note over Reass: Booking transaction commits
             Reass->>Notif: notifyUser(userId, "Reservation cancelled due to damaged asset")
