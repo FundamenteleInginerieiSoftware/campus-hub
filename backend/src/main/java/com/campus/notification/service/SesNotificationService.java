@@ -1,7 +1,10 @@
 package com.campus.notification.service;
 
 import com.campus.notification.api.NotificationService;
+import com.campus.notification.web.LiveEvent;
 import com.campus.user.api.UserApi;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -17,7 +20,9 @@ import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
 
 /**
  * Real e-mails through Amazon SES, in prod. Liviu's {@code LoggingNotificationService} only writes
- * them to the log (dev/test). Called by Calin's reassignment engine and reservation jobs.
+ * them to the log (dev/test). Called by Calin's reassignment engine and reservation jobs. Every
+ * notification is also pushed live to the user's open browser tabs through Liviu's {@link
+ * LiveStreams} (#290).
  */
 @Slf4j
 @Service
@@ -26,11 +31,20 @@ public class SesNotificationService implements NotificationService {
 
     private final SesV2Client ses;
     private final UserApi userApi;
+    private final LiveStreams liveStreams;
+    private final Clock clock;
     private final String from;
 
-    public SesNotificationService(SesV2Client ses, UserApi userApi, @Value("${app.mail.from}") String from) {
+    public SesNotificationService(
+            SesV2Client ses,
+            UserApi userApi,
+            LiveStreams liveStreams,
+            Clock clock,
+            @Value("${app.mail.from}") String from) {
         this.ses = ses;
         this.userApi = userApi;
+        this.liveStreams = liveStreams;
+        this.clock = clock;
         this.from = from;
     }
 
@@ -45,6 +59,10 @@ public class SesNotificationService implements NotificationService {
     @Override
     public void notifyUser(Long userId, String subject, String body) {
         try {
+            // The live push goes first, so an open tab shows the change at once: a slow SES (up to the
+            // 20 s timeout) or a failed lookup below can no longer delay or drop it. LiveStreams.send is
+            // @Async too and does nothing when the user has no open tab.
+            liveStreams.send(userId, LiveEvent.notification(subject, body, LocalDateTime.now(clock)));
             // Bug fixed (#148): this lookup used to be outside the try, so an unknown user (e.g. deleted
             // meanwhile) threw out of notifyUser. Now it is one more failed e-mail, logged below.
             // UserApi.getById opens its own read-only transaction, so it also works on the background thread.

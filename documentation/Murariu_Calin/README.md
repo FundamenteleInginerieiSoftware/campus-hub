@@ -65,6 +65,7 @@ Each document is structured in two parts:
 | 46 | [`46-reassignment-retire-nits.md`](./46-reassignment-retire-nits.md) | Reassignment Retire Flow Review Nits (#311 Follow-up) | Flyway rename `reassignment_log.trigger` → `triggered_by`, generated IDs in `AssetRetiredReassignmentIT`, ER diagram & module doc sync |
 | 47 | [`47-reassignment-source-asset-guard.md`](./47-reassignment-source-asset-guard.md) | Source-Asset Guard on Reassignment Move & Force-Cancel (#319) | `expectedSourceAssetId` + `findByIdForUpdate` in `ReservationApi.moveToAsset`/`forceCancel` to prevent duplicate log/email on concurrent incident + retire |
 | 50 | [`50-user-disabled-event-listener.md`](./50-user-disabled-event-listener.md) | UserDisabledEvent Listener in Reservation Module (#229) | `UserDisabledReservationListener` (`AFTER_COMMIT` + `REQUIRES_NEW` via `TransactionTemplate`, non-`@Async`), unit + PostgreSQL IT, doc 27 contract sync |
+| 49 | [`49-disable-concurrency-followups.md`](./49-disable-concurrency-followups.md) | Disable-Cancel Concurrency Follow-ups (#229, #310, #322) | `FOR UPDATE` in `cancelUpcomingReservationsForUser`, `findByIdForUpdate` in `acceptTransfer`, `pg_stat_activity` polling in `ReservationConcurrencyIT` |
 
 
 

@@ -141,6 +141,12 @@ public class TransferService {
         Long userId = currentUser.id();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
 
+        // Lock order: reservation row, then transfer row (same as cancelUpcomingReservationsForUser,
+        // extend, check-out, moveToAsset) to prevent deadlocks and @Version rollbacks (#229, #329).
+        reservationTransferRepository
+                .findReservationIdById(transferId)
+                .ifPresent(reservationRepository::findByIdForUpdate);
+
         ReservationTransfer transfer = reservationTransferRepository
                 .findByIdForUpdate(transferId)
                 .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
@@ -158,8 +164,9 @@ public class TransferService {
             throw new ConflictException("TRANSFER_NOT_ALLOWED", "Sender account is no longer active");
         }
 
+        // Reservation row was already locked above before the transfer row and before lockUserQuota(userId).
         Reservation reservation = reservationRepository
-                .findById(transfer.getReservationId())
+                .findByIdForUpdate(transfer.getReservationId())
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
 
         if (reservation.getStatus() != ReservationStatus.CONFIRMED || !now.isBefore(reservation.getStartTime())) {
@@ -220,6 +227,12 @@ public class TransferService {
         Long userId = currentUser.id();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
 
+        // Lock order: reservation row, then transfer row (same as cancelUpcomingReservationsForUser,
+        // extend, check-out, moveToAsset) to prevent deadlocks and @Version rollbacks (#229, #329).
+        reservationTransferRepository
+                .findReservationIdById(transferId)
+                .ifPresent(reservationRepository::findByIdForUpdate);
+
         ReservationTransfer transfer = reservationTransferRepository
                 .findByIdForUpdate(transferId)
                 .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
@@ -259,6 +272,12 @@ public class TransferService {
     public ReservationTransferResponse cancelTransfer(Long transferId) {
         Long userId = currentUser.id();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+
+        // Lock order: reservation row, then transfer row (same as cancelUpcomingReservationsForUser,
+        // extend, check-out, moveToAsset) to prevent deadlocks and @Version rollbacks (#229, #329).
+        reservationTransferRepository
+                .findReservationIdById(transferId)
+                .ifPresent(reservationRepository::findByIdForUpdate);
 
         ReservationTransfer transfer = reservationTransferRepository
                 .findByIdForUpdate(transferId)
