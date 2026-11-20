@@ -131,13 +131,13 @@ sequenceDiagram
 
         alt Available substitute found
             Note over Engine: Fresh REQUIRES_NEW tx per move attempt (TransactionTemplate)
-            Engine->>Res: moveToAsset(bookingId, substituteId, reason)
+            Engine->>Res: moveToAsset(bookingId, sourceAssetId, substituteId, reason)
             Engine->>Log: save(ReassignmentLog[outcome=REASSIGNED, strategy=...])
             Note over Engine: Booking transaction commits independently
             Engine->>Notif: notifyUser(userId, subject, body) [via sendNotificationSafely, after commit]
         else No substitute available across all strategies
             Note over Engine: Fresh REQUIRES_NEW tx for force-cancellation (TransactionTemplate)
-            Engine->>Res: forceCancel(bookingId, reason)
+            Engine->>Res: forceCancel(bookingId, sourceAssetId, reason)
             Engine->>Log: save(ReassignmentLog[outcome=FORCE_CANCELLED, reason=...])
             Note over Engine: Booking transaction commits independently
             Engine->>Notif: notifyUser(userId, subject, body) [via sendNotificationSafely, after commit]

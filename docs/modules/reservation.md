@@ -20,9 +20,7 @@ Other modules may only interact with this module through `ReservationApi` or by 
 public interface ReservationApi {
     List<ReservationSummary> findUpcomingActiveByAsset(Long assetId, LocalDateTime from);
     boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId);
-    default boolean moveToAsset(Long reservationId, Long newAssetId, String reason);
     boolean moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason);
-    default boolean forceCancel(Long reservationId, String reason);
     boolean forceCancel(Long reservationId, Long expectedSourceAssetId, String reason);
     Optional<ReservationSummary> findCurrentCheckout(Long assetId);
     UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end);
