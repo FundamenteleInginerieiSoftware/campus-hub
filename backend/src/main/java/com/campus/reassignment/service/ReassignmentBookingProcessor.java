@@ -132,7 +132,8 @@ class ReassignmentBookingProcessor {
                 }
                 try {
                     return inRequiresNewTransaction(() -> {
-                        boolean moved = reservationApi.moveToAsset(booking.id(), candidate.id(), moveReason);
+                        boolean moved =
+                                reservationApi.moveToAsset(booking.id(), sourceAssetId, candidate.id(), moveReason);
 
                         if (moved) {
                             ReassignmentLog logEntry = new ReassignmentLog(
@@ -149,7 +150,7 @@ class ReassignmentBookingProcessor {
                             return Optional.of(
                                     new ReassignmentExecutionResult(ReassignmentOutcome.REASSIGNED, candidate.name()));
                         }
-                        // Reservation was no longer CONFIRMED when moveToAsset ran; skip it cleanly.
+                        // Reservation was no longer CONFIRMED or already moved off sourceAssetId (#319); skip cleanly.
                         return Optional.empty();
                     });
                 } catch (SubstituteNoLongerFreeException e) {
@@ -175,7 +176,7 @@ class ReassignmentBookingProcessor {
 
         // If no strategy found a free substitute, force-cancel the reservation in a fresh REQUIRES_NEW transaction
         return inRequiresNewTransaction(() -> {
-            boolean cancelled = reservationApi.forceCancel(booking.id(), cancelReason);
+            boolean cancelled = reservationApi.forceCancel(booking.id(), sourceAssetId, cancelReason);
 
             if (cancelled) {
                 ReassignmentLog logEntry = new ReassignmentLog(

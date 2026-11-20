@@ -112,7 +112,8 @@ class ReservationLifecycleServiceTest {
         when(reservationService.isAssetFree(
                         SUB_ASSET_ID, threatenedRes.getStartTime(), threatenedRes.getEndTime(), 33L))
                 .thenReturn(true);
-        when(reservationService.moveToAsset(eq(33L), eq(SUB_ASSET_ID), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
+                .thenReturn(true);
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -121,7 +122,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedCount()).isEqualTo(1);
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L);
 
-        verify(reservationService).moveToAsset(eq(33L), eq(SUB_ASSET_ID), any());
+        verify(reservationService).moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any());
         verify(holdService, never()).sweepExpiredHolds(any());
         verify(notificationService).notifyUser(eq(101L), eq("Reservation Marked as No-Show"), any());
         verify(notificationService).notifyUser(eq(102L), eq("Equipment Overdue"), any());
@@ -168,7 +169,7 @@ class ReservationLifecycleServiceTest {
 
         assertThat(summary.markedOverdueCount()).isEqualTo(1);
         assertThat(summary.preventivelyReassignedCount()).isZero();
-        verify(reservationService, never()).moveToAsset(anyLong(), anyLong(), any());
+        verify(reservationService, never()).moveToAsset(anyLong(), anyLong(), anyLong(), any());
         verify(notificationService, never()).notifyUser(eq(103L), any(), any());
     }
 
@@ -207,7 +208,8 @@ class ReservationLifecycleServiceTest {
         when(reservationService.isAssetFree(
                         SUB_ASSET_ID, threatenedRes.getStartTime(), threatenedRes.getEndTime(), 33L))
                 .thenReturn(true);
-        when(reservationService.moveToAsset(eq(33L), eq(SUB_ASSET_ID), any())).thenReturn(false);
+        when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
+                .thenReturn(false);
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -250,7 +252,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.markedOverdueCount()).isEqualTo(1);
         assertThat(summary.preventivelyReassignedCount()).isZero();
         verify(catalogApi, never()).getAsset(anyLong());
-        verify(reservationService, never()).moveToAsset(anyLong(), anyLong(), any());
+        verify(reservationService, never()).moveToAsset(anyLong(), anyLong(), anyLong(), any());
     }
 
     @Test
@@ -337,7 +339,8 @@ class ReservationLifecycleServiceTest {
                 .thenReturn(List.of(threatened1, threatened2));
         when(reservationService.isAssetFree(SUB_ASSET_ID, threatened1.getStartTime(), threatened1.getEndTime(), 33L))
                 .thenReturn(true);
-        when(reservationService.moveToAsset(eq(33L), eq(SUB_ASSET_ID), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
+                .thenReturn(true);
 
         LifecycleSweepSummary sweep1 = lifecycleService.runLifecycleSweep();
 
@@ -358,7 +361,8 @@ class ReservationLifecycleServiceTest {
         when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now2)).thenReturn(List.of(threatened2));
         when(reservationService.isAssetFree(SUB_ASSET_ID, threatened2.getStartTime(), threatened2.getEndTime(), 44L))
                 .thenReturn(true);
-        when(reservationService.moveToAsset(eq(44L), eq(SUB_ASSET_ID), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(44L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
+                .thenReturn(true);
 
         LifecycleSweepSummary sweep2 = service2.runLifecycleSweep();
 
@@ -424,15 +428,17 @@ class ReservationLifecycleServiceTest {
         // Both substitutes (15L in different room and 25L in same room) are free, so the strategy
         // ordering alone determines that sameRoomSub (25L) is selected first over differentRoomSub (15L).
         when(reservationService.isAssetFree(anyLong(), any(), any(), anyLong())).thenReturn(true);
-        when(reservationService.moveToAsset(eq(33L), eq(25L), any())).thenReturn(true);
-        when(reservationService.moveToAsset(eq(44L), eq(25L), any())).thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(25L), any()))
+                .thenReturn(true);
+        when(reservationService.moveToAsset(eq(44L), eq(ASSET_ID), eq(25L), any()))
+                .thenReturn(true);
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
         assertThat(summary.preventivelyReassignedCount()).isEqualTo(2);
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L, 44L);
-        verify(reservationService).moveToAsset(eq(33L), eq(25L), any());
-        verify(reservationService).moveToAsset(eq(44L), eq(25L), any());
+        verify(reservationService).moveToAsset(eq(33L), eq(ASSET_ID), eq(25L), any());
+        verify(reservationService).moveToAsset(eq(44L), eq(ASSET_ID), eq(25L), any());
         verify(catalogApi).getAsset(ASSET_ID);
         verify(catalogApi).findAvailableByModel("Tek-100", ASSET_ID);
     }
@@ -469,7 +475,7 @@ class ReservationLifecycleServiceTest {
         when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
         when(reservationService.isAssetFree(eq(SUB_ASSET_ID), any(), any(), eq(33L)))
                 .thenReturn(true);
-        when(reservationService.moveToAsset(eq(33L), eq(SUB_ASSET_ID), any()))
+        when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
                 .thenThrow(new RuntimeException("Concurrent conflict"));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
