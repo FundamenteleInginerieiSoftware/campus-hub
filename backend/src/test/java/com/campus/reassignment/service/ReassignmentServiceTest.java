@@ -25,6 +25,7 @@ import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.notification.api.NotificationService;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
+import com.campus.reassignment.domain.ReassignmentTrigger;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
@@ -384,6 +385,7 @@ class ReassignmentServiceTest {
         LocalDateTime now = LocalDateTime.of(2026, 11, 2, 10, 0);
         ReassignmentLog logEntry = new ReassignmentLog(
                 INCIDENT_ID,
+                ReassignmentTrigger.INCIDENT,
                 1L,
                 DAMAGED_ASSET_ID,
                 SUBSTITUTE_ASSET_ID,
@@ -410,6 +412,7 @@ class ReassignmentServiceTest {
         com.campus.reassignment.web.ReassignmentLogResponse item =
                 response.content().get(0);
         assertThat(item.incidentId()).isEqualTo(INCIDENT_ID);
+        assertThat(item.trigger()).isEqualTo(ReassignmentTrigger.INCIDENT);
         assertThat(item.reservationId()).isEqualTo(1L);
         assertThat(item.fromAssetId()).isEqualTo(DAMAGED_ASSET_ID);
         assertThat(item.toAssetId()).isEqualTo(SUBSTITUTE_ASSET_ID);

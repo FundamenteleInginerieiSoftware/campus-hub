@@ -32,6 +32,10 @@ public class ReassignmentLog {
     @Column(name = "incident_id")
     private Long incidentId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trigger", nullable = false, length = 32)
+    private ReassignmentTrigger trigger;
+
     @Column(name = "reservation_id", nullable = false)
     private Long reservationId;
 
@@ -53,6 +57,7 @@ public class ReassignmentLog {
 
     public ReassignmentLog(
             Long incidentId,
+            ReassignmentTrigger trigger,
             Long reservationId,
             Long fromAssetId,
             Long toAssetId,
@@ -60,6 +65,7 @@ public class ReassignmentLog {
             String strategy,
             LocalDateTime createdAt) {
         this.incidentId = incidentId;
+        this.trigger = Objects.requireNonNull(trigger, "trigger must not be null");
         this.reservationId = Objects.requireNonNull(reservationId, "reservationId must not be null");
         this.fromAssetId = Objects.requireNonNull(fromAssetId, "fromAssetId must not be null");
         this.toAssetId = toAssetId;

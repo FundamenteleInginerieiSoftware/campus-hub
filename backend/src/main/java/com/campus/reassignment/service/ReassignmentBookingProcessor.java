@@ -5,6 +5,7 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.incident.api.AssetDamagedEvent;
 import com.campus.reassignment.domain.ReassignmentLog;
 import com.campus.reassignment.domain.ReassignmentOutcome;
+import com.campus.reassignment.domain.ReassignmentTrigger;
 import com.campus.reassignment.repository.ReassignmentLogRepository;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
@@ -86,6 +87,7 @@ class ReassignmentBookingProcessor {
             AssetDamagedEvent event, ReservationSummary booking, AssetSummary damaged) {
         return processSingleBooking(
                 event.incidentId(),
+                ReassignmentTrigger.INCIDENT,
                 event.assetId(),
                 "Incident #" + event.incidentId(),
                 "Equipment failure, incident #" + event.incidentId(),
@@ -95,7 +97,8 @@ class ReassignmentBookingProcessor {
 
     /**
      * Processes a single reservation on a retired asset (#245), trying all candidates of each strategy
-     * in order before falling back to force-cancellation. Logs {@code incidentId = null}.
+     * in order before falling back to force-cancellation. Logs {@code incidentId = null} and
+     * {@code trigger = RETIRED}.
      *
      * @return {@link Optional} containing execution details if moved or force-cancelled, or empty if skipped.
      */
@@ -103,6 +106,7 @@ class ReassignmentBookingProcessor {
             AssetRetiredEvent event, ReservationSummary booking, AssetSummary retired) {
         return processSingleBooking(
                 null,
+                ReassignmentTrigger.RETIRED,
                 event.assetId(),
                 "Asset retired #" + event.assetId(),
                 "Equipment retired (asset #" + event.assetId() + ")",
@@ -112,6 +116,7 @@ class ReassignmentBookingProcessor {
 
     private Optional<ReassignmentExecutionResult> processSingleBooking(
             Long incidentId,
+            ReassignmentTrigger trigger,
             Long sourceAssetId,
             String moveReason,
             String cancelReason,
@@ -132,6 +137,7 @@ class ReassignmentBookingProcessor {
                         if (moved) {
                             ReassignmentLog logEntry = new ReassignmentLog(
                                     incidentId,
+                                    trigger,
                                     booking.id(),
                                     sourceAssetId,
                                     candidate.id(),
@@ -174,6 +180,7 @@ class ReassignmentBookingProcessor {
             if (cancelled) {
                 ReassignmentLog logEntry = new ReassignmentLog(
                         incidentId,
+                        trigger,
                         booking.id(),
                         sourceAssetId,
                         null,

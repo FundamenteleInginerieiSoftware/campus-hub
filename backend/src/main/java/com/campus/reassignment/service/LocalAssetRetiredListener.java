@@ -17,6 +17,8 @@ class LocalAssetRetiredListener {
 
     private final ReassignmentService reassignmentService;
 
+    // Intentionally has no app.messaging.sqs.enabled condition: only AssetDamagedEvent would go
+    // through SQS; administrative asset retirement always stays local to prevent a future double trigger.
     // AFTER_COMMIT guarantees we only observe the RETIRED asset once AssetService.retire commits
     // (never on a rolled-back retire). @Async runs reassignment in a background thread so a failure
     // is logged and never rolls back or fails the admin's retire request.
