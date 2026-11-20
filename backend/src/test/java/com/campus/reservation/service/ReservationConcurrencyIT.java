@@ -489,8 +489,11 @@ class ReservationConcurrencyIT {
             try {
                 startLatch.await();
                 reservationService.extendReservation(booking.getId(), new ExtendReservationRequest(extendedEnd));
-            } catch (InvalidStateTransitionException | ConflictException expected) {
+            } catch (InvalidStateTransitionException expected) {
                 // Expected if cancel committed first and transitioned the booking to CANCELLED.
+                if (!"INVALID_RESERVATION_STATUS_TRANSITION".equals(expected.getCode())) {
+                    unexpected.add(expected);
+                }
             } catch (Throwable t) {
                 unexpected.add(t);
             } finally {
@@ -520,6 +523,93 @@ class ReservationConcurrencyIT {
         assertThat(after.getStatus())
                 .as("booking must end up CANCELLED regardless of whether extend ran before or after cancel")
                 .isEqualTo(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName(
+            "Disable-cancel vs acceptTransfer race (#229, #329): reservation -> transfer lock order prevents deadlocks and @Version rollbacks")
+    void acceptTransferRunningDuringCancelUpcomingSenderDoesNotDeadlockOrRollBack() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation booking = reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now));
+        ReservationTransfer transfer =
+                reservationTransferRepository.save(new ReservationTransfer(booking.getId(), USER_1_ID, USER_2_ID, now));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger cancelledCount = new AtomicInteger(-1);
+        AtomicBoolean transferAccepted = new AtomicBoolean(false);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> cancelSenderTask = executor.submit(() -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                cancelledCount.set(reservationService.cancelUpcomingReservationsForUser(USER_1_ID, "Account disabled"));
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> acceptTask = executor.submit(() -> {
+            setupSecurityContext(USER_2_ID);
+            readyLatch.countDown();
+            try {
+                startLatch.await();
+                transferService.acceptTransfer(transfer.getId());
+                transferAccepted.set(true);
+            } catch (InvalidStateTransitionException expected) {
+                if (!"INVALID_TRANSFER_STATUS_TRANSITION".equals(expected.getCode())) {
+                    unexpected.add(expected);
+                }
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                    .as("both cancelSender and acceptTransfer threads must reach the start gate")
+                    .isTrue();
+            startLatch.countDown();
+            cancelSenderTask.get(10, TimeUnit.SECONDS);
+            acceptTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpected)
+                .as("reservation -> transfer lock order must prevent deadlocks and @Version rollbacks; "
+                        + "see TransferService.acceptTransfer and ReservationService.cancelUpcomingReservationsForUser")
+                .isEmpty();
+
+        Reservation after = reservationRepository.findById(booking.getId()).orElseThrow();
+        if (transferAccepted.get()) {
+            assertThat(cancelledCount.get())
+                    .as("if acceptTransfer committed first, sender has 0 remaining bookings to cancel")
+                    .isZero();
+            assertThat(after.getUserId())
+                    .as("accepted transfer moves ownership to recipient")
+                    .isEqualTo(USER_2_ID);
+            assertThat(after.getStatus())
+                    .as("accepted transfer keeps booking CONFIRMED")
+                    .isEqualTo(ReservationStatus.CONFIRMED);
+        } else {
+            assertThat(cancelledCount.get())
+                    .as("if cancelUpcoming committed first, sender's booking must be cancelled cleanly")
+                    .isEqualTo(1);
+            assertThat(after.getStatus())
+                    .as("booking must be CANCELLED when cancelUpcoming wins")
+                    .isEqualTo(ReservationStatus.CANCELLED);
+        }
     }
 
     /**
