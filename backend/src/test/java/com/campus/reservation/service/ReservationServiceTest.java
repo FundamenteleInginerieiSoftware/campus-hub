@@ -711,7 +711,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 14, 0), // Start is 14:00 (clock is 10:00)
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         ReservationResponse response = reservationService.cancelReservation(1L);
 
@@ -734,7 +734,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         ReservationResponse response = reservationService.cancelReservation(1L);
 
@@ -767,7 +767,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -804,7 +804,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
         doThrow(new RuntimeException("Notification service failure"))
                 .when(notificationService)
                 .notifyUser(anyLong(), any(), any());
@@ -824,7 +824,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 9, 0), // In past relative to clock 10:00
                 LocalDateTime.of(2026, 11, 2, 11, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.cancelReservation(1L))
                 .isInstanceOf(ConflictException.class)
@@ -842,7 +842,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         r.checkOut(LocalDateTime.of(2026, 11, 2, 14, 0)); // status is now CHECKED_OUT
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.cancelReservation(1L))
                 .isInstanceOf(ConflictException.class)
@@ -895,7 +895,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         // The database sets the id on insert; there's no database here, so set it by hand.
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.cancelReservation(1L))
                 .isInstanceOf(NotFoundException.class)
@@ -2442,7 +2442,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         ReflectionTestUtils.setField(r, "id", 1L);
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
         ReservationTransfer pendingTransfer =
                 new ReservationTransfer(1L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));

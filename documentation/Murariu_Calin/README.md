@@ -68,6 +68,7 @@ Each document is structured in two parts:
 | 49 | [`49-disable-concurrency-followups.md`](./49-disable-concurrency-followups.md) | Disable-Cancel Concurrency Follow-ups (#229, #310, #322) | `FOR UPDATE` in `cancelUpcomingReservationsForUser`, `findByIdForUpdate` in `acceptTransfer`, `pg_stat_activity` polling in `ReservationConcurrencyIT` |
 | 50 | [`50-user-disabled-event-listener.md`](./50-user-disabled-event-listener.md) | UserDisabledEvent Listener in Reservation Module (#229) | `UserDisabledReservationListener` (`AFTER_COMMIT` + `REQUIRES_NEW` via `TransactionTemplate`, non-`@Async`), unit + PostgreSQL IT, doc 27 contract sync |
 | 51 | [`51-remove-reservation-api-default-overloads.md`](./51-remove-reservation-api-default-overloads.md) | Remove Self-Invoking Default Overloads on ReservationApi (#327 Follow-up) | Removed interface `default` delegates on `ReservationApi.moveToAsset`/`forceCancel` that bypassed Spring `@Transactional`, added `CyclicBarrier` race IT, synced module docs |
+| 52 | [`52-review-followups-lock-archunit-docs.md`](./52-review-followups-lock-archunit-docs.md) | Review Follow-ups & PIT Hardening: cancelReservation Lock, Deterministic Transfer IT, ArchUnit Rule 15 & Docs | `loadOwnedOrAdminForUpdate` in `cancelReservation`, `pg_stat_activity` accept/reject race ITs, ArchUnit no-default-in-api rule, `TransferServiceTest` lock-order PIT assertions, synced docs |
 
 
 

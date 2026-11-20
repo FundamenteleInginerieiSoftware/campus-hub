@@ -395,7 +395,9 @@ public class ReservationService implements ReservationApi {
      */
     @Transactional
     public ReservationResponse cancelReservation(Long id) {
-        Reservation r = ReservationServiceSupport.loadOwnedOrAdmin(reservationRepository, currentUser, id);
+        // Lock the reservation row FOR UPDATE so a concurrent rejectTransfer/cancelTransfer waits instead
+        // of causing a STALE_VERSION error on the student's cancel (#329 follow-up).
+        Reservation r = ReservationServiceSupport.loadOwnedOrAdminForUpdate(reservationRepository, currentUser, id);
         LocalDateTime now = now();
 
         // Check status before timing so non-CONFIRMED bookings get the status error rather than a timing error.
