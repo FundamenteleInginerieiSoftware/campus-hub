@@ -174,9 +174,9 @@ class ReservationServiceRulesTest {
         when(reservationRepository.findById(777L)).thenReturn(Optional.empty());
         when(reservationRepository.findByIdForUpdate(777L)).thenReturn(Optional.empty());
 
-        assertThat(reservationService.moveToAsset(777L, OTHER_ASSET_ID, "reason"))
+        assertThat(reservationService.moveToAsset(777L, null, OTHER_ASSET_ID, "reason"))
                 .isFalse();
-        assertThat(reservationService.forceCancel(777L, "reason")).isFalse();
+        assertThat(reservationService.forceCancel(777L, null, "reason")).isFalse();
         assertThat(reservationService.markNoShow(777L)).isFalse();
         assertThat(reservationService.markOverdue(777L)).isFalse();
     }
@@ -192,7 +192,7 @@ class ReservationServiceRulesTest {
 
         confirmed.markNoShow();
         assertThat(reservationService.markNoShow(1L)).isFalse();
-        assertThat(reservationService.forceCancel(1L, "reason")).isFalse();
+        assertThat(reservationService.forceCancel(1L, null, "reason")).isFalse();
     }
 
     @Test
@@ -201,7 +201,7 @@ class ReservationServiceRulesTest {
         when(reservationRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(confirmed));
         when(catalogApi.isBookable(OTHER_ASSET_ID)).thenReturn(false);
 
-        assertThatThrownBy(() -> reservationService.moveToAsset(2L, OTHER_ASSET_ID, "reason"))
+        assertThatThrownBy(() -> reservationService.moveToAsset(2L, null, OTHER_ASSET_ID, "reason"))
                 .isInstanceOf(SubstituteNoLongerFreeException.class);
         verify(catalogApi).lockForBooking(OTHER_ASSET_ID);
     }
@@ -214,7 +214,7 @@ class ReservationServiceRulesTest {
         when(reservationRepository.existsOverlap(OTHER_ASSET_ID, confirmed.getStartTime(), confirmed.getEndTime(), 3L))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> reservationService.moveToAsset(3L, OTHER_ASSET_ID, "reason"))
+        assertThatThrownBy(() -> reservationService.moveToAsset(3L, null, OTHER_ASSET_ID, "reason"))
                 .isInstanceOf(SubstituteNoLongerFreeException.class);
     }
 

@@ -23,6 +23,12 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -344,6 +350,61 @@ class AssetRetiredReassignmentIT {
                 .toList();
         assertThat(logs)
                 .as("concurrent handlers targeting the same asset must produce exactly one reassignment_log row (#319)")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName(
+            "Concurrent handlers race (#319): two handle(AssetRetiredEvent) calls behind a CyclicBarrier produce exactly one reassignment_log row")
+    void twoConcurrentHandlersBehindBarrierMoveBookingOnlyOnce() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime createdAt = now.minusHours(1);
+        LocalDateTime start = now.plusDays(1).withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation saved =
+                reservationRepository.save(new Reservation(studentId, retiredAssetId, start, end, createdAt));
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        List<Throwable> errors = new CopyOnWriteArrayList<>();
+
+        Runnable handlerTask = () -> {
+            try {
+                barrier.await(5, TimeUnit.SECONDS);
+                reassignmentService.handle(new AssetRetiredEvent(retiredAssetId, now, adminId));
+            } catch (Throwable t) {
+                errors.add(t);
+            }
+        };
+
+        try {
+            Future<?> f1 = executor.submit(handlerTask);
+            Future<?> f2 = executor.submit(handlerTask);
+            f1.get(10, TimeUnit.SECONDS);
+            f2.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(errors)
+                .as("neither concurrent reassignment handler should throw an unexpected exception; see #319")
+                .isEmpty();
+
+        Reservation afterRace = reservationRepository.findById(saved.getId()).orElseThrow();
+        assertThat(afterRace.getStatus())
+                .as("booking must remain CONFIRMED after concurrent reassignment race")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(afterRace.getAssetId())
+                .as("booking must be moved to substituteAssetId")
+                .isEqualTo(substituteAssetId);
+
+        List<ReassignmentLog> logs = reassignmentLogRepository.findAll().stream()
+                .filter(l -> l.getReservationId().equals(saved.getId()))
+                .toList();
+        assertThat(logs)
+                .as("two racing handlers behind a CyclicBarrier must persist exactly one reassignment_log row; "
+                        + "see ReservationService.moveToAsset / forceCancel (#319)")
                 .hasSize(1);
     }
 }

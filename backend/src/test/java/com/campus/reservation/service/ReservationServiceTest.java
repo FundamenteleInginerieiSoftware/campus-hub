@@ -1088,7 +1088,7 @@ class ReservationServiceTest {
         when(reservationRepository.existsOverlap(eq(newAssetId), any(), any(), anyLong()))
                 .thenReturn(false);
 
-        boolean moved = reservationService.moveToAsset(1L, newAssetId, "Damaged in lab");
+        boolean moved = reservationService.moveToAsset(1L, null, newAssetId, "Damaged in lab");
 
         assertThat(moved).isTrue();
         assertThat(r.getAssetId()).isEqualTo(newAssetId);
@@ -1112,7 +1112,7 @@ class ReservationServiceTest {
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
         when(catalogApi.isBookable(newAssetId)).thenReturn(false);
 
-        assertThatThrownBy(() -> reservationService.moveToAsset(1L, newAssetId, "Damaged"))
+        assertThatThrownBy(() -> reservationService.moveToAsset(1L, null, newAssetId, "Damaged"))
                 .isInstanceOf(SubstituteNoLongerFreeException.class);
     }
 
@@ -1128,7 +1128,7 @@ class ReservationServiceTest {
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean moved = reservationService.moveToAsset(1L, 20L, "Damaged");
+        boolean moved = reservationService.moveToAsset(1L, null, 20L, "Damaged");
 
         assertThat(moved).isFalse();
         verify(catalogApi, never()).lockForBooking(anyLong());
@@ -1172,7 +1172,7 @@ class ReservationServiceTest {
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean cancelled = reservationService.forceCancel(1L, "Damaged");
+        boolean cancelled = reservationService.forceCancel(1L, null, "Damaged");
 
         assertThat(cancelled).isFalse();
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
@@ -1261,7 +1261,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean cancelled = reservationService.forceCancel(1L, "Damaged beyond repair");
+        boolean cancelled = reservationService.forceCancel(1L, null, "Damaged beyond repair");
 
         assertThat(cancelled).isTrue();
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.FORCE_CANCELLED);
@@ -2954,7 +2954,7 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean cancelled = reservationService.forceCancel(100L, "Asset broken");
+        boolean cancelled = reservationService.forceCancel(100L, null, "Asset broken");
 
         assertThat(cancelled)
                 .as("force cancel: method must return true on success; see ReservationService.forceCancel")
@@ -3018,7 +3018,7 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean moved = reservationService.moveToAsset(100L, 200L, "Reassigned");
+        boolean moved = reservationService.moveToAsset(100L, null, 200L, "Reassigned");
 
         assertThat(moved)
                 .as("move to asset: method must return true on success; see ReservationService.moveToAsset")
@@ -3048,7 +3048,7 @@ class ReservationServiceTest {
                         eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
 
-        boolean moved = reservationService.moveToAsset(100L, 200L, "Reassigned");
+        boolean moved = reservationService.moveToAsset(100L, null, 200L, "Reassigned");
 
         assertThat(moved)
                 .as(
@@ -3077,7 +3077,7 @@ class ReservationServiceTest {
                         eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> reservationService.moveToAsset(100L, 200L, "Reassigned"))
+        assertThatThrownBy(() -> reservationService.moveToAsset(100L, null, 200L, "Reassigned"))
                 .as(
                         "active holds: another student's hold on substitute must abort move; see ReservationService.moveToAsset")
                 .isInstanceOf(SubstituteNoLongerFreeException.class);
