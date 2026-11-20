@@ -3,6 +3,7 @@ import RequireAdmin from './auth/RequireAdmin.tsx'
 import RequireAuth from './auth/RequireAuth.tsx'
 import AppLayout from './layout/AppLayout.tsx'
 import AdminInventoryPage from './pages/AdminInventoryPage.tsx'
+import AdminUsersPage from './pages/AdminUsersPage.tsx'
 import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
 import CalendarSyncPage from './pages/CalendarSyncPage.tsx'
 import CatalogPage from './pages/CatalogPage.tsx'
@@ -12,14 +13,14 @@ import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
 import PickupPassPage from './pages/PickupPassPage.tsx'
-import PlaceholderPage from './pages/PlaceholderPage.tsx'
 import ProjectDetailsPage from './pages/ProjectDetailsPage.tsx'
 import ProjectsPage from './pages/ProjectsPage.tsx'
+import ReassignmentLogPage from './pages/ReassignmentLogPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
 import ReservationsDeskPage from './pages/ReservationsDeskPage.tsx'
 import AdminAuditLogPage from './pages/AdminAuditLogPage.tsx'
 
-// All pages of the app. Each owner replaces their <PlaceholderPage> with the real page component.
+// All pages of the app.
 // Pages under <AppLayout> get the side menu and need a login; pages under "admin" also need ADMIN.
 export default function App() {
   return (
@@ -51,16 +52,8 @@ export default function App() {
           <Route index element={<Navigate to="reservations" replace />} />
           <Route path="reservations" element={<ReservationsDeskPage />} />
           <Route path="incidents" element={<IncidentQueuePage />} />
-          <Route
-            path="reassignments"
-            element={
-              <PlaceholderPage
-                title="Reassignment log"
-                description="Bookings moved automatically after an incident."
-                owner="Stefania"
-              />
-            }
-          />
+          <Route path="reassignments" element={<ReassignmentLogPage />} />
+          <Route path="users" element={<AdminUsersPage />} />
           <Route path="inventory" element={<AdminInventoryPage />} />
           <Route path="audit-logs" element={<AdminAuditLogPage />} />
           <Route path="audit-log" element={<Navigate to="/admin/audit-logs" replace />} />

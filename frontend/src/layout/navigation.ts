@@ -9,6 +9,7 @@ import {
   IconLayoutGrid,
   IconQrcode,
   type Icon,
+  IconUsers,
 } from '@tabler/icons-react'
 import type { Role } from '../api/auth.ts'
 
@@ -43,6 +44,7 @@ const ADMIN_MENU: NavGroup[] = [
       { label: 'Incident queue', path: '/admin/incidents', icon: IconAlertTriangle },
       { label: 'Reassignment log', path: '/admin/reassignments', icon: IconArrowsExchange },
       { label: 'Audit log', path: '/admin/audit-logs', icon: IconHistory },
+      { label: 'Users', path: '/admin/users', icon: IconUsers },
     ],
   },
   {
