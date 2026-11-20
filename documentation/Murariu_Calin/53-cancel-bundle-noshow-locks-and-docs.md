@@ -1,4 +1,4 @@
-# 53 — Review Follow-ups (#336): cancelBundle & markNoShow Row Locks, Deterministic cancelReservation Race IT & Personal Docs Sync
+# 53 — Review Follow-ups (#336, #338): cancelBundle & markNoShow Row Locks, Deterministic cancelReservation Race IT & Personal Docs Sync
 
 ## Part 1: In simple terms
 
