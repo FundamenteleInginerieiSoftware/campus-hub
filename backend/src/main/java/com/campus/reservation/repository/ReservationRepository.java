@@ -153,6 +153,12 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
 
     List<Reservation> findByBundleIdOrderByAssetIdAsc(UUID bundleId);
 
+    // Acquires row locks in ascending id order (same order as findUpcomingConfirmedByUserForUpdate)
+    // so concurrent cancelBundle and cancelUpcomingReservationsForUser cannot deadlock or trip STALE_VERSION (#336).
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Reservation r WHERE r.bundleId = :bundleId ORDER BY r.id ASC")
+    List<Reservation> findByBundleIdForUpdate(@Param("bundleId") UUID bundleId);
+
     @Query("""
         select r from Reservation r
         where r.userId = :userId
