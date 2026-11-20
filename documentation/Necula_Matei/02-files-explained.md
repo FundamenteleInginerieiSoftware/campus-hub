@@ -1,6 +1,6 @@
 # What each file does (Necula Matei)
 
-Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) the pickup pass backend (`51-pickup-pass-backend.md`), the pickup pass pages (`52-pickup-pass-pages.md`) the calendar feed security rule (`53-calendar-feed-security-rule.md`) and Terraform part 3: server, CloudFront, e-mail sender (`54-terraform-deploy.md`) and the Swagger server URL and `HEAD` fix (`55-swagger-server-head-fix.md`) and the RDS auto-start alert (`56-rds-auto-start-alert.md`), explained twice: first in simple terms, then technically.
+Every file in the repository after #12, plus the backend from PR #13, the users table (`03-user-entity.md`), the login foundations (`04-password-jwt-roles.md`, `05-security-error-json.md`, `06-async-scheduling.md`, `07-user-api.md`, `08-auth-request-records.md`), the prototype mockup (`10-prototype-mockup.md`) the user lookup (`11-user-service.md`) the error-code fix (`12-error-codes-fix.md`) register/login (`13-auth-register-login.md`) the dev accounts (`14-user-seeder.md`), the security test probe paths (`16-security-probe-paths.md`), "who am I?" (`17-users-me.md`) the first admin on AWS (`18-prod-admin-bootstrap.md`) the Docker image (`19-dockerfile.md`), the login fix for old tokens (`20-auth-ignores-old-token.md`), the firewall error format (`21-firewall-error-json.md`), the account check on every request (`22-token-account-check.md`), the S3/SES adapters (`23-s3-ses-adapters.md`), the whole-second `createdAt` fix (`24-user-created-at-seconds.md`), the security pass tests (`25-security-pass-tests.md`), the admin Reservations desk page (`26-reservations-desk-page.md`), mutation testing (`33-mutation-testing.md`), the tests for the gaps mutation testing found (`35-mutation-gaps-tests.md`), the Swagger check (`30-swagger-check.md`), the security chapter of the final report (`31-security-chapter.md`) the UML component and deployment diagrams (`32-component-deployment-diagrams.md`) the Projects feature design (`38-project-assistant-design.md`), the Projects engine (`39-project-engine.md`), the ten project guides (`40-project-content.md`), the Projects pages (`41-projects-pages.md`) and the Projects "Reserve all" endpoint and button (`42-project-reserve-all.md`), its confirmation banner (`43-project-bundle-banner.md`) Terraform part 1: state bucket, network and firewall (`44-terraform-network.md`), Terraform part 2: database, photo bucket, image registry, server role and secrets (`45-terraform-data.md`) the OS security updates in the Docker image (`46-docker-os-patches.md`) the end-of-task docs check (`50-docs-check.md`) the pickup pass backend (`51-pickup-pass-backend.md`), the pickup pass pages (`52-pickup-pass-pages.md`) the calendar feed security rule (`53-calendar-feed-security-rule.md`) and Terraform part 3: server, CloudFront, e-mail sender (`54-terraform-deploy.md`) and the Swagger server URL and `HEAD` fix (`55-swagger-server-head-fix.md`) and the RDS auto-start alert (`56-rds-auto-start-alert.md`), the fresh read in `findActiveRole` (`57-active-role-fresh-read.md`), the pickup pass QR and camera scan (`58-pickup-pass-qr.md`), the automatic deploy with GitHub OIDC (`59-deploy-workflow.md`), explained twice: first in simple terms, then technically.
 For the story of how and why it was set up, see `01-project-setup-v2.md`.
 
 ```
@@ -11,7 +11,7 @@ campus-hub/
 ├── .github/
 │   ├── CODEOWNERS  pull_request_template.md  copilot-instructions.md
 │   ├── ISSUE_TEMPLATE/  bug.md  task.md  user-story.md  config.yml
-│   └── workflows/ci.yml  docs-check.yml                  (docs-check: 50-docs-check.md)
+│   └── workflows/ci.yml  docs-check.yml  deploy.yml      (docs-check: 50-docs-check.md, deploy: 59-deploy-workflow.md)
 ├── docs/  decisions.md  api-contract.md  plan-w4-w6.md  whats-left.md
 │   ├── superpowers/specs/ + plans/                       (38-project-assistant-design.md)
 │   ├── adr/  001-local-first … 005-aws-account-free-plan        (AWS ADRs)
@@ -27,6 +27,7 @@ campus-hub/
 │   ├── rds.tf  storage.tf  iam.tf  ssm.tf                (45-terraform-data.md)
 │   ├── compute.tf  user-data.sh.tftpl  cdn.tf  ses.tf  terraform.tfvars.example   (54-terraform-deploy.md)
 │   ├── alerts.tf                                         (56-rds-auto-start-alert.md)
+│   ├── github-deploy.tf                                  (59-deploy-workflow.md)
 │   └── bootstrap/  main.tf  .terraform.lock.hcl          (44-terraform-network.md)
 └── backend/                                              (PR #13)
     ├── build.gradle  settings.gradle
@@ -95,6 +96,7 @@ campus-hub/
 | `ISSUE_TEMPLATE/` | Forms for new issues: bug, task, user story. |
 | `workflows/ci.yml` | The robot that builds and tests every pull request. It must be green before merging. |
 | `workflows/docs-check.yml` | A second, quick robot: when a pull request changes the app, it checks that the author also updated their personal notes and their lines in the project status (`50-docs-check.md`). |
+| `workflows/deploy.yml` | The robot that puts `main` on AWS after `ci` is green: builds the app's image, uploads it, tells the server to switch to it and waits until the app answers. Logs in to AWS without any stored key (`59-deploy-workflow.md`). |
 | `copilot-instructions.md` | Tells GitHub Copilot to read and follow `AGENTS.md`. |
 
 ### Backend: build (PR #13)
@@ -180,6 +182,11 @@ campus-hub/
 | `PickupPassPage.tsx` | The student's page: the 6-digit code, a countdown ring, and a new code by itself when it runs out. |
 | `ReservationsDeskParts.tsx` | The small window where the admin types the student's code, and the green check next to the name. |
 
+### Frontend: pickup pass QR (`58-pickup-pass-qr.md`)
+| File | What it does |
+|---|---|
+| `ScanPassPanel.tsx` | The camera view inside the Verify window: it reads the student's QR, ignores any other QR and tells the admin in plain words when the camera does not work. |
+
 ### Backend: pickup pass (`51-pickup-pass-backend.md`)
 | File | What it does |
 |---|---|
@@ -225,6 +232,12 @@ campus-hub/
 |---|---|
 | `infra/alerts.tf` | An alert mailing list (SNS topic) with one e-mail subscriber, and a rule that sends it the notice AWS gives when it restarts a stopped database by itself after 7 days. |
 | `infra/variables.tf`, `infra/terraform.tfvars.example` (changed) | New setting `alert_email`, the address that gets the alerts (set in the private `terraform.tfvars`). |
+
+### `infra/`: the automatic deploy (`59-deploy-workflow.md`)
+| File | What it does |
+|---|---|
+| `infra/github-deploy.tf` | Lets GitHub's deploy robot log in to AWS without a stored key, only for runs on `main` of our repository, and only to upload our image and run the deploy command on our server. |
+| `infra/outputs.tf` (changed) | Prints the deploy role's address (`github_deploy_role_arn`), which goes into the GitHub variable `AWS_DEPLOY_ROLE_ARN`. |
 
 ### Prototype mockup (`10-prototype-mockup.md`)
 | File | What it does |
@@ -369,7 +382,7 @@ campus-hub/
 | `AdminBootstrap` | `@Component @Profile("prod")` `CommandLineRunner`, values from `app.admin.email` / `app.admin.password` (`@Value`, constructor). Blank → log + skip; `existsByEmailIgnoreCase` → skip (never resets a password or promotes a student); password < 8 chars or > 72 UTF-8 bytes → `IllegalStateException` (app doesn't start); else `save` one `ADMIN` with a BCrypt hash, `created_at` from the `Clock`. Logs the email, never the password. Details in `18-prod-admin-bootstrap.md`. |
 | `Role` | In `user.api`, not `domain`: the shared `UserSummary` exposes it, and other modules may import only `api`. Saved as text (`@Enumerated(STRING)`); SecurityConfig adds `ROLE_` for `hasRole("ADMIN")`. |
 | `User` | Entity: `@Getter`, protected no-args constructor for Hibernate, one public constructor that lowercases + trims the email and takes `createdAt` from the caller (`LocalDateTime.now(clock)`) and cuts it to whole seconds (#134, `24-user-created-at-seconds.md`). No setters. |
-| `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`). |
+| `UserRepository` | `findByEmailIgnoreCase` (login), `existsByEmailIgnoreCase` (register → `409 EMAIL_TAKEN`).. `findActiveRoleById`: scalar JPQL query `select u.role ... where id and enabled = true`, used by `findActiveRole` so it never returns a cached User (`57-active-role-fresh-read.md`). |
 | `RegisterRequest` / `LoginRequest` | Records with Jakarta validation (contract §3): register = `@Email` ≤ 255, password 8–72, name ≤ 100, no `role` field (always `STUDENT`); login = only `@NotBlank` (same 401 for every wrong input). |
 | `UserResponse` / `LoginResponse` | `UserResponse(id, email, fullName, role)` + `public static from(User)`, called inside the service transaction. `LoginResponse(accessToken, expiresIn, user)`, `expiresIn` in seconds. |
 | `UserApi` / `UserSummary` | The agreed facade: `getById(id)` (throws `NotFoundException` `USER_NOT_FOUND`), `exists(id)`, `findActiveRole(id)` (role if the user exists and is enabled, used by `SecurityConfig`). The only user types other modules may import. Interface only for now: the implementation waits for Liviu's `NotFoundException`. |
@@ -383,6 +396,11 @@ campus-hub/
 | `api/pickupPass.ts` | `fetchPickupPass`, `verifyPickupPass` (`apiFetch`), `parseQrText` (regex `^campus-pickup:1:(\d+):(\d{6})$`). |
 | `PickupPassPage.tsx` | Fetch per `reloadToken`; 1 s interval over a ref; refetch at 0 and on `visibilitychange`; cleanup of timer, listener and late answers. |
 | `ReservationsDeskParts.tsx` | `VerifyStudentDialog` (`Modal` + `PinInput`, whitespace stripped, `PICKUP_CODE_INVALID` text) and `VerifiedMark`. The desk page keeps `verified: Record<number, VerifiedStudent>`. |
+
+### Frontend: pickup pass QR (`58-pickup-pass-qr.md`)
+| File | What it does |
+|---|---|
+| `ScanPassPanel.tsx` | `Scanner` (`@yudiel/react-qr-scanner`, `formats=['qr_code']`, `paused` while verifying), `parseQrText` + same-student check, `IScannerError.kind` to text, and `prepareZXingModule` with `locateFile` pointing at the bundled `zxing_reader.wasm` (`?url`). |
 
 ### Backend: pickup pass (`51-pickup-pass-backend.md`)
 | File | What it does |
@@ -487,7 +505,8 @@ campus-hub/
 | `AuthRequestsTest` | Plain unit test (no Spring, `Validation.buildDefaultValidatorFactory()`): the record rules and the `UserResponse` mapper. |
 | `AuthControllerTest` | `@WebMvcTest(AuthController.class)` starts only the web layer (fast, no database). It doesn't load our `@Configuration` classes, so `@Import(SecurityConfig.class)` is needed; without it Spring's default security would answer 401. Teammates copy this pair of annotations for their controller tests. `AuthService` is a `@MockitoBean`; tests: ping, register 201 (no `passwordHash` in the JSON), bad email + short password → 400 `VALIDATION_FAILED` with 2 field errors, login 200, wrong password → 401 `INVALID_CREDENTIALS`. |
 | `UserControllerTest` | `@WebMvcTest(UserController.class)` + `@Import(SecurityConfig.class)`, `UserService` as `@MockitoBean`: with `jwt()` (spring-security-test puts the token's user in directly, so the converter and `UserApi` are skipped) `GET /api/v1/users/me` → 200 and the body equals the mocked `UserResponse`; without a token → 401 `UNAUTHORIZED` and the service is never called. Before it, only `*IT` tests reached the controller, and PIT leaves those out (`35-mutation-gaps-tests.md`). |
-| `UserServiceTest` | Plain Mockito (`@ExtendWith(MockitoExtension.class)`, no Spring): known id → `UserSummary` without the hash; unknown id → `NotFoundException` with code `USER_NOT_FOUND`; `exists` follows the repository; `me()` with a mocked `CurrentUser` (found / `USER_NOT_FOUND`); `findActiveRole` (enabled → role, disabled or missing → empty). The id is set with `ReflectionTestUtils` because only the database sets it. |
+| `UserServiceTest` | Plain Mockito (`@ExtendWith(MockitoExtension.class)`, no Spring): known id → `UserSummary` without the hash; unknown id → `NotFoundException` with code `USER_NOT_FOUND`; `exists` follows the repository; `me()` with a mocked `CurrentUser` (found / `USER_NOT_FOUND`); `findActiveRole` (the mocked `findActiveRoleById`: role, or empty for disabled/missing; `57-active-role-fresh-read.md`). The id is set with `ReflectionTestUtils` because only the database sets it. |
+| `FindActiveRoleFreshReadIT` | `@SpringBootTest` on PostgreSQL: loads a user in a transaction, disables it in a `REQUIRES_NEW` transaction that commits, then `findActiveRole` in the first one must be empty. Fails with the old `findById` version, passes with the scalar query (`57-active-role-fresh-read.md`). Deletes its user at the end. |
 | `AuthServiceTest` | Mockito, only `UserRepository` mocked; the real BCrypt encoder and a real `NimbusJwtEncoder` with a test key. The token is decoded with a `JwtTimestampValidator` on the fixed clock, so claims and expiry are checked exactly. 7 tests: register OK / taken / race, login OK / wrong password / unknown email / disabled. |
 | `AuthFlowIT` | `@SpringBootTest` + MockMvc + `@Transactional` (rolled back): register → login → token gets 404 on an unknown `/api/v1` path (past security) and 403 on `/api/v1/admin/**`; a second register with other capitals → 409 `EMAIL_TAKEN`; `GET /api/v1/users/me` with the token → 200 (own email, `STUDENT`, no `passwordHash`), without → 401 `UNAUTHORIZED`; login while an expired token is still sent → 200. |
 | `UserSeederTest` | Mockito: `count() = 0` → `saveAll` captured (`ArgumentCaptor`), emails + roles in order, all hashes match `password`; `count() = 3` → `saveAll` never called. |

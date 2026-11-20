@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,7 @@ import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
@@ -46,9 +49,11 @@ class ReservationHoldServiceTest {
 
     private static final Long USER_ID = 42L;
     private static final Long ASSET_ID = 100L;
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 2, 10, 0); // Monday
-    private static final LocalDateTime START = LocalDateTime.of(2026, 11, 2, 14, 0);
-    private static final LocalDateTime END = LocalDateTime.of(2026, 11, 2, 16, 0);
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    private static final LocalDateTime NOW = LocalDateTime.now(FIXED_CLOCK);
+    private static final LocalDateTime START = NOW.plusHours(4);
+    private static final LocalDateTime END = NOW.plusHours(6);
 
     @Mock
     private ReservationRepository reservationRepository;
@@ -76,7 +81,7 @@ class ReservationHoldServiceTest {
 
     @BeforeEach
     void setUp() {
-        clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+        clock = FIXED_CLOCK;
         holdService = new HoldService(
                 reservationHoldRepository,
                 reservationRepository,
@@ -86,6 +91,7 @@ class ReservationHoldServiceTest {
                 notificationService,
                 userApi,
                 clock);
+        lenient().when(userApi.findActiveRole(anyLong())).thenReturn(Optional.of(Role.STUDENT));
     }
 
     @Test
@@ -375,8 +381,8 @@ class ReservationHoldServiceTest {
     @DisplayName("createHold: slot validation - rejects when slot is outside opening hours")
     void createHold_rejectsWhenOutsideOpeningHours() {
         // Outside opening hours (e.g. 20:30)
-        LocalDateTime lateStart = LocalDateTime.of(2026, 11, 2, 20, 30);
-        LocalDateTime lateEnd = LocalDateTime.of(2026, 11, 2, 21, 30);
+        LocalDateTime lateStart = NOW.withHour(20).withMinute(30);
+        LocalDateTime lateEnd = lateStart.plusHours(1);
         assertThatThrownBy(() -> holdService.createHold(new CreateHoldRequest(ASSET_ID, lateStart, lateEnd)))
                 .as(
                         "operating hours: hold outside 08:00-20:00 must throw BusinessRuleException; see HoldService.createHold")
@@ -534,6 +540,49 @@ class ReservationHoldServiceTest {
     }
 
     @Test
+    @DisplayName("confirmHold: throws 404 HOLD_NOT_FOUND when hold does not exist")
+    void confirmHold_notFound_throws404() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> holdService.confirmHold(999L))
+                .as("existence: confirming a non-existent hold must throw HOLD_NOT_FOUND; see HoldService.confirmHold")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "HOLD_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("confirmHold: admin confirming another admin's hold skips student quota check")
+    void confirmHold_adminConfirmingAnotherAdminsHoldSkipsQuotaCheck() {
+        Long otherAdminId = 77L;
+        ReservationHold hold = new ReservationHold(ASSET_ID, otherAdminId, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(otherAdminId)).thenReturn(Optional.of(Role.ADMIN));
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 56L);
+            return r;
+        });
+
+        ReservationResponse response = holdService.confirmHold(1L);
+
+        assertThat(response.id())
+                .as(
+                        "admin-owned hold confirmed by another admin must bypass student quota; see HoldService.confirmHold")
+                .isEqualTo(56L);
+        // After #310, HoldService acquires lockUserQuota(ownerId) before findActiveRole(ownerId)
+        // to close the disable race, then skips the student active-booking count for ADMIN owners.
+        verify(reservationRepository).lockUserQuota(otherAdminId);
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(any(), any());
+    }
+
+    @Test
     @DisplayName("releaseHold: admin can release another user's hold")
     void releaseHold_byAdmin_success() {
         ReservationHold hold = new ReservationHold(ASSET_ID, 999L, START, END, NOW.plusMinutes(1), NOW);
@@ -605,5 +654,60 @@ class ReservationHoldServiceTest {
                         "hold cooldown: student cannot repeatedly hold and release overlapping slots; see HoldService.createHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("You recently held an overlapping slot on this equipment");
+    }
+
+    @Test
+    @DisplayName("createHold: rejects disabled student after acquiring quota lock (#229)")
+    void createHold_rejectsDisabledUserAfterLockingQuota() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(START), eq(END), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationHoldRepository.existsRecentHoldOverlap(eq(USER_ID), eq(ASSET_ID), any(), any(), any()))
+                .thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        CreateHoldRequest req = new CreateHoldRequest(ASSET_ID, START, END);
+
+        assertThatThrownBy(() -> holdService.createHold(req))
+                .as("disabled user after lockUserQuota must be rejected with 403 USER_DISABLED; "
+                        + "see HoldService.createHold")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        var order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationHoldRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("confirmHold: rejects disabled hold owner after acquiring quota lock (#229)")
+    void confirmHold_rejectsDisabledHoldOwnerAfterLockingQuota() {
+        ReservationHold hold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 77L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationHoldRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(
+                        eq(ASSET_ID), eq(START), eq(END), any(), eq(77L), eq(USER_ID)))
+                .thenReturn(false);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> holdService.confirmHold(77L))
+                .as("disabled hold owner after lockUserQuota must be rejected with 403 USER_DISABLED; "
+                        + "see HoldService.confirmHold")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        var order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationRepository, never()).save(any());
     }
 }

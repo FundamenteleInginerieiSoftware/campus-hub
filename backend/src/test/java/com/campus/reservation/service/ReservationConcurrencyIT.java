@@ -3,16 +3,22 @@ package com.campus.reservation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationHold;
+import com.campus.reservation.domain.ReservationTransfer;
+import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.reservation.repository.ReservationTransferRepository;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ExtendReservationRequest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -36,6 +42,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Concurrency integration test proving that pessimistic row locking (CatalogApi.lockForBooking)
@@ -56,10 +63,28 @@ class ReservationConcurrencyIT {
     private ReservationService reservationService;
 
     @Autowired
+    private HoldService holdService;
+
+    @Autowired
+    private TransferService transferService;
+
+    @Autowired
     private ReservationRepository reservationRepository;
 
     @Autowired
+    private ReservationHoldRepository reservationHoldRepository;
+
+    @Autowired
+    private ReservationTransferRepository reservationTransferRepository;
+
+    @Autowired
+    private Clock clock;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @TestConfiguration
     static class ConcurrencyTestConfig {
@@ -103,6 +128,8 @@ class ReservationConcurrencyIT {
 
     @AfterEach
     void tearDown() {
+        reservationTransferRepository.deleteAll();
+        reservationHoldRepository.deleteAll();
         reservationRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
         jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?, ?)", ASSET_ID, ASSET_ID_2, ASSET_ID_3);
@@ -344,6 +371,151 @@ class ReservationConcurrencyIT {
 
         Reservation finalRes = reservationRepository.findById(reservationId).orElseThrow();
         assertThat(finalRes.getStatus()).isEqualTo(ReservationStatus.RETURNED);
+    }
+
+    @Test
+    @DisplayName(
+            "Disabled-user booking race (#229): createReservation waiting on lockUserQuota is rejected with 403 USER_DISABLED")
+    void bookingBlockedOnQuotaLockIsRejectedWhenUserIsDisabled() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateReservationRequest request = new CreateReservationRequest(ASSET_ID, start, end);
+
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                USER_1_ID, () -> reservationService.createReservation(request), "ReservationService.createReservation");
+
+        assertThat(reservationRepository.countByUserIdAndStatusIn(USER_1_ID, ReservationStatus.ACTIVE_STATUSES))
+                .as("disabled student must end with 0 active reservations after createReservation race")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "Disabled-user booking race (#229, #310): bookBundle waiting on lockUserQuota is rejected with 403 USER_DISABLED")
+    void bundleBookingBlockedOnQuotaLockIsRejectedWhenUserIsDisabled() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                USER_1_ID,
+                () -> reservationService.bookBundle(USER_1_ID, List.of(ASSET_ID, ASSET_ID_2), start, end),
+                "ReservationService.bookBundle");
+
+        assertThat(reservationRepository.countByUserIdAndStatusIn(USER_1_ID, ReservationStatus.ACTIVE_STATUSES))
+                .as("disabled student must end with 0 active reservations after bookBundle race")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "Disabled-user booking race (#229, #310): confirmHold waiting on lockUserQuota is rejected with 403 USER_DISABLED")
+    void confirmHoldBlockedOnQuotaLockIsRejectedWhenUserIsDisabled() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        ReservationHold hold = reservationHoldRepository.save(
+                new ReservationHold(ASSET_ID, USER_1_ID, start, end, now.plusMinutes(5), now));
+
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                USER_1_ID, () -> holdService.confirmHold(hold.getId()), "HoldService.confirmHold");
+
+        assertThat(reservationRepository.countByUserIdAndStatusIn(USER_1_ID, ReservationStatus.ACTIVE_STATUSES))
+                .as("disabled student must end with 0 active reservations after confirmHold race")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "Disabled-user booking race (#229, #310): acceptTransfer waiting on lockUserQuota is rejected with 403 USER_DISABLED")
+    void acceptTransferBlockedOnQuotaLockIsRejectedWhenRecipientIsDisabled() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation senderReservation =
+                reservationRepository.save(new Reservation(USER_2_ID, ASSET_ID, start, end, now.minusHours(1)));
+        ReservationTransfer transfer = reservationTransferRepository.save(
+                new ReservationTransfer(senderReservation.getId(), USER_2_ID, USER_1_ID, now));
+
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                USER_1_ID, () -> transferService.acceptTransfer(transfer.getId()), "TransferService.acceptTransfer");
+
+        Reservation afterRace =
+                reservationRepository.findById(senderReservation.getId()).orElseThrow();
+        assertThat(afterRace.getUserId())
+                .as(
+                        "reservation must stay owned by the sender when recipient is disabled while waiting on lockUserQuota; "
+                                + "see TransferService.acceptTransfer")
+                .isEqualTo(USER_2_ID);
+    }
+
+    /**
+     * Thread 1 acquires lockUserQuota(targetUserId) FIRST, lets Thread 2 enter the booking path and
+     * block on lockUserQuota (so any accidental pre-lock User read would already have populated the
+     * Hibernate L1 cache), and ONLY THEN disables the user and commits.
+     */
+    private void assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+            Long targetUserId, Runnable action, String ownerPath) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch quotaLockHeld = new CountDownLatch(1);
+        CountDownLatch actionStarted = new CountDownLatch(1);
+        AtomicInteger disabledRejected = new AtomicInteger(0);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> disableAndCancel = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+            reservationRepository.lockUserQuota(targetUserId);
+            quotaLockHeld.countDown();
+            try {
+                actionStarted.await(5, TimeUnit.SECONDS);
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // Disable ONLY after Thread 2 is blocked on lockUserQuota, reproducing the L1 cache trap if
+            // the action loaded User before acquiring the lock.
+            jdbcTemplate.update("UPDATE users SET enabled = false WHERE id = ?", targetUserId);
+        }));
+
+        Future<?> concurrentAction = executor.submit(() -> {
+            setupSecurityContext(targetUserId);
+            try {
+                assertThat(quotaLockHeld.await(5, TimeUnit.SECONDS))
+                        .as("disable transaction acquired lockUserQuota first")
+                        .isTrue();
+                actionStarted.countDown();
+                action.run();
+            } catch (ForbiddenException ex) {
+                if ("USER_DISABLED".equals(ex.getCode())) {
+                    disabledRejected.incrementAndGet();
+                } else {
+                    unexpected.add(ex);
+                }
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            disableAndCancel.get(10, TimeUnit.SECONDS);
+            concurrentAction.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(unexpected)
+                .as("no unexpected error during disabled-user race; see %s", ownerPath)
+                .isEmpty();
+        assertThat(disabledRejected.get())
+                .as(
+                        "%s waiting on lockUserQuota while the user is disabled must get 403 USER_DISABLED; "
+                                + "see ReservationServiceSupport.requireActiveUserAfterLock",
+                        ownerPath)
+                .isEqualTo(1);
     }
 
     private void setupSecurityContext(Long userId) {

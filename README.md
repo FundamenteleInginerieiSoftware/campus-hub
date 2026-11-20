@@ -78,7 +78,7 @@ Reports after `build`: tests in `backend/build/reports/tests/test/index.html`, c
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (16 Nov 2026, week 7):** **M1 done: `v0.1.0` tagged on 11 Nov.** On `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the **Projects** feature (search, details, Reserve all), the backend of the **pickup pass** (rotating desk code), the Docker image, the S3/SES adapters and the **Terraform** for the AWS network, photo bucket, ECR and instance role (applied; EC2, CloudFront and RDS come with the W7 deploy). **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk, Projects pages. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (next: M2 `v0.2.0` by 6 Dec, everything also on AWS). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
+> **Status (19 Nov 2026, week 7):** **M1 done: `v0.1.0` tagged on 11 Nov.** On `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine**, ArchUnit rules, the **Projects** feature (search, details, Reserve all), the **pickup pass** (rotating desk code, student page + desk Verify dialog), the **calendar feed** (iCalendar), the Docker image, the S3/SES adapters and the **Terraform** for the AWS network, photo bucket, ECR and instance role (applied); the **first AWS deploy** (EC2 + CloudFront + RDS + SES) went live on 17 Nov and is paused between demos to save credits. **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations + booking calendar, My incidents + report form, admin inventory, incident queue, audit log and Reservations desk, Projects pages, Pickup pass, Calendar sync. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (next: M2 `v0.2.0` by 6 Dec, everything also on AWS). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
 
 ---
 
@@ -247,7 +247,7 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 16 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
+What is on `main` and what is still in review, per member. **As of 19 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
 
 ### Matei Necula: cloud, security & auth
 
@@ -272,7 +272,7 @@ What is on `main` and what is still in review, per member. **As of 16 Nov 2026**
 | `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
 | `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
 | First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136, #144, #218, #237, #251 |
+| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136, #144, #218, #237, #251, #301, #307 |
 | Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
 | No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
 | Old tokens ignored on the public `/api/v1/auth/**` endpoints | #126 |
@@ -297,9 +297,14 @@ What is on `main` and what is still in review, per member. **As of 16 Nov 2026**
 | End-of-task docs rule (AGENTS.md §4) + required `docs-check` CI job | #277, #279 |
 | Pickup pass backend: rotating 6-digit desk code, `/users/me/pickup-pass` + admin verify | #283 |
 | Public calendar feed path in `SecurityConfig` (for Calin's calendar feed) | #295 |
-| Personal docs 01-53 + README index of them | #14 + each PR above, #137 |
+| `AGENTS.md`: `cancelUpcomingReservationsForUser` in the `ReservationApi` contract | #282 |
+| Pickup pass pages: student pass page + desk Verify dialog on the Reservations desk | #284 |
+| **First AWS deploy**: EC2 t3.small + Elastic IP + CloudFront, RDS on, SES sender, admin credentials in SSM; app live on CloudFront (17 Nov), then paused to save credits | #304 |
+| Live-check fixes: relative Swagger server URL, `HEAD` on public pages | #308 |
+| E-mail alert when AWS restarts the stopped RDS after 7 days | #309 |
+| Personal docs 01-56 + README index of them | #14 + each PR above, #137 |
 
-**Next:** W7 deploy: EC2 + Elastic IP + CloudFront, RDS on, verified SES sender, admin credentials in SSM; W8 `deploy.yml`. Pickup pass pages (#284, waits for Stefania's review) and QR scan (after Stefania adds the QR libraries). Full list: `docs/whats-left.md` §4.
+**Next:** W8 `deploy.yml` with GitHub OIDC; resume AWS before the demo (RDS first, then EC2); pickup pass QR scan (PR 3) once Stefania's QR libraries (#303) merge, cut 30 Nov. Full list: `docs/whats-left.md` §4.
 
 ### Liviu Nedelcu: catalog & shared services
 
@@ -325,8 +330,11 @@ What is on `main` and what is still in review, per member. **As of 16 Nov 2026**
 | Audit log search `GET /api/v1/admin/audit-logs` + audit log page | #217, #221 |
 | Swagger error codes, `STALE_VERSION` test, PIT survivors in catalog/common/storage | #220 |
 | Catalog/common class + ER diagrams, report chapter | #222 |
+| Student project hardware kits in the dev seed (18 units, 8 models) for Projects | #275 |
+| Code read-through fixes (#268): version check on asset update, retired assets hidden from students, field-level audit diffs; shared `PageRequests` paging helper; admin inventory page split per tab, `PICKUP_PASS_VERIFIED` audit filter | #278, #287, #288 |
+| `AssetRetiredEvent` published when an asset is retired (for the retire flow, #245) | #280 |
 
-**Next:** retire flow with Calin (W7); coverage, final diagrams, demo part (W10–W12). Full list: `docs/whats-left.md` §5.
+**Next:** live in-app notifications (#290); retire flow with Calin (#245, Calin's #311 in review); coverage, final diagrams, demo part (W10–W12). Full list: `docs/whats-left.md` §5.
 
 ### Calin Murariu: reservations & reassignment
 
@@ -370,12 +378,17 @@ What is on `main` and what is still in review, per member. **As of 16 Nov 2026**
 | Frontend: quick-book modal on the catalog and asset details, report-incident button | #226 |
 | Extend + transfer in My reservations; hold countdown in the calendar view; tests for the remaining PIT survivors | #224, #225, #227 |
 | Time-zone offsets rejected; bundle/transfer/hold security fixes (#228); `ReservationApi.bookBundle` for Projects | #233, #234, #235 |
+| `Idempotency-Key` on `POST /reservations` and `/reservations/bundle`: a retry replays the first answer | #262 |
+| Cancel a user's upcoming bookings: `ReservationApi.cancelUpcomingReservationsForUser` + admin endpoint (#229) | #266 |
+| Code read-through fixes and refactors (#267): holds, locking, lifecycle; `isAssetFree` hold owner; unified OVERDUE queries, single hold sweep; `HoldService`, `TransferService`, slot validator; frontend `useSlotHold` + shared booking rules | #270, #292, #293, #294, #296 |
+| Same-model substitute suggestions on a slot conflict | #286 |
+| Calendar feed (#289): token settings + `IcsWriter`, `GET /api/v1/calendar/{token}.ics`, Calendar sync page; `ReservationApi.usedMinutesByAsset` for Stefania's equipment reliability | #297, #298, #299, #300 |
 
 | Parked (draft, after M1) | PRs |
 |---|---|
 | Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
 
-**Next:** no new features until the team agrees which off-plan ones stay; `AssetRetiredEvent` listener if the team picks it (W7); test lead from W10. Full list: `docs/whats-left.md` §6.
+**Next:** re-check of the active user after the quota lock (#310) and the retire-flow listener (#311), both in review; listener for Stefania's `UserDisabledEvent` (#302); test lead from W10. Full list: `docs/whats-left.md` §6.
 
 ### Stefania: incidents, users & frontend lead
 
@@ -398,8 +411,9 @@ What is on `main` and what is still in review, per member. **As of 16 Nov 2026**
 | Personal docs; `CurrentUser.isAdmin()` Javadoc fix | #198, #215 |
 | Frontend: My incidents page + Report a problem form with photo | #216 |
 | Frontend: admin incident queue (start repair, resolve, reject, photo view) | #223 |
+| Only HIGH/CRITICAL incidents take the asset out of use at once; max 3 open reports per student (#229) | #263 |
 
-**Next:** run the M1 flow with the team (W6); incident details page (W7); reassignment log page (W8). Full list: `docs/whats-left.md` §7.
+**Next:** admin users page (#305) and reassignment log page (#306), both due Fri 20 Nov; `UserDisabledEvent` (#302) and QR libraries (#303) in review; equipment reliability (#291). Full list: `docs/whats-left.md` §7.
 
 ### Everyone
 

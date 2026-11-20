@@ -4,7 +4,6 @@ import {
   IconBox,
   IconBulb,
   IconCalendarEvent,
-  IconCalendarShare,
   IconClipboardList,
   IconHistory,
   IconLayoutGrid,
@@ -30,7 +29,6 @@ const STUDENT_MENU: NavGroup[] = [
     title: 'Mine',
     items: [
       { label: 'My reservations', path: '/reservations', icon: IconCalendarEvent },
-      { label: 'Calendar sync', path: '/calendar-sync', icon: IconCalendarShare },
       { label: 'My incidents', path: '/incidents', icon: IconAlertTriangle },
       { label: 'Pickup pass', path: '/pickup-pass', icon: IconQrcode },
     ],
@@ -63,6 +61,11 @@ export function menuFor(role: Role): NavGroup[] {
 
 // Title shown in the top bar for the current address.
 export function titleFor(pathname: string): string {
+  // Calendar sync is opened from My reservations rather than the side menu (#314),
+  // but keeps its route and top-bar title.
+  if (pathname.startsWith('/calendar-sync')) {
+    return 'Calendar sync'
+  }
   for (const group of [...ADMIN_MENU, ...STUDENT_MENU]) {
     const item = group.items.find((entry) => pathname.startsWith(entry.path))
     if (item) {

@@ -154,10 +154,6 @@ public class TransferService {
                     "INVALID_TRANSFER_STATUS_TRANSITION", "Cannot accept transfer in status " + transfer.getStatus());
         }
 
-        if (userApi.findActiveRole(userId).isEmpty()) {
-            throw new NotFoundException("USER_NOT_FOUND", "Recipient user not found or inactive: " + userId);
-        }
-
         if (userApi.findActiveRole(transfer.getFromUserId()).isEmpty()) {
             throw new ConflictException("TRANSFER_NOT_ALLOWED", "Sender account is no longer active");
         }
@@ -175,13 +171,18 @@ public class TransferService {
             throw new ConflictException("TRANSFER_NOT_ALLOWED", "Reservation owner no longer matches transfer sender");
         }
 
+        // Bug fixed (#229, #310): do not look up the recipient before lockUserQuota so Hibernate never
+        // serves a stale L1-cached User after waiting on the lock, and always return 403 USER_DISABLED.
         if (!currentUser.isAdmin()) {
             reservationRepository.lockUserQuota(userId);
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
             if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
                     >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }
+        } else {
+            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
         }
 
         transfer.accept(now);

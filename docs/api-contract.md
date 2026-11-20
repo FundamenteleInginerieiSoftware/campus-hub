@@ -50,6 +50,7 @@ Checks that run **before** the rules above (the token checks only when a token i
 | Token `sub` missing or not a number | `401 UNAUTHORIZED` (#158; was a 500) |
 | Token valid, but the account is disabled or deleted | `401 UNAUTHORIZED` on the next request: the account is looked up on every request (`UserApi.findActiveRole`, #117) |
 | Role | read from the **database** on every request, not from the token's `roles` claim, so a role change counts at once (#117) |
+| Account disabled while a request is already running | the next request with the token gets `401 UNAUTHORIZED`. The request in flight can get `403 USER_DISABLED` from the booking paths that re-check the account (Calin's #310: bundle booking incl. Projects "Reserve all", confirm hold, accept transfer). `findActiveRole` reads the row fresh, so the re-check sees the change (#312) |
 
 - The API is **stateless**: no session, no cookies, every request carries `Authorization: Bearer <token>`. CSRF protection is off for that reason.
 - Frontend and API share one origin (Vite proxy in dev, CloudFront in prod), so **no CORS**.
@@ -186,7 +187,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 
 ### Reservations (Calin)
 
-`RESERVATION_NOT_FOUND` 404 · `HOLD_NOT_FOUND` 404 · `TRANSFER_NOT_FOUND` 404 · `BUNDLE_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `SLOT_HELD` 409 · `HOLD_EXPIRED` 409 · `ACTIVE_HOLD_LIMIT_REACHED` 409 · `HOLD_COOLDOWN_ACTIVE` 409 · `INVALID_HOLD_STATUS_TRANSITION` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409 · `CANNOT_TRANSFER_TO_SELF` 409 · `TRANSFER_ALREADY_PENDING` 409 · `TRANSFER_NOT_ALLOWED` 409 · `TRANSFER_LIMIT_REACHED` 409 · `INVALID_TRANSFER_STATUS_TRANSITION` 409 · `BUNDLE_TRANSFER_NOT_ALLOWED` 409 · `BUNDLE_EXTEND_NOT_ALLOWED` 409 · `MISSING_PARAMETER` 409 · `CONFLICTING_PARAMETERS` 409
+`USER_DISABLED` 403 · `RESERVATION_NOT_FOUND` 404 · `HOLD_NOT_FOUND` 404 · `TRANSFER_NOT_FOUND` 404 · `BUNDLE_NOT_FOUND` 404 · `RESERVATION_CONFLICT` 409 · `SLOT_HELD` 409 · `HOLD_EXPIRED` 409 · `ACTIVE_HOLD_LIMIT_REACHED` 409 · `HOLD_COOLDOWN_ACTIVE` 409 · `INVALID_HOLD_STATUS_TRANSITION` 409 · `ASSET_NOT_BOOKABLE` 409 · `RESERVATION_LIMIT_REACHED` 409 · `BOOKING_TOO_FAR_AHEAD` 409 · `BOOKING_IN_PAST` 409 · `INVALID_TIME_RANGE` 409 · `INVALID_DURATION` 409 · `OUTSIDE_OPENING_HOURS` 409 · `SLOT_NOT_ALIGNED` 409 · `CANCELLATION_NOT_ALLOWED` 409 · `CHECKOUT_WINDOW_CLOSED` 409 · `INVALID_RESERVATION_STATUS_TRANSITION` 409 · `CANNOT_TRANSFER_TO_SELF` 409 · `TRANSFER_ALREADY_PENDING` 409 · `TRANSFER_NOT_ALLOWED` 409 · `TRANSFER_LIMIT_REACHED` 409 · `INVALID_TRANSFER_STATUS_TRANSITION` 409 · `BUNDLE_TRANSFER_NOT_ALLOWED` 409 · `BUNDLE_EXTEND_NOT_ALLOWED` 409 · `MISSING_PARAMETER` 409 · `CONFLICTING_PARAMETERS` 409
 
 ### Incidents (Stefania)
 

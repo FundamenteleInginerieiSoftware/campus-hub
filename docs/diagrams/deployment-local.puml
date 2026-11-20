@@ -101,7 +101,8 @@ laptop -[hidden]right- github
 note bottom of runner
   .github/workflows/ci.yml: Java 25 (Temurin), Node 24.
   The JaCoCo report is uploaded as a build artifact.
-  No AWS access from CI yet (deploy.yml is planned, W8).
+  ci has no AWS access. deploy.yml (W8) runs after a green ci
+  on main and deploys with a GitHub OIDC role (deployment-aws).
 end note
 
 @enduml

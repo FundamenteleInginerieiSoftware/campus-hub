@@ -1,11 +1,14 @@
 package com.campus.reservation.service;
 
+import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationRepository;
+import com.campus.user.api.Role;
+import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -109,5 +112,14 @@ final class ReservationServiceSupport {
         if ((long) page * size > Integer.MAX_VALUE) {
             throw new InvalidParameterException("Page offset exceeds maximum supported value");
         }
+    }
+
+    // Bug fixed (#229): a booking/hold/transfer request that passed the JWT check right before an admin
+    // disabled the account can block on lockUserQuota(userId), wait for cancelUpcomingReservationsForUser
+    // to finish, and then insert a new CONFIRMED booking for the disabled user. Re-checking findActiveRole
+    // right after acquiring the per-user advisory lock closes that race window.
+    static Role requireActiveUserAfterLock(UserApi userApi, Long userId) {
+        return userApi.findActiveRole(userId)
+                .orElseThrow(() -> new ForbiddenException("USER_DISABLED", "Account is disabled or no longer active"));
     }
 }

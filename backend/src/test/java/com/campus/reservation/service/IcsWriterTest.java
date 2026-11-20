@@ -7,7 +7,11 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class IcsWriterTest {
 
@@ -30,6 +34,11 @@ class IcsWriterTest {
         assertThat(ics)
                 .as("empty calendar must declare Campus Hub PRODID; see IcsWriter.write")
                 .contains("PRODID:-//Campus Hub//Reservations//EN\r\n");
+        assertThat(ics)
+                .as("empty calendar must declare CALSCALE, METHOD, and X-WR-CALNAME; see IcsWriter.write")
+                .contains("CALSCALE:GREGORIAN\r\n")
+                .contains("METHOD:PUBLISH\r\n")
+                .contains("X-WR-CALNAME:Campus Hub\r\n");
         assertThat(ics)
                 .as("empty calendar must end with END:VCALENDAR CRLF; see IcsWriter.write")
                 .endsWith("END:VCALENDAR\r\n");
@@ -163,6 +172,20 @@ class IcsWriterTest {
     }
 
     @Test
+    void escapesCrLfBareCrAndTrailingCrWithoutDoubleNewlines() {
+        assertThat(IcsWriter.escape("a\r\nb"))
+                .as("CRLF must collapse to a single escaped \\n; see IcsWriter.escape")
+                .isEqualTo("a\\nb");
+        assertThat(IcsWriter.escape("a\rb"))
+                .as(
+                        "bare CR followed by another char must escape to \\n without dropping the next char; see IcsWriter.escape")
+                .isEqualTo("a\\nb");
+        assertThat(IcsWriter.escape("a\r"))
+                .as("trailing CR at end of string must escape to \\n without out-of-bounds; see IcsWriter.escape")
+                .isEqualTo("a\\n");
+    }
+
+    @Test
     void foldsLinesLongerThan75Bytes() {
         String original = "SUMMARY:" + "A".repeat(200);
 
@@ -222,5 +245,43 @@ class IcsWriterTest {
         assertThat(physicalLines)
                 .as("line within 75 bytes must stay a single unfolded line; see IcsWriter.fold")
                 .containsExactly(shortLine);
+    }
+
+    @Test
+    void foldEmptyLineReturnsSingleEmptyString() {
+        assertThat(IcsWriter.fold(""))
+                .as("empty line must fold to a single empty string; see IcsWriter.fold")
+                .containsExactly("");
+    }
+
+    static Stream<Arguments> utf8FoldBoundaryCases() {
+        return Stream.of(
+                Arguments.of("75 ASCII bytes (exact limit, no fold)", "A".repeat(75), 1),
+                Arguments.of("76 ASCII bytes (exceeds limit by 1, folds)", "A".repeat(76), 2),
+                Arguments.of("25 three-byte € chars = 75 bytes (no fold)", "€".repeat(25), 1),
+                Arguments.of("26 three-byte € chars = 78 bytes (folds)", "€".repeat(26), 2),
+                Arguments.of("18 four-byte emoji = 72 bytes (no fold)", "🔧".repeat(18), 1),
+                Arguments.of(
+                        "19 four-byte emoji = 76 bytes (folds without splitting surrogate pair)", "🔧".repeat(19), 2),
+                Arguments.of("75 x U+007F (1-byte upper boundary = 75B)", "\u007F".repeat(75), 1),
+                Arguments.of("38 x U+0080 (2-byte lower boundary = 76B)", "\u0080".repeat(38), 2),
+                Arguments.of("37 x U+07FF (2-byte upper boundary = 74B)", "\u07FF".repeat(37), 1),
+                Arguments.of("26 x U+0800 (3-byte lower boundary = 78B)", "\u0800".repeat(26), 2),
+                Arguments.of("25 x U+FFFF (3-byte upper boundary = 75B)", "\uFFFF".repeat(25), 1));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("utf8FoldBoundaryCases")
+    void foldRespects75ByteBoundaryAcrossUtf8Widths(String description, String input, int expectedLineCount) {
+        List<String> folded = IcsWriter.fold(input);
+
+        assertThat(folded)
+                .as(
+                        "UTF-8 fold boundary (%s) must produce %d physical line(s); see IcsWriter.fold",
+                        description, expectedLineCount)
+                .hasSize(expectedLineCount);
+        assertThat(String.join("\r\n", folded).replace("\r\n ", ""))
+                .as("unfolding (%s) must recover original string intact; see IcsWriter.fold", description)
+                .isEqualTo(input);
     }
 }
