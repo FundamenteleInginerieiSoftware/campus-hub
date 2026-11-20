@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,5 +95,7 @@ class UserDisabledReservationListenerTest {
                 .as("listener must catch and log errors so disabling an account never fails; "
                         + "see UserDisabledReservationListener.onUserDisabled")
                 .doesNotThrowAnyException();
+        verify(transactionManager).rollback(any());
+        verify(transactionManager, never()).commit(any());
     }
 }

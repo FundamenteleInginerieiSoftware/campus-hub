@@ -3,6 +3,7 @@ package com.campus.reservation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.campus.reservation.api.ReservationStatus;
@@ -29,7 +30,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Integration test for {@link UserDisabledReservationListener} (#229, #302).
- * Deliberately non-{@code @Transactional} so real PostgreSQL commits fire {@code AFTER_COMMIT}.
+ * Deliberately non-{@code @Transactional} so real PostgreSQL commits fire {@code AFTER_COMMIT}, and
+ * reuses the shared cached Spring context (computing dates relative to the injected {@link Clock} bean)
+ * to avoid opening an extra HikariPool against PostgreSQL's connection limit.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -179,5 +182,83 @@ class UserDisabledReservationListenerIT {
                 .as("AFTER_COMMIT listener must not run when the publishing transaction rolls back; "
                         + "see UserDisabledReservationListener.onUserDisabled")
                 .isEqualTo(ReservationStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName(
+            "Disable user flow (#229): listener failure keeps account disabled (200 OK) and admin can retry via cancel-upcoming")
+    void listenerFailureKeepsAccountDisabledAndManualCancelUpcomingRecoversIdempotently() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        Reservation upcoming = reservationRepository.save(new Reservation(
+                studentId,
+                asset1Id,
+                now.plusDays(1).withHour(14),
+                now.plusDays(1).withHour(16),
+                now));
+
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String fnName = "fail_cancel_user_" + suffix;
+        String trigName = "trg_fail_cancel_" + suffix;
+
+        // Force the listener's REQUIRES_NEW reservation update to fail inside PostgreSQL while letting
+        // AdminUserService.disable commit normally.
+        jdbcTemplate.execute("""
+                CREATE FUNCTION %s() RETURNS trigger AS $$
+                BEGIN
+                    IF NEW.user_id = %d AND NEW.status = 'CANCELLED' THEN
+                        RAISE EXCEPTION 'Simulated cancel failure for test user %d';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+                """.formatted(fnName, studentId, studentId));
+        jdbcTemplate.execute("""
+                CREATE TRIGGER %s
+                BEFORE UPDATE ON reservations
+                FOR EACH ROW EXECUTE FUNCTION %s();
+                """.formatted(trigName, fnName));
+
+        try {
+            mockMvc.perform(post("/api/v1/admin/users/{id}/disable", studentId)
+                            .with(jwt().jwt(j -> j.subject(String.valueOf(adminId)))
+                                    .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                    .andExpect(status().isOk());
+
+            Boolean enabled =
+                    jdbcTemplate.queryForObject("SELECT enabled FROM users WHERE id = ?", Boolean.class, studentId);
+            assertThat(enabled)
+                    .as("account disable must remain committed even when the AFTER_COMMIT reservation listener fails; "
+                            + "see UserDisabledReservationListener.onUserDisabled")
+                    .isFalse();
+
+            Reservation stillConfirmed =
+                    reservationRepository.findById(upcoming.getId()).orElseThrow();
+            assertThat(stillConfirmed.getStatus())
+                    .as("booking stays CONFIRMED while the simulated DB trigger blocks cancellation")
+                    .isEqualTo(ReservationStatus.CONFIRMED);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS " + trigName + " ON reservations");
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS " + fnName + "()");
+        }
+
+        // Manual retry endpoint recovers cleanly and is idempotent on a second call.
+        mockMvc.perform(post("/api/v1/admin/reservations/users/{userId}/cancel-upcoming", studentId)
+                        .with(jwt().jwt(j -> j.subject(String.valueOf(adminId)))
+                                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1));
+
+        Reservation cancelledAfterRetry =
+                reservationRepository.findById(upcoming.getId()).orElseThrow();
+        assertThat(cancelledAfterRetry.getStatus())
+                .as("manual cancel-upcoming retry must cancel the booking once the transient failure clears; "
+                        + "see ReservationService.cancelUpcomingReservationsForUser")
+                .isEqualTo(ReservationStatus.CANCELLED);
+
+        mockMvc.perform(post("/api/v1/admin/reservations/users/{userId}/cancel-upcoming", studentId)
+                        .with(jwt().jwt(j -> j.subject(String.valueOf(adminId)))
+                                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(0));
     }
 }

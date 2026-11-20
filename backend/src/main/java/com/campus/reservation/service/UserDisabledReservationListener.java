@@ -14,11 +14,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Reacts to {@link UserDisabledEvent} (#229, #302) by cancelling the disabled account's upcoming
  * {@code CONFIRMED} reservations via {@link ReservationApi#cancelUpcomingReservationsForUser}.
  *
- * <p>Runs {@code AFTER_COMMIT} in a fresh {@code REQUIRES_NEW} transaction (via {@link TransactionTemplate}
- * rather than {@code @Transactional} on the listener method so a caught failure rolls back the inner
- * transaction cleanly without throwing {@code UnexpectedRollbackException} to the admin's disable call).
- * Deliberately not {@code @Async}: the audit actor comes from {@code CurrentUser}, which is bound to the
- * HTTP request thread.
+ * <p>Runs {@code AFTER_COMMIT} in a fresh {@code REQUIRES_NEW} transaction via {@link TransactionTemplate}
+ * inside {@code try / catch (RuntimeException)}: that way both business errors and commit/flush failures
+ * land in the {@code catch} block, roll back the inner transaction cleanly, and emit the actionable
+ * retry log line ({@code POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming}). Deliberately
+ * not {@code @Async}: the audit actor comes from {@code CurrentUser}, which is bound to the HTTP request
+ * thread.
  */
 @Slf4j
 @Service
