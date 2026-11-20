@@ -85,6 +85,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 57 | [57-active-role-fresh-read.md](57-active-role-fresh-read.md) | `findActiveRole` returned a cached User inside a transaction, so Calin's re-check after the quota lock missed a disabled account; now a scalar query | #312 |
 | 58 | [58-pickup-pass-qr.md](58-pickup-pass-qr.md) | Pickup pass (QR): the pass page draws a QR, the Verify dialog can scan it with the camera; the decoder file is served by us, not by a CDN | #318 |
 | 59 | [59-deploy-workflow.md](59-deploy-workflow.md) | W8 `deploy.yml`: after a green `ci` on `main`, build + push to ECR, SSM `campus-deploy <sha>`, health check; GitHub OIDC role limited to `main` (no AWS keys), skips while AWS is paused | #320 |
+| 60 | [60-ses-live-push.md](60-ses-live-push.md) | On AWS, `SesNotificationService` first pushes each notification live to the user's open tabs (Liviu's `LiveStreams`, #290), then sends the e-mail; a slow or failed SES can't delay or drop the push | #332 |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
