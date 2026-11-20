@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-20
-**Branch / PR:** `feat/notification-ses-live-push` (#NNN)
+**Branch / PR:** `feat/notification-ses-live-push` (#332)
 **See also:** `23-s3-ses-adapters.md` (the SES adapter), `06-async-scheduling.md`, issue #290 and Liviu's live stream (#317)
 
 ---
