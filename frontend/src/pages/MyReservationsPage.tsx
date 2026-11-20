@@ -20,6 +20,7 @@ import {
   IconClockPlus,
   IconPackage,
   IconPlus,
+  IconQrcode,
   IconUser,
   IconUserShare,
 } from '@tabler/icons-react'
@@ -375,12 +376,28 @@ export default function MyReservationsPage() {
       header: 'Actions',
       render: (r) => {
         const hasStartedInBucharest = nowInBucharest() >= parseCampusLocalDateTime(r.startTime)
+        const canShowPickupPass = r.status === 'CONFIRMED'
         const canCancel = r.status === 'CONFIRMED' && !hasStartedInBucharest
         const canExtend = r.status === 'CONFIRMED' || r.status === 'CHECKED_OUT'
         const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest
 
         return (
           <Group gap="xs" wrap="nowrap">
+            {canShowPickupPass && (
+              <Tooltip label="Open your rotating 6-digit code and QR pass for the lab desk">
+                <Button
+                  component={Link}
+                  to="/pickup-pass"
+                  size="xs"
+                  variant="light"
+                  color="teal"
+                  leftSection={<IconQrcode size={14} />}
+                >
+                  Show pickup pass
+                </Button>
+              </Tooltip>
+            )}
+
             {canExtend && (
               <Tooltip label="Extend duration of this active reservation">
                 <Button
