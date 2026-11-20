@@ -12,8 +12,9 @@
  *   <li>{@code domain}: entities and enums (if any).
  *   <li>{@code repository}: Spring Data JPA interfaces (if any).
  *   <li>{@code service}: implementations ({@code LoggingNotificationService}, {@code
- *       SesNotificationService}).
- *   <li>{@code web}: REST controllers and request/response records (if any).
+ *       SesNotificationService}) and the in-memory live SSE stream registry ({@code LiveStreams}).
+ *   <li>{@code web}: REST controllers and response records ({@code LiveStreamController}, {@code
+ *       LiveEvent}).
  * </ul>
  *
  * <p>May depend on: {@code common}, {@code user.api}. Used by incident, reassignment, reservation.
