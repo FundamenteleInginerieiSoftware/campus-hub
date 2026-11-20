@@ -11,6 +11,7 @@ import com.campus.common.error.GlobalExceptionHandler;
 import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import com.campus.reassignment.domain.ReassignmentOutcome;
+import com.campus.reassignment.domain.ReassignmentTrigger;
 import com.campus.reassignment.service.ReassignmentService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,6 +37,7 @@ class AdminReassignmentControllerTest {
     private final ReassignmentLogResponse sampleLog = new ReassignmentLogResponse(
             1L,
             100L,
+            ReassignmentTrigger.INCIDENT,
             10L,
             501L,
             502L,
@@ -76,6 +78,7 @@ class AdminReassignmentControllerTest {
                 .andExpect(jsonPath("$.totalPages").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(1))
                 .andExpect(jsonPath("$.content[0].incidentId").value(100))
+                .andExpect(jsonPath("$.content[0].trigger").value("INCIDENT"))
                 .andExpect(jsonPath("$.content[0].reservationId").value(10))
                 .andExpect(jsonPath("$.content[0].fromAssetId").value(501))
                 .andExpect(jsonPath("$.content[0].toAssetId").value(502))

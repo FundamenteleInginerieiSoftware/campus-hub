@@ -385,7 +385,8 @@ After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, 
 // ReassignmentLogResponse (returned by GET /api/v1/admin/reassignments)
 {
   "id": 1,
-  "incidentId": 100,
+  "incidentId": 100,       // null when trigger is "RETIRED" (administrative asset retirement, #245)
+  "trigger": "INCIDENT",   // "INCIDENT" | "RETIRED"
   "reservationId": 10,
   "fromAssetId": 501,
   "toAssetId": 502,
