@@ -15,6 +15,7 @@ import {
   IconArrowsExchange,
   IconCalendar,
   IconCalendarCheck,
+  IconCalendarShare,
   IconCheck,
   IconClockPlus,
   IconPackage,
@@ -443,19 +444,29 @@ export default function MyReservationsPage() {
         title="My reservations"
         description="View your lab bookings and manage upcoming slots. You can cancel any confirmed booking until its start time."
         actions={
-          <Tooltip
-            label={`You already have ${MAX_ACTIVE_RESERVATIONS} active bookings (the maximum allowed). Return or cancel a booking before making a new reservation.`}
-            disabled={summary.activeCount < MAX_ACTIVE_RESERVATIONS}
-          >
+          <Group gap="xs" wrap="wrap">
             <Button
               component={Link}
-              to="/catalog"
-              leftSection={<IconPlus size={16} />}
-              color={summary.activeCount >= MAX_ACTIVE_RESERVATIONS ? 'gray' : 'campus'}
+              to="/calendar-sync"
+              variant="default"
+              leftSection={<IconCalendarShare size={16} />}
             >
-              Book equipment
+              Sync to my calendar
             </Button>
-          </Tooltip>
+            <Tooltip
+              label={`You already have ${MAX_ACTIVE_RESERVATIONS} active bookings (the maximum allowed). Return or cancel a booking before making a new reservation.`}
+              disabled={summary.activeCount < MAX_ACTIVE_RESERVATIONS}
+            >
+              <Button
+                component={Link}
+                to="/catalog"
+                leftSection={<IconPlus size={16} />}
+                color={summary.activeCount >= MAX_ACTIVE_RESERVATIONS ? 'gray' : 'campus'}
+              >
+                Book equipment
+              </Button>
+            </Tooltip>
+          </Group>
         }
       />
 

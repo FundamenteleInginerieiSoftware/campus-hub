@@ -60,6 +60,7 @@ Each document is structured in two parts:
 | 41 | [`41-calendar-feed-endpoint.md`](./41-calendar-feed-endpoint.md) | Calendar Feed Endpoint & Service | `findByUserIdOverlappingRange`, `CalendarFeedService` 30-day window + catalog caching, `GET /api/v1/calendar/{token}.ics` |
 | 42 | [`42-calendar-sync-page.md`](./42-calendar-sync-page.md) | Calendar Sync Page (Frontend) | `calendarFeed.ts` API wrapper, 3-state `CalendarSyncPage`, `CopyButton`, `.ics` download, replace/revoke confirm modals |
 | 43 | [`43-active-user-check-after-quota-lock.md`](./43-active-user-check-after-quota-lock.md) | Active User Re-check After Quota Lock (#229) | `requireActiveUserAfterLock` in `ReservationService`, `HoldService`, `TransferService`; unit + PostgreSQL concurrency test |
+| 45 | [`45-calendar-sync-button-in-my-reservations.md`](./45-calendar-sync-button-in-my-reservations.md) | Calendar Sync Button in My Reservations (#314) | Moved Calendar sync from student sidebar into a header button on `MyReservationsPage`, kept `/calendar-sync` route and top-bar title |
 
 
 
