@@ -606,7 +606,6 @@ class TransferServiceTest {
 
         when(currentUser.id()).thenReturn(recipientId);
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
-        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationRepository.findById(100L)).thenReturn(Optional.empty());
 

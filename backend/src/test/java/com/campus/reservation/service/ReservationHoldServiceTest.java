@@ -576,7 +576,9 @@ class ReservationHoldServiceTest {
                 .as(
                         "admin-owned hold confirmed by another admin must bypass student quota; see HoldService.confirmHold")
                 .isEqualTo(56L);
-        verify(reservationRepository, never()).lockUserQuota(any());
+        // After #310, HoldService acquires lockUserQuota(ownerId) before findActiveRole(ownerId)
+        // to close the disable race, then skips the student active-booking count for ADMIN owners.
+        verify(reservationRepository).lockUserQuota(otherAdminId);
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(any(), any());
     }
 
