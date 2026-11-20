@@ -499,7 +499,9 @@ class ReservationConcurrencyIT {
         });
 
         try {
-            assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                    .as("both cancel and extend worker threads must reach the start gate")
+                    .isTrue();
             startLatch.countDown();
             cancelTask.get(10, TimeUnit.SECONDS);
             extendTask.get(10, TimeUnit.SECONDS);
@@ -532,6 +534,7 @@ class ReservationConcurrencyIT {
         CountDownLatch quotaLockHeld = new CountDownLatch(1);
         CountDownLatch actionStarted = new CountDownLatch(1);
         AtomicBoolean actionDone = new AtomicBoolean(false);
+        AtomicBoolean thread2BlockedOnLock = new AtomicBoolean(false);
         AtomicInteger disabledRejected = new AtomicInteger(0);
         List<Throwable> unexpected = new CopyOnWriteArrayList<>();
 
@@ -540,7 +543,7 @@ class ReservationConcurrencyIT {
             quotaLockHeld.countDown();
             try {
                 actionStarted.await(5, TimeUnit.SECONDS);
-                waitUntilBlockedOnUserQuotaLock(targetUserId, actionDone);
+                thread2BlockedOnLock.set(waitUntilBlockedOnUserQuotaLock(targetUserId, actionDone));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -578,6 +581,12 @@ class ReservationConcurrencyIT {
             executor.shutdownNow();
         }
 
+        assertThat(thread2BlockedOnLock.get())
+                .as(
+                        "%s must actually block on pg_advisory_xact_lock(1, userId) before disable commits; "
+                                + "see ReservationRepository.lockUserQuota",
+                        ownerPath)
+                .isTrue();
         assertThat(unexpected)
                 .as("no unexpected error during disabled-user race; see %s", ownerPath)
                 .isEmpty();
@@ -593,7 +602,7 @@ class ReservationConcurrencyIT {
      * Polls PostgreSQL's {@code pg_stat_activity} joined with {@code pg_locks} until another backend
      * is actively waiting on {@code pg_advisory_xact_lock(1, targetUserId)} (replaces blind sleep, #322).
      */
-    private void waitUntilBlockedOnUserQuotaLock(Long targetUserId, AtomicBoolean actionDone)
+    private boolean waitUntilBlockedOnUserQuotaLock(Long targetUserId, AtomicBoolean actionDone)
             throws InterruptedException {
         long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
@@ -611,10 +620,11 @@ class ReservationConcurrencyIT {
                       AND NOT l.granted
                     """, Integer.class, targetUserId.intValue());
             if (waiting != null && waiting > 0) {
-                return;
+                return true;
             }
             TimeUnit.MILLISECONDS.sleep(10);
         }
+        return false;
     }
 
     private void setupSecurityContext(Long userId) {
