@@ -17,9 +17,9 @@ To close this gap, every student booking, multi-asset bundle, slot hold, hold co
 | `backend/src/main/java/com/campus/reservation/service/HoldService.java` | Called `requireActiveUserAfterLock(userApi, ...)` immediately after `lockUserQuota` in `createHold` (`userId`) and `confirmHold` (`studentId`). |
 | `backend/src/main/java/com/campus/reservation/service/TransferService.java` | Called `requireActiveUserAfterLock(userApi, userId)` immediately after `lockUserQuota(userId)` in `acceptTransfer` so a recipient disabled while waiting on the lock cannot take ownership of a reservation. |
 
-### Why after `lockUserQuota`?
+### Why after `lockUserQuota` (and with no pre-lock read)?
 
-`ReservationService.cancelUpcomingReservationsForUser` acquires `lockUserQuota(userId)` (PostgreSQL transaction-scoped advisory lock key `1`). Checking `userApi.findActiveRole(userId)` *after* `lockUserQuota(userId)` serializes booking writes behind any in-flight cancellation/disable transaction and reads the committed `users.enabled` state under Read Committed isolation.
+`ReservationService.cancelUpcomingReservationsForUser` acquires `lockUserQuota(userId)` (PostgreSQL transaction-scoped advisory lock key `1`). Checking `userApi.findActiveRole(userId)` *only after* `lockUserQuota(userId)` serializes booking writes behind any in-flight cancellation/disable transaction and avoids loading the `User` entity into the Hibernate L1 persistence context before the lock (which caused `bookBundle`, `confirmHold`, and `acceptTransfer` to read stale `enabled = true` on PostgreSQL; paired with Matei's fresh scalar read in #312). In `acceptTransfer`, removing the pre-lock recipient lookup also makes inactive recipients consistently receive `403 USER_DISABLED`.
 
 ### Verification
 
@@ -28,4 +28,4 @@ To close this gap, every student booking, multi-asset bundle, slot hold, hold co
 | `ReservationServiceTest` | Unit tests for `createReservation` and `bookBundle` verifying `lockUserQuota` -> `findActiveRole` call order and `403 USER_DISABLED` with zero saves. |
 | `ReservationHoldServiceTest` | Unit tests for `createHold` and `confirmHold` verifying `403 USER_DISABLED` after `lockUserQuota`. |
 | `TransferServiceTest` | Unit test for `acceptTransfer` verifying recipient disabled while waiting on `lockUserQuota` gets `403 USER_DISABLED`. |
-| `ReservationConcurrencyIT.bookingBlockedOnQuotaLockIsRejectedWhenUserIsDisabled` | Two-thread PostgreSQL integration test: Thread 1 holds `lockUserQuota(userId)` and disables the student; Thread 2 blocks in `createReservation`, wakes up after commit, receives `USER_DISABLED`, and leaves `0` active reservations. |
+| `ReservationConcurrencyIT` (4 disable-race tests) | Two-thread PostgreSQL integration tests for `createReservation`, `bookBundle`, `confirmHold`, and `acceptTransfer` using relative `Clock` dates: Thread 1 holds `lockUserQuota(userId)`, waits until Thread 2 is blocked on the lock, and only then disables the account and commits — every path returns `403 USER_DISABLED` and leaves zero reservations for the disabled user. |

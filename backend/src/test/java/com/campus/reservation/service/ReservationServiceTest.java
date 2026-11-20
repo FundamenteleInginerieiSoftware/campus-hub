@@ -2164,7 +2164,9 @@ class ReservationServiceTest {
                 .as(
                         "admin bypass: user with ADMIN role in userApi must bypass quota in bookBundle; see ReservationService.bookBundle")
                 .isNotNull();
-        verify(reservationRepository, never()).lockUserQuota(anyLong());
+        // #310: lockUserQuota runs before userApi.findActiveRole to avoid L1-cache stale reads;
+        // once ADMIN is resolved after the lock, the student quota count query is bypassed.
+        verify(reservationRepository).lockUserQuota(USER_ID);
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
@@ -3964,7 +3966,7 @@ class ReservationServiceTest {
 
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
-        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT), Optional.empty());
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(10L, 20L), start, end))
                 .as("disabled user after lockUserQuota in bundle path must be rejected with 403 USER_DISABLED; "

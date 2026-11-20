@@ -386,7 +386,6 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
-        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
@@ -405,7 +404,6 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
-        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
 
@@ -432,7 +430,7 @@ class TransferServiceTest {
         when(currentUser.id()).thenReturn(recipientId);
         when(currentUser.isAdmin()).thenReturn(false);
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
-        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT), Optional.empty());
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.empty());
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationRepository.findById(100L)).thenReturn(Optional.of(reservation));
 

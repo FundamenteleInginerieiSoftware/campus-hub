@@ -185,18 +185,19 @@ public class ReservationService implements ReservationApi {
                     catalogApi, assetId, "Asset " + assetId + " is not available for booking");
         }
 
-        // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot)
-        boolean isAdmin = ReservationServiceSupport.isCurrentUserAdmin(currentUser, userId)
-                || userApi.findActiveRole(userId).map(r -> r == Role.ADMIN).orElse(false);
-
-        if (!isAdmin) {
+        // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot).
+        // Bug fixed (#229, #310): acquire lockUserQuota BEFORE calling userApi.findActiveRole so
+        // Hibernate never returns a stale L1-cached User loaded earlier in the same transaction.
+        if (!ReservationServiceSupport.isCurrentUserAdmin(currentUser, userId)) {
             reservationRepository.lockUserQuota(userId);
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
-            long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
-                    userId, ReservationStatus.ACTIVE_STATUSES);
-            if (activeCount + 1 > 2) {
-                throw new ConflictException(
-                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
+            Role role = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+            if (role != Role.ADMIN) {
+                long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                        userId, ReservationStatus.ACTIVE_STATUSES);
+                if (activeCount + 1 > 2) {
+                    throw new ConflictException(
+                            "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
+                }
             }
         }
 

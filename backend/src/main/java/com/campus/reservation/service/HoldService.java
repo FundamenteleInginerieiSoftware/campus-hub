@@ -144,15 +144,16 @@ public class HoldService {
 
         Long studentId = hold.getUserId();
         // Enforce quota whenever the hold owner is a student, including when confirmed by an admin (#228 point 9).
+        // Bug fixed (#229, #310): acquire lockUserQuota BEFORE calling userApi.findActiveRole so
+        // Hibernate never serves a stale L1-cached User loaded earlier in the same transaction.
         boolean adminConfirmingOwnHold = studentId.equals(userId) && currentUser.isAdmin();
-        boolean holdOwnerIsStudent = !adminConfirmingOwnHold
-                && userApi.findActiveRole(studentId).map(r -> r == Role.STUDENT).orElse(true);
-        if (holdOwnerIsStudent) {
+        if (!adminConfirmingOwnHold) {
             reservationRepository.lockUserQuota(studentId);
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
-            if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(
-                            studentId, ReservationStatus.ACTIVE_STATUSES)
-                    >= 2) {
+            Role holdOwnerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
+            if (holdOwnerRole == Role.STUDENT
+                    && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                                    studentId, ReservationStatus.ACTIVE_STATUSES)
+                            >= 2) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }

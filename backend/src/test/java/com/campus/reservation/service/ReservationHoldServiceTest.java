@@ -652,7 +652,7 @@ class ReservationHoldServiceTest {
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(START), eq(END), any(), eq(77L), eq(USER_ID)))
                 .thenReturn(false);
-        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT), Optional.empty());
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> holdService.confirmHold(77L))
                 .as("disabled hold owner after lockUserQuota must be rejected with 403 USER_DISABLED; "
