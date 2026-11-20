@@ -96,10 +96,10 @@ flowchart TD
     E --> F["ReassignmentBookingProcessor.processSingleBooking<br/>(TransactionTemplate REQUIRES_NEW)"]
     
     F --> G{"Try Strategy 1:<br/>SameModelStrategy"}
-    G -->|Candidate Found| H["reservationApi.moveToAsset(bookingId, candidateId)"]
+    G -->|Candidate Found| H["reservationApi.moveToAsset(bookingId, sourceAssetId, candidateId, reason)"]
     G -->|No Candidate / Busy| I{"Try Strategy 2:<br/>SameCategoryStrategy"}
     I -->|Candidate Found| H
-    I -->|All Candidates Busy / Exhausted| J["reservationApi.forceCancel(bookingId, reason)"]
+    I -->|All Candidates Busy / Exhausted| J["reservationApi.forceCancel(bookingId, sourceAssetId, reason)"]
     
     H -->|Success| K["Insert REASSIGNED Log & Return to ReassignmentService (notifies student)"]
     H -->|SubstituteNoLongerFreeException| L["Add to attemptedCandidateIds & Try Next Candidate of Same Strategy"]

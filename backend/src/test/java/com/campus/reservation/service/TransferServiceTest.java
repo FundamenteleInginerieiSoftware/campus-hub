@@ -270,8 +270,13 @@ class TransferServiceTest {
         assertThat(response)
                 .as("acceptTransfer must return the accepted transfer; see TransferService.acceptTransfer")
                 .isNotNull();
-        assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
-        assertThat(r.getUserId()).isEqualTo(recipientId); // Ownership transferred!
+        assertThat(response.status())
+                .as("acceptTransfer must mark the transfer as ACCEPTED; see TransferService.acceptTransfer")
+                .isEqualTo(TransferStatus.ACCEPTED);
+        assertThat(r.getUserId())
+                .as(
+                        "acceptTransfer must transfer reservation ownership to the recipient; see TransferService.acceptTransfer")
+                .isEqualTo(recipientId); // Ownership transferred!
         verify(reservationRepository).save(r);
         verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Transfer Accepted"), any());
         verify(auditService)
@@ -421,7 +426,9 @@ class TransferServiceTest {
         assertThat(response.status())
                 .as("rejectTransfer must mark the transfer as REJECTED; see TransferService.rejectTransfer")
                 .isEqualTo(TransferStatus.REJECTED);
-        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.REJECTED);
+        assertThat(transfer.getStatus())
+                .as("transfer entity status must be REJECTED; see TransferService.rejectTransfer")
+                .isEqualTo(TransferStatus.REJECTED);
         verify(auditService)
                 .record(
                         eq(recipientId),

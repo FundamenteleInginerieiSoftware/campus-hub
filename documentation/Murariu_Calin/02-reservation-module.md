@@ -162,8 +162,8 @@ Returns `ReservationResponse` or throws `404 NotFoundException("RESERVATION_NOT_
 #### D. `cancelReservation(Long id)`
 Validates ownership/admin and start time (`!now.isBefore(r.getStartTime())`), calls `r.cancel(now, "Cancelled by user")`, and writes audit record.
 
-#### E. `moveToAsset(Long reservationId, Long newAssetId, String reason)`
-Annotated with `@Transactional(noRollbackFor = SubstituteNoLongerFreeException.class)` so that candidate collisions in the auto-reassignment engine do not roll back caller transactions.
+#### E. `moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason)`
+Annotated with `@Transactional(noRollbackFor = SubstituteNoLongerFreeException.class)` so that candidate collisions in the auto-reassignment engine do not roll back caller transactions; checks `expectedSourceAssetId` under row lock (`FOR UPDATE`) so concurrent handlers never move a booking twice.
 
 #### F. `findCurrentCheckout(Long assetId)`
 Finds active checkout matching `CHECKED_OUT` or `OVERDUE`.

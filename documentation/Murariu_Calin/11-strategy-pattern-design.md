@@ -105,7 +105,7 @@ When `handle(event)` executes:
 for (SubstituteStrategy strategy : strategies) {
     Optional<AssetSummary> candidate = strategy.findSubstitute(booking, damaged);
     if (candidate.isPresent()) {
-        boolean moved = reservationApi.moveToAsset(booking.id(), candidate.get().id(), "Incident #" + event.incidentId());
+        boolean moved = reservationApi.moveToAsset(booking.id(), event.assetId(), candidate.get().id(), "Incident #" + event.incidentId());
         if (moved) {
             reassignmentLogRepository.save(new ReassignmentLog(event.incidentId(), booking.id(), event.assetId(), candidate.get().id(), ReassignmentOutcome.REASSIGNED, strategy.name(), now));
             notificationService.notifyUser(booking.userId(), "Reservation moved to substitute asset");
@@ -150,7 +150,7 @@ The auto-reassignment engine runs in an isolated transaction to ensure that fail
 
 1. **Observer Decoupling:** `LocalAssetDamagedListener` receives `AssetDamagedEvent` using `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
 2. **Isolated Transactions:** `ReassignmentService.handle` delegates each booking to `ReassignmentBookingProcessor`, running in an isolated `@Transactional(propagation = Propagation.REQUIRES_NEW)` transaction.
-3. **Absence of Substitute is Normal Business Flow:** When no substitute is found, the engine does **not** throw an exception that triggers rollback. Instead, it calls `ReservationService.forceCancel(res.id())` and records `ReassignmentLog(outcome = FORCE_CANCELLED)` (with null strategy). The transaction commits cleanly.
+3. **Absence of Substitute is Normal Business Flow:** When no substitute is found, the engine does **not** throw an exception that triggers rollback. Instead, it calls `ReservationService.forceCancel(res.id(), sourceAssetId, reason)` and records `ReassignmentLog(outcome = FORCE_CANCELLED)` (with null strategy). The transaction commits cleanly.
 
 ---
 
