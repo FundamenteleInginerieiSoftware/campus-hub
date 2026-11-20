@@ -41,13 +41,14 @@ public class UserDisabledReservationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onUserDisabled(UserDisabledEvent event) {
         try {
-            Integer cancelled = requiresNewTx.execute(
-                    status -> reservationApi.cancelUpcomingReservationsForUser(event.userId(), DEFAULT_REASON));
-            log.info(
-                    "Cancelled {} upcoming reservation(s) for disabled user #{} (disabled by admin #{})",
-                    cancelled,
-                    event.userId(),
-                    event.adminId());
+            requiresNewTx.executeWithoutResult(status -> {
+                int cancelled = reservationApi.cancelUpcomingReservationsForUser(event.userId(), DEFAULT_REASON);
+                log.info(
+                        "Cancelled {} upcoming reservation(s) for disabled user #{} (disabled by admin #{})",
+                        cancelled,
+                        event.userId(),
+                        event.adminId());
+            });
         } catch (RuntimeException ex) {
             // Never propagate: disabling the account is the security kill switch and already committed.
             // An admin can retry via POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming.

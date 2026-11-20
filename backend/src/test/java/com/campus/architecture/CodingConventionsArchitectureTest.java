@@ -13,6 +13,7 @@ import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
@@ -506,6 +507,33 @@ class CodingConventionsArchitectureTest {
             })
             .because(
                     "Cross-module references in JPA entities must be plain IDs (e.g. Long assetId) rather than cross-module @Entity associations (AGENTS.md §5)");
+
+    // Rule 15: Public api interfaces must not declare default methods (calling another method on `this`
+    // inside a default method bypasses Spring's @Transactional / @Async proxies; #327, #333).
+    @ArchTest
+    static final ArchRule api_interfaces_must_not_declare_default_methods = methods()
+            .that()
+            .areDeclaredInClassesThat()
+            .resideInAPackage("com.campus..api..")
+            .and()
+            .areDeclaredInClassesThat()
+            .areInterfaces()
+            .should(new ArchCondition<JavaMethod>("not be a default interface method") {
+                @Override
+                public void check(JavaMethod method, ConditionEvents events) {
+                    boolean isStatic = method.getModifiers().contains(JavaModifier.STATIC);
+                    boolean isAbstract = method.getModifiers().contains(JavaModifier.ABSTRACT);
+                    boolean isSynthetic = method.getModifiers().contains(JavaModifier.SYNTHETIC);
+                    if (!isStatic && !isAbstract && !isSynthetic) {
+                        String message = String.format(
+                                "Public api interface method %s is a default method; calling another method on 'this' bypasses Spring AOP proxies (#327, #333)",
+                                method.getFullName());
+                        events.add(SimpleConditionEvent.violated(method, message));
+                    }
+                }
+            })
+            .because(
+                    "Interfaces in ..api.. packages must not declare default methods because self-invocation skips Spring @Transactional/@Async proxies (#327, #333)");
 
     static String extractModuleName(String packageName) {
         if (packageName.startsWith("com.campus.")) {
