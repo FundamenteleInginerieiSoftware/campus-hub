@@ -49,9 +49,11 @@ class ReservationHoldServiceTest {
 
     private static final Long USER_ID = 42L;
     private static final Long ASSET_ID = 100L;
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 2, 10, 0); // Monday
-    private static final LocalDateTime START = LocalDateTime.of(2026, 11, 2, 14, 0);
-    private static final LocalDateTime END = LocalDateTime.of(2026, 11, 2, 16, 0);
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    private static final LocalDateTime NOW = LocalDateTime.now(FIXED_CLOCK);
+    private static final LocalDateTime START = NOW.plusHours(4);
+    private static final LocalDateTime END = NOW.plusHours(6);
 
     @Mock
     private ReservationRepository reservationRepository;
@@ -79,7 +81,7 @@ class ReservationHoldServiceTest {
 
     @BeforeEach
     void setUp() {
-        clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+        clock = FIXED_CLOCK;
         holdService = new HoldService(
                 reservationHoldRepository,
                 reservationRepository,
@@ -379,8 +381,8 @@ class ReservationHoldServiceTest {
     @DisplayName("createHold: slot validation - rejects when slot is outside opening hours")
     void createHold_rejectsWhenOutsideOpeningHours() {
         // Outside opening hours (e.g. 20:30)
-        LocalDateTime lateStart = LocalDateTime.of(2026, 11, 2, 20, 30);
-        LocalDateTime lateEnd = LocalDateTime.of(2026, 11, 2, 21, 30);
+        LocalDateTime lateStart = NOW.withHour(20).withMinute(30);
+        LocalDateTime lateEnd = lateStart.plusHours(1);
         assertThatThrownBy(() -> holdService.createHold(new CreateHoldRequest(ASSET_ID, lateStart, lateEnd)))
                 .as(
                         "operating hours: hold outside 08:00-20:00 must throw BusinessRuleException; see HoldService.createHold")

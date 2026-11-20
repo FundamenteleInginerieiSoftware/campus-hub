@@ -139,12 +139,19 @@ class IdempotencyServiceTest {
                 SamplePayload.class,
                 () -> ResponseEntity.status(HttpStatus.CREATED).body(new SamplePayload(10L, "created")));
 
-        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(res.getStatusCode())
+                .as("first execution must return the action's 201 CREATED status; see IdempotencyService.execute")
+                .isEqualTo(HttpStatus.CREATED);
         assertThat(claimed.getStatus())
                 .as("successful execution must mark IdempotencyRecord COMPLETED; see IdempotencyService.execute")
                 .isEqualTo(IdempotencyStatus.COMPLETED);
-        assertThat(claimed.getResponseStatus()).isEqualTo(201);
-        assertThat(claimed.getResponseBody()).contains("created");
+        assertThat(claimed.getResponseStatus())
+                .as("completed record must persist HTTP status 201; see IdempotencyService.completeRecord")
+                .isEqualTo(201);
+        assertThat(claimed.getResponseBody())
+                .as(
+                        "completed record must persist serialized JSON response body; see IdempotencyService.completeRecord")
+                .contains("created");
         verify(repository).saveAndFlush(any(IdempotencyRecord.class));
         verify(transactionManager, atLeastOnce())
                 .getTransaction(
@@ -152,8 +159,8 @@ class IdempotencyServiceTest {
     }
 
     @Test
-    @DisplayName("Null response body and serialization failure still mark COMPLETED with null stored body")
-    void storesNullBodyWhenResponseEmptyOrUnserializable() {
+    @DisplayName("Null response body (e.g. 204) marks COMPLETED with null stored body")
+    void storesNullBodyWhenResponseBodyIsNull() {
         String fp = service.computeFingerprint(1L, "POST", "/p", null);
         IdempotencyRecord emptyBodyRec = new IdempotencyRecord("k-empty", 1L, fp, now, now.plusHours(24));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-empty", 1L))
@@ -167,14 +174,21 @@ class IdempotencyServiceTest {
                 null,
                 Void.class,
                 () -> ResponseEntity.noContent().build());
-        assertThat(noContent.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        assertThat(noContent.getStatusCode())
+                .as("null body action must preserve 204 NO_CONTENT status; see IdempotencyService.execute")
+                .isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(emptyBodyRec.getStatus())
                 .as("null body action must still mark record COMPLETED; see IdempotencyService.toJson")
                 .isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(emptyBodyRec.getResponseBody())
                 .as("null body must be persisted as null, not empty string; see IdempotencyService.toJson")
                 .isNull();
+    }
 
+    @Test
+    @DisplayName("JSON serialization failure still marks COMPLETED with null stored body")
+    void storesNullBodyWhenSerializationFails() {
         ObjectMapper failingMapper = mock(ObjectMapper.class);
         when(failingMapper.writeValueAsString(any())).thenThrow(new RuntimeException("cannot serialize"));
         IdempotencyService failingService =
@@ -192,7 +206,11 @@ class IdempotencyServiceTest {
                 null,
                 SamplePayload.class,
                 () -> ResponseEntity.status(HttpStatus.CREATED).body(new SamplePayload(1L, "ok")));
-        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        assertThat(res.getStatusCode())
+                .as(
+                        "serialization failure must still return the original 201 CREATED response; see IdempotencyService.toJson")
+                .isEqualTo(HttpStatus.CREATED);
         assertThat(serFailRec.getStatus())
                 .as(
                         "serialization failure after action succeeded must still mark COMPLETED; see IdempotencyService.toJson")
@@ -222,11 +240,10 @@ class IdempotencyServiceTest {
     }
 
     @Test
-    @DisplayName("COMPLETED record replays stored body, null body, or status-only on unreadable JSON")
-    void replaysCompletedRecordVariants() {
+    @DisplayName("COMPLETED record with stored JSON replays status, Idempotency-Replayed header, and deserialized body")
+    void replaysCompletedRecordWithStoredBody() {
         SamplePayload payload = new SamplePayload(1L, "x");
         String fp = service.computeFingerprint(1L, "POST", "/p", payload);
-
         IdempotencyRecord withBody = new IdempotencyRecord("k-body", 1L, fp, now.minusMinutes(1), now.plusHours(23));
         withBody.markCompleted(201, "{\"assetId\":1,\"note\":\"ok\"}", now.minusMinutes(1));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-body", 1L)).thenReturn(Optional.of(withBody));
@@ -235,27 +252,56 @@ class IdempotencyServiceTest {
                 service.execute("k-body", 1L, "POST", "/p", payload, SamplePayload.class, () -> {
                     throw new AssertionError("action must not re-run on replay");
                 });
-        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(replayed.getHeaders().getFirst("Idempotency-Replayed")).isEqualTo("true");
-        assertThat(replayed.getBody()).isEqualTo(new SamplePayload(1L, "ok"));
 
+        assertThat(replayed.getStatusCode())
+                .as("completed record must replay stored 201 status; see IdempotencyService.replay")
+                .isEqualTo(HttpStatus.CREATED);
+        assertThat(replayed.getHeaders().getFirst("Idempotency-Replayed"))
+                .as("replayed response must carry Idempotency-Replayed=true header; see IdempotencyService.replay")
+                .isEqualTo("true");
+        assertThat(replayed.getBody())
+                .as("replayed response must deserialize stored JSON body; see IdempotencyService.replay")
+                .isEqualTo(new SamplePayload(1L, "ok"));
+    }
+
+    @Test
+    @DisplayName("COMPLETED record with null stored body replays status without body")
+    void replaysCompletedRecordWithNullBody() {
+        SamplePayload payload = new SamplePayload(1L, "x");
+        String fp = service.computeFingerprint(1L, "POST", "/p", payload);
         IdempotencyRecord nullBody = new IdempotencyRecord("k-null", 1L, fp, now.minusMinutes(1), now.plusHours(23));
         nullBody.markCompleted(204, null, now.minusMinutes(1));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-null", 1L)).thenReturn(Optional.of(nullBody));
+
         ResponseEntity<SamplePayload> replayedNull =
                 service.execute("k-null", 1L, "POST", "/p", payload, SamplePayload.class, () -> null);
-        assertThat(replayedNull.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        assertThat(replayedNull.getBody()).isNull();
 
+        assertThat(replayedNull.getStatusCode())
+                .as("completed record with null body must replay stored 204 status; see IdempotencyService.replay")
+                .isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(replayedNull.getBody())
+                .as("completed record with null stored body must replay null body; see IdempotencyService.replay")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("COMPLETED record with unreadable JSON falls back to status-only replay")
+    void replaysCompletedRecordStatusOnlyWhenStoredJsonUnreadable() {
+        SamplePayload payload = new SamplePayload(1L, "x");
+        String fp = service.computeFingerprint(1L, "POST", "/p", payload);
         IdempotencyRecord badJson = new IdempotencyRecord("k-bad", 1L, fp, now.minusMinutes(1), now.plusHours(23));
         badJson.markCompleted(201, "{not-valid-json", now.minusMinutes(1));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-bad", 1L)).thenReturn(Optional.of(badJson));
+
         ResponseEntity<SamplePayload> replayedBad =
                 service.execute("k-bad", 1L, "POST", "/p", payload, SamplePayload.class, () -> null);
+
         assertThat(replayedBad.getStatusCode())
                 .as("corrupted stored JSON must fall back to status-only replay; see IdempotencyService.replay")
                 .isEqualTo(HttpStatus.CREATED);
-        assertThat(replayedBad.getBody()).isNull();
+        assertThat(replayedBad.getBody())
+                .as("corrupted stored JSON must return null body instead of failing; see IdempotencyService.replay")
+                .isNull();
     }
 
     @Test
@@ -279,54 +325,91 @@ class IdempotencyServiceTest {
     }
 
     @Test
-    @DisplayName("Active IN_PROGRESS (< 60s) and insert race throw 409 CONCURRENT_IDEMPOTENT_REQUEST")
-    void rejectsActiveInProgressAndInsertRace() {
+    @DisplayName("Active IN_PROGRESS (< 60s) throws 409 CONCURRENT_IDEMPOTENT_REQUEST")
+    void rejectsActiveInProgressRecordWithin60Seconds() {
         String fp = service.computeFingerprint(1L, "POST", "/p", null);
         IdempotencyRecord fresh = new IdempotencyRecord("k-busy", 1L, fp, now.minusSeconds(30), now.plusHours(24));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-busy", 1L)).thenReturn(Optional.of(fresh));
 
         assertThatThrownBy(() ->
                         service.execute("k-busy", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("x")))
-                .as("active IN_PROGRESS (< 60s) must throw 409 CONCURRENT_IDEMPOTENT_REQUEST")
-                .isInstanceOf(ConflictException.class)
-                .hasFieldOrPropertyWithValue("code", "CONCURRENT_IDEMPOTENT_REQUEST");
-
-        when(repository.findWithLockByIdempotencyKeyAndUserId("k-race", 1L)).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("dup"));
-        assertThatThrownBy(() ->
-                        service.execute("k-race", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("x")))
-                .as("unique constraint race on insert must throw 409 CONCURRENT_IDEMPOTENT_REQUEST")
+                .as(
+                        "active IN_PROGRESS (< 60s) must throw 409 CONCURRENT_IDEMPOTENT_REQUEST; see IdempotencyService.claimOrInspect")
                 .isInstanceOf(ConflictException.class)
                 .hasFieldOrPropertyWithValue("code", "CONCURRENT_IDEMPOTENT_REQUEST");
     }
 
     @Test
-    @DisplayName("Expired, FAILED, and abandoned IN_PROGRESS (>= 60s) records restart and re-run action")
-    void restartsExpiredFailedAndAbandonedRecords() {
-        String fp = service.computeFingerprint(1L, "POST", "/p", null);
+    @DisplayName("Unique-constraint insert race throws 409 CONCURRENT_IDEMPOTENT_REQUEST")
+    void rejectsConcurrentInsertRaceWith409() {
+        when(repository.findWithLockByIdempotencyKeyAndUserId("k-race", 1L)).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("dup"));
 
+        assertThatThrownBy(() ->
+                        service.execute("k-race", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("x")))
+                .as(
+                        "unique constraint race on insert must throw 409 CONCURRENT_IDEMPOTENT_REQUEST; see IdempotencyService.claimOrInspect")
+                .isInstanceOf(ConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "CONCURRENT_IDEMPOTENT_REQUEST");
+    }
+
+    @Test
+    @DisplayName("Expired record restarts with new fingerprint and re-runs action")
+    void restartsExpiredRecordAndUpdatesFingerprint() {
+        String fp = service.computeFingerprint(1L, "POST", "/p", null);
         IdempotencyRecord expired = new IdempotencyRecord("k-exp", 1L, "old-fp", now.minusHours(25), now.minusHours(1));
         expired.markCompleted(200, "\"old\"", now.minusHours(25));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-exp", 1L)).thenReturn(Optional.of(expired));
-        assertThat(service.execute("k-exp", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("fresh"))
-                        .getBody())
-                .isEqualTo("fresh");
-        assertThat(expired.getRequestFingerprint()).isEqualTo(fp);
 
+        ResponseEntity<String> res =
+                service.execute("k-exp", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("fresh"));
+
+        assertThat(res.getBody())
+                .as("expired record must re-run action and return fresh body; see IdempotencyService.claimOrInspect")
+                .isEqualTo("fresh");
+        assertThat(expired.getRequestFingerprint())
+                .as(
+                        "restarted expired record must replace stale fingerprint with new one; see IdempotencyRecord.restart")
+                .isEqualTo(fp);
+    }
+
+    @Test
+    @DisplayName("Abandoned IN_PROGRESS (>= 60s) record restarts and re-runs action")
+    void restartsAbandonedInProgressRecordAfter60Seconds() {
+        String fp = service.computeFingerprint(1L, "POST", "/p", null);
         IdempotencyRecord abandoned = new IdempotencyRecord("k-ab", 1L, fp, now.minusSeconds(61), now.plusHours(23));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-ab", 1L)).thenReturn(Optional.of(abandoned));
-        assertThat(service.execute("k-ab", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("taken"))
-                        .getBody())
-                .isEqualTo("taken");
-        assertThat(abandoned.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
 
+        ResponseEntity<String> res =
+                service.execute("k-ab", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("taken"));
+
+        assertThat(res.getBody())
+                .as("abandoned IN_PROGRESS (>= 60s) must re-run action; see IdempotencyService.claimOrInspect")
+                .isEqualTo("taken");
+        assertThat(abandoned.getStatus())
+                .as("taken-over abandoned record must finish in COMPLETED state; see IdempotencyService.completeRecord")
+                .isEqualTo(IdempotencyStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("FAILED record restarts on retry and transitions to COMPLETED")
+    void restartsFailedRecordOnRetry() {
+        String fp = service.computeFingerprint(1L, "POST", "/p", null);
         IdempotencyRecord failed = new IdempotencyRecord("k-fl", 1L, fp, now.minusSeconds(10), now.plusHours(23));
         failed.markFailed(now.minusSeconds(10));
         when(repository.findWithLockByIdempotencyKeyAndUserId("k-fl", 1L)).thenReturn(Optional.of(failed));
-        assertThat(service.execute("k-fl", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("retried"))
-                        .getBody())
+
+        ResponseEntity<String> res =
+                service.execute("k-fl", 1L, "POST", "/p", null, String.class, () -> ResponseEntity.ok("retried"));
+
+        assertThat(res.getBody())
+                .as(
+                        "FAILED record must allow retry and return new response body; see IdempotencyService.claimOrInspect")
                 .isEqualTo("retried");
-        assertThat(failed.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
+        assertThat(failed.getStatus())
+                .as(
+                        "retried FAILED record must transition to COMPLETED on success; see IdempotencyService.completeRecord")
+                .isEqualTo(IdempotencyStatus.COMPLETED);
     }
 
     @Test
@@ -334,15 +417,18 @@ class IdempotencyServiceTest {
     void sweepExpiredRecordsReturnsCount() {
         when(repository.deleteExpiredRecords(now)).thenReturn(0, 3);
 
-        assertThat(service.sweepExpiredRecords()).isZero();
         assertThat(service.sweepExpiredRecords())
-                .as("sweepExpiredRecords must return the number of deleted expired keys")
+                .as("empty sweep must return 0 deleted rows; see IdempotencyService.sweepExpiredRecords")
+                .isZero();
+        assertThat(service.sweepExpiredRecords())
+                .as(
+                        "sweepExpiredRecords must return the number of deleted expired keys; see IdempotencyService.sweepExpiredRecords")
                 .isEqualTo(3);
     }
 
     @Test
-    @DisplayName("IdempotencyRecord guards markCompleted/markFailed by status and attempt timestamp, and checks expiry")
-    void idempotencyRecordStateAndExpiryGuards() {
+    @DisplayName("IdempotencyRecord.isExpired is false at exact expiresAt boundary and true after")
+    void idempotencyRecordIsNotExpiredAtExactBoundaryAndExpiredAfter() {
         IdempotencyRecord rec = new IdempotencyRecord("k", 1L, "fp", now, now.plusHours(1));
 
         assertThat(rec.isExpired(now.plusHours(1)))
@@ -351,16 +437,34 @@ class IdempotencyServiceTest {
         assertThat(rec.isExpired(now.plusHours(1).plusSeconds(1)))
                 .as("after expiresAt record is expired; see IdempotencyRecord.isExpired")
                 .isTrue();
+    }
 
-        // Stale attempt timestamp must not transition status
+    @Test
+    @DisplayName("IdempotencyRecord ignores stale attempt timestamps on markCompleted and markFailed")
+    void idempotencyRecordIgnoresStaleAttemptTimestampOnCompletionAndFailure() {
+        IdempotencyRecord rec = new IdempotencyRecord("k", 1L, "fp", now, now.plusHours(1));
+
         rec.markFailed(now.minusSeconds(5));
-        assertThat(rec.getStatus()).isEqualTo(IdempotencyStatus.IN_PROGRESS);
+        assertThat(rec.getStatus())
+                .as("stale attempt timestamp must not transition record to FAILED; see IdempotencyRecord.markFailed")
+                .isEqualTo(IdempotencyStatus.IN_PROGRESS);
         rec.markCompleted(200, "x", now.minusSeconds(5));
-        assertThat(rec.getStatus()).isEqualTo(IdempotencyStatus.IN_PROGRESS);
+        assertThat(rec.getStatus())
+                .as(
+                        "stale attempt timestamp must not transition record to COMPLETED; see IdempotencyRecord.markCompleted")
+                .isEqualTo(IdempotencyStatus.IN_PROGRESS);
+    }
 
-        // Matching timestamp transitions to COMPLETED; subsequent markFailed is ignored
+    @Test
+    @DisplayName("IdempotencyRecord ignores a late markFailed call once COMPLETED")
+    void idempotencyRecordIgnoresLateMarkFailedAfterCompleted() {
+        IdempotencyRecord rec = new IdempotencyRecord("k", 1L, "fp", now, now.plusHours(1));
+
         rec.markCompleted(201, "ok", now);
-        assertThat(rec.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
+        assertThat(rec.getStatus())
+                .as(
+                        "matching attempt timestamp must transition record to COMPLETED; see IdempotencyRecord.markCompleted")
+                .isEqualTo(IdempotencyStatus.COMPLETED);
         rec.markFailed(now);
         assertThat(rec.getStatus())
                 .as("COMPLETED record must ignore a late markFailed call; see IdempotencyRecord.markFailed")

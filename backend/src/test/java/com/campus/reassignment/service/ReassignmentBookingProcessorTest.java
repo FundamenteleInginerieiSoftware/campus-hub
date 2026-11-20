@@ -275,7 +275,10 @@ class ReassignmentBookingProcessorTest {
                 .as("wrapped concurrency/SQLState causes must retry until a free candidate wins; "
                         + "see ReassignmentBookingProcessor.isConcurrencyConflict")
                 .isPresent();
-        assertThat(result.get().substituteAssetName()).isEqualTo("Scope Winner");
+        assertThat(result.get().substituteAssetName())
+                .as("winner candidate must be selected after retrying transient lock errors; "
+                        + "see ReassignmentBookingProcessor.processSingleBooking")
+                .isEqualTo("Scope Winner");
     }
 
     @Test

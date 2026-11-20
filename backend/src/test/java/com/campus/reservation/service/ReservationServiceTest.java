@@ -3782,7 +3782,9 @@ class ReservationServiceTest {
                 .isEqualTo(exact255);
 
         int countNull = reservationService.cancelUpcomingReservationsForUser(USER_ID, null);
-        assertThat(countNull).isEqualTo(1);
+        assertThat(countNull)
+                .as("null reason must still cancel the upcoming reservation; see cancelUpcomingReservationsForUser")
+                .isEqualTo(1);
         assertThat(r2.getCancelReason())
                 .as("null reason must fall back to default admin message; see cancelUpcomingReservationsForUser")
                 .isEqualTo("Account disabled by administrator");

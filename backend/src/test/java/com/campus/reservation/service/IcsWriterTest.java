@@ -7,7 +7,11 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class IcsWriterTest {
 
@@ -244,43 +248,40 @@ class IcsWriterTest {
     }
 
     @Test
-    void foldHandlesExact75ByteBoundaryEmptyAndThreeAndFourByteUtf8() {
+    void foldEmptyLineReturnsSingleEmptyString() {
         assertThat(IcsWriter.fold(""))
                 .as("empty line must fold to a single empty string; see IcsWriter.fold")
                 .containsExactly("");
-        assertThat(IcsWriter.fold("A".repeat(75)))
-                .as("line of exactly 75 UTF-8 bytes must not fold; see IcsWriter.fold")
-                .hasSize(1);
-        assertThat(IcsWriter.fold("A".repeat(76)))
-                .as("line of 76 UTF-8 bytes must fold into 2 physical lines; see IcsWriter.fold")
-                .hasSize(2);
+    }
 
-        // 3-byte UTF-8 ('€' = U+20AC, 25 * 3 = 75 bytes fits on 1 line; 26 * 3 = 78 bytes folds)
-        assertThat(IcsWriter.fold("€".repeat(25)))
-                .as("25 three-byte chars = 75 bytes must stay on 1 line; see IcsWriter.utf8ByteLength")
-                .hasSize(1);
-        assertThat(IcsWriter.fold("€".repeat(26)))
-                .as("26 three-byte chars = 78 bytes must fold; see IcsWriter.utf8ByteLength")
-                .hasSize(2);
+    static Stream<Arguments> utf8FoldBoundaryCases() {
+        return Stream.of(
+                Arguments.of("75 ASCII bytes (exact limit, no fold)", "A".repeat(75), 1),
+                Arguments.of("76 ASCII bytes (exceeds limit by 1, folds)", "A".repeat(76), 2),
+                Arguments.of("25 three-byte € chars = 75 bytes (no fold)", "€".repeat(25), 1),
+                Arguments.of("26 three-byte € chars = 78 bytes (folds)", "€".repeat(26), 2),
+                Arguments.of("18 four-byte emoji = 72 bytes (no fold)", "🔧".repeat(18), 1),
+                Arguments.of(
+                        "19 four-byte emoji = 76 bytes (folds without splitting surrogate pair)", "🔧".repeat(19), 2),
+                Arguments.of("75 x U+007F (1-byte upper boundary = 75B)", "\u007F".repeat(75), 1),
+                Arguments.of("38 x U+0080 (2-byte lower boundary = 76B)", "\u0080".repeat(38), 2),
+                Arguments.of("37 x U+07FF (2-byte upper boundary = 74B)", "\u07FF".repeat(37), 1),
+                Arguments.of("26 x U+0800 (3-byte lower boundary = 78B)", "\u0800".repeat(26), 2),
+                Arguments.of("25 x U+FFFF (3-byte upper boundary = 75B)", "\uFFFF".repeat(25), 1));
+    }
 
-        // 4-byte UTF-8 ('🔧' = U+1F527, 18 * 4 = 72 bytes fits; 19 * 4 = 76 bytes folds without splitting surrogate
-        // pair)
-        assertThat(IcsWriter.fold("🔧".repeat(18)))
-                .as("18 four-byte emoji = 72 bytes must stay on 1 line; see IcsWriter.utf8ByteLength")
-                .hasSize(1);
-        List<String> foldedEmoji = IcsWriter.fold("🔧".repeat(19));
-        assertThat(foldedEmoji)
-                .as("19 four-byte emoji = 76 bytes must fold into 2 lines; see IcsWriter.utf8ByteLength")
-                .hasSize(2);
-        assertThat(String.join("\r\n", foldedEmoji).replace("\r\n ", ""))
-                .as("unfolding 4-byte emoji must recover original string intact; see IcsWriter.fold")
-                .isEqualTo("🔧".repeat(19));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("utf8FoldBoundaryCases")
+    void foldRespects75ByteBoundaryAcrossUtf8Widths(String description, String input, int expectedLineCount) {
+        List<String> folded = IcsWriter.fold(input);
 
-        // Exact UTF-8 byte-length boundaries: U+007F (1B), U+0080 (2B), U+07FF (2B), U+0800 (3B), U+FFFF (3B)
-        assertThat(IcsWriter.fold("\u007F".repeat(75))).hasSize(1);
-        assertThat(IcsWriter.fold("\u0080".repeat(38))).hasSize(2);
-        assertThat(IcsWriter.fold("\u07FF".repeat(37))).hasSize(1);
-        assertThat(IcsWriter.fold("\u0800".repeat(26))).hasSize(2);
-        assertThat(IcsWriter.fold("\uFFFF".repeat(25))).hasSize(1);
+        assertThat(folded)
+                .as(
+                        "UTF-8 fold boundary (%s) must produce %d physical line(s); see IcsWriter.fold",
+                        description, expectedLineCount)
+                .hasSize(expectedLineCount);
+        assertThat(String.join("\r\n", folded).replace("\r\n ", ""))
+                .as("unfolding (%s) must recover original string intact; see IcsWriter.fold", description)
+                .isEqualTo(input);
     }
 }
