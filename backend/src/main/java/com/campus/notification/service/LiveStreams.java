@@ -18,8 +18,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * In-memory registry of open Server-Sent Events (SSE) streams per user.
  *
  * <p>In-memory storage is sufficient because Campus Hub runs on a single EC2 app instance (ADR-002).
- * Both {@code LoggingNotificationService} (dev/test, Liviu) and {@code SesNotificationService}
- * (prod, Matei) call {@link #send(Long, LiveEvent)} on this bean so every user notification is
+ * {@code LoggingNotificationService} (dev/test, Liviu, PR 3) and {@code SesNotificationService}
+ * (prod, Matei) will call {@link #send(Long, LiveEvent)} on this bean so every user notification is
  * pushed to open browser tabs without blocking the caller.
  */
 @Slf4j
@@ -48,7 +48,11 @@ public class LiveStreams {
 
     /** Opens and registers a new SSE stream for the given user. */
     public SseEmitter open(Long userId) {
-        return register(userId, new SseEmitter(STREAM_LIFETIME.toMillis()));
+        SseEmitter emitter = register(userId, new SseEmitter(STREAM_LIFETIME.toMillis()));
+        // Tomcat flushes 200 response headers on the first write; sending ":connected" right away
+        // avoids waiting up to 20 s for the first heartbeat (tight against CloudFront's 30 s timeout).
+        sendSafely(userId, emitter, SseEmitter.event().comment("connected"));
+        return emitter;
     }
 
     // Package-private entry point so unit tests can inject recording/broken SseEmitter subclasses.
@@ -65,7 +69,12 @@ public class LiveStreams {
         });
 
         emitter.onCompletion(() -> remove(userId, emitter));
-        emitter.onTimeout(() -> remove(userId, emitter));
+        // Complete explicitly on timeout so Spring ends the stream quietly instead of logging
+        // AsyncRequestTimeoutException warnings in CloudWatch every 10 minutes per tab.
+        emitter.onTimeout(() -> {
+            remove(userId, emitter);
+            emitter.complete();
+        });
         emitter.onError(ex -> remove(userId, emitter));
         return emitter;
     }

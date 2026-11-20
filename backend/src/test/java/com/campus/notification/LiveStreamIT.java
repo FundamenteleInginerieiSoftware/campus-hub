@@ -37,9 +37,14 @@ class LiveStreamIT {
     private JdbcTemplate jdbcTemplate;
 
     private String createdEmail;
+    private Long openedUserId;
 
     @AfterEach
     void cleanUp() {
+        if (openedUserId != null) {
+            liveStreams.completeAll(openedUserId);
+            openedUserId = null;
+        }
         if (createdEmail != null) {
             jdbcTemplate.update("DELETE FROM users WHERE email = ?", createdEmail);
             createdEmail = null;
@@ -66,6 +71,7 @@ class LiveStreamIT {
                 .andReturn();
 
         long student1Id = ((Number) JsonPath.read(regResult.getResponse().getContentAsString(), "$.id")).longValue();
+        openedUserId = student1Id;
         long otherUserId = student1Id + 9999L;
 
         String loginBody = """
@@ -94,7 +100,9 @@ class LiveStreamIT {
 
         String streamedSoFar = asyncResult.getResponse().getContentAsString();
         assertThat(streamedSoFar)
-                .as("stream must contain event:notification and student 1's message; see LiveStreams.send")
+                .as(
+                        "open() must flush :connected immediately and send() must deliver event:notification; see LiveStreams")
+                .contains(":connected")
                 .contains("event:notification")
                 .contains("for one");
         assertThat(streamedSoFar)
