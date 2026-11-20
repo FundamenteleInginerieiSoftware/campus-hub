@@ -49,9 +49,11 @@ class ReservationHoldServiceTest {
 
     private static final Long USER_ID = 42L;
     private static final Long ASSET_ID = 100L;
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 2, 10, 0); // Monday
-    private static final LocalDateTime START = LocalDateTime.of(2026, 11, 2, 14, 0);
-    private static final LocalDateTime END = LocalDateTime.of(2026, 11, 2, 16, 0);
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+    private static final LocalDateTime NOW = LocalDateTime.now(FIXED_CLOCK);
+    private static final LocalDateTime START = NOW.plusHours(4);
+    private static final LocalDateTime END = NOW.plusHours(6);
 
     @Mock
     private ReservationRepository reservationRepository;
@@ -79,7 +81,7 @@ class ReservationHoldServiceTest {
 
     @BeforeEach
     void setUp() {
-        clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
+        clock = FIXED_CLOCK;
         holdService = new HoldService(
                 reservationHoldRepository,
                 reservationRepository,
@@ -379,8 +381,8 @@ class ReservationHoldServiceTest {
     @DisplayName("createHold: slot validation - rejects when slot is outside opening hours")
     void createHold_rejectsWhenOutsideOpeningHours() {
         // Outside opening hours (e.g. 20:30)
-        LocalDateTime lateStart = LocalDateTime.of(2026, 11, 2, 20, 30);
-        LocalDateTime lateEnd = LocalDateTime.of(2026, 11, 2, 21, 30);
+        LocalDateTime lateStart = NOW.withHour(20).withMinute(30);
+        LocalDateTime lateEnd = lateStart.plusHours(1);
         assertThatThrownBy(() -> holdService.createHold(new CreateHoldRequest(ASSET_ID, lateStart, lateEnd)))
                 .as(
                         "operating hours: hold outside 08:00-20:00 must throw BusinessRuleException; see HoldService.createHold")
@@ -535,6 +537,49 @@ class ReservationHoldServiceTest {
                         "quota limit: student cannot exceed 2 active reservations even on admin confirmation; see HoldService.confirmHold")
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Student cannot have more than 2 active reservations");
+    }
+
+    @Test
+    @DisplayName("confirmHold: throws 404 HOLD_NOT_FOUND when hold does not exist")
+    void confirmHold_notFound_throws404() {
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationHoldRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> holdService.confirmHold(999L))
+                .as("existence: confirming a non-existent hold must throw HOLD_NOT_FOUND; see HoldService.confirmHold")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "HOLD_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("confirmHold: admin confirming another admin's hold skips student quota check")
+    void confirmHold_adminConfirmingAnotherAdminsHoldSkipsQuotaCheck() {
+        Long otherAdminId = 77L;
+        ReservationHold hold = new ReservationHold(ASSET_ID, otherAdminId, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(hold, "id", 1L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(otherAdminId)).thenReturn(Optional.of(Role.ADMIN));
+        when(reservationHoldRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(hold));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, START, END, -1L)).thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 56L);
+            return r;
+        });
+
+        ReservationResponse response = holdService.confirmHold(1L);
+
+        assertThat(response.id())
+                .as(
+                        "admin-owned hold confirmed by another admin must bypass student quota; see HoldService.confirmHold")
+                .isEqualTo(56L);
+        // After #310, HoldService acquires lockUserQuota(ownerId) before findActiveRole(ownerId)
+        // to close the disable race, then skips the student active-booking count for ADMIN owners.
+        verify(reservationRepository).lockUserQuota(otherAdminId);
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(any(), any());
     }
 
     @Test

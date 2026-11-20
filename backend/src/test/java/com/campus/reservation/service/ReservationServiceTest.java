@@ -3618,9 +3618,18 @@ class ReservationServiceTest {
         b2.assignBundle(bundleId);
         ReflectionTestUtils.setField(b2, "id", 202L);
 
+        Reservation b3 = new Reservation(
+                USER_ID,
+                12L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(2));
+        b3.assignBundle(bundleId);
+        ReflectionTestUtils.setField(b3, "id", 203L);
+
         when(userApi.exists(USER_ID)).thenReturn(true);
         when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
-                .thenReturn(List.of(b1, b2));
+                .thenReturn(List.of(b1, b2, b3));
         when(reservationTransferRepository.findByReservationIdAndStatus(anyLong(), eq(TransferStatus.PENDING)))
                 .thenReturn(Optional.empty());
         when(currentUser.id()).thenReturn(99L);
@@ -3631,9 +3640,9 @@ class ReservationServiceTest {
                     reservationService.cancelUpcomingReservationsForUser(USER_ID, "Account disabled by administrator");
 
             assertThat(cancelledCount)
-                    .as("Both reservations in the bundle must be cancelled; see cancelUpcomingReservationsForUser")
-                    .isEqualTo(2);
-            verify(auditService, org.mockito.Mockito.times(2))
+                    .as("All 3 reservations in the bundle must be cancelled; see cancelUpcomingReservationsForUser")
+                    .isEqualTo(3);
+            verify(auditService, org.mockito.Mockito.times(3))
                     .record(
                             eq(99L),
                             eq("CANCEL_RESERVATION"),
@@ -3736,6 +3745,111 @@ class ReservationServiceTest {
 
         verify(reservationRepository, never()).lockUserQuota(any());
         verify(reservationRepository, never()).findUpcomingConfirmedByUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("cancelUpcomingReservationsForUser: accepts 255-char custom reason and defaults on null reason")
+    void cancelUpcomingReservationsForUser_accepts255CharReasonAndDefaultsOnNull() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        String exact255 = "r".repeat(255);
+        Reservation r1 = new Reservation(
+                USER_ID,
+                10L,
+                now.plusDays(1).withHour(10).withMinute(0),
+                now.plusDays(1).withHour(12).withMinute(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r1, "id", 101L);
+
+        Reservation r2 = new Reservation(
+                USER_ID,
+                11L,
+                now.plusDays(1).withHour(14).withMinute(0),
+                now.plusDays(1).withHour(16).withMinute(0),
+                now.minusHours(1));
+        ReflectionTestUtils.setField(r2, "id", 102L);
+
+        when(userApi.exists(USER_ID)).thenReturn(true);
+        when(reservationRepository.findUpcomingConfirmedByUser(eq(USER_ID), any(LocalDateTime.class)))
+                .thenReturn(List.of(r1), List.of(r2));
+
+        int countCustom = reservationService.cancelUpcomingReservationsForUser(USER_ID, exact255);
+        assertThat(countCustom)
+                .as(
+                        "255-char reason is at the exact max length boundary and must succeed; see cancelUpcomingReservationsForUser")
+                .isEqualTo(1);
+        assertThat(r1.getCancelReason())
+                .as("non-blank custom reason must be preserved verbatim; see cancelUpcomingReservationsForUser")
+                .isEqualTo(exact255);
+
+        int countNull = reservationService.cancelUpcomingReservationsForUser(USER_ID, null);
+        assertThat(countNull)
+                .as("null reason must still cancel the upcoming reservation; see cancelUpcomingReservationsForUser")
+                .isEqualTo(1);
+        assertThat(r2.getCancelReason())
+                .as("null reason must fall back to default admin message; see cancelUpcomingReservationsForUser")
+                .isEqualTo("Account disabled by administrator");
+    }
+
+    @Test
+    @DisplayName("extendReservation: throws 404 RESERVATION_NOT_FOUND when reservation does not exist")
+    void extendReservation_notFound_throws404() {
+        LocalDateTime newEnd = LocalDateTime.now(clock).plusDays(1).withHour(18).withMinute(0);
+        when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.extendReservation(999L, new ExtendReservationRequest(newEnd)))
+                .as(
+                        "existence: extending a missing reservation must throw RESERVATION_NOT_FOUND; see ReservationServiceSupport.loadOwnedOrAdminForUpdate")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("extendReservation: rejects if reservation status changes concurrently while acquiring asset lock")
+    void extendReservation_rejectsIfStatusChangedConcurrentlyAfterLock() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start = now.plusHours(1).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(1);
+        LocalDateTime newEnd = end.plusHours(1);
+
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, end, now.minusHours(1));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
+        org.mockito.Mockito.doAnswer(inv -> {
+                    r.cancel(now, "concurrent cancel");
+                    return null;
+                })
+                .when(catalogApi)
+                .lockForBooking(ASSET_ID);
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .as(
+                        "concurrency: status re-check after asset row lock must reject cancelled reservation; see ReservationService.extendReservation")
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasFieldOrPropertyWithValue("code", "INVALID_RESERVATION_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName(
+            "bookBundle: non-web context without CurrentUser treats caller as non-admin and enforces student quota")
+    void bookBundle_nonWebContextEnforcesStudentQuota() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(currentUser.id()).thenThrow(new IllegalStateException("no HTTP request context"));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(ASSET_ID), start, end))
+                .as(
+                        "non-web context: CurrentUser failure must default isCurrentUserAdmin to false so student quota applies; see ReservationServiceSupport.isCurrentUserAdmin")
+                .isInstanceOf(ConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_LIMIT_REACHED");
     }
 
     @Test

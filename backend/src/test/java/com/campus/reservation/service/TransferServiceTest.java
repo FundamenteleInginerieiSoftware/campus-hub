@@ -51,6 +51,11 @@ class TransferServiceTest {
 
     private final Clock clock =
             Clock.fixed(Instant.parse("2026-11-02T08:00:00.123456789Z"), ZoneId.of("Europe/Bucharest"));
+    private final LocalDateTime now = LocalDateTime.now(clock).withSecond(0).withNano(0);
+    private final LocalDateTime slotStart = now.plusHours(4);
+    private final LocalDateTime slotEnd = now.plusHours(6);
+    private final LocalDateTime requestedAt = now.plusHours(1);
+    private final LocalDateTime resolvedAt = now.plusHours(2);
 
     @Mock
     private ReservationRepository reservationRepository;
@@ -91,12 +96,7 @@ class TransferServiceTest {
     @Test
     @DisplayName("Transfer: initiates transfer offer to recipient student and notifies them")
     void initiateTransfer_success() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -125,12 +125,7 @@ class TransferServiceTest {
     @DisplayName(
             "Transfer: anti-probing: allows initiate even if recipient is at quota (quota enforced at accept, #240 point 3)")
     void initiateTransfer_doesNotProbeRecipientQuota() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -155,12 +150,7 @@ class TransferServiceTest {
     @Test
     @DisplayName("Transfer: rejects initiate if 24-hour transfer offer limit is reached (#240 point 3)")
     void initiateTransfer_rejectsWhenDailyTransferOfferLimitReached() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -179,12 +169,7 @@ class TransferServiceTest {
     @Test
     @DisplayName("Transfer: rejects transfer to oneself")
     void initiateTransfer_rejectsSelfTransfer() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -198,12 +183,7 @@ class TransferServiceTest {
     @Test
     @DisplayName("initiateTransfer: rejects transfer of individual items belonging to a bundle (#228 point 1)")
     void initiateTransfer_rejectsBundleItems() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
         r.assignBundle(UUID.randomUUID());
 
@@ -220,12 +200,7 @@ class TransferServiceTest {
     @Test
     @DisplayName("initiateTransfer: rejects recipient who is not a student (e.g. ADMIN) (#228 point 2)")
     void initiateTransfer_rejectsNonStudentRecipient() {
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -242,12 +217,7 @@ class TransferServiceTest {
     @DisplayName("initiateTransfer: admin-initiated transfer records reservation owner as fromUserId (#228 point 5)")
     void initiateTransfer_byAdmin_setsFromUserIdToReservationOwner() {
         Long studentOwnerId = 77L;
-        Reservation r = new Reservation(
-                studentOwnerId,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(studentOwnerId, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
         when(currentUser.id()).thenReturn(USER_ID); // Admin ID
@@ -274,16 +244,10 @@ class TransferServiceTest {
     @DisplayName("Transfer: accepts transfer and atomically changes reservation ownership")
     void acceptTransfer_success() {
         Long recipientId = 99L;
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
@@ -310,16 +274,10 @@ class TransferServiceTest {
     @DisplayName("Transfer: rejects transfer if recipient active quota is exceeded")
     void acceptTransfer_rejectsIfRecipientQuotaExceeded() {
         Long recipientId = 99L;
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
@@ -343,16 +301,10 @@ class TransferServiceTest {
     @DisplayName("Transfer: admin accepting transfer bypasses active quota check")
     void acceptTransfer_adminBypassesQuota() {
         Long adminId = 999L;
-        Reservation r = new Reservation(
-                USER_ID,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, adminId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, adminId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(adminId);
@@ -373,16 +325,10 @@ class TransferServiceTest {
     @DisplayName("Transfer: rejects accept if reservation owner no longer matches transfer sender")
     void acceptTransfer_rejectsIfReservationOwnerChanged() {
         Long recipientId = 99L;
-        Reservation r = new Reservation(
-                777L,
-                ASSET_ID,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation r = new Reservation(777L, ASSET_ID, slotStart, slotEnd, now);
         ReflectionTestUtils.setField(r, "id", 100L);
 
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
@@ -399,8 +345,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: rejects accept if sender account is no longer active")
     void acceptTransfer_rejectsIfSenderInactive() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
@@ -450,8 +395,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: recipient rejects transfer and notifies sender")
     void rejectTransfer_success() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
@@ -477,8 +421,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: admin can reject transfer on behalf of recipient")
     void rejectTransfer_byAdmin_success() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(777L);
@@ -495,8 +438,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: non-recipient student throws 404 when rejecting transfer")
     void rejectTransfer_nonRecipient_throws404() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(888L);
@@ -523,10 +465,9 @@ class TransferServiceTest {
     @DisplayName("Transfer: reject transfer throws 409 when status is not PENDING")
     void rejectTransfer_nonPending_throws409() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
-        transfer.reject(LocalDateTime.of(2026, 11, 2, 12, 0));
+        transfer.reject(resolvedAt);
 
         when(currentUser.id()).thenReturn(recipientId);
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
@@ -540,8 +481,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: sender cancels pending transfer and notifies recipient")
     void cancelTransfer_senderCancelsAndNotifiesRecipient() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(USER_ID);
@@ -570,8 +510,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: admin can cancel outgoing transfer offer")
     void cancelTransfer_byAdmin_success() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(777L);
@@ -588,8 +527,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: non-sender student throws 404 when cancelling transfer")
     void cancelTransfer_nonSender_throws404() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(888L);
@@ -616,10 +554,9 @@ class TransferServiceTest {
     @DisplayName("Transfer: cancel transfer throws 409 when status is not PENDING")
     void cancelTransfer_nonPending_throws409() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
-        transfer.cancel(LocalDateTime.of(2026, 11, 2, 12, 0));
+        transfer.cancel(resolvedAt);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
@@ -633,8 +570,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: getMyPendingTransfers lists transfers directed to current user")
     void getMyPendingTransfers_returnsList() {
         Long recipientId = USER_ID;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, 2L, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
+        ReservationTransfer transfer = new ReservationTransfer(100L, 2L, recipientId, requestedAt);
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
@@ -646,5 +582,37 @@ class TransferServiceTest {
 
         assertThat(list).hasSize(1);
         assertThat(list.get(0).id()).isEqualTo(500L);
+    }
+
+    @Test
+    @DisplayName("Transfer: acceptTransfer throws 404 TRANSFER_NOT_FOUND when transfer does not exist")
+    void acceptTransfer_transferNotFound_throws404() {
+        when(currentUser.id()).thenReturn(99L);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transferService.acceptTransfer(500L))
+                .as(
+                        "existence: accepting a missing transfer must throw TRANSFER_NOT_FOUND; see TransferService.acceptTransfer")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "TRANSFER_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("Transfer: acceptTransfer throws 404 RESERVATION_NOT_FOUND when underlying reservation is missing")
+    void acceptTransfer_reservationNotFound_throws404() {
+        Long recipientId = 99L;
+        ReservationTransfer transfer = new ReservationTransfer(100L, USER_ID, recipientId, requestedAt);
+        ReflectionTestUtils.setField(transfer, "id", 500L);
+
+        when(currentUser.id()).thenReturn(recipientId);
+        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.findById(100L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transferService.acceptTransfer(500L))
+                .as(
+                        "existence: accepting a transfer whose reservation disappeared must throw RESERVATION_NOT_FOUND; see TransferService.acceptTransfer")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
     }
 }
