@@ -34,3 +34,4 @@
 | 21 | [21-frontend-inventory-split-and-audit-filter.md](21-frontend-inventory-split-and-audit-filter.md) | Split `AdminInventoryPage` into tab components with isolated modal errors, extract `statusBadgeColor`, and add `PICKUP_PASS_VERIFIED` audit filter (Refs #268) |
 | 22 | [22-live-notification-stream.md](22-live-notification-stream.md) | Live notifications PR 1: in-memory SSE stream registry (`LiveStreams`), `GET /api/v1/live/stream`, heartbeat, and tests (Refs #290) |
 | 23 | [23-live-toasts-frontend.md](23-live-toasts-frontend.md) | Live notifications PR 2: SSE fetch client (`live.ts`) and floating Mantine toast stack (`LiveToasts.tsx`) (Refs #290) |
+| 24 | [24-live-notifications-push.md](24-live-notifications-push.md) | Live notifications PR 3: push from `LoggingNotificationService`, `UserDisabledLiveStreamListener`, and end-to-end `LiveStreamIT` (Refs #290) |
