@@ -41,7 +41,7 @@ The module employs the **Observer Pattern** (via Spring Application Events) to d
 When an admin retires equipment (`POST /api/v1/admin/assets/{id}/retire`), the asset is permanently decommissioned. Future bookings must not remain orphaned on a retired asset.
 - **Trigger Event:** `AssetService.retire` publishes `AssetRetiredEvent(Long assetId, LocalDateTime retiredAt, Long actorId)` from `com.campus.catalog.api` (#280).
 - **Engine Reaction:** `LocalAssetRetiredListener` (`@Async` + `@TransactionalEventListener(phase = AFTER_COMMIT)`, always local — no `app.messaging.sqs.enabled` condition) invokes `ReassignmentService.handle(AssetRetiredEvent)` (#311).
-- **Audit Logging Alignment:** Flyway migration `V2026_11_19_1245__reassignment_nullable_incident_id.sql` makes `reassignment_log.incident_id` nullable and adds `trigger VARCHAR(32) NOT NULL DEFAULT 'INCIDENT'` (`INCIDENT` | `RETIRED`), so retirement reassignments record an explicit audit trail without a dummy incident.
+- **Audit Logging Alignment:** Flyway migration `V2026_11_19_1245__reassignment_nullable_incident_id.sql` makes `reassignment_log.incident_id` nullable and adds the trigger column (`INCIDENT` | `RETIRED`), which `V2026_11_20_1255__reassignment_rename_trigger_to_triggered_by.sql` renames from `trigger` to `triggered_by` (keeping the JSON field `trigger` unchanged while avoiding SQL keyword quoting in external tools).
 
 ---
 

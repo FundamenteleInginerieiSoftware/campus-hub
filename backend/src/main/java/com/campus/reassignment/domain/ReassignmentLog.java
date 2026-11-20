@@ -32,8 +32,9 @@ public class ReassignmentLog {
     @Column(name = "incident_id")
     private Long incidentId;
 
+    // Column is named triggered_by to avoid quoting the SQL keyword TRIGGER in external tools (#311 follow-up).
     @Enumerated(EnumType.STRING)
-    @Column(name = "trigger", nullable = false, length = 32)
+    @Column(name = "triggered_by", nullable = false, length = 32)
     private ReassignmentTrigger trigger;
 
     @Column(name = "reservation_id", nullable = false)

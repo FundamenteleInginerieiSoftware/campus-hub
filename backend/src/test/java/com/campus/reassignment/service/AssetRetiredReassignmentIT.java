@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,18 +38,11 @@ import org.springframework.test.web.servlet.MockMvc;
  * Integration test for the W7 asset retirement reassignment flow (#245): verifies both direct
  * {@link ReassignmentService#handle(AssetRetiredEvent)} execution and the full HTTP
  * {@code POST /api/v1/admin/assets/{id}/retire} → {@code AFTER_COMMIT} → {@link LocalAssetRetiredListener}
- * wiring, asserting {@code incident_id = NULL} and {@code trigger = RETIRED} in {@code reassignment_log}.
+ * wiring, asserting {@code incident_id = NULL} and {@code triggered_by = RETIRED} in {@code reassignment_log}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 class AssetRetiredReassignmentIT {
-
-    private static final long STUDENT_ID = 301L;
-    private static final long ADMIN_ID = 302L;
-    private static final long CATEGORY_ID = 750L;
-    private static final long LAB_ROOM_ID = 750L;
-    private static final long RETIRED_ASSET_ID = 751L;
-    private static final long SUBSTITUTE_ASSET_ID = 752L;
 
     @Autowired
     private ReassignmentService reassignmentService;
@@ -68,6 +62,14 @@ class AssetRetiredReassignmentIT {
     @Autowired
     private Clock clock;
 
+    // Generated per-test IDs so tearDown never touches rows owned by any other test.
+    private Long studentId;
+    private Long adminId;
+    private Long categoryId;
+    private Long labRoomId;
+    private Long retiredAssetId;
+    private Long substituteAssetId;
+
     @TestConfiguration
     static class FixedClockConfig {
         @Bean
@@ -79,50 +81,71 @@ class AssetRetiredReassignmentIT {
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.update("""
-                INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
-                VALUES (301, 'student301@retire.test', '{bcrypt}hash', 'Student 301', 'STUDENT', true, NOW()),
-                       (302, 'admin302@retire.test', '{bcrypt}hash', 'Admin 302', 'ADMIN', true, NOW())
-                ON CONFLICT (id) DO NOTHING
-                """);
-        jdbcTemplate.update(
-                "INSERT INTO categories (id, name) VALUES (750, 'Retire Test Scopes') ON CONFLICT (id) DO NOTHING");
-        jdbcTemplate.update(
-                "INSERT INTO lab_rooms (id, code, name) VALUES (750, 'LAB-750', 'Retire Test Lab') ON CONFLICT (id) DO NOTHING");
-        jdbcTemplate.update("""
-                INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
-                VALUES (751, 'Retired Scope #1', 'RETIRE-DS1054Z', 'SN-RET-751', 'RETIRED', 750, 750, NOW(), NOW()),
-                       (752, 'Healthy Scope #2', 'RETIRE-DS1054Z', 'SN-RET-752', 'AVAILABLE', 750, 750, NOW(), NOW())
-                ON CONFLICT (id) DO NOTHING
-                """);
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        String model = "RETIRE-DS1054Z-" + tag;
+
+        studentId = jdbcTemplate.queryForObject("""
+                INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
+                VALUES (?, '{bcrypt}hash', 'Retire Test Student', 'STUDENT', true, NOW())
+                RETURNING id
+                """, Long.class, "student-" + tag + "@retire.test");
+
+        adminId = jdbcTemplate.queryForObject("""
+                INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
+                VALUES (?, '{bcrypt}hash', 'Retire Test Admin', 'ADMIN', true, NOW())
+                RETURNING id
+                """, Long.class, "admin-" + tag + "@retire.test");
+
+        categoryId = jdbcTemplate.queryForObject(
+                "INSERT INTO categories (name) VALUES (?) RETURNING id", Long.class, "Retire Test Scopes " + tag);
+
+        labRoomId = jdbcTemplate.queryForObject(
+                "INSERT INTO lab_rooms (code, name) VALUES (?, ?) RETURNING id",
+                Long.class,
+                "LAB-" + tag,
+                "Retire Test Lab " + tag);
+
+        retiredAssetId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO assets (name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+                VALUES (?, ?, ?, 'RETIRED', ?, ?, NOW(), NOW())
+                RETURNING id
+                """, Long.class, "Retired Scope " + tag, model, "SN-RET-1-" + tag, categoryId, labRoomId);
+
+        substituteAssetId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO assets (name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+                VALUES (?, ?, ?, 'AVAILABLE', ?, ?, NOW(), NOW())
+                RETURNING id
+                """, Long.class, "Healthy Scope " + tag, model, "SN-RET-2-" + tag, categoryId, labRoomId);
     }
 
     @AfterEach
     void tearDown() {
         jdbcTemplate.update(
-                "DELETE FROM reassignment_log WHERE from_asset_id IN (?, ?)", RETIRED_ASSET_ID, SUBSTITUTE_ASSET_ID);
+                "DELETE FROM reassignment_log WHERE from_asset_id IN (?, ?)", retiredAssetId, substituteAssetId);
         jdbcTemplate.update(
                 "DELETE FROM audit_logs WHERE actor_id IN (?, ?) OR (entity_type = 'Asset' AND entity_id IN (?, ?)) "
                         + "OR (entity_type = 'Reservation' AND entity_id IN "
                         + "(SELECT id FROM reservations WHERE asset_id IN (?, ?) OR original_asset_id IN (?, ?)))",
-                STUDENT_ID,
-                ADMIN_ID,
-                RETIRED_ASSET_ID,
-                SUBSTITUTE_ASSET_ID,
-                RETIRED_ASSET_ID,
-                SUBSTITUTE_ASSET_ID,
-                RETIRED_ASSET_ID,
-                SUBSTITUTE_ASSET_ID);
+                studentId,
+                adminId,
+                retiredAssetId,
+                substituteAssetId,
+                retiredAssetId,
+                substituteAssetId,
+                retiredAssetId,
+                substituteAssetId);
         jdbcTemplate.update(
                 "DELETE FROM reservations WHERE asset_id IN (?, ?) OR original_asset_id IN (?, ?)",
-                RETIRED_ASSET_ID,
-                SUBSTITUTE_ASSET_ID,
-                RETIRED_ASSET_ID,
-                SUBSTITUTE_ASSET_ID);
-        jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?)", RETIRED_ASSET_ID, SUBSTITUTE_ASSET_ID);
-        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", LAB_ROOM_ID);
-        jdbcTemplate.update("DELETE FROM categories WHERE id = ?", CATEGORY_ID);
-        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", STUDENT_ID, ADMIN_ID);
+                retiredAssetId,
+                substituteAssetId,
+                retiredAssetId,
+                substituteAssetId);
+        jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?)", retiredAssetId, substituteAssetId);
+        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", labRoomId);
+        jdbcTemplate.update("DELETE FROM categories WHERE id = ?", categoryId);
+        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", studentId, adminId);
     }
 
     @Test
@@ -134,9 +157,9 @@ class AssetRetiredReassignmentIT {
         LocalDateTime end = start.plusHours(2);
 
         Reservation saved =
-                reservationRepository.save(new Reservation(STUDENT_ID, RETIRED_ASSET_ID, start, end, createdAt));
+                reservationRepository.save(new Reservation(studentId, retiredAssetId, start, end, createdAt));
 
-        reassignmentService.handle(new AssetRetiredEvent(RETIRED_ASSET_ID, now, ADMIN_ID));
+        reassignmentService.handle(new AssetRetiredEvent(retiredAssetId, now, adminId));
 
         Reservation updated = reservationRepository.findById(saved.getId()).orElseThrow();
         assertThat(updated.getStatus())
@@ -144,10 +167,10 @@ class AssetRetiredReassignmentIT {
                 .isEqualTo(ReservationStatus.CONFIRMED);
         assertThat(updated.getAssetId())
                 .as("reservation must move to the free same-model substitute; see ReassignmentBookingProcessor")
-                .isEqualTo(SUBSTITUTE_ASSET_ID);
+                .isEqualTo(substituteAssetId);
         assertThat(updated.getOriginalAssetId())
                 .as("originalAssetId must preserve the retired asset id; see Reservation.moveTo")
-                .isEqualTo(RETIRED_ASSET_ID);
+                .isEqualTo(retiredAssetId);
 
         List<ReassignmentLog> logs = reassignmentLogRepository.findAll().stream()
                 .filter(l -> l.getReservationId().equals(saved.getId()))
@@ -164,23 +187,23 @@ class AssetRetiredReassignmentIT {
                 .isEqualTo(ReassignmentTrigger.RETIRED);
         assertThat(logEntry.getFromAssetId())
                 .as("fromAssetId must record the retired asset id")
-                .isEqualTo(RETIRED_ASSET_ID);
+                .isEqualTo(retiredAssetId);
         assertThat(logEntry.getToAssetId())
-                .as("toAssetId must record the substitute asset id")
-                .isEqualTo(SUBSTITUTE_ASSET_ID);
+                .as("toAssetId must record the chosen substitute asset id")
+                .isEqualTo(substituteAssetId);
         assertThat(logEntry.getOutcome())
-                .as("outcome must be REASSIGNED when a substitute is free")
+                .as("outcome must be REASSIGNED when a substitute is available")
                 .isEqualTo(ReassignmentOutcome.REASSIGNED);
         assertThat(logEntry.getStrategy())
-                .as("same-model substitute must be chosen by SameModelStrategy")
+                .as("same-model substitute must be selected by SameModelStrategy")
                 .isEqualTo("SameModelStrategy");
     }
 
     @Test
-    @DisplayName("Retire flow (#245): force-cancels upcoming booking when no substitute is free and logs RETIRED")
-    void assetRetiredForceCancelsWhenNoSubstituteFreeAndPersistsNullIncidentId() {
+    @DisplayName("Retire flow (#245): force-cancels upcoming booking when no substitute is free")
+    void assetRetiredForceCancelsWhenNoSubstituteAvailableAndPersistsNullIncidentId() {
         // Retire the substitute too so no replacement asset is available
-        jdbcTemplate.update("UPDATE assets SET status = 'RETIRED' WHERE id = ?", SUBSTITUTE_ASSET_ID);
+        jdbcTemplate.update("UPDATE assets SET status = 'RETIRED' WHERE id = ?", substituteAssetId);
 
         LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime createdAt = now.minusHours(1);
@@ -188,9 +211,9 @@ class AssetRetiredReassignmentIT {
         LocalDateTime end = start.plusHours(2);
 
         Reservation saved =
-                reservationRepository.save(new Reservation(STUDENT_ID, RETIRED_ASSET_ID, start, end, createdAt));
+                reservationRepository.save(new Reservation(studentId, retiredAssetId, start, end, createdAt));
 
-        reassignmentService.handle(new AssetRetiredEvent(RETIRED_ASSET_ID, now, ADMIN_ID));
+        reassignmentService.handle(new AssetRetiredEvent(retiredAssetId, now, adminId));
 
         Reservation updated = reservationRepository.findById(saved.getId()).orElseThrow();
         assertThat(updated.getStatus())
@@ -213,7 +236,7 @@ class AssetRetiredReassignmentIT {
                 .isEqualTo(ReassignmentTrigger.RETIRED);
         assertThat(logEntry.getFromAssetId())
                 .as("fromAssetId must record the retired asset id")
-                .isEqualTo(RETIRED_ASSET_ID);
+                .isEqualTo(retiredAssetId);
         assertThat(logEntry.getToAssetId())
                 .as("toAssetId must be null when force-cancelled")
                 .isNull();
@@ -229,7 +252,7 @@ class AssetRetiredReassignmentIT {
     @DisplayName("Retire flow (#245): POST /api/v1/admin/assets/{id}/retire triggers LocalAssetRetiredListener")
     void retiringAssetViaAdminEndpointReassignsBookingAfterCommit() throws Exception {
         // Start with the asset AVAILABLE so AssetService.retire performs a real transition and publishes the event.
-        jdbcTemplate.update("UPDATE assets SET status = 'AVAILABLE' WHERE id = ?", RETIRED_ASSET_ID);
+        jdbcTemplate.update("UPDATE assets SET status = 'AVAILABLE' WHERE id = ?", retiredAssetId);
 
         LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime createdAt = now.minusHours(1);
@@ -237,12 +260,12 @@ class AssetRetiredReassignmentIT {
         LocalDateTime end = start.plusHours(2);
 
         Reservation saved =
-                reservationRepository.save(new Reservation(STUDENT_ID, RETIRED_ASSET_ID, start, end, createdAt));
+                reservationRepository.save(new Reservation(studentId, retiredAssetId, start, end, createdAt));
 
         // AsyncConfig runs @Async on the caller's thread in tests, so LocalAssetRetiredListener has
         // already finished when the HTTP retire call returns.
-        mockMvc.perform(post("/api/v1/admin/assets/{id}/retire", RETIRED_ASSET_ID)
-                        .with(jwt().jwt(j -> j.subject(String.valueOf(ADMIN_ID)))
+        mockMvc.perform(post("/api/v1/admin/assets/{id}/retire", retiredAssetId)
+                        .with(jwt().jwt(j -> j.subject(String.valueOf(adminId)))
                                 .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
 
@@ -250,10 +273,10 @@ class AssetRetiredReassignmentIT {
         assertThat(updated.getAssetId())
                 .as("real AssetService.retire must fire LocalAssetRetiredListener AFTER_COMMIT and move the booking; "
                         + "see LocalAssetRetiredListener.on")
-                .isEqualTo(SUBSTITUTE_ASSET_ID);
+                .isEqualTo(substituteAssetId);
         assertThat(updated.getOriginalAssetId())
                 .as("originalAssetId must preserve the retired asset id after listener-driven reassignment")
-                .isEqualTo(RETIRED_ASSET_ID);
+                .isEqualTo(retiredAssetId);
 
         List<ReassignmentLog> logs = reassignmentLogRepository.findAll().stream()
                 .filter(l -> l.getReservationId().equals(saved.getId()))
