@@ -69,6 +69,7 @@ Each document is structured in two parts:
 | 50 | [`50-user-disabled-event-listener.md`](./50-user-disabled-event-listener.md) | UserDisabledEvent Listener in Reservation Module (#229) | `UserDisabledReservationListener` (`AFTER_COMMIT` + `REQUIRES_NEW` via `TransactionTemplate`, non-`@Async`), unit + PostgreSQL IT, doc 27 contract sync |
 | 51 | [`51-remove-reservation-api-default-overloads.md`](./51-remove-reservation-api-default-overloads.md) | Remove Self-Invoking Default Overloads on ReservationApi (#327 Follow-up) | Removed interface `default` delegates on `ReservationApi.moveToAsset`/`forceCancel` that bypassed Spring `@Transactional`, added `CyclicBarrier` race IT, synced module docs |
 | 52 | [`52-review-followups-lock-archunit-docs.md`](./52-review-followups-lock-archunit-docs.md) | Review Follow-ups & PIT Hardening: cancelReservation Lock, Deterministic Transfer IT, ArchUnit Rule 15 & Docs | `loadOwnedOrAdminForUpdate` in `cancelReservation`, `pg_stat_activity` accept/reject race ITs, ArchUnit no-default-in-api rule, `TransferServiceTest` lock-order PIT assertions, synced docs |
+| 53 | [`53-cancel-bundle-noshow-locks-and-docs.md`](./53-cancel-bundle-noshow-locks-and-docs.md) | Review Follow-ups (#336): cancelBundle & markNoShow Row Locks, Deterministic cancelReservation IT & Personal Docs | `findByBundleIdForUpdate` (`ORDER BY id ASC`) in `cancelBundle`, `findByIdForUpdate` in `markNoShow`, `rejectTransfer`-vs-`cancelReservation` and disable-vs-`cancelBundle` race ITs, synced docs 02/11/15 |
 
 
 
