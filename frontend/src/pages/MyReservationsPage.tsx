@@ -444,7 +444,7 @@ export default function MyReservationsPage() {
         title="My reservations"
         description="View your lab bookings and manage upcoming slots. You can cancel any confirmed booking until its start time."
         actions={
-          <Group gap="xs">
+          <Group gap="xs" wrap="wrap">
             <Button
               component={Link}
               to="/calendar-sync"
