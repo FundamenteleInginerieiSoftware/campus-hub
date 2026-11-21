@@ -258,6 +258,27 @@ Rules (decisions.md, "User admin"): an admin can't disable or demote themselves;
 
 After the report commits, `AssetDamagedEvent(incidentId, assetId, reportedById, occurredAt)` starts Calin's reassignment engine.
 
+### Equipment reliability (Stefania)
+
+| Method & path | Access | Request | Response | Errors |
+|---|---|---|---|---|
+| `GET /api/v1/admin/reliability?days=180` | admin | – | `200` + `ReliabilityReportResponse`: the units with at least one failure in the last `days` days, worst first. Not paged. `days` 30–365, default 180 | 400 `VALIDATION_FAILED` (`days` outside 30–365), 401, 403 |
+
+A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `HIGH`/`CRITICAL` ones. `usageHours` comes from Calin's `ReservationApi.usedMinutesByAsset` (check-out → return). `failuresPer100h = failures × 100 / max(usageHours, 10)`. `vsModel` compares the unit with the **other** units of the same model together (`null` when they have less than 10 h of use together or never failed). **Level:** `INSPECT` = at least 3 failures, or at least 2 and `vsModel` ≥ 2.0; `WATCH` = at least 1 failure; units without failures are not listed. **Order:** `INSPECT` first, then `failuresPer100h` (highest first), then `assetId`. Every number has one decimal; `mtbfHours`, `avgRepairHours` and `vsModel` can be `null` (never `NaN`). Calculated on every call, nothing stored; an asset the catalog no longer knows is skipped.
+
+```json
+// ReliabilityReportResponse
+{
+  "windowDays": 180, "from": "2026-05-14T10:00:00", "to": "2026-11-10T10:00:00",
+  "items": [{
+    "assetId": 2, "assetName": "Oscilloscope DS1054Z #2", "model": "DS1054Z", "status": "AVAILABLE",
+    "failures": 2, "severeFailures": 1, "usageHours": 40.0, "failuresPer100h": 5.0,
+    "mtbfHours": 20.0, "avgRepairHours": null, "vsModel": 6.0, "level": "INSPECT",
+    "reason": "2 incidents in the last 180 days; fails 6.0× more often than other DS1054Z units"
+  }]
+}
+```
+
 ---
 
 ### Reservation endpoints (Calin)
