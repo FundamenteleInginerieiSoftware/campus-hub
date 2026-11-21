@@ -27,6 +27,7 @@ Before every push: `npm run lint && npm run build` (CI runs the same two command
 | `src/api/<module>.ts` | Your module's calls and types, e.g. `src/api/catalog.ts` | module owner |
 | `src/auth/` | `useAuth()`, `RequireAuth`, `RequireAdmin` | Stefania (shared) |
 | `src/layout/` | Side menu, top bar, `navigation.ts` (menu per role) | Stefania (shared) |
+| `src/live/` | `LiveToasts`: live notification cards bottom-right, mounted once in `AppLayout.tsx` (stream client in `src/api/live.ts`) | Liviu |
 | `src/components/` | Shared components: `PageHeader`, `PagedTable`, `ErrorAlert` | Stefania (shared) |
 | `src/pages/` | One file per page, e.g. `CatalogPage.tsx` | module owner |
 | `src/theme.ts` | Colors, fonts, light/dark backgrounds | Stefania (shared) |

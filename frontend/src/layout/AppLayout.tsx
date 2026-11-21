@@ -16,6 +16,7 @@ import { useDisclosure } from '@mantine/hooks'
 import { IconFlask, IconLogout, IconMoon, IconSun } from '@tabler/icons-react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../auth/useAuth.ts'
+import LiveToasts from '../live/LiveToasts.tsx'
 import { menuFor, titleFor } from './navigation.ts'
 
 function initials(fullName: string): string {
@@ -135,6 +136,9 @@ export default function AppLayout() {
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>
+
+      {/* Live notifications (#290): mounted here once, so the stream opens after login and closes on logout. */}
+      <LiveToasts />
     </AppShell>
   )
 }
