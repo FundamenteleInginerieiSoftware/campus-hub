@@ -15,11 +15,14 @@ const AUTO_CLOSE_MS = 8000
  * Floating bottom-right toast stack that opens the live SSE stream on mount and displays
  * incoming notifications (newest on top, max 3 cards, auto-closing after 8 seconds).
  *
- * Mounted once inside AppLayout.tsx (Stefania).
+ * To be mounted once inside the authenticated AppLayout (Stefania).
  */
 export default function LiveToasts() {
   const [items, setItems] = useState<ToastItem[]>([])
   const nextIdRef = useRef(1)
+  // Track visible toast IDs in a ref so timer eviction happens outside the React state updater
+  // (keeping setItems pure even under StrictMode double-invocation).
+  const activeIdsRef = useRef<number[]>([])
   const timersRef = useRef<Map<number, number>>(new Map())
 
   const dismiss = (id: number) => {
@@ -28,6 +31,7 @@ export default function LiveToasts() {
       window.clearTimeout(timer)
       timersRef.current.delete(id)
     }
+    activeIdsRef.current = activeIdsRef.current.filter((activeId) => activeId !== id)
     setItems((prev) => prev.filter((item) => item.id !== id))
   }
 
@@ -38,24 +42,26 @@ export default function LiveToasts() {
       const id = nextIdRef.current
       nextIdRef.current += 1
 
-      setItems((prev) => {
-        const next = [{ id, event }, ...prev]
-        if (next.length > MAX_VISIBLE_TOASTS) {
-          const evicted = next.slice(MAX_VISIBLE_TOASTS)
-          for (const old of evicted) {
-            const oldTimer = timers.get(old.id)
-            if (oldTimer !== undefined) {
-              window.clearTimeout(oldTimer)
-              timers.delete(old.id)
-            }
+      const updatedIds = [id, ...activeIdsRef.current]
+      if (updatedIds.length > MAX_VISIBLE_TOASTS) {
+        const evictedIds = updatedIds.slice(MAX_VISIBLE_TOASTS)
+        for (const oldId of evictedIds) {
+          const oldTimer = timers.get(oldId)
+          if (oldTimer !== undefined) {
+            window.clearTimeout(oldTimer)
+            timers.delete(oldId)
           }
-          return next.slice(0, MAX_VISIBLE_TOASTS)
         }
-        return next
-      })
+        activeIdsRef.current = updatedIds.slice(0, MAX_VISIBLE_TOASTS)
+      } else {
+        activeIdsRef.current = updatedIds
+      }
+
+      setItems((prev) => [{ id, event }, ...prev].slice(0, MAX_VISIBLE_TOASTS))
 
       const timer = window.setTimeout(() => {
         timers.delete(id)
+        activeIdsRef.current = activeIdsRef.current.filter((activeId) => activeId !== id)
         setItems((prev) => prev.filter((item) => item.id !== id))
       }, AUTO_CLOSE_MS)
       timers.set(id, timer)
@@ -68,13 +74,12 @@ export default function LiveToasts() {
         window.clearTimeout(timer)
       }
       timers.clear()
+      activeIdsRef.current = []
     }
   }, [])
 
-  if (items.length === 0) {
-    return null
-  }
-
+  // Keep the aria-live container mounted even when empty so screen readers register the live
+  // region before the first toast arrives.
   return (
     <div
       aria-live="polite"
@@ -85,23 +90,26 @@ export default function LiveToasts() {
         zIndex: 400,
         width: 360,
         maxWidth: 'calc(100vw - 32px)',
+        pointerEvents: items.length === 0 ? 'none' : 'auto',
       }}
     >
-      <Stack gap="xs">
-        {items.map(({ id, event }) => (
-          <Notification
-            key={id}
-            icon={<IconBell size={18} />}
-            color="blue"
-            title={event.title}
-            onClose={() => dismiss(id)}
-            withBorder
-            radius="md"
-          >
-            {event.message}
-          </Notification>
-        ))}
-      </Stack>
+      {items.length > 0 && (
+        <Stack gap="xs">
+          {items.map(({ id, event }) => (
+            <Notification
+              key={id}
+              icon={<IconBell size={18} />}
+              color="blue"
+              title={event.title}
+              onClose={() => dismiss(id)}
+              withBorder
+              radius="md"
+            >
+              {event.message}
+            </Notification>
+          ))}
+        </Stack>
+      )}
     </div>
   )
 }
