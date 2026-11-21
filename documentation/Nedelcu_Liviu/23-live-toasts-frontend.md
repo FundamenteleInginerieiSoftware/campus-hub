@@ -22,11 +22,11 @@ Once Stefania mounts `<LiveToasts />` once in `AppLayout.tsx`, any logged-in stu
 ### 1. Files Created
 - [`frontend/src/api/live.ts`](../../frontend/src/api/live.ts):
   - `parseSseChunk(buffer)`: normalizes `\r\n`, splits on `\n\n`, keeps any incomplete trailing frame in `rest`, ignores `:` comment lines (`:connected`, `:hb`), and safely `JSON.parse`s `data:` lines into `LiveEvent`.
-  - `connectLive()`: opens `GET /api/v1/live/stream` via `fetch` + `Authorization: Bearer <token>` (never putting tokens in URLs), reads `response.body.getReader()` with streaming `TextDecoder`, reconnects with backoff (`1s, 2s, 5s, 15s, 30s`), resets backoff after any stream that delivered bytes, stops permanently on `401` (logged out), and retries after `30s` on `409 LIVE_STREAM_LIMIT` (handles rapid reloads before the 20 s heartbeat drops stale tabs).
+  - `connectLive()`: opens `GET /api/v1/live/stream` via `fetch` + `Authorization: Bearer <token>` (never putting tokens in URLs), reads `response.body.getReader()` with streaming `TextDecoder`, reconnects with backoff (`1s, 2s, 5s, 15s, 30s`), resets backoff after any stream that delivered bytes, stops quietly on `401` (leaving token cleanup and redirect to `client.ts` on the next API call), and retries after `30s` on `409 LIVE_STREAM_LIMIT` (handles rapid reloads before the 20 s heartbeat drops stale tabs).
   - `subscribeLive(listener)`: maintains a `Set` of subscribers, isolating exceptions per listener.
 - [`frontend/src/live/LiveToasts.tsx`](../../frontend/src/live/LiveToasts.tsx):
   - Connects on mount (`connectLive()` + `subscribeLive(...)`) and cleans up stream + all timers on unmount.
-  - Displays up to 3 Mantine `Notification` cards bottom-right (`position: fixed`, `zIndex: 400`, `aria-live="polite"`), auto-dismissing each card after 8 seconds. Renders `null` when empty.
+  - Displays up to 3 Mantine `Notification` cards bottom-right (`position: fixed`, `zIndex: 400`, `aria-live="polite"`), auto-dismissing each card after 8 seconds. Keeps the `aria-live="polite"` container mounted even when empty so screen readers register it before the first toast arrives.
 
 ### 2. Integration Follow-up
 - **Stefania (`AppLayout.tsx`):** Mount `<LiveToasts />` once inside the authenticated layout (one import + one JSX line).

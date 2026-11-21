@@ -41,6 +41,8 @@ class LiveStreamIT {
     private JdbcTemplate jdbcTemplate;
 
     private String createdEmail;
+    private String createdAdminEmail;
+    private Long createdAdminId;
     private Long openedUserId;
 
     @AfterEach
@@ -49,9 +51,17 @@ class LiveStreamIT {
             liveStreams.completeAll(openedUserId);
             openedUserId = null;
         }
+        if (createdAdminId != null) {
+            jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id = ?", createdAdminId);
+            createdAdminId = null;
+        }
         if (createdEmail != null) {
             jdbcTemplate.update("DELETE FROM users WHERE email = ?", createdEmail);
             createdEmail = null;
+        }
+        if (createdAdminEmail != null) {
+            jdbcTemplate.update("DELETE FROM users WHERE email = ?", createdAdminEmail);
+            createdAdminEmail = null;
         }
     }
 
@@ -179,5 +189,84 @@ class LiveStreamIT {
 
         liveStreams.completeAll(student1Id);
         mockMvc.perform(asyncDispatch(asyncResult)).andExpect(status().isOk());
+    }
+
+    @Test
+    void disablingUserClosesOpenStreamsAndBlocksReconnect() throws Exception {
+        String run = Long.toString(System.currentTimeMillis(), 36) + "c";
+        createdEmail = "live-disable-student-" + run + "@campus.test";
+        createdAdminEmail = "live-disable-admin-" + run + "@campus.test";
+
+        MvcResult studentReg = mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "password123",
+                                  "fullName": "Disabled Student"
+                                }
+                                """.formatted(createdEmail)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long studentId = ((Number) JsonPath.read(studentReg.getResponse().getContentAsString(), "$.id")).longValue();
+        openedUserId = studentId;
+
+        MvcResult adminReg = mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "password123",
+                                  "fullName": "Live Test Admin"
+                                }
+                                """.formatted(createdAdminEmail)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long adminId = ((Number) JsonPath.read(adminReg.getResponse().getContentAsString(), "$.id")).longValue();
+        createdAdminId = adminId;
+        jdbcTemplate.update("UPDATE users SET role = 'ADMIN' WHERE id = ?", adminId);
+
+        MvcResult studentLogin = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "%s", "password": "password123" }
+                                """.formatted(createdEmail)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String studentToken = JsonPath.read(studentLogin.getResponse().getContentAsString(), "$.accessToken");
+
+        MvcResult adminLogin = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "%s", "password": "password123" }
+                                """.formatted(createdAdminEmail)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String adminToken = JsonPath.read(adminLogin.getResponse().getContentAsString(), "$.accessToken");
+
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/live/stream")
+                        .header("Authorization", "Bearer " + studentToken)
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        assertThat(liveStreams.openCount(studentId))
+                .as("stream must be registered before disable; see LiveStreams.open")
+                .isEqualTo(1);
+
+        mockMvc.perform(post("/api/v1/admin/users/" + studentId + "/disable")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        assertThat(liveStreams.openCount(studentId))
+                .as("disabling a user must close all open SSE streams after commit; see UserDisabledLiveStreamListener")
+                .isZero();
+
+        mockMvc.perform(asyncDispatch(asyncResult)).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/live/stream")
+                        .header("Authorization", "Bearer " + studentToken)
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isUnauthorized());
     }
 }
