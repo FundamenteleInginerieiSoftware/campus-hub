@@ -1975,7 +1975,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r1, r2));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1, r2));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Cancelled entire kit");
 
@@ -2003,7 +2004,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, "late cancel"))
                 .isInstanceOf(ConflictException.class)
@@ -2610,7 +2612,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Changed plans");
@@ -2655,7 +2658,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r));
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
                 .isInstanceOf(ConflictException.class)
@@ -2676,18 +2680,23 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Reservation bundle not found");
+        verify(reservationRepository, never()).findByBundleIdForUpdate(bundleId);
     }
 
     @Test
     @DisplayName("Bundle: cancelBundle throws 404 when bundle does not exist")
     void cancelBundle_notFound_throws404() {
         UUID bundleId = UUID.randomUUID();
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of());
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
                 .isInstanceOf(NotFoundException.class)
@@ -2921,7 +2930,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
         when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
@@ -3203,7 +3213,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r1, r2));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Changed plans");
 
@@ -3216,6 +3227,7 @@ class ReservationServiceTest {
         assertThat(r2.getStatus())
                 .as("bundle cancellation: unowned item must remain CONFIRMED; see ReservationService.cancelBundle")
                 .isEqualTo(ReservationStatus.CONFIRMED);
+        verify(reservationRepository, never()).findByBundleIdForUpdate(bundleId);
     }
 
     @Test
@@ -3460,7 +3472,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
 
         TransactionSynchronizationManager.initSynchronization();
         try {

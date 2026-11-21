@@ -324,18 +324,21 @@ public class ReservationService implements ReservationApi {
 
     private List<Reservation> loadOwnedOrAdminBundle(UUID bundleId, boolean forUpdate) {
         Long userId = currentUser.id();
-        List<Reservation> items = forUpdate
-                ? reservationRepository.findByBundleIdForUpdate(bundleId)
-                : reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        boolean isAdmin = currentUser.isAdmin();
+        List<Reservation> items;
+        if (forUpdate) {
+            items = isAdmin
+                    ? reservationRepository.findByBundleIdForUpdate(bundleId)
+                    : reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, userId);
+        } else {
+            items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+            // Per-item ownership check: non-admins can only access their own items (#228 point 1)
+            if (!isAdmin) {
+                items = items.stream().filter(r -> r.getUserId().equals(userId)).toList();
+            }
+        }
         if (items.isEmpty()) {
             throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
-        }
-        // Per-item ownership check: non-admins can only access their own items (#228 point 1)
-        if (!currentUser.isAdmin()) {
-            items = items.stream().filter(r -> r.getUserId().equals(userId)).toList();
-            if (items.isEmpty()) {
-                throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
-            }
         }
         return items;
     }

@@ -14,8 +14,8 @@ This PR addresses the four non-blocking items from Matei's review on #336:
 
 | File | Change |
 |---|---|
-| `ReservationRepository.java` | Added `@Lock(PESSIMISTIC_WRITE) findByBundleIdForUpdate(UUID bundleId)` ordered by `r.id ASC`. |
-| `ReservationService.java` | Updated `loadOwnedOrAdminBundle(UUID, boolean forUpdate)` (`true` in `cancelBundle`, `false` in `getBundle`) and switched `markNoShow` to `findByIdForUpdate`. |
+| `ReservationRepository.java` | Added `@Lock(PESSIMISTIC_WRITE) findByBundleIdForUpdate(UUID bundleId)` and `findByBundleIdAndUserIdForUpdate(UUID bundleId, Long userId)` ordered by `r.id ASC`. |
+| `ReservationService.java` | Updated `loadOwnedOrAdminBundle(UUID, boolean forUpdate)` (`true` in `cancelBundle`, `false` in `getBundle`; student `cancelBundle` locks only owned rows via `findByBundleIdAndUserIdForUpdate`) and switched `markNoShow` to `findByIdForUpdate`. |
 | `ReservationConcurrencyIT.java` | Added `cancelReservationWaitsBehindRejectTransferAndSucceedsWithoutStaleVersion` and `cancelBundleWaitsBehindCancelUpcomingAndCompletesWithoutStaleVersion` using `pg_stat_activity` lock polling. |
 | `ReservationRepositoryTest.java` | Added `findByBundleIdForUpdate_returnsOrderedByIdAsc`. |
 | `ReservationServiceTest.java`, `ReservationServiceRulesTest.java`, `TransferServiceTest.java` | Updated `cancelBundle` / `markNoShow` stubs to `findByBundleIdForUpdate` / `findByIdForUpdate` and added `.as(...)` messages on follow-up assertions in `TransferServiceTest`. |
