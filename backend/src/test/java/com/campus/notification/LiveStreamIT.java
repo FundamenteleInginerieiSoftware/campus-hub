@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.campus.notification.api.NotificationService;
 import com.campus.notification.service.LiveStreams;
 import com.campus.notification.web.LiveEvent;
 import com.jayway.jsonpath.JsonPath;
@@ -32,6 +33,9 @@ class LiveStreamIT {
 
     @Autowired
     private LiveStreams liveStreams;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -111,6 +115,68 @@ class LiveStreamIT {
 
         // Complete the emitter so Spring MVC performs the ASYNC dispatch; verifies no 401/403
         // (AccessDeniedException) occurs when the async response finishes.
+        liveStreams.completeAll(student1Id);
+        mockMvc.perform(asyncDispatch(asyncResult)).andExpect(status().isOk());
+    }
+
+    @Test
+    void notifyUserReachesTheOpenStream() throws Exception {
+        String run = Long.toString(System.currentTimeMillis(), 36) + "b";
+        createdEmail = "live-push-it-" + run + "@campus.test";
+
+        String registerBody = """
+                {
+                  "email": "%s",
+                  "password": "password123",
+                  "fullName": "Live Push Student"
+                }
+                """.formatted(createdEmail);
+
+        MvcResult regResult = mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        long student1Id = ((Number) JsonPath.read(regResult.getResponse().getContentAsString(), "$.id")).longValue();
+        openedUserId = student1Id;
+        long otherUserId = student1Id + 9999L;
+
+        String loginBody = """
+                {
+                  "email": "%s",
+                  "password": "password123"
+                }
+                """.formatted(createdEmail);
+
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String token = JsonPath.read(loginResult.getResponse().getContentAsString(), "$.accessToken");
+
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/live/stream")
+                        .header("Authorization", "Bearer " + token)
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        notificationService.notifyUser(student1Id, "Subject A", "Body A");
+        notificationService.notifyUser(otherUserId, "Subject B", "Body B");
+
+        String streamed = asyncResult.getResponse().getContentAsString();
+        assertThat(streamed)
+                .as(
+                        "NotificationService.notifyUser must reach the user's open SSE stream; see LoggingNotificationService")
+                .contains("Subject A")
+                .contains("Body A");
+        assertThat(streamed)
+                .as("NotificationService.notifyUser for another user must not leak; see LiveStreams.send")
+                .doesNotContain("Subject B")
+                .doesNotContain("Body B");
+
         liveStreams.completeAll(student1Id);
         mockMvc.perform(asyncDispatch(asyncResult)).andExpect(status().isOk());
     }
