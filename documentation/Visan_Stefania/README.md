@@ -30,6 +30,7 @@ Every document has two parts:
 | 08 | [`08-qr-libraries-and-ci-guards.md`](./08-qr-libraries-and-ci-guards.md) | QR libraries + honest CI steps | Refs #291, #269 | `qrcode.react`, `@yudiel/react-qr-scanner`, React 19 peer ranges, no `hashFiles` guards in `ci.yml` |
 | 09 | [`09-admin-users-and-reassignment-log.md`](./09-admin-users-and-reassignment-log.md) | Users and Reassignment log pages | Closes #305, #306 | search + filters, confirm before disable/role change, own row locked, last-admin error from the backend, RETIRED rows without incident |
 | 10 | [`10-reliability-calculator.md`](./10-reliability-calculator.md) | Which units keep breaking: the calculation | Refs #291 (PR 1 of 3) | failures per 100 h of use, 10-hour floor, compared with twins of the same model, INSPECT/WATCH, rounding only on published numbers |
+| 14 | [`14-live-toasts-mount.md`](./14-live-toasts-mount.md) | Live notifications on every page | #345 (Refs #290) | `<LiveToasts />` mounted once in `AppLayout`, stream opens after login and closes on logout, StrictMode double mount, why not in `App.tsx` |
 
 ---
 
