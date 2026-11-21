@@ -5,6 +5,7 @@ import {
   IconBulb,
   IconCalendarEvent,
   IconClipboardList,
+  IconHeartbeat,
   IconHistory,
   IconLayoutGrid,
   IconQrcode,
@@ -53,6 +54,7 @@ const ADMIN_MENU: NavGroup[] = [
       { label: 'Catalog', path: '/catalog', icon: IconLayoutGrid },
       { label: 'Projects', path: '/projects', icon: IconBulb },
       { label: 'Inventory', path: '/admin/inventory', icon: IconBox },
+      { label: 'Equipment health', path: '/admin/reliability', icon: IconHeartbeat },
     ],
   },
 ]
@@ -67,6 +69,10 @@ export function titleFor(pathname: string): string {
   // but keeps its route and top-bar title.
   if (pathname.startsWith('/calendar-sync')) {
     return 'Calendar sync'
+  }
+  // One incident (/incidents/12) is opened from My incidents, the Incident queue or the Reassignment log.
+  if (/^\/incidents\/[^/]+/.test(pathname)) {
+    return 'Incident details'
   }
   for (const group of [...ADMIN_MENU, ...STUDENT_MENU]) {
     const item = group.items.find((entry) => pathname.startsWith(entry.path))

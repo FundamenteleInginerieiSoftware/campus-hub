@@ -3,6 +3,7 @@ package com.campus.incident.repository;
 import com.campus.incident.domain.IncidentReport;
 import com.campus.incident.domain.IncidentReport.IncidentSeverity;
 import com.campus.incident.domain.IncidentReport.IncidentStatus;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -24,6 +25,9 @@ public interface IncidentReportRepository extends JpaRepository<IncidentReport, 
 
     boolean existsByAssetIdAndStatusAndSeverityIn(
             Long assetId, IncidentStatus status, Collection<IncidentSeverity> severities);
+
+    // #291: every incident created in the reliability window (at or after `since`), whatever its status.
+    List<IncidentReport> findByCreatedAtGreaterThanEqual(LocalDateTime since);
 
     // #229: how many reports of this student are still waiting for an admin.
     long countByReportedByIdAndStatus(Long reportedById, IncidentStatus status);

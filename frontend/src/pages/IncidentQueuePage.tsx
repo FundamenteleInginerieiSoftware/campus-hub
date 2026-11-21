@@ -150,7 +150,14 @@ export default function IncidentQueuePage() {
   }
 
   const columns: Column<Incident>[] = [
-    { header: '#', render: (i) => i.id },
+    {
+      header: '#',
+      render: (i) => (
+        <Anchor component={Link} to={`/incidents/${i.id}`} size="sm" fw={500} aria-label={`Open incident #${i.id}`}>
+          #{i.id}
+        </Anchor>
+      ),
+    },
     {
       header: 'Equipment',
       render: (i) => {

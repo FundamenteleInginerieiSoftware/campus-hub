@@ -84,7 +84,7 @@ export default function ReassignmentLogPage() {
             Asset retired
           </Badge>
         ) : (
-          <Anchor component={Link} to="/admin/incidents" size="sm">
+          <Anchor component={Link} to={`/incidents/${r.incidentId}`} size="sm">
             Incident #{r.incidentId}
           </Anchor>
         ),

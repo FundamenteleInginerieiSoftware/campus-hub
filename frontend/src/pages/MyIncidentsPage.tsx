@@ -1,8 +1,8 @@
-import { ActionIcon, Alert, Badge, Button, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Alert, Anchor, Badge, Button, Text, Tooltip } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconCheck, IconAlertTriangle, IconPhoto, IconPlus } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import {
   fetchMyIncidents,
   formatCampusDateTime,
@@ -105,7 +105,14 @@ export default function MyIncidentsPage() {
   }
 
   const columns: Column<Incident>[] = [
-    { header: '#', render: (i) => i.id },
+    {
+      header: '#',
+      render: (i) => (
+        <Anchor component={Link} to={`/incidents/${i.id}`} size="sm" fw={500} aria-label={`Open incident #${i.id}`}>
+          #{i.id}
+        </Anchor>
+      ),
+    },
     {
       header: 'Equipment',
       render: (i) => {
