@@ -4,8 +4,8 @@ import { IconCheck, IconPhoto } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import {
   MAX_DESCRIPTION_LENGTH,
-  MAX_PHOTO_BYTES,
   PHOTO_TYPES,
+  photoProblem,
   SEVERITIES,
   takesOutOfUseAtOnce,
   reportIncident,
@@ -28,20 +28,6 @@ type Props = {
 
 function assetLabel(asset: AssetSummary): string {
   return `${asset.name} (${asset.model}, SN ${asset.serialNumber})`
-}
-
-// Checked here only to give a quick answer; the backend checks again (type from the first bytes, 5 MB).
-function photoProblem(file: File | null): string | null {
-  if (!file) {
-    return null
-  }
-  if (!PHOTO_TYPES.includes(file.type)) {
-    return 'Only JPEG, PNG or WebP images are allowed.'
-  }
-  if (file.size > MAX_PHOTO_BYTES) {
-    return 'The photo is too large (max 5 MB).'
-  }
-  return null
 }
 
 /**

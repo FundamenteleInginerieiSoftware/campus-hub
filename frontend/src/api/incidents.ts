@@ -46,10 +46,29 @@ export const MAX_DESCRIPTION_LENGTH = 2000
 export const MAX_PHOTO_BYTES = 5 * 1024 * 1024
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
+// Checked here only to give a quick answer; the backend checks again (type from the first bytes, 5 MB).
+export function photoProblem(file: File | null): string | null {
+  if (!file) {
+    return null
+  }
+  if (!PHOTO_TYPES.includes(file.type)) {
+    return 'Only JPEG, PNG or WebP images are allowed.'
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    return 'The photo is too large (max 5 MB).'
+  }
+  return null
+}
+
 /** The incidents I reported, newest first (GET /api/v1/incidents/me). */
 export function fetchMyIncidents(page = 0, size = 10) {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   return apiFetch<PageResponse<Incident>>(`/api/v1/incidents/me?${params.toString()}`)
+}
+
+/** One incident, for its reporter or an admin; someone else's is a 404 (GET /api/v1/incidents/{id}). */
+export function fetchIncident(incidentId: number) {
+  return apiFetch<Incident>(`/api/v1/incidents/${incidentId}`)
 }
 
 /** Reports a problem; the asset goes UNDER_MAINTENANCE at once (POST /api/v1/incidents). */

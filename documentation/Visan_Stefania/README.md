@@ -30,6 +30,9 @@ Every document has two parts:
 | 08 | [`08-qr-libraries-and-ci-guards.md`](./08-qr-libraries-and-ci-guards.md) | QR libraries + honest CI steps | Refs #291, #269 | `qrcode.react`, `@yudiel/react-qr-scanner`, React 19 peer ranges, no `hashFiles` guards in `ci.yml` |
 | 09 | [`09-admin-users-and-reassignment-log.md`](./09-admin-users-and-reassignment-log.md) | Users and Reassignment log pages | Closes #305, #306 | search + filters, confirm before disable/role change, own row locked, last-admin error from the backend, RETIRED rows without incident |
 | 10 | [`10-reliability-calculator.md`](./10-reliability-calculator.md) | Which units keep breaking: the calculation | Refs #291 (PR 1 of 3) | failures per 100 h of use, 10-hour floor, compared with twins of the same model, INSPECT/WATCH, rounding only on published numbers |
+| 11 | [`11-reliability-report.md`](./11-reliability-report.md) | The reliability report endpoint | Refs #291 (PR 2 of 3) | `GET /api/v1/admin/reliability`, window from the `Clock`, Calin's used minutes, one catalog lookup per unit, unknown assets skipped, `null` instead of NaN |
+| 12 | [`12-equipment-health-page.md`](./12-equipment-health-page.md) | Equipment health page | Refs #291 (PR 3 of 3) | `/admin/reliability`, 90/180/365 window, level badges, `null` shown as "–", no "healthy" message on an error, horizontal scroll on a phone |
+| 13 | [`13-incident-details-page.md`](./13-incident-details-page.md) | Incident details page | W7 | `/incidents/:id` for the reporter or an admin, photo inline + replace, history, admin actions, 404 for someone else's incident |
 | 14 | [`14-live-toasts-mount.md`](./14-live-toasts-mount.md) | Live notifications on every page | #345 (Refs #290) | `<LiveToasts />` mounted once in `AppLayout`, stream opens after login and closes on logout, StrictMode double mount, why not in `App.tsx` |
 
 ---
