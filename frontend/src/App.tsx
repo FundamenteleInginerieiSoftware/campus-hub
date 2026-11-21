@@ -3,6 +3,7 @@ import RequireAdmin from './auth/RequireAdmin.tsx'
 import RequireAuth from './auth/RequireAuth.tsx'
 import AppLayout from './layout/AppLayout.tsx'
 import AdminInventoryPage from './pages/AdminInventoryPage.tsx'
+import AdminReliabilityPage from './pages/AdminReliabilityPage.tsx'
 import AdminUsersPage from './pages/AdminUsersPage.tsx'
 import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
 import CalendarSyncPage from './pages/CalendarSyncPage.tsx'
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="reassignments" element={<ReassignmentLogPage />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="inventory" element={<AdminInventoryPage />} />
+          <Route path="reliability" element={<AdminReliabilityPage />} />
           <Route path="audit-logs" element={<AdminAuditLogPage />} />
           <Route path="audit-log" element={<Navigate to="/admin/audit-logs" replace />} />
         </Route>
