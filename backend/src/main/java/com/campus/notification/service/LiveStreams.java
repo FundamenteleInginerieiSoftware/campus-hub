@@ -18,8 +18,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * In-memory registry of open Server-Sent Events (SSE) streams per user.
  *
  * <p>In-memory storage is sufficient because Campus Hub runs on a single EC2 app instance (ADR-002).
- * {@code LoggingNotificationService} (dev/test, Liviu, PR 3) and {@code SesNotificationService}
- * (prod, Matei) will call {@link #send(Long, LiveEvent)} on this bean so every user notification is
+ * Both {@code LoggingNotificationService} (dev/test, Liviu) and {@code SesNotificationService}
+ * (prod, Matei) call {@link #send(Long, LiveEvent)} on this bean so every user notification is
  * pushed to open browser tabs without blocking the caller.
  */
 @Slf4j
