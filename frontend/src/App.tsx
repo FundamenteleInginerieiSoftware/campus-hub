@@ -8,6 +8,7 @@ import AdminUsersPage from './pages/AdminUsersPage.tsx'
 import AssetDetailsPage from './pages/AssetDetailsPage.tsx'
 import CalendarSyncPage from './pages/CalendarSyncPage.tsx'
 import CatalogPage from './pages/CatalogPage.tsx'
+import IncidentDetailsPage from './pages/IncidentDetailsPage.tsx'
 import IncidentQueuePage from './pages/IncidentQueuePage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
@@ -44,6 +45,8 @@ export default function App() {
         <Route path="reservations" element={<MyReservationsPage />} />
         <Route path="calendar-sync" element={<CalendarSyncPage />} />
         <Route path="incidents" element={<MyIncidentsPage />} />
+        {/* The reporter or an admin; the backend answers 404 for anyone else */}
+        <Route path="incidents/:id" element={<IncidentDetailsPage />} />
         <Route path="pickup-pass" element={<PickupPassPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:slug" element={<ProjectDetailsPage />} />
