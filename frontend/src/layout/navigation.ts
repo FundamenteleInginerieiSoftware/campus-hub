@@ -5,6 +5,7 @@ import {
   IconBulb,
   IconCalendarEvent,
   IconClipboardList,
+  IconHeartbeat,
   IconHistory,
   IconLayoutGrid,
   IconQrcode,
@@ -53,6 +54,7 @@ const ADMIN_MENU: NavGroup[] = [
       { label: 'Catalog', path: '/catalog', icon: IconLayoutGrid },
       { label: 'Projects', path: '/projects', icon: IconBulb },
       { label: 'Inventory', path: '/admin/inventory', icon: IconBox },
+      { label: 'Equipment health', path: '/admin/reliability', icon: IconHeartbeat },
     ],
   },
 ]
