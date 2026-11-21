@@ -29,6 +29,7 @@ Every document has two parts:
 | 07 | [`07-user-disabled-event.md`](./07-user-disabled-event.md) | Disabling a user frees their bookings | #302 (#229 part 2, with #266) | `UserDisabledEvent`, why not a direct call (module cycle), why the listener runs after the commit (the disable must never fail) |
 | 08 | [`08-qr-libraries-and-ci-guards.md`](./08-qr-libraries-and-ci-guards.md) | QR libraries + honest CI steps | Refs #291, #269 | `qrcode.react`, `@yudiel/react-qr-scanner`, React 19 peer ranges, no `hashFiles` guards in `ci.yml` |
 | 09 | [`09-admin-users-and-reassignment-log.md`](./09-admin-users-and-reassignment-log.md) | Users and Reassignment log pages | Closes #305, #306 | search + filters, confirm before disable/role change, own row locked, last-admin error from the backend, RETIRED rows without incident |
+| 10 | [`10-reliability-calculator.md`](./10-reliability-calculator.md) | Which units keep breaking: the calculation | Refs #291 (PR 1 of 3) | failures per 100 h of use, 10-hour floor, compared with twins of the same model, INSPECT/WATCH, rounding only on published numbers |
 
 ---
 
