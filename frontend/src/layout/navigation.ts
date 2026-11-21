@@ -70,6 +70,10 @@ export function titleFor(pathname: string): string {
   if (pathname.startsWith('/calendar-sync')) {
     return 'Calendar sync'
   }
+  // One incident (/incidents/12) is opened from My incidents, the Incident queue or the Reassignment log.
+  if (/^\/incidents\/[^/]+/.test(pathname)) {
+    return 'Incident details'
+  }
   for (const group of [...ADMIN_MENU, ...STUDENT_MENU]) {
     const item = group.items.find((entry) => pathname.startsWith(entry.path))
     if (item) {
