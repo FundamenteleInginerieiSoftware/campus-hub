@@ -171,7 +171,6 @@ class ReservationServiceRulesTest {
 
     @Test
     void movingAnUnknownOrNotConfirmedReservationDoesNothing() {
-        when(reservationRepository.findById(777L)).thenReturn(Optional.empty());
         when(reservationRepository.findByIdForUpdate(777L)).thenReturn(Optional.empty());
 
         assertThat(reservationService.moveToAsset(777L, null, OTHER_ASSET_ID, "reason"))
@@ -184,7 +183,6 @@ class ReservationServiceRulesTest {
     @Test
     void noShowAndOverdueSkipReservationsInTheWrongStatus() {
         Reservation confirmed = reservation(1L, now.plusHours(1), now.plusHours(2));
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(confirmed));
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(confirmed));
 
         // A CONFIRMED booking was never checked out, so it can't become OVERDUE.
