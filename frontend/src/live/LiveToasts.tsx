@@ -15,7 +15,7 @@ const AUTO_CLOSE_MS = 8000
  * Floating bottom-right toast stack that opens the live SSE stream on mount and displays
  * incoming notifications (newest on top, max 3 cards, auto-closing after 8 seconds).
  *
- * To be mounted once inside the authenticated AppLayout (Stefania).
+ * Mounted once inside AppLayout.tsx (Stefania, #345).
  */
 export default function LiveToasts() {
   const [items, setItems] = useState<ToastItem[]>([])

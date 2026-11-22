@@ -25,8 +25,9 @@ After the three main Live Notifications PRs (`#317`, `#339`, `#340`) were merged
 - Updated `23-live-toasts-frontend.md` with a note on `401` behavior (stops the SSE loop quietly; `client.ts` handles token cleanup + redirect on the next API call).
 
 ### 2. Backend (`com.campus.notification`)
-- **`LiveStreamController.java`:** Injects `UserApi` and re-checks `userApi.findActiveRole(userId)` right after `liveStreams.open(userId)`; if empty, calls `liveStreams.completeAll(userId)` and throws `UnauthorizedException("Account is disabled")` (`401 UNAUTHORIZED`).
-- **`LiveStreamControllerTest.java`:** Mocks `UserApi` and adds `rejectsStreamWhenUserWasDisabledMidRequest()`.
+- **`LiveStreams.java`:** Added `close(Long userId, SseEmitter emitter)` to remove and complete a single emitter without disturbing the user's other open tabs.
+- **`LiveStreamController.java`:** Injects `UserApi` and re-checks `userApi.findActiveRole(userId)` right after `liveStreams.open(userId)` inside a `try/finally` block; if the user is not active (or the lookup throws), calls `liveStreams.close(userId, emitter)` so a never-started emitter can never leak, and throws `UnauthorizedException("Account is disabled")` (`401 UNAUTHORIZED`) on disabled accounts.
+- **`LiveStreamControllerTest.java`:** Mocks `UserApi` and adds `rejectsStreamWhenUserWasDisabledMidRequest()` and `closesOnlyNewEmitterWhenActiveCheckThrows()`.
 - **`LiveStreamIT.java`:** Adds `disablingUserClosesOpenStreamsAndBlocksReconnect()` testing the real end-to-end `POST /api/v1/admin/users/{id}/disable` → `UserDisabledEvent` → `UserDisabledLiveStreamListener` → `openCount == 0` → reconnect `401`.
 - **`LoggingNotificationServiceTest.java`:** Replaced bare `argThat(...)` with `ArgumentCaptor<LiveEvent>` and AssertJ `.as("...; see LoggingNotificationService.notifyUser")` messages.
 

@@ -1,5 +1,6 @@
 package com.campus.notification.web;
 
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -68,15 +69,33 @@ class LiveStreamControllerTest {
     @Test
     @WithMockUser(roles = "STUDENT")
     void rejectsStreamWhenUserWasDisabledMidRequest() throws Exception {
+        SseEmitter emitter = new SseEmitter(60_000L);
         when(currentUser.id()).thenReturn(12L);
-        when(liveStreams.open(12L)).thenReturn(new SseEmitter(60_000L));
+        when(liveStreams.open(12L)).thenReturn(emitter);
         when(userApi.findActiveRole(12L)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/live/stream"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
 
-        verify(liveStreams).completeAll(12L);
+        verify(liveStreams).close(12L, emitter);
+        verify(liveStreams, never()).completeAll(12L);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void closesOnlyNewEmitterWhenActiveCheckThrows() throws Exception {
+        SseEmitter emitter = new SseEmitter(60_000L);
+        when(currentUser.id()).thenReturn(12L);
+        when(liveStreams.open(12L)).thenReturn(emitter);
+        when(userApi.findActiveRole(12L)).thenThrow(new IllegalStateException("DB timeout"));
+
+        mockMvc.perform(get("/api/v1/live/stream"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+
+        verify(liveStreams).close(12L, emitter);
+        verify(liveStreams, never()).completeAll(12L);
     }
 
     @Test

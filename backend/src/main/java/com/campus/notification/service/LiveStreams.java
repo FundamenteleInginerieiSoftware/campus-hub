@@ -113,6 +113,14 @@ public class LiveStreams {
         return emitters == null ? 0 : emitters.size();
     }
 
+    /** Completes and removes a single emitter without affecting the user's other open tabs. */
+    public void close(Long userId, SseEmitter emitter) {
+        remove(userId, emitter);
+        synchronized (emitter) {
+            emitter.complete();
+        }
+    }
+
     /** Completes and removes all currently open streams for {@code userId}. */
     public void completeAll(Long userId) {
         List<SseEmitter> emitters = streamsByUser.remove(userId);

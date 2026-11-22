@@ -34,7 +34,7 @@ class LoggingNotificationServiceTest {
 
         LiveEvent event = captor.getValue();
         assertThat(event.type())
-                .as("dev notifications must emit type='notification'; see LoggingNotificationService.notifyUser")
+                .as("dev notifications must emit type='NOTIFICATION'; see LoggingNotificationService.notifyUser")
                 .isEqualTo(LiveEvent.TYPE_NOTIFICATION);
         assertThat(event.title())
                 .as("dev notification title must match the subject; see LoggingNotificationService.notifyUser")

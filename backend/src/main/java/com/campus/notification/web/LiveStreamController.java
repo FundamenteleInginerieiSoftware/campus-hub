@@ -42,7 +42,7 @@ public class LiveStreamController {
                             + "and emits 'notification' events as JSON payloads. At most 5 concurrent streams per user are allowed.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "SSE stream opened (stays open)"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized (missing or invalid JWT)"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized (missing/invalid JWT or account disabled)"),
         @ApiResponse(responseCode = "409", description = "Too many open tabs for this account (LIVE_STREAM_LIMIT)")
     })
     public SseEmitter stream(HttpServletResponse response) {
@@ -51,9 +51,17 @@ public class LiveStreamController {
         SseEmitter emitter = liveStreams.open(userId);
         // Close the tiny race where an admin disables the account right after the JWT filter
         // checked it and before liveStreams.open() registered this emitter (so the disable
-        // listener already ran). Re-checking after open() ensures no disabled user keeps a stream.
-        if (userApi.findActiveRole(userId).isEmpty()) {
-            liveStreams.completeAll(userId);
+        // listener already ran). Dropping only this emitter in finally also prevents leaking a
+        // never-started emitter (which has no async timeout) if the DB lookup itself throws.
+        boolean active = false;
+        try {
+            active = userApi.findActiveRole(userId).isPresent();
+        } finally {
+            if (!active) {
+                liveStreams.close(userId, emitter);
+            }
+        }
+        if (!active) {
             throw new UnauthorizedException("Account is disabled");
         }
         return emitter;
