@@ -20,3 +20,40 @@ export function fetchReassignmentLogs(page = 0, size = 20) {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   return apiFetch<PageResponse<ReassignmentLog>>(`/api/v1/admin/reassignments?${params.toString()}`)
 }
+
+export type SimulateMaintenanceRequest = {
+  assetId: number
+  windowStart: string
+  windowEnd: string
+}
+
+export type SimulatedBookingImpact = {
+  reservationId: number
+  userId: number
+  startTime: string
+  endTime: string
+  outcome: 'REASSIGNED' | 'FORCE_CANCELLED'
+  substituteAssetId: number | null
+  substituteAssetName: string | null
+  strategy: string | null
+}
+
+export type MaintenanceImpactResponse = {
+  assetId: number
+  assetName: string
+  windowStart: string
+  windowEnd: string
+  totalAffected: number
+  reassignedCount: number
+  forceCancelledCount: number
+  disruptionScore: number
+  bookings: SimulatedBookingImpact[]
+}
+
+/** Dry-runs planned maintenance impact for an asset (POST /api/v1/admin/reassignments/simulate). */
+export function simulateMaintenanceImpact(request: SimulateMaintenanceRequest) {
+  return apiFetch<MaintenanceImpactResponse>('/api/v1/admin/reassignments/simulate', {
+    method: 'POST',
+    body: request,
+  })
+}
