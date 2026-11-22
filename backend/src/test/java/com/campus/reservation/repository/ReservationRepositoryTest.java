@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +24,8 @@ class ReservationRepositoryTest {
 
     private static final Long USER_ID = 100L;
     private static final Long ASSET_ID = 100L;
+    private static final Clock TEST_CLOCK =
+            Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
 
     @Autowired
     private ReservationRepository reservationRepository;
@@ -763,9 +769,10 @@ class ReservationRepositoryTest {
             ON CONFLICT (id) DO NOTHING
             """);
         UUID bundleId = UUID.randomUUID();
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime created = LocalDateTime.of(2026, 11, 1, 9, 0);
+        LocalDateTime now = LocalDateTime.now(TEST_CLOCK).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
+        LocalDateTime created = now.minusDays(1);
 
         Reservation rHigherAssetLowerId = new Reservation(USER_ID, 101L, start, end, created);
         rHigherAssetLowerId.assignBundle(bundleId);
@@ -805,9 +812,10 @@ class ReservationRepositoryTest {
             ON CONFLICT (id) DO NOTHING
             """);
         UUID bundleId = UUID.randomUUID();
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime created = LocalDateTime.of(2026, 11, 1, 9, 0);
+        LocalDateTime now = LocalDateTime.now(TEST_CLOCK).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
+        LocalDateTime created = now.minusDays(1);
 
         Reservation r1 = new Reservation(USER_ID, 101L, start, end, created);
         r1.assignBundle(bundleId);

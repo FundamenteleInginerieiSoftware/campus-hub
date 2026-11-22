@@ -1015,14 +1015,16 @@ public class ReservationService implements ReservationApi {
      * Called through the {@link ReservationService} proxy by {@link ReservationLifecycleService}
      * so an optimistic-lock conflict on one booking never rolls back the rest of the sweep, and
      * the no-show email is only sent after this transaction commits.
+     *
+     * @return the owner {@code userId} read under the row lock if transitioned, or empty if skipped
      */
     @Transactional
-    public boolean markNoShow(Long reservationId) {
+    public Optional<Long> markNoShow(Long reservationId) {
         // Lock the reservation row FOR UPDATE so a concurrent checkOutReservation or cancelUpcomingReservationsForUser
         // waits instead of causing a STALE_VERSION error (#336 follow-up).
         Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
         if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
-            return false;
+            return Optional.empty();
         }
         r.markNoShow();
         transferService.cancelPendingTransferIfExists(
@@ -1032,7 +1034,7 @@ public class ReservationService implements ReservationApi {
                 "Auto-cancelled due to no-show",
                 "The transfer offer for reservation #" + reservationId + " was cancelled due to no-show.");
         auditService.record(null, "AUTO_NO_SHOW", "Reservation", r.getId(), "Unclaimed 30m after startTime");
-        return true;
+        return Optional.of(r.getUserId());
     }
 
     /**

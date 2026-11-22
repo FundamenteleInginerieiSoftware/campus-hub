@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,10 +92,13 @@ public class ReservationLifecycleService {
 
         for (Reservation r : unclaimed) {
             try {
-                if (reservationService.markNoShow(r.getId())) {
+                // Use the userId returned under the FOR UPDATE row lock so a concurrent transfer
+                // cannot cause the no-show email to go to the previous owner (#346).
+                Optional<Long> markedUserId = reservationService.markNoShow(r.getId());
+                if (markedUserId.isPresent()) {
                     releasedCount++;
                     notifySafely(
-                            r.getUserId(),
+                            markedUserId.get(),
                             "Reservation Marked as No-Show",
                             "Your reservation #" + r.getId()
                                     + " was automatically released because it was not checked out within 30 minutes of start time.");

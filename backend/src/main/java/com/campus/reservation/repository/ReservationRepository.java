@@ -159,8 +159,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
     @Query("SELECT r FROM Reservation r WHERE r.bundleId = :bundleId ORDER BY r.id ASC")
     List<Reservation> findByBundleIdForUpdate(@Param("bundleId") UUID bundleId);
 
-    // Student cancelBundle variant: locks only the caller's own items in the bundle so items
-    // transferred to another student are not locked before ownership filtering (#338 review nit).
+    // Student cancelBundle variant: locks only rows owned by userId as a safety net
+    // (transferOwnership also clears bundleId, so transferred items leave the bundle; #338 nit).
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM Reservation r WHERE r.bundleId = :bundleId AND r.userId = :userId ORDER BY r.id ASC")
     List<Reservation> findByBundleIdAndUserIdForUpdate(@Param("bundleId") UUID bundleId, @Param("userId") Long userId);

@@ -1215,10 +1215,15 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(confirmed, "id", 10L);
         when(reservationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(confirmed));
 
-        assertThat(reservationService.markNoShow(10L)).isTrue();
+        assertThat(reservationService.markNoShow(10L))
+                .as(
+                        "markNoShow must return the locked owner userId when transitioning CONFIRMED -> NO_SHOW; see ReservationService.markNoShow")
+                .contains(USER_ID);
         assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
         verify(auditService).record(isNull(), eq("AUTO_NO_SHOW"), eq("Reservation"), eq(10L), any());
-        assertThat(reservationService.markNoShow(10L)).isFalse();
+        assertThat(reservationService.markNoShow(10L))
+                .as("markNoShow must return empty when booking is already NO_SHOW; see ReservationService.markNoShow")
+                .isEmpty();
 
         Reservation checkedOut = new Reservation(
                 USER_ID,
@@ -2995,11 +3000,12 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean marked = reservationService.markNoShow(100L);
+        Optional<Long> markedUserId = reservationService.markNoShow(100L);
 
-        assertThat(marked)
-                .as("mark no-show: method must return true on success; see ReservationService.markNoShow")
-                .isTrue();
+        assertThat(markedUserId)
+                .as(
+                        "mark no-show: method must return locked owner userId on success; see ReservationService.markNoShow")
+                .contains(USER_ID);
         assertThat(transfer.getStatus())
                 .as("mark no-show: pending transfer must transition to CANCELLED; see ReservationService.markNoShow")
                 .isEqualTo(TransferStatus.CANCELLED);
