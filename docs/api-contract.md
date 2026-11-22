@@ -451,6 +451,19 @@ A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE`, or `RETIRED` for admins; non-admin requests on `RETIRED` assets receive `404 ASSET_NOT_FOUND`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).
 ```
 
+Next free slots recommender (`GET /api/v1/reservations/next-free-slots?assetId=1&from=&durationMinutes=60&limit=5`, authenticated, `#61`):
+```json
+{
+  "assetId": 1,
+  "durationMinutes": 60,
+  "bookable": true,
+  "slots": [
+    { "startTime": "2026-11-10T10:00:00", "endTime": "2026-11-10T11:00:00" },
+    { "startTime": "2026-11-10T10:30:00", "endTime": "2026-11-10T11:30:00" }
+  ]
+}
+```
+
 ---
 
 ### Project endpoints (Matei)

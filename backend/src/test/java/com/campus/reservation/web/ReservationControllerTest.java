@@ -20,6 +20,7 @@ import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.service.IdempotencyService;
+import com.campus.reservation.service.NextFreeSlotsService;
 import com.campus.reservation.service.ReservationService;
 import com.campus.reservation.service.TransferService;
 import java.time.LocalDateTime;
@@ -56,6 +57,9 @@ class ReservationControllerTest {
 
     @MockitoBean
     private IdempotencyService idempotencyService;
+
+    @MockitoBean
+    private NextFreeSlotsService nextFreeSlotsService;
 
     @BeforeEach
     void setUpIdempotency() {
@@ -587,5 +591,25 @@ class ReservationControllerTest {
         mockMvc.perform(post("/api/v1/reservations/transfers/500/cancel"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots returns 200 OK with recommended slots")
+    void nextFreeSlotsReturns200() throws Exception {
+        NextFreeSlotsResponse response = new NextFreeSlotsResponse(
+                1L,
+                60,
+                true,
+                List.of(new FreeSlotOption(
+                        LocalDateTime.of(2026, 11, 10, 10, 0), LocalDateTime.of(2026, 11, 10, 11, 0))));
+        when(nextFreeSlotsService.getNextFreeSlots(eq(1L), isNull(), eq(60), eq(5)))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots").param("assetId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assetId").value(1))
+                .andExpect(jsonPath("$.durationMinutes").value(60))
+                .andExpect(jsonPath("$.bookable").value(true))
+                .andExpect(jsonPath("$.slots[0].startTime").value("2026-11-10T10:00:00"));
     }
 }

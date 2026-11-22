@@ -4,6 +4,7 @@ import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.service.IdempotencyService;
+import com.campus.reservation.service.NextFreeSlotsService;
 import com.campus.reservation.service.ReservationService;
 import com.campus.reservation.service.TransferService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,6 +47,7 @@ public class ReservationController {
     private final TransferService transferService;
     private final CurrentUser currentUser;
     private final IdempotencyService idempotencyService;
+    private final NextFreeSlotsService nextFreeSlotsService;
 
     @Operation(
             summary = "Create a reservation",
@@ -136,6 +138,26 @@ public class ReservationController {
                     @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
                     LocalDateTime endTime) {
         return ResponseEntity.ok(reservationService.checkAvailability(assetId, categoryId, startTime, endTime));
+    }
+
+    @Operation(
+            summary = "Recommend next free slots for an asset",
+            description =
+                    "Finds the earliest upcoming free 30-minute aligned weekday slots for an asset within the 14-day horizon")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Free slot recommendations returned"),
+        @ApiResponse(responseCode = "400", description = "Invalid parameter (INVALID_PARAMETER)"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "404", description = "Asset not found"),
+        @ApiResponse(responseCode = "409", description = "Invalid duration (INVALID_DURATION)")
+    })
+    @GetMapping("/next-free-slots")
+    public ResponseEntity<NextFreeSlotsResponse> nextFreeSlots(
+            @RequestParam Long assetId,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime from,
+            @RequestParam(defaultValue = "60") int durationMinutes,
+            @RequestParam(defaultValue = "5") int limit) {
+        return ResponseEntity.ok(nextFreeSlotsService.getNextFreeSlots(assetId, from, durationMinutes, limit));
     }
 
     @Operation(
