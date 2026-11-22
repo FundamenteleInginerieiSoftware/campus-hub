@@ -416,6 +416,30 @@ A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `
   "createdAt": "2026-11-03T14:00:00"
 }
 
+// MaintenanceImpactResponse (returned by POST /api/v1/admin/reassignments/simulate, admin only, #58)
+{
+  "assetId": 1,
+  "assetName": "Rigol DS1054Z #1",
+  "windowStart": "2026-11-10T09:00:00",
+  "windowEnd": "2026-11-10T17:00:00",
+  "totalAffected": 2,
+  "reassignedCount": 1,
+  "forceCancelledCount": 1,
+  "disruptionScore": 4,
+  "bookings": [
+    {
+      "reservationId": 10,
+      "userId": 2,
+      "startTime": "2026-11-10T10:00:00",
+      "endTime": "2026-11-10T12:00:00",
+      "outcome": "REASSIGNED",
+      "substituteAssetId": 2,
+      "substituteAssetName": "Rigol DS1054Z #2",
+      "strategy": "SameModelStrategy"
+    }
+  ]
+}
+
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE` or `RETIRED`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).
 ```
 
