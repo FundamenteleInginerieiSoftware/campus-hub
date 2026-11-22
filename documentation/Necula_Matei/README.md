@@ -87,6 +87,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 59 | [59-deploy-workflow.md](59-deploy-workflow.md) | W8 `deploy.yml`: after a green `ci` on `main`, build + push to ECR, SSM `campus-deploy <sha>`, health check; GitHub OIDC role limited to `main` (no AWS keys), skips while AWS is paused | #320 |
 | 60 | [60-ses-live-push.md](60-ses-live-push.md) | On AWS, `SesNotificationService` first pushes each notification live to the user's open tabs (Liviu's `LiveStreams`, #290), then sends the e-mail; a slow or failed SES can't delay or drop the push | #332 |
 | 61 | [61-user-disabled-event-javadoc.md](61-user-disabled-event-javadoc.md) | Fix: `UserDisabledEvent` Javadoc corrected (listener contract vs the `@Async` reassignment listeners) | #335 |
+| 62 | [62-scheduler-thread-pool.md](62-scheduler-thread-pool.md) | `@Scheduled` jobs get 3 threads (`campus-sched-`) instead of 1, so Liviu's SSE heartbeat never waits behind Calin's sweeps | #TBD |
 
 **Team docs:**
 - [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
