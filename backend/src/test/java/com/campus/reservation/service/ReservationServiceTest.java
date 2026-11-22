@@ -69,6 +69,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -112,6 +113,9 @@ class ReservationServiceTest {
     @Mock
     private ReservationHoldRepository reservationHoldRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private TransferService transferService;
     private ReservationService reservationService;
 
@@ -135,7 +139,8 @@ class ReservationServiceTest {
                 clock,
                 transferService,
                 userApi,
-                reservationHoldRepository);
+                reservationHoldRepository,
+                eventPublisher);
         lenient().when(userApi.findActiveRole(anyLong())).thenReturn(Optional.of(Role.STUDENT));
     }
 

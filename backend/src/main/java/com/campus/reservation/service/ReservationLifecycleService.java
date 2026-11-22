@@ -44,6 +44,7 @@ public class ReservationLifecycleService {
     private final ReservationRepository reservationRepository;
     private final ReservationService reservationService;
     private final HoldService holdService;
+    private final WaitlistService waitlistService;
     private final CatalogApi catalogApi;
     private final NotificationService notificationService;
     private final Clock clock;
@@ -62,6 +63,7 @@ public class ReservationLifecycleService {
             initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")
     public LifecycleSweepSummary runLifecycleSweep() {
         LocalDateTime now = now();
+        waitlistService.expireStaleEntries();
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);

@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -80,7 +81,8 @@ class ReservationAdminSearchTest {
                 clock,
                 mock(TransferService.class),
                 mock(UserApi.class),
-                mock(ReservationHoldRepository.class));
+                mock(ReservationHoldRepository.class),
+                mock(ApplicationEventPublisher.class));
     }
 
     private PageResponse<ReservationResponse> search(

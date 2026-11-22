@@ -345,6 +345,46 @@ export function fetchNextFreeSlots(
   return apiFetch<NextFreeSlotsResponse>(`/api/v1/reservations/next-free-slots?${params.toString()}`)
 }
 
+export type WaitlistStatus = 'WAITING' | 'PROMOTED' | 'CANCELLED' | 'EXPIRED' | 'SKIPPED_QUOTA_FULL'
+
+export type WaitlistEntry = {
+  id: number
+  assetId: number
+  userId: number
+  startTime: string
+  endTime: string
+  status: WaitlistStatus
+  promotedReservationId: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Queues the current user onto the FIFO waitlist for an occupied slot (POST /api/v1/reservations/waitlist).
+ */
+export function joinWaitlist(request: CreateReservationRequest) {
+  return apiFetch<WaitlistEntry>('/api/v1/reservations/waitlist', {
+    method: 'POST',
+    body: request,
+  })
+}
+
+/**
+ * Lists the authenticated user's waitlist entries, newest first (GET /api/v1/reservations/waitlist/me).
+ */
+export function fetchMyWaitlist() {
+  return apiFetch<WaitlistEntry[]>('/api/v1/reservations/waitlist/me')
+}
+
+/**
+ * Cancels a WAITING waitlist entry (DELETE /api/v1/reservations/waitlist/{id}).
+ */
+export function cancelWaitlistEntry(id: number) {
+  return apiFetch<void>(`/api/v1/reservations/waitlist/${id}`, {
+    method: 'DELETE',
+  })
+}
+
 /**
  * Returns a Date object whose local year, month, day, hour, minute, and second
  * match the current wall-clock time in Europe/Bucharest (the shared campus clock zone).

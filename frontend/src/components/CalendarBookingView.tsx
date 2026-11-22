@@ -33,6 +33,7 @@ import {
   createReservation,
   fetchAssetSummary,
   fetchNextFreeSlots,
+  joinWaitlist,
   nowInBucharest,
   parseCampusLocalDateTime,
   type AssetSummary,
@@ -211,6 +212,9 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
+  const [waitlistLoading, setWaitlistLoading] = useState(false)
+  const [waitlistError, setWaitlistError] = useState<unknown>(null)
+  const [waitlistJoined, setWaitlistJoined] = useState<{ key: string; entryId: number } | null>(null)
 
   // Compute the 5 weekdays for the active week view.
   const weekDays = useMemo(() => {
@@ -399,6 +403,25 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   const isSlotAvailable = availability.data?.available === true
+  const currentSlotKey = `${asset.id}:${startIso}:${endIso}`
+  const hasJoinedWaitlistForSlot = waitlistJoined?.key === currentSlotKey
+
+  async function handleJoinWaitlist() {
+    setWaitlistLoading(true)
+    setWaitlistError(null)
+    try {
+      const entry = await joinWaitlist({
+        assetId: asset.id,
+        startTime: startIso,
+        endTime: endIso,
+      })
+      setWaitlistJoined({ key: currentSlotKey, entryId: entry.id })
+    } catch (err) {
+      setWaitlistError(err)
+    } finally {
+      setWaitlistLoading(false)
+    }
+  }
 
   const substituteKey =
     !availability.checking && availability.data && !availability.data.available
@@ -983,6 +1006,42 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         {formatSlotDate(slot.startTime)} • {formatSlotTime(slot.startTime, slot.endTime)}
                       </Button>
                     ))}
+                  </Stack>
+                </Paper>
+              )}
+
+              {!availability.checking && !isSlotAvailable && availability.data?.conflictReason === 'RESERVATION_CONFLICT' && (
+                <Paper withBorder p="xs" radius="sm">
+                  <Stack gap={6}>
+                    <Text size="xs" fw={600}>
+                      Need this exact slot?
+                    </Text>
+                    <ErrorAlert error={waitlistError} />
+                    {hasJoinedWaitlistForSlot ? (
+                      <Alert color="blue" variant="light" p="xs">
+                        <Group justify="space-between" gap="xs" wrap="wrap">
+                          <Text size="xs">
+                            Added to FIFO waitlist (#{waitlistJoined?.entryId}). You will be promoted automatically if
+                            the slot opens up.
+                          </Text>
+                          <Button size="xs" variant="subtle" onClick={() => navigate('/reservations')}>
+                            View in My reservations
+                          </Button>
+                        </Group>
+                      </Alert>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="blue"
+                        fullWidth
+                        loading={waitlistLoading}
+                        disabled={holdLoading || bookingLoading}
+                        onClick={() => void handleJoinWaitlist()}
+                      >
+                        Join FIFO waitlist
+                      </Button>
+                    )}
                   </Stack>
                 </Paper>
               )}

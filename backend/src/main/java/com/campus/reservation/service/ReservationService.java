@@ -48,6 +48,7 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -76,6 +77,7 @@ public class ReservationService implements ReservationApi {
     private final TransferService transferService;
     private final UserApi userApi;
     private final ReservationHoldRepository reservationHoldRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Creates a new reservation adhering to the global lock DAG ({@code Quota -> Asset -> Hold})
@@ -322,6 +324,11 @@ public class ReservationService implements ReservationApi {
                     "Reservation Bundle Cancelled",
                     "Your reservation bundle #" + bundleId + " was cancelled.");
         }
+        items.stream()
+                .filter(r -> r.getStatus() == ReservationStatus.CANCELLED)
+                .map(Reservation::getAssetId)
+                .distinct()
+                .forEach(assetId -> eventPublisher.publishEvent(new SlotFreedEvent(assetId)));
 
         return results;
     }
@@ -441,6 +448,7 @@ public class ReservationService implements ReservationApi {
                     "Reservation Cancelled by Administrator",
                     "Your reservation #" + r.getId() + " has been cancelled by an administrator.");
         }
+        eventPublisher.publishEvent(new SlotFreedEvent(r.getAssetId()));
         return ReservationResponse.from(r);
     }
 
@@ -836,6 +844,10 @@ public class ReservationService implements ReservationApi {
         }
 
         reservationRepository.saveAll(upcoming);
+        upcoming.stream()
+                .map(Reservation::getAssetId)
+                .distinct()
+                .forEach(assetId -> eventPublisher.publishEvent(new SlotFreedEvent(assetId)));
         log.info(
                 "Cancelled {} upcoming reservation(s) for user {} (actorId: {}): {}",
                 upcoming.size(),
@@ -1049,6 +1061,7 @@ public class ReservationService implements ReservationApi {
                 "Auto-cancelled due to no-show",
                 "The transfer offer for reservation #" + reservationId + " was cancelled due to no-show.");
         auditService.record(null, "AUTO_NO_SHOW", "Reservation", r.getId(), "Unclaimed 30m after startTime");
+        eventPublisher.publishEvent(new SlotFreedEvent(r.getAssetId()));
         return Optional.of(r.getUserId());
     }
 
