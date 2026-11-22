@@ -90,6 +90,19 @@ erDiagram
         TIMESTAMP created_at
     }
 
+    waitlist_entries {
+        BIGINT id PK
+        BIGINT asset_id FK
+        BIGINT user_id FK
+        TIMESTAMP start_time
+        TIMESTAMP end_time
+        VARCHAR_32 status
+        BIGINT promoted_reservation_id FK
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+        BIGINT version
+    }
+
     categories ||--o{ assets : "category_id"
     lab_rooms ||--o{ assets : "lab_room_id"
     users ||--o{ reservations : "user_id"
@@ -100,3 +113,6 @@ erDiagram
     reservations ||--o{ reassignment_log : "reservation_id"
     assets ||--o{ reassignment_log : "from_asset_id / to_asset_id"
     users |o--o{ audit_logs : "actor_id"
+    assets ||--o{ waitlist_entries : "asset_id"
+    users ||--o{ waitlist_entries : "user_id"
+    reservations |o--o{ waitlist_entries : "promoted_reservation_id"
