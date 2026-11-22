@@ -372,8 +372,9 @@ export function joinWaitlist(request: CreateReservationRequest) {
 /**
  * Lists the authenticated user's waitlist entries, newest first (GET /api/v1/reservations/waitlist/me).
  */
-export function fetchMyWaitlist() {
-  return apiFetch<WaitlistEntry[]>('/api/v1/reservations/waitlist/me')
+export function fetchMyWaitlist(page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  return apiFetch<PageResponse<WaitlistEntry>>(`/api/v1/reservations/waitlist/me?${params.toString()}`)
 }
 
 /**

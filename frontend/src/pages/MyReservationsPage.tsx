@@ -199,8 +199,9 @@ export default function MyReservationsPage() {
       })
 
     fetchMyWaitlist()
-      .then(async (entries) => {
+      .then(async (page) => {
         if (ignore) return
+        const entries = page.content
         setWaitlistEntries(entries)
         const missingIds = [...new Set(entries.map((e) => e.assetId).filter((id) => !assetCacheRef.current[id]))]
         if (missingIds.length > 0) {
