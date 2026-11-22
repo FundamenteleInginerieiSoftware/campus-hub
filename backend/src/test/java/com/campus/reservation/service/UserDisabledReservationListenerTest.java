@@ -45,6 +45,9 @@ class UserDisabledReservationListenerTest {
     private UserApi userApi;
 
     @Mock
+    private WaitlistService waitlistService;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     private UserDisabledReservationListener listener;
@@ -53,8 +56,8 @@ class UserDisabledReservationListenerTest {
     void setUp() {
         TransactionStatus txStatus = mock(TransactionStatus.class);
         lenient().when(transactionManager.getTransaction(any())).thenReturn(txStatus);
-        listener =
-                new UserDisabledReservationListener(reservationApi, reservationRepository, userApi, transactionManager);
+        listener = new UserDisabledReservationListener(
+                reservationApi, reservationRepository, userApi, waitlistService, transactionManager);
     }
 
     @Test
@@ -96,11 +99,12 @@ class UserDisabledReservationListenerTest {
 
         listener.onUserDisabled(new UserDisabledEvent(42L, 3L));
 
-        var order = inOrder(reservationRepository, userApi, reservationApi);
+        var order = inOrder(reservationRepository, userApi, reservationApi, waitlistService);
         order.verify(reservationRepository).lockUserQuota(42L);
         order.verify(userApi).findActiveRole(42L);
         order.verify(reservationApi)
                 .cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON);
+        order.verify(waitlistService).cancelWaitingEntriesForUser(42L);
     }
 
     @Test
@@ -115,6 +119,7 @@ class UserDisabledReservationListenerTest {
         order.verify(reservationRepository).lockUserQuota(42L);
         order.verify(userApi).findActiveRole(42L);
         verify(reservationApi, never()).cancelUpcomingReservationsForUser(any(), any());
+        verify(waitlistService, never()).cancelWaitingEntriesForUser(any());
     }
 
     @Test

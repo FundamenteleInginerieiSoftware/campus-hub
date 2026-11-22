@@ -9,7 +9,8 @@ CREATE TABLE waitlist_entries (
     promoted_reservation_id BIGINT      REFERENCES reservations (id),
     created_at              TIMESTAMP   NOT NULL,
     updated_at              TIMESTAMP   NOT NULL,
-    version                 BIGINT      NOT NULL DEFAULT 0
+    version                 BIGINT      NOT NULL DEFAULT 0,
+    CONSTRAINT chk_waitlist_time CHECK (end_time > start_time)
 );
 
 CREATE INDEX idx_waitlist_asset_status_created
@@ -17,3 +18,8 @@ CREATE INDEX idx_waitlist_asset_status_created
 
 CREATE INDEX idx_waitlist_user_created
     ON waitlist_entries (user_id, created_at DESC, id DESC);
+
+-- Partial unique index backstop: at most one active WAITING entry per (asset, user, slot).
+CREATE UNIQUE INDEX uq_waitlist_active_slot
+    ON waitlist_entries (asset_id, user_id, start_time, end_time)
+    WHERE status = 'WAITING';

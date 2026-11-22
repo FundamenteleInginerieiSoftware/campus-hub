@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 /**
  * FIFO waitlist entry queued by a student when a desired equipment slot is occupied (#59).
@@ -22,7 +21,6 @@ import lombok.Setter;
 @Entity
 @Table(name = "waitlist_entries")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class WaitlistEntry {
 

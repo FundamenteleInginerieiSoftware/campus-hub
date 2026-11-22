@@ -13,11 +13,14 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
+import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
+import com.campus.reservation.domain.ReservationHold;
 import com.campus.reservation.domain.WaitlistEntry;
 import com.campus.reservation.domain.WaitlistStatus;
 import com.campus.reservation.repository.ReservationHoldRepository;
@@ -47,6 +50,7 @@ class WaitlistServiceTest {
     private static final Long ASSET_ID = 10L;
     private static final Long USER_1_ID = 101L;
     private static final Long USER_2_ID = 102L;
+    private static final Long USER_3_ID = 103L;
 
     // 2026-11-02 10:00 Europe/Bucharest (Monday)
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
@@ -96,6 +100,7 @@ class WaitlistServiceTest {
         slotEnd = slotStart.plusHours(2);
         lenient().when(currentUser.id()).thenReturn(USER_1_ID);
         lenient().when(currentUser.isAdmin()).thenReturn(false);
+        lenient().when(userApi.findActiveRole(USER_1_ID)).thenReturn(Optional.of(Role.STUDENT));
     }
 
     @Test
@@ -120,6 +125,7 @@ class WaitlistServiceTest {
         assertThat(res.status())
                 .as("new waitlist entry must start in WAITING status; see WaitlistService.joinWaitlist")
                 .isEqualTo(WaitlistStatus.WAITING);
+        verify(reservationRepository).lockUserQuota(USER_1_ID);
         verify(auditService).record(eq(USER_1_ID), eq("JOIN_WAITLIST"), eq("WaitlistEntry"), eq(55L), any());
     }
 
@@ -148,8 +154,6 @@ class WaitlistServiceTest {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, ReservationService.NO_RESERVATION_ID))
-                .thenReturn(true);
         when(waitlistEntryRepository.existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
                         ASSET_ID, USER_1_ID, slotStart, slotEnd, WaitlistStatus.WAITING))
                 .thenReturn(true);
@@ -159,6 +163,39 @@ class WaitlistServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .extracting(ex -> ((ConflictException) ex).getCode())
                 .isEqualTo("WAITLIST_ALREADY_JOINED");
+    }
+
+    @Test
+    @DisplayName("joinWaitlist rejects when caller already owns an active reservation for that slot")
+    void joinWaitlist_rejectsOwnReservationOverlap() {
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsUserOverlapOnAsset(ASSET_ID, USER_1_ID, slotStart, slotEnd))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> waitlistService.joinWaitlist(new JoinWaitlistRequest(ASSET_ID, slotStart, slotEnd)))
+                .as(
+                        "caller owning overlapping booking must get OWN_RESERVATION_CONFLICT; see WaitlistService.joinWaitlist")
+                .isInstanceOf(ConflictException.class)
+                .extracting(ex -> ((ConflictException) ex).getCode())
+                .isEqualTo("OWN_RESERVATION_CONFLICT");
+    }
+
+    @Test
+    @DisplayName("joinWaitlist rejects when student reaches active waitlist entry cap (5)")
+    void joinWaitlist_rejectsWhenWaitlistLimitReached() {
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(waitlistEntryRepository.countByUserIdAndStatus(USER_1_ID, WaitlistStatus.WAITING))
+                .thenReturn((long) WaitlistService.MAX_WAITING_ENTRIES);
+
+        assertThatThrownBy(() -> waitlistService.joinWaitlist(new JoinWaitlistRequest(ASSET_ID, slotStart, slotEnd)))
+                .as("student at waitlist limit (5) must get WAITLIST_LIMIT_REACHED; see WaitlistService.joinWaitlist")
+                .isInstanceOf(ConflictException.class)
+                .extracting(ex -> ((ConflictException) ex).getCode())
+                .isEqualTo("WAITLIST_LIMIT_REACHED");
     }
 
     @Test
@@ -174,24 +211,47 @@ class WaitlistServiceTest {
     }
 
     @Test
-    @DisplayName("processPromotionsForAsset skips quota-full first waiter and promotes second FIFO waiter")
-    void processPromotionsForAsset_skipsQuotaFullAndPromotesSecondFifoWaiter() {
+    @DisplayName("cancelWaitlistEntry rejects non-WAITING entry with INVALID_WAITLIST_STATUS_TRANSITION")
+    void cancelWaitlistEntry_rejectsNonWaitingEntry() {
         LocalDateTime now = LocalDateTime.now(clock);
-        WaitlistEntry firstQuotaFull = new WaitlistEntry(ASSET_ID, USER_1_ID, slotStart, slotEnd, now.minusMinutes(10));
+        WaitlistEntry promoted = new WaitlistEntry(ASSET_ID, USER_1_ID, slotStart, slotEnd, now.minusMinutes(10));
+        ReflectionTestUtils.setField(promoted, "id", 71L);
+        promoted.markPromoted(888L, now);
+        when(waitlistEntryRepository.findByIdForUpdate(71L)).thenReturn(Optional.of(promoted));
+
+        assertThatThrownBy(() -> waitlistService.cancelWaitlistEntry(71L))
+                .as(
+                        "cancelling non-WAITING entry must throw INVALID_WAITLIST_STATUS_TRANSITION; see WaitlistEntry.cancel")
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .extracting(ex -> ((InvalidStateTransitionException) ex).getCode())
+                .isEqualTo("INVALID_WAITLIST_STATUS_TRANSITION");
+    }
+
+    @Test
+    @DisplayName(
+            "processPromotionsForAsset skips quota-full and disabled waiters, promotes next FIFO waiter and confirms hold")
+    void processPromotionsForAsset_skipsQuotaFullDisabledAndPromotesWithHoldConfirmation() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        WaitlistEntry firstQuotaFull = new WaitlistEntry(ASSET_ID, USER_1_ID, slotStart, slotEnd, now.minusMinutes(15));
         ReflectionTestUtils.setField(firstQuotaFull, "id", 1L);
-        WaitlistEntry secondEligible = new WaitlistEntry(ASSET_ID, USER_2_ID, slotStart, slotEnd, now.minusMinutes(5));
-        ReflectionTestUtils.setField(secondEligible, "id", 2L);
+        WaitlistEntry secondDisabled = new WaitlistEntry(ASSET_ID, USER_3_ID, slotStart, slotEnd, now.minusMinutes(10));
+        ReflectionTestUtils.setField(secondDisabled, "id", 2L);
+        WaitlistEntry thirdEligible = new WaitlistEntry(ASSET_ID, USER_2_ID, slotStart, slotEnd, now.minusMinutes(5));
+        ReflectionTestUtils.setField(thirdEligible, "id", 3L);
+
+        ReservationHold ownedHold =
+                new ReservationHold(ASSET_ID, USER_2_ID, slotStart, slotEnd, now.plusMinutes(1), now);
 
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
-                .thenReturn(List.of(firstQuotaFull, secondEligible));
+        when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(List.of(firstQuotaFull, secondDisabled, thirdEligible));
         when(reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, ReservationService.NO_RESERVATION_ID))
-                .thenReturn(false)
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
                         eq(ASSET_ID), eq(slotStart), eq(slotEnd), any(), eq(null), any()))
                 .thenReturn(false);
         when(userApi.findActiveRole(USER_1_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_3_ID)).thenReturn(Optional.empty());
         when(userApi.findActiveRole(USER_2_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                         USER_1_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -199,6 +259,8 @@ class WaitlistServiceTest {
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                         USER_2_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L);
+        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(USER_2_ID, HoldStatus.ACTIVE, now))
+                .thenReturn(List.of(ownedHold));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
             ReflectionTestUtils.setField(r, "id", 900L);
@@ -211,16 +273,17 @@ class WaitlistServiceTest {
                 .as("exactly 1 eligible waiter must be promoted; see WaitlistService.processPromotionsForAsset")
                 .isEqualTo(1);
         assertThat(firstQuotaFull.getStatus())
-                .as(
-                        "first waiter at 2-booking limit must be marked SKIPPED_QUOTA_FULL; see WaitlistService.processPromotionsForAsset")
+                .as("first waiter at 2-booking limit must be marked SKIPPED_QUOTA_FULL")
                 .isEqualTo(WaitlistStatus.SKIPPED_QUOTA_FULL);
-        assertThat(secondEligible.getStatus())
-                .as("second FIFO waiter must be marked PROMOTED; see WaitlistService.processPromotionsForAsset")
+        assertThat(secondDisabled.getStatus())
+                .as("disabled waiter must be marked EXPIRED during promotion")
+                .isEqualTo(WaitlistStatus.EXPIRED);
+        assertThat(thirdEligible.getStatus())
+                .as("third eligible FIFO waiter must be marked PROMOTED")
                 .isEqualTo(WaitlistStatus.PROMOTED);
-        assertThat(secondEligible.getPromotedReservationId())
-                .as(
-                        "promoted waitlist entry must link to created reservation #900; see WaitlistService.processPromotionsForAsset")
-                .isEqualTo(900L);
+        assertThat(ownedHold.getStatus())
+                .as("promoted waiter's matching active hold must transition to CONFIRMED")
+                .isEqualTo(HoldStatus.CONFIRMED);
         verify(notificationService).notifyUser(eq(USER_2_ID), eq("Waitlist Spot Confirmed"), any());
     }
 }

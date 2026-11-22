@@ -5,6 +5,7 @@ import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
+import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
@@ -24,6 +25,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 @Slf4j
 final class ReservationServiceSupport {
+
+    static final int MAX_ACTIVE_RESERVATIONS = 2;
 
     private ReservationServiceSupport() {}
 

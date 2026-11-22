@@ -109,7 +109,7 @@ public class ReservationService implements ReservationApi {
         if (activeRole != Role.ADMIN
                 && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                                 userId, ReservationStatus.ACTIVE_STATUSES)
-                        >= 2) {
+                        >= ReservationServiceSupport.MAX_ACTIVE_RESERVATIONS) {
             throw new ConflictException(
                     "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
         }
@@ -201,7 +201,7 @@ public class ReservationService implements ReservationApi {
         if (role != Role.ADMIN) {
             long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
                     userId, ReservationStatus.ACTIVE_STATUSES);
-            if (activeCount + 1 > 2) {
+            if (activeCount + 1 > ReservationServiceSupport.MAX_ACTIVE_RESERVATIONS) {
                 throw new ConflictException(
                         "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }

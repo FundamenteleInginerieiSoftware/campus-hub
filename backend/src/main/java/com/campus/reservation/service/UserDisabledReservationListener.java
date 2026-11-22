@@ -35,16 +35,19 @@ public class UserDisabledReservationListener {
     private final ReservationApi reservationApi;
     private final ReservationRepository reservationRepository;
     private final UserApi userApi;
+    private final WaitlistService waitlistService;
     private final TransactionTemplate requiresNewTx;
 
     public UserDisabledReservationListener(
             ReservationApi reservationApi,
             ReservationRepository reservationRepository,
             UserApi userApi,
+            WaitlistService waitlistService,
             PlatformTransactionManager transactionManager) {
         this.reservationApi = reservationApi;
         this.reservationRepository = reservationRepository;
         this.userApi = userApi;
+        this.waitlistService = waitlistService;
         TransactionTemplate tt = new TransactionTemplate(transactionManager);
         tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.requiresNewTx = tt;
@@ -64,9 +67,11 @@ public class UserDisabledReservationListener {
                     return;
                 }
                 int cancelled = reservationApi.cancelUpcomingReservationsForUser(event.userId(), DEFAULT_REASON);
+                int cancelledWaitlist = waitlistService.cancelWaitingEntriesForUser(event.userId());
                 log.info(
-                        "Cancelled {} upcoming reservation(s) for disabled user #{} (disabled by admin #{})",
+                        "Cancelled {} upcoming reservation(s) and {} waitlist entry(ies) for disabled user #{} (disabled by admin #{})",
                         cancelled,
+                        cancelledWaitlist,
                         event.userId(),
                         event.adminId());
             });
