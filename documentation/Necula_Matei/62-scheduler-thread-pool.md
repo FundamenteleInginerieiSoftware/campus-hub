@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-22
-**Branch / PR:** `chore/config-scheduler-pool` (#TBD)
+**Branch / PR:** `chore/config-scheduler-pool` (#347)
 **See also:** `LiveStreams.heartbeat()` (Liviu, #317), `ReservationLifecycleService` (Calin), `documentation/Necula_Matei/60-ses-live-push.md`
 
 ---
