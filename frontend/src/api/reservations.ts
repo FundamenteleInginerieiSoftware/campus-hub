@@ -315,6 +315,36 @@ export function rejectTransfer(transferId: number) {
   })
 }
 
+export type FreeSlotOption = {
+  startTime: string
+  endTime: string
+}
+
+export type NextFreeSlotsResponse = {
+  assetId: number
+  durationMinutes: number
+  bookable: boolean
+  slots: FreeSlotOption[]
+}
+
+/**
+ * Recommends the earliest upcoming free slots for an asset (GET /api/v1/reservations/next-free-slots, #61).
+ */
+export function fetchNextFreeSlots(
+  assetId: number,
+  from: string,
+  durationMinutes: number,
+  limit = 4,
+) {
+  const params = new URLSearchParams({
+    assetId: String(assetId),
+    from,
+    durationMinutes: String(durationMinutes),
+    limit: String(limit),
+  })
+  return apiFetch<NextFreeSlotsResponse>(`/api/v1/reservations/next-free-slots?${params.toString()}`)
+}
+
 /**
  * Returns a Date object whose local year, month, day, hour, minute, and second
  * match the current wall-clock time in Europe/Bucharest (the shared campus clock zone).

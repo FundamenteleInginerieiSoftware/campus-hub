@@ -31,10 +31,12 @@ import {
   confirmHold,
   createReservation,
   fetchAssetSummary,
+  fetchNextFreeSlots,
   nowInBucharest,
   parseCampusLocalDateTime,
   type AssetSummary,
   type AvailabilityResponse,
+  type FreeSlotOption,
   type Reservation,
 } from '../api/reservations.ts'
 import ErrorAlert from './ErrorAlert.tsx'
@@ -53,7 +55,7 @@ import {
   SLOT_STEP_MINUTES,
   TIME_STEPS,
 } from './reservation/bookingRules.ts'
-import { formatSlotDate, MONTH_NAMES } from './reservation/reservationFormatters.ts'
+import { formatSlotDate, formatSlotTime, MONTH_NAMES } from './reservation/reservationFormatters.ts'
 import { useSlotHold } from './reservation/useSlotHold.ts'
 
 type Props = {
@@ -171,6 +173,10 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   const [substituteState, setSubstituteState] = useState<{
     key: string
     items: AssetSummary[]
+  }>({ key: '', items: [] })
+  const [nextSlotsState, setNextSlotsState] = useState<{
+    key: string
+    items: FreeSlotOption[]
   }>({ key: '', items: [] })
   const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
@@ -424,6 +430,41 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     availability.data?.availableAssetIds.length ?? 0,
     substituteAssets.length,
   )
+
+  const nextSlotsKey =
+    !availability.checking &&
+    availability.data &&
+    !availability.data.available &&
+    availability.data.conflictReason === 'RESERVATION_CONFLICT'
+      ? `${asset.id}:${startIso}:${effectiveDuration}`
+      : ''
+
+  useEffect(() => {
+    if (!nextSlotsKey) return
+    let cancelled = false
+    fetchNextFreeSlots(asset.id, startIso, effectiveDuration, 4)
+      .then((res) => {
+        if (!cancelled) {
+          setNextSlotsState({ key: nextSlotsKey, items: res.bookable ? res.slots : [] })
+        }
+      })
+      .catch(() => {
+        // Non-blocking recommendation helper
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [nextSlotsKey, asset.id, startIso, effectiveDuration])
+
+  const nextFreeSlots = nextSlotsKey && nextSlotsState.key === nextSlotsKey ? nextSlotsState.items : []
+
+  function handleSelectRecommendedSlot(slot: FreeSlotOption) {
+    if (holdLoading || bookingLoading) return
+    const parsedStart = parseCampusLocalDateTime(slot.startTime)
+    setCurrentMonday(getMonday(parsedStart))
+    const hhmm = `${String(parsedStart.getHours()).padStart(2, '0')}:${String(parsedStart.getMinutes()).padStart(2, '0')}`
+    selectSlot(formatDateKey(parsedStart), hhmm)
+  }
 
   function handleSwitchToSubstitute(sub: AssetSummary) {
     if (holdLoading || bookingLoading) return
@@ -898,6 +939,30 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         Showing the first {substituteAssets.length} of {totalAvailableSubstitutes} free units.
                       </Text>
                     )}
+                  </Stack>
+                </Paper>
+              )}
+
+              {!availability.checking && !isSlotAvailable && nextFreeSlots.length > 0 && (
+                <Paper withBorder p="xs" radius="sm" bg="var(--mantine-color-blue-light)">
+                  <Stack gap={6}>
+                    <Text size="xs" fw={700} c="blue">
+                      Next free slots on this unit:
+                    </Text>
+                    {nextFreeSlots.map((slot) => (
+                      <Button
+                        key={slot.startTime}
+                        size="xs"
+                        variant="light"
+                        color="blue"
+                        justify="space-between"
+                        fullWidth
+                        disabled={holdLoading || bookingLoading}
+                        onClick={() => handleSelectRecommendedSlot(slot)}
+                      >
+                        {formatSlotDate(slot.startTime)} • {formatSlotTime(slot.startTime, slot.endTime)}
+                      </Button>
+                    ))}
                   </Stack>
                 </Paper>
               )}
