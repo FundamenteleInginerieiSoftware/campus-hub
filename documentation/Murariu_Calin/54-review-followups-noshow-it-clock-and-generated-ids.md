@@ -2,10 +2,10 @@
 
 ## Part 1: In simple terms
 
-This PR closes the remaining reservation and test-hygiene items from Matei's and Stefania's review notes (#338, #346):
-1. **No-show email uses the owner read under the row lock:** `ReservationService.markNoShow` now returns `Optional<Long>` with the `userId` read after acquiring `FOR UPDATE`, so `ReservationLifecycleService.processNoShows` notifies the current owner even if a transfer occurred between the initial query and the lock.
-2. **`checkOutReservation` vs `markNoShow` concurrency IT:** Added a two-thread PostgreSQL test using `pg_stat_activity` lock polling to prove `markNoShow` waits behind an active `checkOutReservation` transaction and returns `Optional.empty()` without a `STALE_VERSION` error.
-3. **#338 review nits:** Clarified the `findByBundleIdAndUserIdForUpdate` repository comment (the `userId` filter is a safety net because `transferOwnership` also clears `bundleId`) and replaced hard-coded calendar dates with a `Clock` in the new `ReservationRepositoryTest` bundle-lock tests.
+This PR closes the remaining reservation and test-hygiene items from Matei's reviews (#338, #346):
+1. **No-show email uses the owner read under the row lock:** `ReservationService.markNoShow` now returns `Optional<Long>` with the `userId` read after acquiring `FOR UPDATE`, so `ReservationLifecycleService.processNoShows` uses that owner as a safety net rather than the unlocked query read.
+2. **`checkOutReservation` vs `markNoShow` concurrency IT:** Added a two-thread PostgreSQL test using `pg_stat_activity` + `pg_locks` lock polling (`reservations` relation / `transactionid`) to prove `markNoShow` waits behind an active `checkOutReservation` transaction and returns `Optional.empty()` without a `STALE_VERSION` error.
+3. **#338 review nits:** Clarified the `findByBundleIdAndUserIdForUpdate` repository comment (the `userId` filter is a safety net because `transferOwnership` also clears `bundleId`) and replaced hard-coded calendar dates with `Clock` in the new `ReservationRepositoryTest` bundle-lock tests and in `ReassignmentRollbackIT`.
 4. **Generated IDs in ITs:** Switched `ReservationConcurrencyIT` and `ReassignmentRollbackIT` from explicit numeric IDs (`100`–`103`, `500`–`603`) to generated `RETURNING id` rows so a dirty `campus_test` database cannot collide on `users_pkey`.
 
 ---

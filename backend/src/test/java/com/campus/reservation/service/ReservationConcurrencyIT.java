@@ -909,10 +909,13 @@ class ReservationConcurrencyIT {
         while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
             Integer waiting = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*)
-                    FROM pg_stat_activity
-                    WHERE datname = current_database()
-                      AND pid <> pg_backend_pid()
-                      AND wait_event_type = 'Lock'
+                    FROM pg_stat_activity a
+                    JOIN pg_locks l ON l.pid = a.pid
+                    WHERE a.datname = current_database()
+                      AND a.pid <> pg_backend_pid()
+                      AND a.wait_event_type = 'Lock'
+                      AND NOT l.granted
+                      AND (l.locktype = 'transactionid' OR l.relation = 'reservations'::regclass)
                     """, Integer.class);
             if (waiting != null && waiting > 0) {
                 return true;

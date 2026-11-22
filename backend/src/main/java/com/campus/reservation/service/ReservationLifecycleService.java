@@ -92,8 +92,9 @@ public class ReservationLifecycleService {
 
         for (Reservation r : unclaimed) {
             try {
-                // Use the userId returned under the FOR UPDATE row lock so a concurrent transfer
-                // cannot cause the no-show email to go to the previous owner (#346).
+                // Safety net: use the userId returned under the FOR UPDATE row lock rather than the unlocked
+                // list read (in practice acceptTransfer rejects once startTime has passed, while no-show runs +30m
+                // later).
                 Optional<Long> markedUserId = reservationService.markNoShow(r.getId());
                 if (markedUserId.isPresent()) {
                     releasedCount++;

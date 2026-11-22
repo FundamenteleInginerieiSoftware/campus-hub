@@ -100,6 +100,9 @@ class ReassignmentRollbackIT {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private Clock clock;
+
     @MockitoBean
     private CatalogApi catalogApi;
 
@@ -166,12 +169,12 @@ class ReassignmentRollbackIT {
     @DisplayName("Rollback bug fix verification: When first substitute throws SubstituteNoLongerFreeException, "
             + "the transaction does not roll back, moves to second substitute and saves log")
     void fallsBackToNextStrategyWithoutRollback() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
 
         // Reservation to reassign (on damaged asset), committed since test runs with NOT_SUPPORTED
-        Reservation bookingToMove =
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation bookingToMove = new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, now);
         bookingToMove = reservationRepository.saveAndFlush(bookingToMove);
 
         AssetSummary damaged = new AssetSummary(
@@ -190,8 +193,7 @@ class ReassignmentRollbackIT {
         when(catalogApi.findAvailableByCategory(categoryId, DAMAGED_ASSET_ID)).thenReturn(List.of(sub2Free));
         when(catalogApi.isBookable(SUB_CAT_FREE_ID)).thenReturn(true);
 
-        AssetDamagedEvent event =
-                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+        AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, clock.instant());
 
         // This call invokes ReservationService.moveToAsset(bookingId, SUB_MODEL_BUSY_ID),
         // which throws SubstituteNoLongerFreeException through the real Spring proxy.
@@ -221,15 +223,16 @@ class ReassignmentRollbackIT {
     @Test
     @DisplayName("Bug #112 fix: Concurrent cancellation on booking 2 does not roll back booking 1 reassignment")
     void concurrentModificationOnOneBookingDoesNotRollbackOtherReassignments() {
-        LocalDateTime start1 = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end1 = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime start2 = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime end2 = LocalDateTime.of(2026, 11, 2, 18, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start1 = now.plusHours(4);
+        LocalDateTime end1 = start1.plusHours(2);
+        LocalDateTime start2 = end1;
+        LocalDateTime end2 = start2.plusHours(2);
 
-        Reservation b1 = reservationRepository.saveAndFlush(
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start1, end1, LocalDateTime.of(2026, 11, 2, 10, 0)));
-        Reservation b2 = reservationRepository.saveAndFlush(
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start2, end2, LocalDateTime.of(2026, 11, 2, 10, 0)));
+        Reservation b1 =
+                reservationRepository.saveAndFlush(new Reservation(USER_ID, DAMAGED_ASSET_ID, start1, end1, now));
+        Reservation b2 =
+                reservationRepository.saveAndFlush(new Reservation(USER_ID, DAMAGED_ASSET_ID, start2, end2, now));
 
         AssetSummary damaged = new AssetSummary(
                 DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
@@ -250,7 +253,7 @@ class ReassignmentRollbackIT {
                     tt.execute(status -> {
                         Reservation r2 =
                                 reservationRepository.findById(b2.getId()).orElseThrow();
-                        r2.cancel(LocalDateTime.of(2026, 11, 2, 12, 0), "Cancelled concurrently by student");
+                        r2.cancel(now.plusHours(2), "Cancelled concurrently by student");
                         reservationRepository.saveAndFlush(r2);
                         return null;
                     });
@@ -259,8 +262,7 @@ class ReassignmentRollbackIT {
                 .when(notificationService)
                 .notifyUser(eq(USER_ID), eq("Reservation Reassigned"), anyString());
 
-        AssetDamagedEvent event =
-                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+        AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, clock.instant());
 
         reassignmentService.handle(event);
 
@@ -286,11 +288,12 @@ class ReassignmentRollbackIT {
     @DisplayName(
             "Bug #149 fix: When first same-model candidate becomes unavailable concurrently, tries second same-model candidate in a fresh REQUIRES_NEW transaction")
     void triesSecondSameModelCandidateWhenFirstRaces() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
 
-        Reservation bookingToMove = reservationRepository.saveAndFlush(
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 0)));
+        Reservation bookingToMove =
+                reservationRepository.saveAndFlush(new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, now));
 
         AssetSummary damaged = new AssetSummary(
                 DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
@@ -310,8 +313,7 @@ class ReassignmentRollbackIT {
         when(catalogApi.isBookable(SUB_MODEL_BUSY_ID)).thenReturn(false);
         when(catalogApi.isBookable(SUB_MODEL_SECOND_FREE_ID)).thenReturn(true);
 
-        AssetDamagedEvent event =
-                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+        AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, clock.instant());
 
         reassignmentService.handle(event);
 
