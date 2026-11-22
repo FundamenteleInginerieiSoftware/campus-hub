@@ -752,4 +752,82 @@ class ReservationRepositoryTest {
                         "findCheckedOutOverlapping must exclude CONFIRMED/CANCELLED/NO_SHOW and checkouts outside [from, to]; see ReservationRepository.findCheckedOutOverlapping")
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName(
+            "findByBundleIdForUpdate returns bundle reservations ordered by ascending id even when assetId order differs (#336)")
+    void findByBundleIdForUpdate_returnsOrderedByIdAsc() {
+        jdbcTemplate.update("""
+            INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+            VALUES (101, 'Rigol DS1054Z #2', 'DS1054Z', 'SN-REPO-101', 'AVAILABLE', 100, 100, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime created = LocalDateTime.of(2026, 11, 1, 9, 0);
+
+        Reservation rHigherAssetLowerId = new Reservation(USER_ID, 101L, start, end, created);
+        rHigherAssetLowerId.assignBundle(bundleId);
+        rHigherAssetLowerId = reservationRepository.saveAndFlush(rHigherAssetLowerId);
+
+        Reservation rLowerAssetHigherId = new Reservation(USER_ID, ASSET_ID, start, end, created);
+        rLowerAssetHigherId.assignBundle(bundleId);
+        rLowerAssetHigherId = reservationRepository.saveAndFlush(rLowerAssetHigherId);
+
+        List<Reservation> lockedItems = reservationRepository.findByBundleIdForUpdate(bundleId);
+
+        assertThat(lockedItems)
+                .as(
+                        "findByBundleIdForUpdate must return all bundle items ordered by ascending id (matching findUpcomingConfirmedByUserForUpdate); "
+                                + "see ReservationRepository.findByBundleIdForUpdate")
+                .extracting(Reservation::getId)
+                .containsExactly(rHigherAssetLowerId.getId(), rLowerAssetHigherId.getId());
+    }
+
+    @Test
+    @DisplayName(
+            "findByBundleIdAndUserIdForUpdate returns only the caller's bundle items ordered by ascending id (#338)")
+    void findByBundleIdAndUserIdForUpdate_returnsOnlyOwnedItemsOrderedByIdAsc() {
+        jdbcTemplate.update("""
+            INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
+            VALUES (101, 'student101@campus.test', '{bcrypt}hash', 'Student 101', 'STUDENT', true, NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+        jdbcTemplate.update("""
+            INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+            VALUES (101, 'Rigol DS1054Z #2', 'DS1054Z', 'SN-REPO-101', 'AVAILABLE', 100, 100, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+        jdbcTemplate.update("""
+            INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+            VALUES (102, 'Rigol DS1054Z #3', 'DS1054Z', 'SN-REPO-102', 'AVAILABLE', 100, 100, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+            """);
+        UUID bundleId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime created = LocalDateTime.of(2026, 11, 1, 9, 0);
+
+        Reservation r1 = new Reservation(USER_ID, 101L, start, end, created);
+        r1.assignBundle(bundleId);
+        r1 = reservationRepository.saveAndFlush(r1);
+
+        Reservation rOtherUser = new Reservation(101L, 102L, start, end, created);
+        rOtherUser.assignBundle(bundleId);
+        reservationRepository.saveAndFlush(rOtherUser);
+
+        Reservation r2 = new Reservation(USER_ID, ASSET_ID, start, end, created);
+        r2.assignBundle(bundleId);
+        r2 = reservationRepository.saveAndFlush(r2);
+
+        List<Reservation> lockedOwnedItems = reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID);
+
+        assertThat(lockedOwnedItems)
+                .as(
+                        "findByBundleIdAndUserIdForUpdate must exclude items transferred to other users and order by ascending id; "
+                                + "see ReservationRepository.findByBundleIdAndUserIdForUpdate")
+                .extracting(Reservation::getId)
+                .containsExactly(r1.getId(), r2.getId());
+    }
 }
