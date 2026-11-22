@@ -1039,7 +1039,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         disabled={holdLoading || bookingLoading}
                         onClick={() => void handleJoinWaitlist()}
                       >
-                        Join FIFO waitlist
+                        Waitlist
                       </Button>
                     )}
                   </Stack>

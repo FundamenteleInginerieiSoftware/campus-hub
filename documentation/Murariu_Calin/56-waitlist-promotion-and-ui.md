@@ -13,4 +13,4 @@ Cancelling a reservation, cancelling a bundle, or marking a booking as no-show n
 | `SlotFreedEvent.java`, `WaitlistPromotionListener.java` | Publishes `SlotFreedEvent(assetId)` from `cancelReservation`, `cancelBundle`, `cancelUpcomingReservationsForUser`, and `markNoShow`; `AFTER_COMMIT` + `REQUIRES_NEW` listener invokes `WaitlistService.processPromotionsForAsset`. |
 | `ReservationLifecycleService.java` | Calls `waitlistService.expireStaleEntries()` during `runLifecycleSweep()`. |
 | `WaitlistPromotionIT.java` | PostgreSQL `@SpringBootTest` proving cancellation automatically promotes the first FIFO waiter into a `CONFIRMED` reservation. |
-| `reservations.ts`, `CalendarBookingView.tsx`, `MyReservationsPage.tsx` | Added waitlist API helpers, "Join FIFO waitlist" button on `RESERVATION_CONFLICT`, and "My Waitlist" card with leave/cancel action. |
+| `reservations.ts`, `CalendarBookingView.tsx`, `MyReservationsPage.tsx` | Added waitlist API helpers, "Waitlist" button on `RESERVATION_CONFLICT`, and "My Waitlist" card with leave/cancel action. |
