@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -102,7 +103,7 @@ class ReservationLifecycleServiceTest {
 
         when(reservationRepository.findConfirmedBeforeCutoff(now.minusMinutes(30)))
                 .thenReturn(List.of(noShowRes));
-        when(reservationService.markNoShow(11L)).thenReturn(true);
+        when(reservationService.markNoShow(11L)).thenReturn(Optional.of(101L));
         when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of(overdueRes));
         when(reservationService.markOverdue(22L)).thenReturn(true);
         when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
@@ -281,7 +282,7 @@ class ReservationLifecycleServiceTest {
                 .thenReturn(List.of(r1, r2));
         when(reservationService.markNoShow(51L))
                 .thenThrow(new ObjectOptimisticLockingFailureException(Reservation.class, 51L));
-        when(reservationService.markNoShow(52L)).thenReturn(true);
+        when(reservationService.markNoShow(52L)).thenReturn(Optional.of(202L));
         when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of());
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
@@ -498,5 +499,30 @@ class ReservationLifecycleServiceTest {
                         "sweep expired holds: lifecycle scheduled runner must return count of holds swept; see ReservationLifecycleService.sweepExpiredHolds")
                 .isEqualTo(5);
         verify(holdService).sweepExpiredHolds(expectedNow);
+    }
+
+    @Test
+    @DisplayName(
+            "processNoShows notifies the owner read under the FOR UPDATE lock rather than the stale unlocked read (#346)")
+    void processNoShowsNotifiesLockedRowOwnerRatherThanStaleUnlockedRead() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Reservation staleSnapshot =
+                new Reservation(101L, ASSET_ID, now.minusHours(1), now.plusHours(1), now.minusHours(2));
+        ReflectionTestUtils.setField(staleSnapshot, "id", 77L);
+
+        when(reservationRepository.findConfirmedBeforeCutoff(now.minusMinutes(30)))
+                .thenReturn(List.of(staleSnapshot));
+        // Simulate a concurrent transfer before markNoShow acquired FOR UPDATE: locked row now belongs to 202L.
+        when(reservationService.markNoShow(77L)).thenReturn(Optional.of(202L));
+        when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of());
+
+        LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
+
+        assertThat(summary.noShowReleasedCount())
+                .as(
+                        "no-show sweep must count the transitioned reservation; see ReservationLifecycleService.processNoShows")
+                .isEqualTo(1);
+        verify(notificationService).notifyUser(eq(202L), eq("Reservation Marked as No-Show"), any());
+        verify(notificationService, never()).notifyUser(eq(101L), any(), any());
     }
 }

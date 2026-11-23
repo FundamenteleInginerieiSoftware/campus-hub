@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -73,12 +74,16 @@ class ReassignmentRollbackIT {
         }
     }
 
-    private static final Long DAMAGED_ASSET_ID = 501L;
-    private static final Long SUB_MODEL_BUSY_ID = 502L;
-    private static final Long SUB_CAT_FREE_ID = 503L;
-    private static final Long SUB_MODEL_SECOND_FREE_ID = 504L;
     private static final Long INCIDENT_ID = 888L;
-    private static final Long USER_ID = 100L;
+
+    // Generated per-test IDs so concurrent or interrupted runs never collide on users_pkey (#346).
+    private Long DAMAGED_ASSET_ID;
+    private Long SUB_MODEL_BUSY_ID;
+    private Long SUB_CAT_FREE_ID;
+    private Long SUB_MODEL_SECOND_FREE_ID;
+    private Long USER_ID;
+    private Long categoryId;
+    private Long labRoomId;
 
     @Autowired
     private ReassignmentService reassignmentService;
@@ -94,6 +99,9 @@ class ReassignmentRollbackIT {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private Clock clock;
 
     @MockitoBean
     private CatalogApi catalogApi;
@@ -112,33 +120,34 @@ class ReassignmentRollbackIT {
 
     @BeforeEach
     void setUp() {
-        // Seed FK rows
-        jdbcTemplate.update("""
-            INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
-            VALUES (100, 'itstudent@campus.test', '{bcrypt}hash', 'IT Student', 'STUDENT', true, NOW())
-            ON CONFLICT (id) DO NOTHING
-            """);
-        jdbcTemplate.update("""
-            INSERT INTO categories (id, name)
-            VALUES (500, 'Test IT Scopes')
-            ON CONFLICT (id) DO NOTHING
-            """);
-        jdbcTemplate.update("""
-            INSERT INTO lab_rooms (id, code, name)
-            VALUES (500, 'LAB-500', 'IT Lab')
-            ON CONFLICT (id) DO NOTHING
-            """);
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        USER_ID = jdbcTemplate.queryForObject("""
+            INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
+            VALUES (?, '{bcrypt}hash', 'IT Student', 'STUDENT', true, NOW())
+            RETURNING id
+            """, Long.class, "itstudent-" + tag + "@rollback.test");
+        categoryId = jdbcTemplate.queryForObject(
+                "INSERT INTO categories (name) VALUES (?) RETURNING id", Long.class, "Test IT Scopes " + tag);
+        labRoomId = jdbcTemplate.queryForObject(
+                "INSERT INTO lab_rooms (code, name) VALUES (?, ?) RETURNING id",
+                Long.class,
+                "LAB-" + tag,
+                "IT Lab " + tag);
 
-        for (long id : List.of(DAMAGED_ASSET_ID, SUB_MODEL_BUSY_ID, SUB_CAT_FREE_ID, SUB_MODEL_SECOND_FREE_ID)) {
-            jdbcTemplate.update(
-                    """
-                INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'AVAILABLE', 500, 500, NOW(), NOW())
-                ON CONFLICT (id) DO NOTHING
-                """, id, "Asset " + id, id == SUB_CAT_FREE_ID ? "DIFFERENT_MODEL" : "SAME_MODEL", "SN-IT-" + id);
-        }
+        DAMAGED_ASSET_ID = insertAsset("Damaged " + tag, "SAME_MODEL", "SN-IT-1-" + tag);
+        SUB_MODEL_BUSY_ID = insertAsset("Sub Busy " + tag, "SAME_MODEL", "SN-IT-2-" + tag);
+        SUB_CAT_FREE_ID = insertAsset("Sub Cat Free " + tag, "DIFFERENT_MODEL", "SN-IT-3-" + tag);
+        SUB_MODEL_SECOND_FREE_ID = insertAsset("Sub Model Free " + tag, "SAME_MODEL", "SN-IT-4-" + tag);
 
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
+    }
+
+    private Long insertAsset(String name, String model, String serialNumber) {
+        return jdbcTemplate.queryForObject("""
+            INSERT INTO assets (name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+            VALUES (?, ?, ?, 'AVAILABLE', ?, ?, NOW(), NOW())
+            RETURNING id
+            """, Long.class, name, model, serialNumber, categoryId, labRoomId);
     }
 
     @AfterEach
@@ -151,29 +160,29 @@ class ReassignmentRollbackIT {
                 SUB_MODEL_BUSY_ID,
                 SUB_CAT_FREE_ID,
                 SUB_MODEL_SECOND_FREE_ID);
-        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 500");
-        jdbcTemplate.update("DELETE FROM categories WHERE id = 500");
-        jdbcTemplate.update("DELETE FROM users WHERE id = 100");
+        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", labRoomId);
+        jdbcTemplate.update("DELETE FROM categories WHERE id = ?", categoryId);
+        jdbcTemplate.update("DELETE FROM users WHERE id = ?", USER_ID);
     }
 
     @Test
     @DisplayName("Rollback bug fix verification: When first substitute throws SubstituteNoLongerFreeException, "
             + "the transaction does not roll back, moves to second substitute and saves log")
     void fallsBackToNextStrategyWithoutRollback() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
 
         // Reservation to reassign (on damaged asset), committed since test runs with NOT_SUPPORTED
-        Reservation bookingToMove =
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 0));
+        Reservation bookingToMove = new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, now);
         bookingToMove = reservationRepository.saveAndFlush(bookingToMove);
 
-        AssetSummary damaged =
-                new AssetSummary(DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
-        AssetSummary sub1Busy =
-                new AssetSummary(SUB_MODEL_BUSY_ID, "Sub 1 Busy", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
-        AssetSummary sub2Free =
-                new AssetSummary(SUB_CAT_FREE_ID, "Sub 2 Free", "DIFFERENT_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+        AssetSummary damaged = new AssetSummary(
+                DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
+        AssetSummary sub1Busy = new AssetSummary(
+                SUB_MODEL_BUSY_ID, "Sub 1 Busy", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
+        AssetSummary sub2Free = new AssetSummary(
+                SUB_CAT_FREE_ID, "Sub 2 Free", "DIFFERENT_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damaged);
         // Strategy 1 (SameModel) selects sub1Busy (isAssetFree is true),
@@ -181,11 +190,10 @@ class ReassignmentRollbackIT {
         when(catalogApi.findAvailableByModel("SAME_MODEL", DAMAGED_ASSET_ID)).thenReturn(List.of(sub1Busy));
         when(catalogApi.isBookable(SUB_MODEL_BUSY_ID)).thenReturn(false);
         // Strategy 2 (SameCategory) selects sub2Free, which succeeds in moveToAsset.
-        when(catalogApi.findAvailableByCategory(500L, DAMAGED_ASSET_ID)).thenReturn(List.of(sub2Free));
+        when(catalogApi.findAvailableByCategory(categoryId, DAMAGED_ASSET_ID)).thenReturn(List.of(sub2Free));
         when(catalogApi.isBookable(SUB_CAT_FREE_ID)).thenReturn(true);
 
-        AssetDamagedEvent event =
-                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+        AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, clock.instant());
 
         // This call invokes ReservationService.moveToAsset(bookingId, SUB_MODEL_BUSY_ID),
         // which throws SubstituteNoLongerFreeException through the real Spring proxy.
@@ -215,24 +223,25 @@ class ReassignmentRollbackIT {
     @Test
     @DisplayName("Bug #112 fix: Concurrent cancellation on booking 2 does not roll back booking 1 reassignment")
     void concurrentModificationOnOneBookingDoesNotRollbackOtherReassignments() {
-        LocalDateTime start1 = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end1 = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime start2 = LocalDateTime.of(2026, 11, 2, 16, 0);
-        LocalDateTime end2 = LocalDateTime.of(2026, 11, 2, 18, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start1 = now.plusHours(4);
+        LocalDateTime end1 = start1.plusHours(2);
+        LocalDateTime start2 = end1;
+        LocalDateTime end2 = start2.plusHours(2);
 
-        Reservation b1 = reservationRepository.saveAndFlush(
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start1, end1, LocalDateTime.of(2026, 11, 2, 10, 0)));
-        Reservation b2 = reservationRepository.saveAndFlush(
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start2, end2, LocalDateTime.of(2026, 11, 2, 10, 0)));
+        Reservation b1 =
+                reservationRepository.saveAndFlush(new Reservation(USER_ID, DAMAGED_ASSET_ID, start1, end1, now));
+        Reservation b2 =
+                reservationRepository.saveAndFlush(new Reservation(USER_ID, DAMAGED_ASSET_ID, start2, end2, now));
 
-        AssetSummary damaged =
-                new AssetSummary(DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
-        AssetSummary subFree =
-                new AssetSummary(SUB_CAT_FREE_ID, "Sub Free", "DIFFERENT_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+        AssetSummary damaged = new AssetSummary(
+                DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
+        AssetSummary subFree = new AssetSummary(
+                SUB_CAT_FREE_ID, "Sub Free", "DIFFERENT_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damaged);
         when(catalogApi.findAvailableByModel(any(), anyLong())).thenReturn(List.of());
-        when(catalogApi.findAvailableByCategory(500L, DAMAGED_ASSET_ID)).thenReturn(List.of(subFree));
+        when(catalogApi.findAvailableByCategory(categoryId, DAMAGED_ASSET_ID)).thenReturn(List.of(subFree));
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
 
         // Simulate student concurrently cancelling b2 in a separate committed transaction
@@ -244,7 +253,7 @@ class ReassignmentRollbackIT {
                     tt.execute(status -> {
                         Reservation r2 =
                                 reservationRepository.findById(b2.getId()).orElseThrow();
-                        r2.cancel(LocalDateTime.of(2026, 11, 2, 12, 0), "Cancelled concurrently by student");
+                        r2.cancel(now.plusHours(2), "Cancelled concurrently by student");
                         reservationRepository.saveAndFlush(r2);
                         return null;
                     });
@@ -253,8 +262,7 @@ class ReassignmentRollbackIT {
                 .when(notificationService)
                 .notifyUser(eq(USER_ID), eq("Reservation Reassigned"), anyString());
 
-        AssetDamagedEvent event =
-                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+        AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, clock.instant());
 
         reassignmentService.handle(event);
 
@@ -280,18 +288,24 @@ class ReassignmentRollbackIT {
     @DisplayName(
             "Bug #149 fix: When first same-model candidate becomes unavailable concurrently, tries second same-model candidate in a fresh REQUIRES_NEW transaction")
     void triesSecondSameModelCandidateWhenFirstRaces() {
-        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
 
-        Reservation bookingToMove = reservationRepository.saveAndFlush(
-                new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, LocalDateTime.of(2026, 11, 2, 10, 0)));
+        Reservation bookingToMove =
+                reservationRepository.saveAndFlush(new Reservation(USER_ID, DAMAGED_ASSET_ID, start, end, now));
 
-        AssetSummary damaged =
-                new AssetSummary(DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
-        AssetSummary sub1Raced =
-                new AssetSummary(SUB_MODEL_BUSY_ID, "Sub 1 Raced", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+        AssetSummary damaged = new AssetSummary(
+                DAMAGED_ASSET_ID, "Damaged", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
+        AssetSummary sub1Raced = new AssetSummary(
+                SUB_MODEL_BUSY_ID, "Sub 1 Raced", "SAME_MODEL", categoryId, labRoomId, AssetStatus.AVAILABLE);
         AssetSummary sub2SameModelFree = new AssetSummary(
-                SUB_MODEL_SECOND_FREE_ID, "Sub 2 Same Model Free", "SAME_MODEL", 500L, 500L, AssetStatus.AVAILABLE);
+                SUB_MODEL_SECOND_FREE_ID,
+                "Sub 2 Same Model Free",
+                "SAME_MODEL",
+                categoryId,
+                labRoomId,
+                AssetStatus.AVAILABLE);
 
         when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damaged);
         when(catalogApi.findAvailableByModel("SAME_MODEL", DAMAGED_ASSET_ID))
@@ -299,8 +313,7 @@ class ReassignmentRollbackIT {
         when(catalogApi.isBookable(SUB_MODEL_BUSY_ID)).thenReturn(false);
         when(catalogApi.isBookable(SUB_MODEL_SECOND_FREE_ID)).thenReturn(true);
 
-        AssetDamagedEvent event =
-                new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, Instant.parse("2026-11-02T10:00:00Z"));
+        AssetDamagedEvent event = new AssetDamagedEvent(INCIDENT_ID, DAMAGED_ASSET_ID, USER_ID, clock.instant());
 
         reassignmentService.handle(event);
 

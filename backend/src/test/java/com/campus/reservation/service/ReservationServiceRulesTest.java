@@ -176,7 +176,7 @@ class ReservationServiceRulesTest {
         assertThat(reservationService.moveToAsset(777L, null, OTHER_ASSET_ID, "reason"))
                 .isFalse();
         assertThat(reservationService.forceCancel(777L, null, "reason")).isFalse();
-        assertThat(reservationService.markNoShow(777L)).isFalse();
+        assertThat(reservationService.markNoShow(777L)).isEmpty();
         assertThat(reservationService.markOverdue(777L)).isFalse();
     }
 
@@ -189,7 +189,7 @@ class ReservationServiceRulesTest {
         assertThat(reservationService.markOverdue(1L)).isFalse();
 
         confirmed.markNoShow();
-        assertThat(reservationService.markNoShow(1L)).isFalse();
+        assertThat(reservationService.markNoShow(1L)).isEmpty();
         assertThat(reservationService.forceCancel(1L, null, "reason")).isFalse();
     }
 
