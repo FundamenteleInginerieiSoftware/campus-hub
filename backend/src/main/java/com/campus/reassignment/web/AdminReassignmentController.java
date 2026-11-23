@@ -56,13 +56,15 @@ public class AdminReassignmentController {
     @Operation(
             summary = "Simulate maintenance impact (dry-run)",
             description =
-                    "Dry-runs the reassignment strategies across a planned maintenance window without modifying bookings.")
+                    "Dry-runs the reassignment strategies across a planned maintenance window (max 90 days) for future CONFIRMED overlapping bookings without modifying the database.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Simulation result returned"),
-        @ApiResponse(responseCode = "400", description = "Validation failed"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "Validation failed or timezone offset provided (VALIDATION_FAILED, MALFORMED_REQUEST)"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "403", description = "Forbidden (requires ADMIN role)"),
-        @ApiResponse(responseCode = "404", description = "Asset not found"),
+        @ApiResponse(responseCode = "404", description = "Asset not found (ASSET_NOT_FOUND)"),
         @ApiResponse(responseCode = "409", description = "Invalid maintenance time window (INVALID_TIME_RANGE)")
     })
     public ResponseEntity<MaintenanceImpactResponse> simulate(@Valid @RequestBody SimulateMaintenanceRequest request) {

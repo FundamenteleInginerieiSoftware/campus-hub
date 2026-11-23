@@ -1,5 +1,6 @@
 package com.campus.reassignment.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -16,6 +17,7 @@ import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.domain.ReassignmentTrigger;
 import com.campus.reassignment.service.MaintenanceImpactSimulator;
 import com.campus.reassignment.service.ReassignmentService;
+import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(AdminReassignmentController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -117,12 +120,16 @@ class AdminReassignmentControllerTest {
     @WithMockUser(roles = "STUDENT")
     @DisplayName("POST /api/v1/admin/reassignments/simulate returns 403 when user is student")
     void simulateForbiddenForStudent() throws Exception {
-        mockMvc.perform(
+        MvcResult result = mockMvc.perform(
                         post("/api/v1/admin/reassignments/simulate")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         "{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00\",\"windowEnd\":\"2026-11-10T17:00:00\"}"))
-                .andExpect(status().isForbidden());
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+        assertThat(result.getResponse().getStatus())
+                .as("students must be denied access to admin simulator endpoint; body=%s", body)
+                .isEqualTo(403);
 
         verifyNoInteractions(maintenanceImpactSimulator);
     }
@@ -143,14 +150,68 @@ class AdminReassignmentControllerTest {
                 List.of());
         when(maintenanceImpactSimulator.simulate(any())).thenReturn(response);
 
-        mockMvc.perform(
+        MvcResult result = mockMvc.perform(
                         post("/api/v1/admin/reassignments/simulate")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         "{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00\",\"windowEnd\":\"2026-11-10T17:00:00\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.assetId").value(1))
-                .andExpect(jsonPath("$.reassignedCount").value(1))
-                .andExpect(jsonPath("$.disruptionScore").value(1));
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(result.getResponse().getStatus())
+                .as("admin simulator request must return 200; see AdminReassignmentController.simulate; body=%s", body)
+                .isEqualTo(200);
+        assertThat(JsonPath.<Integer>read(body, "$.assetId"))
+                .as("response assetId must match simulated asset; body=%s", body)
+                .isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(body, "$.reassignedCount"))
+                .as("response reassignedCount must match simulator output; body=%s", body)
+                .isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(body, "$.disruptionScore"))
+                .as("response disruptionScore must match simulator output; body=%s", body)
+                .isEqualTo(1);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/simulate returns 400 MALFORMED_REQUEST when Z offset is sent")
+    void simulateWithZOffsetReturns400() throws Exception {
+        MvcResult result = mockMvc.perform(
+                        post("/api/v1/admin/reassignments/simulate")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00Z\",\"windowEnd\":\"2026-11-10T17:00:00Z\"}"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(result.getResponse().getStatus())
+                .as("timezone offsets must be rejected with 400; see SimulateMaintenanceRequest; body=%s", body)
+                .isEqualTo(400);
+        assertThat(JsonPath.<String>read(body, "$.code"))
+                .as("timezone offset rejection must use MALFORMED_REQUEST code; body=%s", body)
+                .isEqualTo("MALFORMED_REQUEST");
+        verifyNoInteractions(maintenanceImpactSimulator);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName(
+            "POST /api/v1/admin/reassignments/simulate returns 400 VALIDATION_FAILED when required field is missing")
+    void simulateWithMissingFieldReturns400() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/admin/reassignments/simulate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00\"}"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(result.getResponse().getStatus())
+                .as(
+                        "missing windowEnd must fail Bean Validation with 400; see SimulateMaintenanceRequest; body=%s",
+                        body)
+                .isEqualTo(400);
+        assertThat(JsonPath.<String>read(body, "$.code"))
+                .as("missing required field must return VALIDATION_FAILED code; body=%s", body)
+                .isEqualTo("VALIDATION_FAILED");
+        verifyNoInteractions(maintenanceImpactSimulator);
     }
 }

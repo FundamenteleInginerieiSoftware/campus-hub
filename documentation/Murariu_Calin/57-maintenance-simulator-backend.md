@@ -10,7 +10,7 @@ Administrators can now run a read-only dry-run simulation (`POST /api/v1/admin/r
 
 | Artifact | Purpose |
 |---|---|
-| `MaintenanceImpactSimulator.java` | `@Transactional(readOnly = true)` service reusing `List<SubstituteStrategy>` with an in-memory `virtualAllocations` map so overlapping simulated bookings never double-book a substitute. |
+| `MaintenanceImpactSimulator.java` | `@Transactional(readOnly = true)` service reusing `List<SubstituteStrategy>` with an in-memory `virtualAllocations` map so overlapping simulated bookings never double-book a substitute. Simulates only future `CONFIRMED` bookings overlapping `[windowStart, windowEnd]` (up to 90 days) via `ReservationApi.findUpcomingActiveByAsset`; currently `CHECKED_OUT`/`OVERDUE` items are ignored, whereas the live reassignment engine moves all future `CONFIRMED` bookings on the asset. |
 | `AdminReassignmentController.java` | Added `POST /api/v1/admin/reassignments/simulate` (protected under `/api/v1/admin/**`). |
-| `SimulateMaintenanceRequest.java`, `MaintenanceImpactResponse.java`, `SimulatedBookingImpact.java` | Request/response DTO records including `disruptionScore = 1 * reassigned + 3 * forceCancelled`. |
-| `MaintenanceImpactSimulatorTest.java`, `AdminReassignmentControllerTest.java` | Unit and WebMvc security tests (403 for students, 200 for admins, virtual double-allocation prevention, `INVALID_TIME_RANGE`). |
+| `SimulateMaintenanceRequest.java`, `MaintenanceImpactResponse.java`, `SimulatedBookingImpact.java` | Request/response DTO records with `@JsonFormat(lenient = OptBoolean.FALSE)` (rejecting timezone offsets), Swagger `@Schema` metadata, and `disruptionScore = 1 * reassigned + 3 * forceCancelled`. |
+| `MaintenanceImpactSimulatorTest.java`, `AdminReassignmentControllerTest.java` | Per-rule unit tests (window filter, virtual allocation, model→category fallback, unavailable/busy substitute skip, score, >90-day range guard, zero mutations) and WebMvc security/validation tests (`403` student, `400` missing field / `Z` offset, `200` admin). |

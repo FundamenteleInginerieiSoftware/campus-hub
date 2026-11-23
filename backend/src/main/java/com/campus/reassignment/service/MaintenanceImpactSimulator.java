@@ -10,6 +10,7 @@ import com.campus.reassignment.web.SimulatedBookingImpact;
 import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationSummary;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -22,15 +23,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Dry-run maintenance impact simulator (#58): previews which upcoming bookings on an asset would
- * be reassigned (reusing the ordered {@link SubstituteStrategy} beans) vs. force-cancelled if the
- * asset were taken offline during a planned maintenance window, without mutating the database.
+ * Dry-run maintenance impact simulator (#58): previews which upcoming {@code CONFIRMED} bookings
+ * overlapping a planned maintenance window would be reassigned (reusing the ordered
+ * {@link SubstituteStrategy} beans) vs. force-cancelled if the asset were taken offline, without
+ * mutating the database.
+ *
+ * <p>Scope note: unlike the live reassignment engine (which moves every future {@code CONFIRMED}
+ * booking on damage or retirement), this dry-run considers only future {@code CONFIRMED} bookings
+ * overlapping {@code [windowStart, windowEnd]} via {@link ReservationApi#findUpcomingActiveByAsset};
+ * currently {@code CHECKED_OUT} or {@code OVERDUE} holdings are ignored.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MaintenanceImpactSimulator {
 
+    static final long MAX_WINDOW_DAYS = 90;
     private static final int REASSIGNED_WEIGHT = 1;
     private static final int FORCE_CANCELLED_WEIGHT = 3;
 
@@ -46,11 +54,17 @@ public class MaintenanceImpactSimulator {
     }
 
     /**
-     * Simulates taking {@code request.assetId()} offline across {@code [windowStart, windowEnd]}.
+     * Simulates taking {@code request.assetId()} offline across {@code [windowStart, windowEnd]}
+     * (at most 90 days), evaluating only future {@code CONFIRMED} bookings that overlap the window.
      */
     public MaintenanceImpactResponse simulate(SimulateMaintenanceRequest request) {
         if (!request.windowEnd().isAfter(request.windowStart())) {
             throw new BusinessRuleException("INVALID_TIME_RANGE", "Maintenance window end must be after start");
+        }
+        if (Duration.between(request.windowStart(), request.windowEnd()).compareTo(Duration.ofDays(MAX_WINDOW_DAYS))
+                > 0) {
+            throw new BusinessRuleException(
+                    "INVALID_TIME_RANGE", "Maintenance window cannot exceed " + MAX_WINDOW_DAYS + " days");
         }
 
         AssetSummary target = catalogApi.getAsset(request.assetId());

@@ -314,6 +314,7 @@ A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `
 | `POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming` | Admin | – | `200` + `BatchCancelResponse` | `400 VALIDATION_FAILED`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 USER_NOT_FOUND` (optional query param `reason`, max 255 chars; cancels upcoming CONFIRMED bookings and auto-cancels pending transfer offers) |
 | `POST /api/v1/admin/reservations/jobs/run-lifecycle` | Admin | – | `200` + `LifecycleSweepSummary` | `401 UNAUTHORIZED`, `403 FORBIDDEN` |
 | `GET /api/v1/admin/reassignments?page=0&size=20` | Admin | – | `200` + `PageResponse<ReassignmentLogResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `403 FORBIDDEN` |
+| `POST /api/v1/admin/reassignments/simulate` | Admin | `SimulateMaintenanceRequest` | `200` + `MaintenanceImpactResponse` | `400 VALIDATION_FAILED`, `400 MALFORMED_REQUEST`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 ASSET_NOT_FOUND`, `409 INVALID_TIME_RANGE` (max 90 days; dry-runs future `CONFIRMED` bookings overlapping the window) |
 
 ```json
 // CreateReservationRequest
@@ -414,6 +415,13 @@ A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `
   "outcome": "REASSIGNED",
   "strategy": "SameModelStrategy",
   "createdAt": "2026-11-03T14:00:00"
+}
+
+// SimulateMaintenanceRequest (POST /api/v1/admin/reassignments/simulate, admin only, #58)
+{
+  "assetId": 1,
+  "windowStart": "2026-11-10T09:00:00",
+  "windowEnd": "2026-11-10T17:00:00"
 }
 
 // MaintenanceImpactResponse (returned by POST /api/v1/admin/reassignments/simulate, admin only, #58)
