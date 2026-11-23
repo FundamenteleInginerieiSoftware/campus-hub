@@ -33,6 +33,7 @@ Every document has two parts:
 | 11 | [`11-reliability-report.md`](./11-reliability-report.md) | The reliability report endpoint | Refs #291 (PR 2 of 3) | `GET /api/v1/admin/reliability`, window from the `Clock`, Calin's used minutes, one catalog lookup per unit, unknown assets skipped, `null` instead of NaN |
 | 12 | [`12-equipment-health-page.md`](./12-equipment-health-page.md) | Equipment health page | Refs #291 (PR 3 of 3) | `/admin/reliability`, 90/180/365 window, level badges, `null` shown as "–", no "healthy" message on an error, horizontal scroll on a phone |
 | 13 | [`13-incident-details-page.md`](./13-incident-details-page.md) | Incident details page | W7 | `/incidents/:id` for the reporter or an admin, photo inline + replace, history, admin actions, 404 for someone else's incident |
+| 14 | [`14-live-toasts-mount.md`](./14-live-toasts-mount.md) | Live notifications on every page | #345 (Refs #290) | `<LiveToasts />` mounted once in `AppLayout`, stream opens after login and closes on logout, StrictMode double mount, why not in `App.tsx` |
 
 ---
 
