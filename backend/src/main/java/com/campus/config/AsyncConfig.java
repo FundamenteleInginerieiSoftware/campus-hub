@@ -15,7 +15,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *   <li>{@code @Async}: the method runs on a background thread, so the caller doesn't wait. Used for
  *       event listeners such as Calin's reassignment and the notifications. The pool itself (size,
  *       thread names) is set in application.yml under {@code spring.task.execution}.
- *   <li>{@code @Scheduled}: the method runs on a timer, e.g. Calin's overdue and no-show jobs.
+ *   <li>{@code @Scheduled}: the method runs on a timer, e.g. Calin's overdue and no-show jobs and
+ *       Liviu's SSE heartbeat. They share a small pool set in application.yml under {@code
+ *       spring.task.scheduling}.
  * </ul>
  */
 @Configuration
