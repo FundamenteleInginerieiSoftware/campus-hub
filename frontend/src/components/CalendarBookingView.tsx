@@ -405,6 +405,20 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   const isSlotAvailable = availability.data?.available === true
   const currentSlotKey = `${asset.id}:${startIso}:${endIso}`
   const hasJoinedWaitlistForSlot = waitlistJoined?.key === currentSlotKey
+  const conflictErrorCode =
+    bookingError instanceof ApiError
+      ? bookingError.code
+      : holdError instanceof ApiError
+        ? holdError.code
+        : null
+  const showWaitlistPanel =
+    (!availability.checking &&
+      !isSlotAvailable &&
+      (availability.data?.conflictReason === 'RESERVATION_CONFLICT' ||
+        availability.data?.conflictReason === 'SLOT_HELD' ||
+        availability.data?.conflictReason === 'HOLD_CONFLICT')) ||
+    conflictErrorCode === 'RESERVATION_CONFLICT' ||
+    conflictErrorCode === 'SLOT_HELD'
 
   async function handleJoinWaitlist() {
     setWaitlistLoading(true)
@@ -1010,7 +1024,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 </Paper>
               )}
 
-              {!availability.checking && !isSlotAvailable && availability.data?.conflictReason === 'RESERVATION_CONFLICT' && (
+              {showWaitlistPanel && (
                 <Paper withBorder p="xs" radius="sm">
                   <Stack gap={6}>
                     <Text size="xs" fw={600}>

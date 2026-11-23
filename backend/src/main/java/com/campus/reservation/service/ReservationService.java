@@ -981,6 +981,9 @@ public class ReservationService implements ReservationApi {
         reservation.returnItem(now);
         auditService.record(
                 currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at " + now);
+        if (now.isBefore(reservation.getEndTime())) {
+            eventPublisher.publishEvent(new SlotFreedEvent(reservation.getAssetId()));
+        }
         return ReservationResponse.from(reservation);
     }
 

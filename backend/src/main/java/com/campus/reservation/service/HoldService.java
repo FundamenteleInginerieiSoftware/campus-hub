@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,7 @@ public class HoldService {
     private final NotificationService notificationService;
     private final UserApi userApi;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Temporarily holds a lab asset time slot for 1 minute.
@@ -234,6 +236,7 @@ public class HoldService {
         ReservationHold saved = reservationHoldRepository.save(hold);
 
         auditService.record(userId, "HOLD_RELEASED", "ReservationHold", saved.getId(), "Released by user #" + userId);
+        eventPublisher.publishEvent(new SlotFreedEvent(saved.getAssetId()));
 
         return ReservationHoldResponse.from(saved, now);
     }
@@ -255,9 +258,11 @@ public class HoldService {
      */
     @Transactional
     public int sweepExpiredHolds(LocalDateTime now) {
+        List<Long> affectedAssetIds = reservationHoldRepository.findExpiredActiveHoldAssetIds(now);
         int count = reservationHoldRepository.expireOldHolds(now);
         if (count > 0) {
             log.info("Expired {} abandoned reservation holds", count);
+            affectedAssetIds.forEach(assetId -> eventPublisher.publishEvent(new SlotFreedEvent(assetId)));
         }
         return count;
     }

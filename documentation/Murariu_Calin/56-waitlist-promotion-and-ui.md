@@ -10,7 +10,7 @@ Cancelling a reservation, cancelling a bundle, or marking a booking as no-show n
 
 | File | Change |
 |---|---|
-| `SlotFreedEvent.java`, `WaitlistPromotionListener.java` | Publishes `SlotFreedEvent(assetId)` from `cancelReservation`, `cancelBundle`, `cancelUpcomingReservationsForUser`, and `markNoShow`; `AFTER_COMMIT` + `REQUIRES_NEW` listener invokes `WaitlistService.processPromotionsForAsset`. |
-| `ReservationLifecycleService.java` | Calls `waitlistService.expireStaleEntries()` during `runLifecycleSweep()`. |
-| `WaitlistPromotionIT.java` | PostgreSQL `@SpringBootTest` proving cancellation automatically promotes the first FIFO waiter into a `CONFIRMED` reservation. |
-| `reservations.ts`, `CalendarBookingView.tsx`, `MyReservationsPage.tsx` | Added waitlist API helpers, "Waitlist" button on `RESERVATION_CONFLICT`, and "My Waitlist" card with leave/cancel action. |
+| `SlotFreedEvent.java`, `WaitlistPromotionListener.java`, `WaitlistService.java` | Publishes `SlotFreedEvent(assetId)` from `cancelReservation`, `cancelBundle`, `cancelUpcomingReservationsForUser`, `markNoShow`, early `returnReservation`, `HoldService.releaseHold`, and `HoldService.sweepExpiredHolds`; `AFTER_COMMIT` listener invokes `WaitlistService.processPromotionsForAsset`, which executes one user-quota-locked promotion step per `REQUIRES_NEW` transaction to avoid cross-asset deadlocks. |
+| `ReservationLifecycleService.java` | Calls `waitlistService.expireStaleEntries()` inside a `try/catch` during `runLifecycleSweep()` so expiration errors never skip no-show/overdue processing. |
+| `WaitlistPromotionIT.java` | PostgreSQL `@SpringBootTest` proving cancellation, hold release, and hold expiry sweep promote the first active FIFO waiter, disabled waiters are skipped, and concurrent cross-asset promotions never deadlock. |
+| `reservations.ts`, `CalendarBookingView.tsx`, `MyReservationsPage.tsx` | Added waitlist API helpers, "Waitlist" button on reservation/hold conflicts, and "My Waitlist" card with leave/cancel action. |

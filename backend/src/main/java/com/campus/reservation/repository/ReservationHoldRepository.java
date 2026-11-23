@@ -89,6 +89,13 @@ public interface ReservationHoldRepository extends JpaRepository<ReservationHold
             @Param("now") LocalDateTime now,
             @Param("excludeUserId") Long excludeUserId);
 
+    @Query("""
+        SELECT DISTINCT h.assetId FROM ReservationHold h
+        WHERE h.status = 'ACTIVE'
+          AND h.expiresAt <= :now
+    """)
+    List<Long> findExpiredActiveHoldAssetIds(@Param("now") LocalDateTime now);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE ReservationHold h

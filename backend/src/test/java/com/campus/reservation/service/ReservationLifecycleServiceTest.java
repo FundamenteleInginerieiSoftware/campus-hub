@@ -132,6 +132,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedCount()).isEqualTo(1);
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L);
 
+        verify(waitlistService).expireStaleEntries();
         verify(reservationService).moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any());
         verify(holdService, never()).sweepExpiredHolds(any());
         verify(notificationService).notifyUser(eq(101L), eq("Reservation Marked as No-Show"), any());

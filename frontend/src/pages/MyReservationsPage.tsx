@@ -62,6 +62,14 @@ import ExtendReservationModal from '../components/reservation/ExtendReservationM
 import { formatSlotDate, formatSlotTime } from '../components/reservation/reservationFormatters.ts'
 import TransferReservationModal from '../components/reservation/TransferReservationModal.tsx'
 
+const WAITLIST_BADGE_COLOR: Record<WaitlistStatus, string> = {
+  WAITING: 'blue',
+  PROMOTED: 'green',
+  CANCELLED: 'gray',
+  EXPIRED: 'gray',
+  SKIPPED_QUOTA_FULL: 'orange',
+}
+
 function statusColor(status: ReservationStatus): string {
   switch (status) {
     case 'CONFIRMED':
@@ -654,18 +662,11 @@ export default function MyReservationsPage() {
             </Text>
           </Group>
           {waitlistEntries.map((w) => {
-            const badgeColor: Record<WaitlistStatus, string> = {
-              WAITING: 'blue',
-              PROMOTED: 'green',
-              CANCELLED: 'gray',
-              EXPIRED: 'gray',
-              SKIPPED_QUOTA_FULL: 'orange',
-            }
             const assetName = assetCache[w.assetId]?.name ?? `Asset #${w.assetId}`
             return (
               <Group key={w.id} justify="space-between" wrap="wrap" py={4}>
                 <Group gap="xs" wrap="wrap">
-                  <Badge size="xs" color={badgeColor[w.status]}>
+                  <Badge size="xs" color={WAITLIST_BADGE_COLOR[w.status]}>
                     {w.status}
                   </Badge>
                   <Text size="xs" fw={600}>

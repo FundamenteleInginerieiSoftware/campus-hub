@@ -1225,6 +1225,7 @@ class ReservationServiceTest {
                 .contains(USER_ID);
         assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
         verify(auditService).record(isNull(), eq("AUTO_NO_SHOW"), eq("Reservation"), eq(10L), any());
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(ASSET_ID));
         assertThat(reservationService.markNoShow(10L))
                 .as("markNoShow must return empty when booking is already NO_SHOW; see ReservationService.markNoShow")
                 .isEmpty();
@@ -1498,6 +1499,30 @@ class ReservationServiceTest {
         assertThat(response.returnedAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
         verify(catalogApi).lockForBooking(ASSET_ID);
         verify(auditService).record(eq(1L), eq("RETURN_RESERVATION"), eq("Reservation"), eq(201L), any());
+        verify(eventPublisher, never()).publishEvent(any(SlotFreedEvent.class));
+    }
+
+    @Test
+    @DisplayName("returnReservation: publishes SlotFreedEvent when returned before endTime")
+    void returnReservationEarlyPublishesSlotFreedEvent() {
+        Reservation r = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 0),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 10, 30, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 205L);
+        r.checkOut(LocalDateTime.of(2026, 11, 2, 9, 5));
+
+        when(reservationRepository.findByIdForUpdate(205L)).thenReturn(Optional.of(r));
+        when(currentUser.id()).thenReturn(1L);
+
+        ReservationResponse response = reservationService.returnReservation(205L);
+
+        assertThat(response.status())
+                .as("early return must mark reservation RETURNED; see ReservationService.returnReservation")
+                .isEqualTo(ReservationStatus.RETURNED);
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(ASSET_ID));
     }
 
     @Test
@@ -1994,6 +2019,8 @@ class ReservationServiceTest {
         verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(101L), any());
         verify(auditService).record(eq(USER_ID), eq("CANCEL_RESERVATION"), eq("Reservation"), eq(102L), any());
         verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Bundle Cancelled"), any());
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(10L));
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(20L));
     }
 
     @Test
@@ -3934,6 +3961,8 @@ class ReservationServiceTest {
         assertThat(r2.getCancelReason())
                 .as("null reason must fall back to default admin message; see cancelUpcomingReservationsForUser")
                 .isEqualTo("Account disabled by administrator");
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(10L));
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(11L));
     }
 
     @Test

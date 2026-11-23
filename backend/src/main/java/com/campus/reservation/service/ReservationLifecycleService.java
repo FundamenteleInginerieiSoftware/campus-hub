@@ -63,7 +63,11 @@ public class ReservationLifecycleService {
             initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")
     public LifecycleSweepSummary runLifecycleSweep() {
         LocalDateTime now = now();
-        waitlistService.expireStaleEntries();
+        try {
+            waitlistService.expireStaleEntries();
+        } catch (RuntimeException e) {
+            log.warn("Waitlist stale entry expiration failed during lifecycle sweep: {}", e.getMessage());
+        }
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
