@@ -1213,12 +1213,17 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 10, 0),
                 LocalDateTime.of(2026, 11, 2, 8, 0));
         ReflectionTestUtils.setField(confirmed, "id", 10L);
-        when(reservationRepository.findById(10L)).thenReturn(Optional.of(confirmed));
+        when(reservationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(confirmed));
 
-        assertThat(reservationService.markNoShow(10L)).isTrue();
+        assertThat(reservationService.markNoShow(10L))
+                .as(
+                        "markNoShow must return the locked owner userId when transitioning CONFIRMED -> NO_SHOW; see ReservationService.markNoShow")
+                .contains(USER_ID);
         assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
         verify(auditService).record(isNull(), eq("AUTO_NO_SHOW"), eq("Reservation"), eq(10L), any());
-        assertThat(reservationService.markNoShow(10L)).isFalse();
+        assertThat(reservationService.markNoShow(10L))
+                .as("markNoShow must return empty when booking is already NO_SHOW; see ReservationService.markNoShow")
+                .isEmpty();
 
         Reservation checkedOut = new Reservation(
                 USER_ID,
@@ -1975,7 +1980,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1, r2));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1, r2));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Cancelled entire kit");
 
@@ -2003,7 +2009,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, "late cancel"))
                 .isInstanceOf(ConflictException.class)
@@ -2610,7 +2617,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Changed plans");
@@ -2633,7 +2641,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(true);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Lab closed for maintenance");
@@ -2655,7 +2663,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r));
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
                 .isInstanceOf(ConflictException.class)
@@ -2676,18 +2685,23 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("Reservation bundle not found");
+        verify(reservationRepository, never()).findByBundleIdForUpdate(bundleId);
     }
 
     @Test
     @DisplayName("Bundle: cancelBundle throws 404 when bundle does not exist")
     void cancelBundle_notFound_throws404() {
         UUID bundleId = UUID.randomUUID();
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of());
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, null))
                 .isInstanceOf(NotFoundException.class)
@@ -2891,7 +2905,7 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID); // Admin ID
         when(currentUser.isAdmin()).thenReturn(true);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdForUpdate(bundleId)).thenReturn(List.of(r1));
 
         reservationService.cancelBundle(bundleId, "Lab maintenance");
 
@@ -2921,7 +2935,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
         when(reservationTransferRepository.findByReservationIdAndStatus(101L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
@@ -2981,15 +2996,16 @@ class ReservationServiceTest {
                 new ReservationTransfer(100L, USER_ID, 99L, LocalDateTime.of(2026, 11, 2, 11, 0));
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
-        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean marked = reservationService.markNoShow(100L);
+        Optional<Long> markedUserId = reservationService.markNoShow(100L);
 
-        assertThat(marked)
-                .as("mark no-show: method must return true on success; see ReservationService.markNoShow")
-                .isTrue();
+        assertThat(markedUserId)
+                .as(
+                        "mark no-show: method must return locked owner userId on success; see ReservationService.markNoShow")
+                .contains(USER_ID);
         assertThat(transfer.getStatus())
                 .as("mark no-show: pending transfer must transition to CANCELLED; see ReservationService.markNoShow")
                 .isEqualTo(TransferStatus.CANCELLED);
@@ -3203,7 +3219,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1, r2));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
 
         List<ReservationResponse> responses = reservationService.cancelBundle(bundleId, "Changed plans");
 
@@ -3216,6 +3233,7 @@ class ReservationServiceTest {
         assertThat(r2.getStatus())
                 .as("bundle cancellation: unowned item must remain CONFIRMED; see ReservationService.cancelBundle")
                 .isEqualTo(ReservationStatus.CONFIRMED);
+        verify(reservationRepository, never()).findByBundleIdForUpdate(bundleId);
     }
 
     @Test
@@ -3460,7 +3478,8 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId)).thenReturn(List.of(r1));
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(r1));
 
         TransactionSynchronizationManager.initSynchronization();
         try {

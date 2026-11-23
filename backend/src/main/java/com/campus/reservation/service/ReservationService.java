@@ -262,7 +262,7 @@ public class ReservationService implements ReservationApi {
      * Retrieves all items in a multi-asset reservation bundle (owner or admin).
      */
     public MultiAssetReservationResponse getBundle(UUID bundleId) {
-        List<Reservation> items = loadOwnedOrAdminBundle(bundleId);
+        List<Reservation> items = loadOwnedOrAdminBundle(bundleId, false);
         List<ReservationResponse> responses =
                 items.stream().map(ReservationResponse::from).toList();
         Reservation first = items.get(0);
@@ -277,7 +277,7 @@ public class ReservationService implements ReservationApi {
     public List<ReservationResponse> cancelBundle(UUID bundleId, String reason) {
         Long userId = currentUser.id();
         LocalDateTime now = now();
-        List<Reservation> items = loadOwnedOrAdminBundle(bundleId);
+        List<Reservation> items = loadOwnedOrAdminBundle(bundleId, true);
 
         Reservation first = items.get(0);
         // Student cancellation is only allowed before start time (#72)
@@ -322,18 +322,23 @@ public class ReservationService implements ReservationApi {
         return results;
     }
 
-    private List<Reservation> loadOwnedOrAdminBundle(UUID bundleId) {
+    private List<Reservation> loadOwnedOrAdminBundle(UUID bundleId, boolean forUpdate) {
         Long userId = currentUser.id();
-        List<Reservation> items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        boolean isAdmin = currentUser.isAdmin();
+        List<Reservation> items;
+        if (forUpdate) {
+            items = isAdmin
+                    ? reservationRepository.findByBundleIdForUpdate(bundleId)
+                    : reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, userId);
+        } else {
+            items = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+            // Per-item ownership check: non-admins can only access their own items (#228 point 1)
+            if (!isAdmin) {
+                items = items.stream().filter(r -> r.getUserId().equals(userId)).toList();
+            }
+        }
         if (items.isEmpty()) {
             throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
-        }
-        // Per-item ownership check: non-admins can only access their own items (#228 point 1)
-        if (!currentUser.isAdmin()) {
-            items = items.stream().filter(r -> r.getUserId().equals(userId)).toList();
-            if (items.isEmpty()) {
-                throw new NotFoundException("BUNDLE_NOT_FOUND", "Reservation bundle not found");
-            }
         }
         return items;
     }
@@ -1010,12 +1015,16 @@ public class ReservationService implements ReservationApi {
      * Called through the {@link ReservationService} proxy by {@link ReservationLifecycleService}
      * so an optimistic-lock conflict on one booking never rolls back the rest of the sweep, and
      * the no-show email is only sent after this transaction commits.
+     *
+     * @return the owner {@code userId} read under the row lock if transitioned, or empty if skipped
      */
     @Transactional
-    public boolean markNoShow(Long reservationId) {
-        Reservation r = reservationRepository.findById(reservationId).orElse(null);
+    public Optional<Long> markNoShow(Long reservationId) {
+        // Lock the reservation row FOR UPDATE so a concurrent checkOutReservation or cancelUpcomingReservationsForUser
+        // waits instead of causing a STALE_VERSION error (#336 follow-up).
+        Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
         if (r == null || r.getStatus() != ReservationStatus.CONFIRMED) {
-            return false;
+            return Optional.empty();
         }
         r.markNoShow();
         transferService.cancelPendingTransferIfExists(
@@ -1025,7 +1034,7 @@ public class ReservationService implements ReservationApi {
                 "Auto-cancelled due to no-show",
                 "The transfer offer for reservation #" + reservationId + " was cancelled due to no-show.");
         auditService.record(null, "AUTO_NO_SHOW", "Reservation", r.getId(), "Unclaimed 30m after startTime");
-        return true;
+        return Optional.of(r.getUserId());
     }
 
     /**

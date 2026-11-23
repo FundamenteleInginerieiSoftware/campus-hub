@@ -9,6 +9,7 @@ import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.domain.ReservationHold;
 import com.campus.reservation.domain.ReservationTransfer;
+import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.repository.ReservationTransferRepository;
@@ -20,6 +21,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -28,6 +31,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,12 +57,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest
 class ReservationConcurrencyIT {
 
-    private static final Long ASSET_ID = 601L;
-    private static final Long ASSET_ID_2 = 602L;
-    private static final Long ASSET_ID_3 = 603L;
-    private static final Long USER_1_ID = 101L;
-    private static final Long USER_2_ID = 102L;
-    private static final Long ADMIN_ID = 103L;
+    // Generated per-test IDs so concurrent or interrupted runs never collide on users_pkey (#346).
+    private Long ASSET_ID;
+    private Long ASSET_ID_2;
+    private Long ASSET_ID_3;
+    private Long USER_1_ID;
+    private Long USER_2_ID;
+    private Long ADMIN_ID;
+    private Long categoryId;
+    private Long labRoomId;
 
     @Autowired
     private ReservationService reservationService;
@@ -98,33 +105,42 @@ class ReservationConcurrencyIT {
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.update("""
-            INSERT INTO users (id, email, password_hash, full_name, role, enabled, created_at)
-            VALUES (101, 'student101@campus.test', '{bcrypt}hash', 'Student 101', 'STUDENT', true, NOW()),
-                   (102, 'student102@campus.test', '{bcrypt}hash', 'Student 102', 'STUDENT', true, NOW()),
-                   (103, 'admin103@campus.test', '{bcrypt}hash', 'Admin 103', 'ADMIN', true, NOW())
-            ON CONFLICT (id) DO NOTHING
-            """);
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        USER_1_ID = jdbcTemplate.queryForObject("""
+            INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
+            VALUES (?, '{bcrypt}hash', 'Student 1', 'STUDENT', true, NOW())
+            RETURNING id
+            """, Long.class, "student1-" + tag + "@conc.test");
+        USER_2_ID = jdbcTemplate.queryForObject("""
+            INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
+            VALUES (?, '{bcrypt}hash', 'Student 2', 'STUDENT', true, NOW())
+            RETURNING id
+            """, Long.class, "student2-" + tag + "@conc.test");
+        ADMIN_ID = jdbcTemplate.queryForObject("""
+            INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
+            VALUES (?, '{bcrypt}hash', 'Admin', 'ADMIN', true, NOW())
+            RETURNING id
+            """, Long.class, "admin-" + tag + "@conc.test");
 
-        jdbcTemplate.update("""
-            INSERT INTO categories (id, name)
-            VALUES (600, 'Oscilloscopes')
-            ON CONFLICT (id) DO NOTHING
-            """);
+        categoryId = jdbcTemplate.queryForObject(
+                "INSERT INTO categories (name) VALUES (?) RETURNING id", Long.class, "Oscilloscopes-" + tag);
+        labRoomId = jdbcTemplate.queryForObject(
+                "INSERT INTO lab_rooms (code, name) VALUES (?, ?) RETURNING id",
+                Long.class,
+                "LAB-" + tag,
+                "Physics Lab " + tag);
 
-        jdbcTemplate.update("""
-            INSERT INTO lab_rooms (id, code, name)
-            VALUES (600, 'LAB-600', 'Physics Lab')
-            ON CONFLICT (id) DO NOTHING
-            """);
+        ASSET_ID = insertAsset("Keysight DSOX1204G #1", "SN-CONC-1-" + tag);
+        ASSET_ID_2 = insertAsset("Keysight DSOX1204G #2", "SN-CONC-2-" + tag);
+        ASSET_ID_3 = insertAsset("Keysight DSOX1204G #3", "SN-CONC-3-" + tag);
+    }
 
-        jdbcTemplate.update("""
-            INSERT INTO assets (id, name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
-            VALUES (601, 'Keysight DSOX1204G #1', 'DSOX1204G', 'SN-CONC-601', 'AVAILABLE', 600, 600, NOW(), NOW()),
-                   (602, 'Keysight DSOX1204G #2', 'DSOX1204G', 'SN-CONC-602', 'AVAILABLE', 600, 600, NOW(), NOW()),
-                   (603, 'Keysight DSOX1204G #3', 'DSOX1204G', 'SN-CONC-603', 'AVAILABLE', 600, 600, NOW(), NOW())
-            ON CONFLICT (id) DO NOTHING
-            """);
+    private Long insertAsset(String name, String serialNumber) {
+        return jdbcTemplate.queryForObject("""
+            INSERT INTO assets (name, model, serial_number, status, category_id, lab_room_id, created_at, updated_at)
+            VALUES (?, 'DSOX1204G', ?, 'AVAILABLE', ?, ?, NOW(), NOW())
+            RETURNING id
+            """, Long.class, name, serialNumber, categoryId, labRoomId);
     }
 
     @AfterEach
@@ -134,8 +150,8 @@ class ReservationConcurrencyIT {
         reservationRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
         jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?, ?)", ASSET_ID, ASSET_ID_2, ASSET_ID_3);
-        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = 600");
-        jdbcTemplate.update("DELETE FROM categories WHERE id = 600");
+        jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", labRoomId);
+        jdbcTemplate.update("DELETE FROM categories WHERE id = ?", categoryId);
         jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
     }
 
@@ -541,6 +557,256 @@ class ReservationConcurrencyIT {
                 transferId -> transferService.rejectTransfer(transferId), "TransferService.rejectTransfer");
     }
 
+    @Test
+    @DisplayName(
+            "rejectTransfer vs cancelReservation race (#329, #336): cancelReservation locks the reservation row FOR UPDATE and waits behind rejectTransfer without STALE_VERSION")
+    void cancelReservationWaitsBehindRejectTransferAndSucceedsWithoutStaleVersion() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation booking = reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now));
+        ReservationTransfer transfer =
+                reservationTransferRepository.save(new ReservationTransfer(booking.getId(), USER_1_ID, USER_2_ID, now));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch rejectLockHeld = new CountDownLatch(1);
+        CountDownLatch cancelStarted = new CountDownLatch(1);
+        AtomicBoolean cancelDone = new AtomicBoolean(false);
+        AtomicBoolean cancelBlockedOnLock = new AtomicBoolean(false);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> rejectTask = executor.submit(() -> {
+            setupSecurityContext(USER_2_ID);
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    transferService.rejectTransfer(transfer.getId());
+                    rejectLockHeld.countDown();
+                    try {
+                        cancelStarted.await(5, TimeUnit.SECONDS);
+                        cancelBlockedOnLock.set(waitUntilAnyOtherBackendBlocksOnLock(cancelDone));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> cancelTask = executor.submit(() -> {
+            setupSecurityContext(USER_1_ID);
+            try {
+                assertThat(rejectLockHeld.await(5, TimeUnit.SECONDS))
+                        .as("rejectTransfer must acquire the reservation lock first")
+                        .isTrue();
+                cancelStarted.countDown();
+                reservationService.cancelReservation(booking.getId());
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                cancelDone.set(true);
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            rejectTask.get(10, TimeUnit.SECONDS);
+            cancelTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(cancelBlockedOnLock.get())
+                .as("cancelReservation must block on the reservation row lock held by rejectTransfer; "
+                        + "see ReservationService.cancelReservation")
+                .isTrue();
+        assertThat(unexpected)
+                .as("cancelReservation waiting behind rejectTransfer must succeed without STALE_VERSION; "
+                        + "see ReservationService.cancelReservation")
+                .isEmpty();
+
+        Reservation after = reservationRepository.findById(booking.getId()).orElseThrow();
+        assertThat(after.getStatus())
+                .as("booking must end CANCELLED after rejectTransfer and cancelReservation both commit")
+                .isEqualTo(ReservationStatus.CANCELLED);
+        ReservationTransfer afterTransfer =
+                reservationTransferRepository.findById(transfer.getId()).orElseThrow();
+        assertThat(afterTransfer.getStatus())
+                .as("transfer must remain REJECTED after cancelReservation commits")
+                .isEqualTo(TransferStatus.REJECTED);
+    }
+
+    @Test
+    @DisplayName(
+            "Disable-cancel vs cancelBundle race (#336): cancelBundle locks bundle rows FOR UPDATE in ascending id order and waits behind cancelUpcomingReservationsForUser without STALE_VERSION")
+    void cancelBundleWaitsBehindCancelUpcomingAndCompletesWithoutStaleVersion() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+        UUID bundleId = UUID.randomUUID();
+
+        Reservation item1 = new Reservation(USER_1_ID, ASSET_ID, start, end, now);
+        item1.assignBundle(bundleId);
+        item1 = reservationRepository.save(item1);
+
+        Reservation item2 = new Reservation(USER_1_ID, ASSET_ID_2, start, end, now);
+        item2.assignBundle(bundleId);
+        item2 = reservationRepository.save(item2);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch disableLockHeld = new CountDownLatch(1);
+        CountDownLatch bundleCancelStarted = new CountDownLatch(1);
+        AtomicBoolean bundleCancelDone = new AtomicBoolean(false);
+        AtomicBoolean bundleCancelBlockedOnLock = new AtomicBoolean(false);
+        AtomicInteger disableCancelledCount = new AtomicInteger(-1);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> disableTask = executor.submit(() -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    disableCancelledCount.set(
+                            reservationService.cancelUpcomingReservationsForUser(USER_1_ID, "Account disabled"));
+                    disableLockHeld.countDown();
+                    try {
+                        bundleCancelStarted.await(5, TimeUnit.SECONDS);
+                        bundleCancelBlockedOnLock.set(waitUntilAnyOtherBackendBlocksOnLock(bundleCancelDone));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> bundleCancelTask = executor.submit(() -> {
+            setupSecurityContext(USER_1_ID);
+            try {
+                assertThat(disableLockHeld.await(5, TimeUnit.SECONDS))
+                        .as("cancelUpcomingReservationsForUser must lock the bundle rows first")
+                        .isTrue();
+                bundleCancelStarted.countDown();
+                reservationService.cancelBundle(bundleId, "Changed plans");
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                bundleCancelDone.set(true);
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        try {
+            disableTask.get(10, TimeUnit.SECONDS);
+            bundleCancelTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(bundleCancelBlockedOnLock.get())
+                .as("cancelBundle must block on the bundle row locks held by cancelUpcomingReservationsForUser; "
+                        + "see ReservationService.cancelBundle")
+                .isTrue();
+        assertThat(unexpected)
+                .as("cancelBundle waiting behind cancelUpcomingReservationsForUser must finish without STALE_VERSION; "
+                        + "see ReservationService.cancelBundle")
+                .isEmpty();
+        assertThat(disableCancelledCount.get())
+                .as("cancelUpcomingReservationsForUser must cancel both bundle items")
+                .isEqualTo(2);
+
+        List<Reservation> afterItems = reservationRepository.findByBundleIdOrderByAssetIdAsc(bundleId);
+        assertThat(afterItems)
+                .as("all bundle items must end CANCELLED")
+                .extracting(Reservation::getStatus)
+                .containsOnly(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName(
+            "checkOutReservation vs markNoShow race (#338, #346): markNoShow locks the row FOR UPDATE and waits behind checkOutReservation without STALE_VERSION")
+    void markNoShowWaitsBehindCheckOutReservationAndReturnsEmpty() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        // Inside the [-15m, +30m] check-out window around fixedClock (10:00 Bucharest).
+        LocalDateTime start = now.minusMinutes(10);
+        LocalDateTime end = now.plusHours(2);
+
+        Reservation booking =
+                reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now.minusHours(1)));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch checkOutLockHeld = new CountDownLatch(1);
+        CountDownLatch noShowStarted = new CountDownLatch(1);
+        AtomicBoolean noShowDone = new AtomicBoolean(false);
+        AtomicBoolean noShowBlockedOnLock = new AtomicBoolean(false);
+        AtomicReference<Optional<Long>> markNoShowResult = new AtomicReference<>();
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        Future<?> checkOutTask = executor.submit(() -> {
+            setupSecurityContext(ADMIN_ID, "ADMIN");
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    reservationService.checkOutReservation(booking.getId());
+                    checkOutLockHeld.countDown();
+                    try {
+                        noShowStarted.await(5, TimeUnit.SECONDS);
+                        noShowBlockedOnLock.set(waitUntilAnyOtherBackendBlocksOnLock(noShowDone));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        Future<?> noShowTask = executor.submit(() -> {
+            try {
+                assertThat(checkOutLockHeld.await(5, TimeUnit.SECONDS))
+                        .as("checkOutReservation must acquire the reservation row lock first")
+                        .isTrue();
+                noShowStarted.countDown();
+                markNoShowResult.set(reservationService.markNoShow(booking.getId()));
+            } catch (Throwable t) {
+                unexpected.add(t);
+            } finally {
+                noShowDone.set(true);
+            }
+        });
+
+        try {
+            checkOutTask.get(10, TimeUnit.SECONDS);
+            noShowTask.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(noShowBlockedOnLock.get())
+                .as("markNoShow must block on the reservation row lock held by checkOutReservation; "
+                        + "see ReservationService.markNoShow")
+                .isTrue();
+        assertThat(unexpected)
+                .as("markNoShow waiting behind checkOutReservation must not throw STALE_VERSION; "
+                        + "see ReservationService.markNoShow")
+                .isEmpty();
+        assertThat(markNoShowResult.get())
+                .as("markNoShow must return empty once checkOutReservation committed CHECKED_OUT; "
+                        + "see ReservationService.markNoShow")
+                .isEmpty();
+
+        Reservation after = reservationRepository.findById(booking.getId()).orElseThrow();
+        assertThat(after.getStatus())
+                .as("booking must remain CHECKED_OUT after checkOutReservation and markNoShow complete")
+                .isEqualTo(ReservationStatus.CHECKED_OUT);
+    }
+
     /**
      * Thread 1 runs {@code cancelUpcomingReservationsForUser} inside an explicit transaction (holding the
      * reservation row lock and cancelling the pending transfer), polls {@code pg_stat_activity} until
@@ -643,10 +909,13 @@ class ReservationConcurrencyIT {
         while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
             Integer waiting = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*)
-                    FROM pg_stat_activity
-                    WHERE datname = current_database()
-                      AND pid <> pg_backend_pid()
-                      AND wait_event_type = 'Lock'
+                    FROM pg_stat_activity a
+                    JOIN pg_locks l ON l.pid = a.pid
+                    WHERE a.datname = current_database()
+                      AND a.pid <> pg_backend_pid()
+                      AND a.wait_event_type = 'Lock'
+                      AND NOT l.granted
+                      AND (l.locktype = 'transactionid' OR l.relation = 'reservations'::regclass)
                     """, Integer.class);
             if (waiting != null && waiting > 0) {
                 return true;
