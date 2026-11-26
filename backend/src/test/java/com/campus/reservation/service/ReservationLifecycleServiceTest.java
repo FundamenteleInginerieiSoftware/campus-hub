@@ -590,4 +590,20 @@ class ReservationLifecycleServiceTest {
         verify(notificationService).notifyUser(eq(205L), eq("Proactive Reservation Reassignment"), any());
         verify(notificationService, never()).notifyUser(eq(103L), any(), any());
     }
+
+    @Test
+    @DisplayName("runLifecycleSweep triggers waitlist promotion for assets that still have WAITING entries (#350)")
+    void runLifecycleSweepPromotesAssetsWithWaitingEntries() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        when(reservationRepository.findConfirmedBeforeCutoff(now.minusMinutes(30)))
+                .thenReturn(List.of());
+        when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of());
+        when(waitlistService.findAssetIdsWithWaitingEntries()).thenReturn(List.of(ASSET_ID, SUB_ASSET_ID));
+
+        lifecycleService.runLifecycleSweep();
+
+        verify(waitlistService).expireStaleEntries();
+        verify(waitlistService).processPromotionsForAsset(ASSET_ID);
+        verify(waitlistService).processPromotionsForAsset(SUB_ASSET_ID);
+    }
 }

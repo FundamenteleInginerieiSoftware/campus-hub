@@ -289,6 +289,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     setSelectedDay(day)
     setSelectedStartTime(time)
     setBookingError(null)
+    setWaitlistError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     setAvailabilityTick((t) => t + 1)
   }
@@ -298,6 +299,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     discardActiveHold()
     setDurationMinutes(val)
     setBookingError(null)
+    setWaitlistError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     // Increment availabilityTick so changing duration when endIso stays capped at 20:00 still finishes re-checking.
     setAvailabilityTick((t) => t + 1)
@@ -414,9 +416,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   const showWaitlistPanel =
     (!availability.checking &&
       !isSlotAvailable &&
-      (availability.data?.conflictReason === 'RESERVATION_CONFLICT' ||
-        availability.data?.conflictReason === 'SLOT_HELD' ||
-        availability.data?.conflictReason === 'HOLD_CONFLICT')) ||
+      availability.data?.conflictReason === 'RESERVATION_CONFLICT') ||
     conflictErrorCode === 'RESERVATION_CONFLICT' ||
     conflictErrorCode === 'SLOT_HELD'
 
@@ -527,6 +527,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     if (holdLoading || bookingLoading) return
     discardActiveHold()
     setBookingError(null)
+    setWaitlistError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     setSwitchedAsset(sub.id === initialAsset.id ? null : { baseAssetId: initialAsset.id, selected: sub })
   }

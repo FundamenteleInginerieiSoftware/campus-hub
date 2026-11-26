@@ -2,6 +2,7 @@ package com.campus.reservation.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campus.catalog.api.CatalogApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -51,6 +53,12 @@ class WaitlistPromotionIT {
 
     @Autowired
     private WaitlistService waitlistService;
+
+    @Autowired
+    private ReservationLifecycleService reservationLifecycleService;
+
+    @Autowired
+    private CatalogApi catalogApi;
 
     @Autowired
     private ReservationRepository reservationRepository;
@@ -97,11 +105,15 @@ class WaitlistPromotionIT {
     }
 
     private Long insertUser(String email, String name) {
+        return insertUser(email, name, "STUDENT");
+    }
+
+    private Long insertUser(String email, String name, String role) {
         return jdbcTemplate.queryForObject("""
             INSERT INTO users (email, password_hash, full_name, role, enabled, created_at)
-            VALUES (?, '{bcrypt}hash', ?, 'STUDENT', true, NOW())
+            VALUES (?, '{bcrypt}hash', ?, ?, true, NOW())
             RETURNING id
-            """, Long.class, email, name);
+            """, Long.class, email, name, role);
     }
 
     @AfterEach
@@ -109,15 +121,33 @@ class WaitlistPromotionIT {
         SecurityContextHolder.clearContext();
         List<Long> allAssets = new ArrayList<>(extraAssetIds);
         allAssets.add(assetId);
+        List<Long> allUsers = new ArrayList<>(extraUserIds);
+        allUsers.addAll(List.of(student1Id, student2Id, student3Id));
+
+        String assetPlaceholders =
+                String.join(",", allAssets.stream().map(id -> "?").toList());
+        String userPlaceholders =
+                String.join(",", allUsers.stream().map(id -> "?").toList());
+        List<Object> auditParams = new ArrayList<>();
+        auditParams.addAll(allUsers);
+        auditParams.addAll(allAssets);
+        auditParams.addAll(allUsers);
+        auditParams.addAll(allAssets);
+        auditParams.addAll(allUsers);
+        jdbcTemplate.update(
+                "DELETE FROM audit_logs WHERE actor_id IN (" + userPlaceholders + ") "
+                        + "OR (entity_type = 'WaitlistEntry' AND entity_id IN ("
+                        + "SELECT id FROM waitlist_entries WHERE asset_id IN (" + assetPlaceholders
+                        + ") OR user_id IN (" + userPlaceholders + "))) "
+                        + "OR (entity_type = 'Reservation' AND entity_id IN ("
+                        + "SELECT id FROM reservations WHERE asset_id IN (" + assetPlaceholders
+                        + ") OR user_id IN (" + userPlaceholders + ")))",
+                auditParams.toArray());
+
         for (Long aId : allAssets) {
             jdbcTemplate.update("DELETE FROM waitlist_entries WHERE asset_id = ?", aId);
             jdbcTemplate.update("DELETE FROM reservation_holds WHERE asset_id = ?", aId);
             jdbcTemplate.update("DELETE FROM reservations WHERE asset_id = ?", aId);
-        }
-        List<Long> allUsers = new ArrayList<>(extraUserIds);
-        allUsers.addAll(List.of(student1Id, student2Id, student3Id));
-        for (Long uId : allUsers) {
-            jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id = ?", uId);
         }
         for (Long aId : extraAssetIds) {
             jdbcTemplate.update("DELETE FROM assets WHERE id = ?", aId);
@@ -359,6 +389,96 @@ class WaitlistPromotionIT {
         }
     }
 
+    @Test
+    @DisplayName("Returning an OVERDUE reservation past endTime promotes a student waiting on a future slot (#350)")
+    void returningOverdueReservationPromotesWaitingStudent() {
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        Long adminId = insertUser("wl-admin-" + tag + "@test.local", "Desk Admin", "ADMIN");
+        extraUserIds.add(adminId);
+
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        Reservation overdue =
+                new Reservation(student1Id, assetId, now.minusHours(3), now.minusHours(1), now.minusHours(4));
+        overdue.checkOut(now.minusHours(3).plusMinutes(5));
+        overdue.markOverdue();
+        overdue = reservationRepository.saveAndFlush(overdue);
+
+        LocalDateTime futureStart = nextWeekdaySlot(14);
+        LocalDateTime futureEnd = futureStart.plusHours(2);
+
+        setAuth(student2Id);
+        WaitlistEntryResponse waiter =
+                waitlistService.joinWaitlist(new JoinWaitlistRequest(assetId, futureStart, futureEnd));
+
+        setAuth(adminId, "ROLE_ADMIN");
+        reservationService.returnReservation(overdue.getId());
+
+        WaitlistEntry updated = waitlistEntryRepository.findById(waiter.id()).orElseThrow();
+        assertThat(updated.getStatus())
+                .as("returning an OVERDUE reservation must publish SlotFreedEvent and promote the waiter; "
+                        + "see ReservationService.returnReservation")
+                .isEqualTo(WaitlistStatus.PROMOTED);
+        assertThat(updated.getPromotedReservationId())
+                .as("promoted waiter after overdue return must reference a CONFIRMED reservation; "
+                        + "see WaitlistService.processPromotionsForAsset")
+                .isNotNull();
+        Reservation promotedBooking = reservationRepository
+                .findById(updated.getPromotedReservationId())
+                .orElseThrow();
+        assertThat(promotedBooking.getStatus())
+                .as("promoted reservation after overdue return must be CONFIRMED")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(promotedBooking.getUserId())
+                .as("promoted reservation after overdue return must belong to student2")
+                .isEqualTo(student2Id);
+    }
+
+    @Test
+    @DisplayName(
+            "Repaired asset transitioning back to AVAILABLE promotes WAITING entries on the next lifecycle sweep (#350)")
+    void repairedAssetPromotesWaitingStudentDuringLifecycleSweep() {
+        LocalDateTime futureStart = nextWeekdaySlot(10);
+        LocalDateTime futureEnd = futureStart.plusHours(2);
+
+        setAuth(student1Id);
+        ReservationResponse original =
+                reservationService.createReservation(new CreateReservationRequest(assetId, futureStart, futureEnd));
+
+        setAuth(student2Id);
+        WaitlistEntryResponse waiter =
+                waitlistService.joinWaitlist(new JoinWaitlistRequest(assetId, futureStart, futureEnd));
+
+        // Simulate incident damage: asset goes UNDER_MAINTENANCE and its booking is force-cancelled.
+        catalogApi.markUnderMaintenance(assetId);
+        reservationService.forceCancel(original.id(), assetId, "Damaged");
+
+        WaitlistEntry whileUnderMaintenance =
+                waitlistEntryRepository.findById(waiter.id()).orElseThrow();
+        assertThat(whileUnderMaintenance.getStatus())
+                .as("waiter must stay WAITING while asset is UNDER_MAINTENANCE; "
+                        + "see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(WaitlistStatus.WAITING);
+
+        // Simulate incident resolution: asset becomes AVAILABLE again, then lifecycle sweep runs.
+        catalogApi.markAvailable(assetId);
+        reservationLifecycleService.runLifecycleSweep();
+
+        WaitlistEntry afterSweep = waitlistEntryRepository.findById(waiter.id()).orElseThrow();
+        assertThat(afterSweep.getStatus())
+                .as("lifecycle sweep must promote WAITING entries once repaired asset is AVAILABLE; "
+                        + "see ReservationLifecycleService.runLifecycleSweep")
+                .isEqualTo(WaitlistStatus.PROMOTED);
+        Reservation promotedBooking = reservationRepository
+                .findById(afterSweep.getPromotedReservationId())
+                .orElseThrow();
+        assertThat(promotedBooking.getStatus())
+                .as("promoted reservation after repair sweep must be CONFIRMED")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(promotedBooking.getUserId())
+                .as("promoted reservation after repair sweep must belong to student2")
+                .isEqualTo(student2Id);
+    }
+
     private LocalDateTime nextWeekdaySlot(int hour) {
         LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime slot =
@@ -370,13 +490,17 @@ class WaitlistPromotionIT {
     }
 
     private void setAuth(Long userId) {
+        setAuth(userId, "ROLE_STUDENT");
+    }
+
+    private void setAuth(Long userId, String role) {
         Jwt jwt = Jwt.withTokenValue("mock-token")
                 .header("alg", "none")
                 .subject(String.valueOf(userId))
-                .claim("roles", List.of("ROLE_STUDENT"))
+                .claim("roles", List.of(role))
                 .build();
         SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-        ctx.setAuthentication(new JwtAuthenticationToken(jwt));
+        ctx.setAuthentication(new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(role))));
         SecurityContextHolder.setContext(ctx);
     }
 }

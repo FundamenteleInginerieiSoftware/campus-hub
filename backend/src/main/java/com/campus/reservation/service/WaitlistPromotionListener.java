@@ -8,9 +8,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * Reacts to {@link SlotFreedEvent} (#59) after the freeing transaction commits.
- * {@link WaitlistService#processPromotionsForAsset} executes each promotion step in its own
- * {@code REQUIRES_NEW} transaction so cancellations never roll back and cross-asset promotions
- * cannot deadlock.
+ * {@link WaitlistService#processPromotionsForAsset} executes one waiter step per
+ * {@code REQUIRES_NEW} transaction (holding at most one user quota lock at a time); any runtime
+ * failure is logged without rolling back the freeing action and is recovered on the next lifecycle
+ * sweep.
  */
 @Slf4j
 @Service

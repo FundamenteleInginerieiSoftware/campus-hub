@@ -981,9 +981,8 @@ public class ReservationService implements ReservationApi {
         reservation.returnItem(now);
         auditService.record(
                 currentUser.id(), "RETURN_RESERVATION", "Reservation", reservation.getId(), "Returned at " + now);
-        if (now.isBefore(reservation.getEndTime())) {
-            eventPublisher.publishEvent(new SlotFreedEvent(reservation.getAssetId()));
-        }
+        // Publish unconditionally: returning an OVERDUE booking happens after endTime and still frees future slots.
+        eventPublisher.publishEvent(new SlotFreedEvent(reservation.getAssetId()));
         return ReservationResponse.from(reservation);
     }
 

@@ -420,6 +420,14 @@ public class WaitlistService {
     }
 
     /**
+     * Returns distinct asset IDs that currently have at least one WAITING entry (#350).
+     */
+    @Transactional(readOnly = true)
+    public List<Long> findAssetIdsWithWaitingEntries() {
+        return waitlistEntryRepository.findDistinctAssetIdsByStatus(WaitlistStatus.WAITING);
+    }
+
+    /**
      * Expires WAITING entries whose start time has already passed.
      */
     @Transactional

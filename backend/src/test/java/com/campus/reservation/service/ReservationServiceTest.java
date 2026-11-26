@@ -1499,7 +1499,7 @@ class ReservationServiceTest {
         assertThat(response.returnedAt()).isEqualTo(LocalDateTime.of(2026, 11, 2, 10, 0));
         verify(catalogApi).lockForBooking(ASSET_ID);
         verify(auditService).record(eq(1L), eq("RETURN_RESERVATION"), eq("Reservation"), eq(201L), any());
-        verify(eventPublisher, never()).publishEvent(any(SlotFreedEvent.class));
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(ASSET_ID));
     }
 
     @Test
@@ -1545,6 +1545,7 @@ class ReservationServiceTest {
 
         assertThat(response.status()).isEqualTo(ReservationStatus.RETURNED);
         verify(catalogApi).lockForBooking(ASSET_ID);
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(ASSET_ID));
     }
 
     @Test
