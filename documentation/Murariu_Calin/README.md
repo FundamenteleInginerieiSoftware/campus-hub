@@ -72,6 +72,7 @@ Each document is structured in two parts:
 | 53 | [`53-cancel-bundle-noshow-locks-and-docs.md`](./53-cancel-bundle-noshow-locks-and-docs.md) | Review Follow-ups (#336): cancelBundle & markNoShow Row Locks, Deterministic cancelReservation IT & Personal Docs | `findByBundleIdForUpdate` (`ORDER BY id ASC`) in `cancelBundle`, `findByIdForUpdate` in `markNoShow`, `rejectTransfer`-vs-`cancelReservation` and disable-vs-`cancelBundle` race ITs, synced docs 02/11/15 |
 | 54 | [`54-review-followups-noshow-it-clock-and-generated-ids.md`](./54-review-followups-noshow-it-clock-and-generated-ids.md) | Review Follow-ups (#338, #346): Locked No-Show Owner, checkOut vs markNoShow IT, Clock Dates & Generated IT IDs | `Optional<Long> markNoShow` returning locked `userId`, `markNoShow`-vs-`checkOut` race IT, `TEST_CLOCK` in `ReservationRepositoryTest`, generated `RETURNING id` rows in ITs |
 | 57 | [`57-maintenance-simulator-backend.md`](./57-maintenance-simulator-backend.md) | Maintenance Impact Simulator Backend (#58, PR 1) | `@Transactional(readOnly = true)` `MaintenanceImpactSimulator` reusing `SubstituteStrategy`, `POST /api/v1/admin/reassignments/simulate`, unit + WebMvc tests |
+| 58 | [`58-maintenance-simulator-admin-page.md`](./58-maintenance-simulator-admin-page.md) | Maintenance Impact Simulator Admin Dashboard Page (#58, PR 2) | `MaintenanceSimulatorPage`, `simulateMaintenanceImpact`, `/admin/maintenance-simulator` admin route & sidebar entry |
 
 
 
