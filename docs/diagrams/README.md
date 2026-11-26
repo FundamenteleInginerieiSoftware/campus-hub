@@ -14,3 +14,19 @@ Text sources live next to their exported PNGs. PlantUML (`.puml`) and Mermaid (`
 | `asset-lifecycle.mmd` | State diagram of an equipment asset (`AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED`) | Liviu |
 | `catalog-and-common-class.mmd` | UML class diagram of `catalog`, `common` (`error`, `paging`, `audit`), `storage`, and `notification` | Liviu |
 | `database-er.mmd` | Entity-Relationship (ER) diagram of all 8 PostgreSQL 18 tables from Flyway migrations | Liviu |
+
+## Progress & team overview visuals (SVG)
+
+These standalone SVGs are embedded in [`PROGRESS.md`](../../PROGRESS.md) as a quick visual snapshot for teammates and the professor.
+
+| File | What it shows | Owner |
+|---|---|---|
+| `progress-system-overview.svg` | End-to-end system sketch: browser SPA, Spring Boot 4.1 monolith, PostgreSQL 18 / S3 / SES, and the Observer/Strategy reassignment loop | Matei |
+| `progress-module-ownership.svg` | Module ownership map and public `api` contracts across all four team members | Matei |
+| `progress-work-profile.svg` | Team contribution profile by work type and cross-team peer review collaboration | Matei |
+| `progress-codebase-loc.svg` | Lines of code by explicit authored category (backend tests, backend Java, frontend, infra/CI, DB/config, personal & shared docs) with exclusions | Matei |
+| `progress-testing-pyramid.svg` | Testing pyramid across all 5 test layers (`1,221` tests in `113` files) and PostgreSQL concurrency/integrity guardrails | Matei |
+| `progress-engineering-health.svg` | Engineering process and review health across `241` post-reset PRs (median size, turnaround time, issue closure, and PR type mix) | Matei |
+| `progress-domain-map.svg` | Database schema map of all `12` PostgreSQL 18 tables grouped by module owner with cross-module foreign keys | Matei |
+| `progress-beyond-crud.svg` | Side-by-side comparison of one-shot CRUD defaults vs. Campus Hub's systems engineering across locking, events, security, architecture, testing, and cloud delivery | Matei |
+| `progress-lock-hierarchy.svg` | PostgreSQL 18 lock-ordering hierarchy (Bands 0 and A–D across `10` `FOR UPDATE` queries, `2` advisory namespaces, and `5` `@Version` entities) alongside `6` real concurrency and proxy bugs proved in PRs | Matei |

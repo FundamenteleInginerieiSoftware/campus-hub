@@ -152,7 +152,7 @@ void lockForBooking(Long assetId);
 3. **Your area in section 7 (Status) of this file:** append `<what, in a few words> (#PR)` to the bullet of your module. Add the PR number with a second push right after `gh pr create`.
 4. **Shared docs this change touches:** `docs/api-contract.md` (API changed), `docs/modules/<module>.md` (public API or how to test changed), `docs/diagrams/` (entity or migration changed), `docs/decisions.md` (a team decision was made).
 
-Edit only the lines of your own area. The shared lines (the date line of section 7, the "Open PRs" table and milestones in `whats-left.md`, the README status) are refreshed by Matei once a week: those are the lines every open PR would fight over in merge conflicts.
+Edit only the lines of your own area. The shared lines (the date line of section 7, the "Open PRs" table and milestones in `whats-left.md`, PROGRESS.md and the README status) are refreshed by Matei once a week: those are the lines every open PR would fight over in merge conflicts.
 **Done when** `git diff origin/main --stat` lists your personal doc, `docs/whats-left.md` and `AGENTS.md`, plus every shared doc from step 4 that applies. Reviews and PR comments alone need no doc.
 The CI job **`docs-check`** (`.github/workflows/docs-check.yml`) fails a PR that changes `backend/src/main/` or `frontend/src/` without the first three; its log lists what is missing. The label `no-docs` skips it, only for a real exception (one-line fix, dependency bump).
 

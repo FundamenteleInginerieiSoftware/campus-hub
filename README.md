@@ -1,8 +1,49 @@
 # Campus Equipment & Incident Hub
 
+> **[Project Progress & Team Contributions](PROGRESS.md)** · **[Wiki](https://github.com/FundamenteleInginerieiSoftware/campus-hub/wiki)** · **[What's Left](docs/whats-left.md)** · **[Contributing](CONTRIBUTING.md)**
+
 University project for **Fundamentele Ingineriei Software (FIS)**.
 Students reserve shared lab equipment by time slot and report broken equipment with a photo.
 When an asset is reported damaged, an **auto-reassignment engine** moves its upcoming bookings to a substitute (or cancels them) and notifies the students.
+
+## Why This Isn't a Simple CRUD App (And Can't Be One-Shotted)
+
+On paper, *"book lab equipment and report broken items"* sounds like a weekend CRUD prompt. Under real concurrency, failing hardware, security abuse, and cloud latency, a one-shot generated app breaks immediately — double-booking gear, deadlocking on multi-item kits, letting disabled users keep booking for 8 hours, or stranding students with broken equipment.
+
+![Why Campus Hub Isn't a One-Shot CRUD App](docs/diagrams/progress-beyond-crud.svg)
+
+What makes this system genuinely hard — and empirically proved on `main` across **`1,221` automated tests** (`2.16×` larger than backend production code) and **`40` real bugs closed with regression tests**:
+
+- **Deadlock-free PostgreSQL 18 concurrency:** `10` `SELECT ... FOR UPDATE` queries, `2` PostgreSQL advisory lock namespaces (`(1, userId)` for booking quota, `(2, userId)` for incident quota), `5` `@Version` entities, `Idempotency-Key` replay/takeover protection in isolated `REQUIRES_NEW` transactions, and a strict lock-ordering DAG proved by multi-thread `pg_stat_activity` tests ([`ReservationConcurrencyIT`](backend/src/test/java/com/campus/reservation/service/ReservationConcurrencyIT.java), [`IdempotencyServiceIT`](backend/src/test/java/com/campus/reservation/service/IdempotencyServiceIT.java)).
+- **Event-driven auto-reassignment & 90-day dry-run simulator:** `HIGH`/`CRITICAL` damage or retirement fires `AFTER_COMMIT` events into a Strategy pipeline (`SameModelStrategy` → `SameCategoryStrategy`, same lab room first) with per-booking `REQUIRES_NEW` isolation, PostgreSQL SQLState (`40P01`/`55P03`/`40001`) retry, an `expectedSourceAssetId` double-move guard, and a zero-write virtual allocation simulator ([`MaintenanceImpactSimulator`](backend/src/main/java/com/campus/reassignment/service/MaintenanceImpactSimulator.java)).
+- **Zero-delay security kill-switch, rotating QR pass & real-time SSE:** every JWT request runs a scalar `findActiveRoleById` query bypassing Hibernate's L1 cache (`0s` account revocation), 30-second HMAC-SHA256 rotating 6-digit/QR pickup passes verified in constant time, binary magic-byte photo validation, and `/api/v1/live/stream` SSE toasts with 20s `:hb` heartbeats tuned below CloudFront's 30s idle timeout and instant disconnect on disable.
+- **Rich state machines & temporal invariants:** 7-state reservations with open-ended `OVERDUE` overlap checks, session-counted multi-asset bundles (`coalesce(bundleId, id)`), 1-minute holds with 2-minute anti-hoarding cooldown, 3-in-24h transfers, preventive 60-minute overdue cascades, bilingual RO/EN project search + atomic *"Reserve all"*, and an injected `Clock` (`Europe/Bucharest` vs UTC on AWS).
+- **Machine-enforced modular monolith (`28` `@ArchTest` rules):** `api`-only module encapsulation, acyclic dependency DAG, banning `default` methods on `..api..` interfaces after catching a real Spring `@Transactional` proxy bypass (`#327`/`#333`), banning `LocalDateTime.now()` without `Clock`, and on-demand PIT mutation testing (`./gradlew pitest`).
+- **Production AWS with zero static deploy keys:** 3-stage CVE-patched single-origin Docker image, Terraform VPC + private RDS + CloudFront prefix-list security group + IMDSv2 + SSM-only (no SSH), and immutable GitHub OIDC [`deploy.yml`](.github/workflows/deploy.yml).
+
+<details>
+<summary><strong>▶ Prove it in 60 seconds — run the 75-test live proof suite on PostgreSQL 18</strong></summary>
+
+With local PostgreSQL 18 running (Quick start step 1), run this single command inside `backend/` to execute **75 live tests** (`DemoFlowIT` E2E auto-reassignment, `SecurityPassIT` IDOR/admin-route reflection, `28` ArchUnit rules, and all multi-thread locking, idempotency, rollback, and L1-cache-bypass ITs — verified green in ~41 s):
+
+```bash
+cd backend && ./gradlew test --rerun \
+  --tests "com.campus.DemoFlowIT" \
+  --tests "com.campus.config.SecurityPassIT" \
+  --tests "com.campus.architecture.*" \
+  --tests "com.campus.reservation.service.ReservationConcurrencyIT" \
+  --tests "com.campus.reservation.service.IdempotencyServiceIT" \
+  --tests "com.campus.reassignment.service.AssetRetiredReassignmentIT" \
+  --tests "com.campus.reassignment.service.ReassignmentRollbackIT" \
+  --tests "com.campus.user.service.FindActiveRoleFreshReadIT" \
+  --tests "com.campus.incident.service.IncidentQuotaConcurrencyIT"
+```
+
+</details>
+
+> **Full technical case, PostgreSQL lock-ordering diagram, 6 real concurrency bugs caught in PRs, and a 3-minute live two-window browser demo:** see **[`PROGRESS.md` §1](PROGRESS.md#1-why-this-isnt-a-simple-crud-app-and-cant-be-one-shotted)** (auto-synced to the **[GitHub Wiki](https://github.com/FundamenteleInginerieiSoftware/campus-hub/wiki)**).
+
+---
 
 ## ▶ Quick start: run it, open it, test it
 
@@ -42,7 +83,7 @@ npm run dev                        # sends every /api call on to :8080, so start
 
 **Dev accounts** (password `password` for all): `student1@campus.test`, `student2@campus.test`, `admin@campus.test`. On an empty database the app also creates demo equipment (categories, lab rooms, several assets of the same model) and a few bookings.
 
-**What works in the browser today:** login and register; catalog + asset details with quick booking, **My reservations** with the booking calendar, **My incidents** + report form, **Projects** pages (students); admin inventory, incident queue, audit log and the **Reservations desk** for pickups and returns (admin).
+**What works in the browser today:** login and register, plus live toast notifications across open tabs; catalog + asset details with quick booking, **My reservations** with the booking calendar, **Calendar sync**, **Pickup pass**, **My incidents** + report form, **Incident details** (`/incidents/:id`), and **Projects** pages (students); admin inventory, incident queue, **Equipment health** (`/admin/reliability`), admin users, reassignment log, audit log, and the **Reservations desk** for pickups and returns (admin).
 
 **5. Run the tests**
 
@@ -78,7 +119,7 @@ Reports after `build`: tests in `backend/build/reports/tests/test/index.html`, c
 | Frontend | React + Vite + TypeScript (in `frontend/`) |
 | Cloud | AWS: one EC2 server (Docker) behind CloudFront, RDS PostgreSQL 18, S3, SES ([ADR-002](docs/adr/002-single-ec2-behind-cloudfront.md)), managed by Matei. **You don't need an AWS account.** |
 
-> **Status (20 Nov 2026, week 7):** **M1 done: `v0.1.0` tagged on 11 Nov.** On `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints; disabling a user cancels their upcoming bookings automatically), the **catalog** with admin CRUD, retire, search and **dev seed data**, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show and overdue jobs; also bundle booking, extend, transfer and a 1-minute slot hold), **incidents** (report, triage, my incidents, photo upload), the **auto-reassignment engine** (retiring an asset moves or cancels its future bookings), ArchUnit rules, the **Projects** feature (search, details, Reserve all), the **pickup pass** (rotating desk code, QR code, desk camera scan, student page + desk Verify dialog), the **calendar feed** (iCalendar), **live notifications** over server-sent events for open tabs, the Docker image, the S3/SES adapters and the **Terraform** for the AWS network, photo bucket, ECR and instance role (applied); the **first AWS deploy** (EC2 + CloudFront + RDS + SES) went live on 17 Nov and is paused between demos to save credits. The deploy workflow `deploy.yml` (GitHub OIDC, after a green `ci` on `main`) is written but not applied yet. **The whole prototype demo runs on `main`** and is checked by `DemoFlowIT`. Frontend: login, register, catalog + asset details with quick booking, My reservations (with a Show pickup pass button) + booking calendar, My incidents + report form, admin inventory, incident queue, admin Users, Reassignment log, audit log and Reservations desk pages, Projects pages, Pickup pass, Calendar sync. **What is left for each of us, until the defense: [`docs/whats-left.md`](docs/whats-left.md)** (next: M2 `v0.2.0` by 6 Dec, everything also on AWS). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
+> **Status (26 Nov 2026, week 8):** **M1 done (`v0.1.0` tagged 11 Nov).** On `main`: security (register/login with JWT, `/users/me`, admin-only `/api/v1/admin/**`, admin user endpoints; disabling a user cancels upcoming bookings and closes live streams automatically), **catalog** with admin CRUD, retire, search and dev seed data, **reservations** (overlap check, my reservations, cancel, availability, check-out/return, no-show/overdue jobs, bundle booking, extend, transfer, 1-minute slot hold, iCalendar feed, and dry-run maintenance impact simulator endpoint `#351`), **incidents** (report, triage, my incidents, photo upload, **Incident details** `/incidents/:id`, and **Equipment reliability** `/admin/reliability`), the **auto-reassignment engine** (damage and retire flows), ArchUnit rules, **Projects** (search, details, Reserve all), **Pickup pass** (rotating desk code, QR code, desk camera scan), and **live notifications end-to-end** (SSE stream, dev/SES push, `<LiveToasts />` in `AppLayout`, and a 3-thread scheduler). Cloud & CI: Docker image, S3/SES adapters, Terraform, the **first AWS deploy** (17 Nov, paused between demos to save credits), and GitHub OIDC **`deploy.yml`** (applied and proved on 22 Nov; skips while EC2 is paused). **The whole demo runs on `main`** and is checked by `DemoFlowIT`. Full visual progress, ownership map, timeline and per-member PR logs: **[`PROGRESS.md`](PROGRESS.md)**. What is still left until the defense: **[`docs/whats-left.md`](docs/whats-left.md)** (next: M2 `v0.2.0` on Sun 6 Dec, local + AWS; feature freeze and teacher feedback demo moved to Mon 7 Dec). New here? Install the tools (section 1), set up the database (section 1.1), then follow the **Quick start** at the top and do your practice PR (section 3).
 
 ---
 
@@ -247,192 +288,11 @@ Inside every module the code is split the same way: `api/` (the only package oth
 
 ## 7. Progress: what each of us has done
 
-What is on `main` and what is still in review, per member. **As of 20 Nov 2026**; update it when PRs merge. **What is still to do: [`docs/whats-left.md`](docs/whats-left.md).**
+For the full visual project overview (system overview sketch, W1–W12 timeline, module-ownership map, contribution profile, and complete per-member merged PR logs), see **[`PROGRESS.md`](PROGRESS.md)** (snapshot as of 26 Nov 2026, Week 8). For what is still left to do per member until the defense, see **[`docs/whats-left.md`](docs/whats-left.md)**.
 
-### Matei Necula: cloud, security & auth
-
-| Done (merged) | PRs |
-|---|---|
-| Repo restart: README, CONTRIBUTING, AGENTS, CODEOWNERS, PR/issue templates, `ci` workflow, `main` protection | #12, #16, #18, #26, #49 |
-| Gradle backend skeleton (Java 25, Spring Boot 4.1, PostgreSQL 18, Flyway, Spotless, JaCoCo, Swagger) | #13 |
-| Decisions log + API contract draft | #15 |
-| `users` table, `User` entity and repository | #17 |
-| Password hashing (BCrypt), JWT signing, `/api/v1/admin/**` admin-only, Swagger "Authorize" | #25 |
-| 401/403 answers as ProblemDetail JSON | #44 |
-| `@Async` + `@Scheduled` switched on (for Calin's jobs and listeners) | #45 |
-| `UserApi` contract + `UserSummary`, implemented by `UserService` | #46, #48 |
-| Register/login request and response records | #47 |
-| AWS architecture diagram + ADRs 001-005; AWS account with budget alerts | #20 |
-| Clickable prototype of the app (fake data) | #41, #42 |
-| Error responses keep their `code` for validation errors, bad JSON and unknown paths | #52 |
-| Register + login endpoints (JWT with `sub`, `email`, `roles`; 8 h) | #54 |
-| Dev test accounts created on startup (2 students, 1 admin) | #55 |
-| `archunit-junit5` added for Calin's architecture tests | #62 |
-| Security tests probe paths no controller maps | #70 |
-| `AGENTS.md`: `CurrentUser` as an injectable bean in the contract | #53 |
-| `GET /api/v1/users/me` (the logged-in user's profile) | #82 |
-| First admin on AWS from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`prod` only) | #88 |
-| Status updates in README + AGENTS, team plan W4-W6, what's-left list | #50, #56, #57, #81, #83, #93, #106, #136, #144, #218, #237, #251, #301, #307, #313 |
-| Docker image: builds the React app and serves it from Spring Boot (one origin, ADR-002), non-root, health check | #114 |
-| No more review buddies: anyone can review anyone's PR (CODEOWNERS + ruleset) | #104 |
-| Old tokens ignored on the public `/api/v1/auth/**` endpoints | #126 |
-| Firewall-rejected URLs answer ProblemDetail JSON | #127 |
-| Disabled or deleted users lose access at once (`UserApi.findActiveRole`, checked on every request with a token) | #128 |
-| S3 + SES adapters for `prod` (photos in S3, e-mails through SES); missing S3 keys, slow or failing sends handled | #129, #177 |
-| `users.created_at` in whole seconds | #135 |
-| Register trims spaces around the email; a token with a bad subject gets 401, not 500 | #175, #176 |
-| Admin **Reservations desk** page (today's pickups and returns, check-out/return), sorted by start time on the backend | #138, #194 |
-| Security pass as tests: IDOR with two students, students rejected on admin endpoints, no stack traces (`SecurityPassIT`) | #139 |
-| Mutation testing on demand (`./gradlew pitest`) + tests for the gaps it found in my code | #180, #182 |
-| `DemoFlowIT`: the whole demo through the HTTP API; a failure names the step and its owner | #181 |
-| Defense playbook (`docs/testing/defense-playbook.md`) + test rules in `AGENTS.md` | #183 |
-| Swagger: 401/403 and `ProblemDetail` errors documented on every endpoint | #184 |
-| Security chapter of the report + JWT sequence diagram; UML component + deployment diagrams | #185, #186 |
-| All security rules in `docs/api-contract.md` §2; SSM arrow fixed in the AWS diagram | #195 |
-| README quick start (run, open, test) at the top | #200 |
-| Projects feature (#140): design + plan; engine with bilingual search and free units per model (`GET /api/v1/projects`, `/projects/{slug}`); 10 projects; Projects pages; Reserve all; confirmation banner | #232, #236, #239, #238, #243, #248 |
-| Terraform part 1 (state bucket, VPC, subnets, security groups) and part 2 (photo bucket, ECR, instance role, SSM parameters; RDS off until W7), applied; first image pushed to ECR | #249, #250 |
-| Docker image with OS security updates; clean ECR scan noted | #252, #253 |
-| Login rejects passwords over 72 bytes; project search false hits and details page errors fixed | #271, #272, #273 |
-| End-of-task docs rule (AGENTS.md §4) + required `docs-check` CI job | #277, #279 |
-| Pickup pass backend: rotating 6-digit desk code, `/users/me/pickup-pass` + admin verify | #283 |
-| Public calendar feed path in `SecurityConfig` (for Calin's calendar feed) | #295 |
-| `AGENTS.md`: `cancelUpcomingReservationsForUser` in the `ReservationApi` contract | #282 |
-| Pickup pass pages: student pass page + desk Verify dialog on the Reservations desk | #284 |
-| **First AWS deploy**: EC2 t3.small + Elastic IP + CloudFront, RDS on, SES sender, admin credentials in SSM; app live on CloudFront (17 Nov), then paused to save credits | #304 |
-| Live-check fixes: relative Swagger server URL, `HEAD` on public pages | #308 |
-| E-mail alert when AWS restarts the stopped RDS after 7 days | #309 |
-| `findActiveRole` reads the user row fresh, so a re-check inside a transaction sees a disable | #312 |
-| Pickup pass: QR code and desk camera scan | #318 |
-| `deploy.yml`: after a green `ci` on `main`, build and push to ECR, deploy over SSM, health check; GitHub OIDC (written, not applied yet) | #320 |
-| Team decisions settled (off-plan features, open rows) | #321, #323 |
-| Live SES notifications also pushed to open tabs | #332 |
-| Personal docs 01-56 + README index of them | #14 + each PR above, #137 |
-
-**Next:** `terraform apply` for the deploy role (3 to add) and repo variables `AWS_DEPLOY_ROLE_ARN` + `APP_URL`; resume AWS before the teacher feedback demo (Mon 23 Nov), then the first `deploy.yml` run; M2 `v0.2.0` by Sun 6 Dec. Full list: `docs/whats-left.md` §4.
-
-### Liviu Nedelcu: catalog & shared services
-
-| Done (merged) | PRs |
-|---|---|
-| Shared exceptions + `GlobalExceptionHandler` (ProblemDetail errors) | #22 |
-| `PageResponse<T>` for paginated lists | #22 |
-| `AuditService`, `StorageService`, `NotificationService` interfaces + dev versions (logging, local disk) | #22 |
-| Personal documentation folder | #21 |
-| Catalog: `categories`, `lab_rooms`, `assets` tables + entities, real `CatalogApi` (incl. `lockForBooking`), `docs/modules/catalog.md` | #24 |
-| Real `AuditService` writing the `audit_logs` table | #64 |
-| Personal docs W2-W4 | #68 |
-| Category, lab room and asset CRUD + retire (admin), asset details | #66 (+ #73) |
-| Catalog admin actor via `CurrentUser` | #89 |
-| Local disk storage with security checks (type, size, path traversal) | #90 |
-| Asset search, filters and paging (`GET /api/v1/assets`) | #92 |
-| Query-parameter validation errors → 400 `VALIDATION_FAILED` | #110 |
-| Large page offsets → 400, audit errors kept apart from duplicate-name errors, error contract aligned | #143 |
-| Fewer catalog queries, audit times in whole seconds, constraint checks | #192 |
-| **`CatalogSeeder`** (dev): 4 categories, 3 lab rooms, 18 assets, several units of the same model | #193 |
-| Frontend: catalog page, asset details page, admin inventory page | #196 |
-| `docs/modules/common.md` | #197 |
-| Audit log search `GET /api/v1/admin/audit-logs` + audit log page | #217, #221 |
-| Swagger error codes, `STALE_VERSION` test, PIT survivors in catalog/common/storage | #220 |
-| Catalog/common class + ER diagrams, report chapter | #222 |
-| Student project hardware kits in the dev seed (18 units, 8 models) for Projects | #275 |
-| Code read-through fixes (#268): version check on asset update, retired assets hidden from students, field-level audit diffs; shared `PageRequests` paging helper; admin inventory page split per tab, `PICKUP_PASS_VERIFIED` audit filter | #278, #287, #288 |
-| `AssetRetiredEvent` published when an asset is retired (for the retire flow, #245) | #280 |
-| Live notifications: server-sent event stream `GET /api/v1/live/stream` for open tabs (#290) | #317 |
-
-**Next:** live notifications frontend (#290 PR 2: `live.ts`, `<LiveToasts />`) and PR 3 (push from `LoggingNotificationService`), by 30 Nov; #268 leftovers (category and lab room version check); help Calin with substitute-search edge cases; coverage, final diagrams, demo part (W10–W12). Full list: `docs/whats-left.md` §5.
-
-### Calin Murariu: reservations & reassignment
-
-| Done (merged) | PRs |
-|---|---|
-| Shared `Clock` bean (Europe/Bucharest) for every "now" in the app | #27 |
-| Reservations table, entity and `ReservationApi` | #34 |
-| Booking with overlap check and row locking | #35 |
-| My reservations, cancel, facade, seeder | #36 |
-| Auto-reassignment engine on `AssetDamagedEvent` (same model, then same category, else cancel) | #37 |
-| Reservation + reassignment docs | #39 |
-| ArchUnit module boundary and coding convention rules | #76 |
-| Admin desk: reservation search, check-out, return | #80 |
-| Check-out/return windows, scheduled no-show and overdue jobs | #60 |
-| Equipment availability endpoint | #78 |
-| Frontend: My reservations page + calendar booking view, `/reservations/me/summary` | #87 |
-| Fix: rollback test used the real clock and broke once its date passed | #95 |
-| `GET /api/v1/admin/reassignments` (paged reassignment log) | #96 |
-| Concurrency test: two threads book the same slot, exactly one wins | #97 |
-| Boundary tests for every booking rule | #98 |
-| Engine hardening: retired assets excluded, deterministic tie-break | #99 |
-| "Moved" / "force-cancelled" badges in My reservations | #100 |
-| Reservation diagrams, team test plan, Strategy pattern doc | #101 |
-| More unit + web slice tests, 3 new ArchUnit rules (shared `Clock`, `@Transactional` placement, no ORDINAL enums) | #102 |
-| Review follow-ups: badge check, test cleanup, coverage worded as a target | #109 |
-| Timestamps in whole seconds (reservations, reassignment log) | #130 |
-| No check-out of an overdue or non-bookable asset | #131 |
-| Reassignment: one transaction per booking, one failed move no longer rolls back the rest | #132 |
-| My reservations: loader and error reset on every fetch | #133 |
-| OVERDUE bookings block the asset until returned | #141 |
-| Reassignment: candidate lookup outside the lock transaction, retry with the next substitute; same room first in the preventive cascade | #152, #161 |
-| Huge page offsets → 400; per-user booking limit checked under an advisory lock | #153, #173 |
-| Admin cancel reason and notification, `sortDir` on the admin search | #172 |
-| Sweep/reassignment indexes + admin Swagger docs; Swagger examples and error codes | #162, #191 |
-| Frontend fixes: Today button, 14-day slot horizon, campus clock, no cancel after the start | #154, #163, #174 |
-| More ArchUnit rules: method-level `@CrossOrigin`/`@Transactional`, Boot 4 imports, admin prefix | #179 |
-| Tests for remaining branches and PIT survivors in reservation and reassignment | #178, #201 |
-| Test plan with PIT, Strategy pattern doc, booking sequence diagram, report chapter, personal doc 15 | #199, #205, #204, #203, #202 |
-| Observer pattern doc | #207 |
-| New (not in the original plan): multi-asset bundle booking, extend an active booking, transfer a booking to a classmate, 1-minute slot hold | #212, #213, #214, #219 |
-| Frontend: quick-book modal on the catalog and asset details, report-incident button | #226 |
-| Extend + transfer in My reservations; hold countdown in the calendar view; tests for the remaining PIT survivors | #224, #225, #227 |
-| Time-zone offsets rejected; bundle/transfer/hold security fixes (#228); `ReservationApi.bookBundle` for Projects | #233, #234, #235 |
-| `Idempotency-Key` on `POST /reservations` and `/reservations/bundle`: a retry replays the first answer | #262 |
-| Cancel a user's upcoming bookings: `ReservationApi.cancelUpcomingReservationsForUser` + admin endpoint (#229) | #266 |
-| Code read-through fixes and refactors (#267): holds, locking, lifecycle; `isAssetFree` hold owner; unified OVERDUE queries, single hold sweep; `HoldService`, `TransferService`, slot validator; frontend `useSlotHold` + shared booking rules | #270, #292, #293, #294, #296 |
-| Same-model substitute suggestions on a slot conflict | #286 |
-| Calendar feed (#289): token settings + `IcsWriter`, `GET /api/v1/calendar/{token}.ics`, Calendar sync page; `ReservationApi.usedMinutesByAsset` for Stefania's equipment reliability | #297, #298, #299, #300 |
-| Calendar sync button in My reservations (closes #314) | #315 |
-| PIT survivors covered in the reservation module | #316 |
-| Retired asset → reassignment: `AssetRetiredEvent` listener, nullable `reassignment_log.incident_id` (#245) | #311 |
-| Reassignment log column `trigger` renamed to `triggered_by`, generated IDs in the retire-flow test | #326 |
-| `moveToAsset` / `forceCancel` check the expected source asset (closes #319) | #327 |
-| Active user re-checked after the booking quota lock (#229) | #310 |
-| Disabled user's bookings: row lock order, `FOR UPDATE` on the cancel, automatic cancel on `UserDisabledEvent` (#229) | #329, #330 |
-| "Show pickup pass" button on today's confirmed bookings in My reservations | #328 |
-| Clean-up: no self-invoking default overloads on `ReservationApi` | #333 |
-
-| Parked (draft, after M1) | PRs |
-|---|---|
-| Maintenance simulator, waitlist, slot recommender | #58, #59, #61 |
-
-**Next:** the three off-plan features back on: FIFO waitlist (#59), maintenance impact simulator (#58), next free slots (#61); first PR on `main` by 30 Nov, all by 7 Dec. Doc follow-up: old `moveToAsset`/`forceCancel` call shapes in `strategy-pattern.md`, `reassignment-sequence.mmd`, the report chapter and doc 47. Full list: `docs/whats-left.md` §6.
-
-### Stefania: incidents, users & frontend lead
-
-| Done (merged) | PRs |
-|---|---|
-| Personal documentation folder | #19 |
-| Redesigned clickable prototype (`docs/prototype/campus-hub-redesign.html`) | #51 |
-| `CurrentUser` as an injectable bean | #74 |
-| Incident reporting flow, persistence, `AssetDamagedEvent` | #40 |
-| Frontend scaffold (Vite + React + TypeScript + Mantine, routing) | #84 |
-| API client, auth context, login page | #85 |
-| App layout, role-based routes, shared components, conventions (`docs/modules/frontend.md`) | #86 |
-| Register page | #107 |
-| Incident triage (start repair, reject), `GET /incidents/me`, `GET /incidents/{id}` | #108 |
-| Every triage action audited, list indexes, error responses in Swagger | #208 |
-| Incident photo upload + view (reporter or admin), orphan files cleaned up | #210 |
-| Admin user endpoints: search, details, enable/disable, change role | #206 |
-| ADR-002 ✅ in `docs/decisions.md` (Spring serves the React build) | #111 |
-| Frontend: keep the token when the backend is down on startup; unique `ErrorAlert` keys, `/admin` index route | #142, #145 |
-| Personal docs; `CurrentUser.isAdmin()` Javadoc fix | #198, #215 |
-| Frontend: My incidents page + Report a problem form with photo | #216 |
-| Frontend: admin incident queue (start repair, resolve, reject, photo view) | #223 |
-| Only HIGH/CRITICAL incidents take the asset out of use at once; max 3 open reports per student (#229) | #263 |
-| `UserDisabledEvent` published on disable, so upcoming bookings are cancelled (#229) | #302 |
-| Admin **Users** page (search, enable/disable, role change) and **Reassignment log** page (#305, #306) | #331 |
-| QR libraries for the pickup pass; `ci.yml` steps no longer skipped by `hashFiles` guards | #303 |
-
-**Next:** close #229 (all its PRs are merged); equipment reliability (#291, backend and admin page by 30 Nov); #269 leftovers; app-wide RO/EN choice (#140); incident details page; mount `<LiveToasts />` once Liviu's PR 2 lands. Full list: `docs/whats-left.md` §7.
-
-### Everyone
-
-- Still to decide (🟡/⏳ in `docs/decisions.md`): weekly meeting time, entity freeze session, real week dates and milestones.
+| Milestone | Date / Target | Status |
+|---|---|---|
+| Prototype (`v0.1.0-prototype`) & M1 (`v0.1.0`) | 31 Oct / 11 Nov 2026 | ✅ Done |
+| First AWS Deploy & GitHub OIDC `deploy.yml` | 17 Nov / 22 Nov 2026 | ✅ Done (paused between demos) |
+| M2 (`v0.2.0`, local + AWS) & Feature Freeze / Teacher Demo | Sun 6 Dec / Mon 7 Dec 2026 | 🎯 Next milestone |
+| Defense (`v1.0.0`) | W11–W12 | 📅 Date from professor |
