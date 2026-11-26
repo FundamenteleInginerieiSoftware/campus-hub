@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-26
-**Branch / PR:** `fix/platform-audit-bugs`
+**Branch / PR:** `fix/platform-audit-bugs` (#366)
 **See also:** `documentation/Necula_Matei/60-ses-live-push.md`, `documentation/Necula_Matei/62-scheduler-thread-pool.md`, `documentation/Necula_Matei/53-calendar-feed-security-rule.md`
 
 ---
