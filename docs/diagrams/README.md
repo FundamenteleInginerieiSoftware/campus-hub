@@ -28,3 +28,5 @@ These standalone SVGs are embedded in [`PROGRESS.md`](../../PROGRESS.md) as a qu
 | `progress-testing-pyramid.svg` | Testing pyramid across all 5 test layers (`1,221` tests in `113` files) and PostgreSQL concurrency/integrity guardrails | Matei |
 | `progress-engineering-health.svg` | Engineering process and review health across `241` post-reset PRs (median size, turnaround time, issue closure, and PR type mix) | Matei |
 | `progress-domain-map.svg` | Database schema map of all `12` PostgreSQL 18 tables grouped by module owner with cross-module foreign keys | Matei |
+| `progress-beyond-crud.svg` | Side-by-side comparison of one-shot CRUD defaults vs. Campus Hub's systems engineering across locking, events, security, architecture, testing, and cloud delivery | Matei |
+| `progress-lock-hierarchy.svg` | PostgreSQL 18 lock-ordering hierarchy (Bands 0 and A–D across `10` `FOR UPDATE` queries, `2` advisory namespaces, and `5` `@Version` entities) alongside `6` real concurrency and proxy bugs proved in PRs | Matei |

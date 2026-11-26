@@ -1,0 +1,373 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" role="img" aria-label="PostgreSQL 18 Lock-Ordering Hierarchy and Real Bugs Caught">
+  <defs>
+    <!-- Subtle Excalidraw-inspired dot grid -->
+    <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.9" fill="#cbd5e1" opacity="0.55"/>
+    </pattern>
+
+    <!-- Color-matched crisp arrowheads -->
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#0d9488"/>
+    </marker>
+
+    <clipPath id="canvas-clip">
+      <rect x="0" y="0" width="1200" height="700" rx="16"/>
+    </clipPath>
+  </defs>
+
+  <!-- Explicit solid light canvas (GitHub Light + Dark mode safe) -->
+  <rect x="0" y="0" width="1200" height="700" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+  <rect x="1" y="1" width="1198" height="698" rx="15" fill="url(#dot-grid)" clip-path="url(#canvas-clip)"/>
+
+  <!-- ==================== HEADER (y=18..82) ==================== -->
+  <g id="header" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <rect x="28" y="23" width="5" height="45" rx="2.5" fill="#d97706"/>
+    <text x="44" y="43" font-size="20" font-weight="700" fill="#0f172a">PostgreSQL 18 Lock-Ordering Hierarchy &amp; Real Bugs Caught</text>
+    <text x="44" y="65" font-size="11.8" fill="#475569">Enforced acquisition order across 10 FOR UPDATE queries, 2 advisory namespaces &amp; 5 @Version entities — plus 6 subtle concurrency bugs proved &amp; fixed</text>
+
+    <!-- Top-right badge pill -->
+    <rect x="984" y="24" width="188" height="26" rx="13" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+    <circle cx="1000" cy="37" r="4" fill="#d97706"/>
+    <text x="1010" y="41" font-size="11" font-weight="700" fill="#78350f">Deadlock-free lock DAG</text>
+  </g>
+
+  <!-- ==================== LEFT PANEL (x=28..640, y=92..674) ==================== -->
+  <g id="left-panel" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <!-- Offset sketch shadow -->
+    <rect x="32" y="96" width="612" height="582" rx="14" fill="#0f172a" opacity="0.06"/>
+    <!-- Card frame -->
+    <rect x="28" y="92" width="612" height="582" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <!-- Header band -->
+    <path d="M 28 106 Q 28 92 42 92 L 626 92 Q 640 92 640 106 L 640 134 L 28 134 Z" fill="#f8fafc"/>
+    <line x1="28" y1="134" x2="640" y2="134" stroke="#e2e8f0" stroke-width="1"/>
+    <circle cx="46" cy="113" r="4.5" fill="#d97706"/>
+    <text x="58" y="118" font-size="14" font-weight="700" fill="#0f172a">Enforced Lock &amp; Isolation Order (PostgreSQL 18)</text>
+    <text x="622" y="117" text-anchor="end" font-size="10.5" font-weight="600" fill="#64748b">Strict step order (no cycles)</text>
+
+    <!-- ========== BAND 0: Idempotency Wrapper (y=144..240) ========== -->
+    <g id="band-0">
+      <rect x="44" y="144" width="580" height="96" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.3"/>
+      <rect x="47" y="151" width="4.5" height="82" rx="2.25" fill="#475569"/>
+      <rect x="59" y="152" width="54" height="17" rx="5" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.9"/>
+      <text x="86" y="164" text-anchor="middle" font-size="9.2" font-weight="700" fill="#334155">BAND 0</text>
+      <text x="121" y="164.5" font-size="12.5" font-weight="700" fill="#0f172a">Idempotency Wrapper</text>
+      <text x="59" y="181" font-size="10.2" fill="#475569">Isolated REQUIRES_NEW pre/post tx — never overlaps domain locks</text>
+
+      <!-- Chip 1: x=59..201 (w=142) -->
+      <rect x="60.5" y="193" width="142" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="59" y="191" width="142" height="38" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+      <circle cx="72" cy="210" r="7.5" fill="#475569"/>
+      <text x="72" y="213.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">1</text>
+      <text x="85" y="206.5" font-size="10" font-weight="700" fill="#0f172a">Claim Key</text>
+      <text x="85" y="220" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#475569">FOR UPDATE</text>
+
+      <line x1="204" y1="210" x2="220" y2="210" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow-slate)"/>
+
+      <!-- Chip 2: x=223..365 (w=142) -->
+      <rect x="224.5" y="193" width="142" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="223" y="191" width="142" height="38" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+      <circle cx="236" cy="210" r="7.5" fill="#475569"/>
+      <text x="236" y="213.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">2</text>
+      <text x="249" y="206.5" font-size="10" font-weight="700" fill="#0f172a">Execute</text>
+      <text x="249" y="220" font-size="9.5" font-weight="600" fill="#475569">Domain Tx</text>
+
+      <line x1="368" y1="210" x2="384" y2="210" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow-slate)"/>
+
+      <!-- Chip 3: x=387..614 (w=227) -->
+      <rect x="388.5" y="193" width="227" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="387" y="191" width="227" height="38" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+      <circle cx="400" cy="210" r="7.5" fill="#475569"/>
+      <text x="400" y="213.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">3</text>
+      <text x="413" y="206.5" font-size="10" font-weight="700" fill="#0f172a">Mark COMPLETED</text>
+      <text x="413" y="220" font-size="9.2" fill="#475569">guarded by <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.9" font-weight="600" fill="#334155">attemptStartedAt</tspan></text>
+    </g>
+
+    <!-- ========== BAND A: New Booking, Bundle & Hold (y=249..345) ========== -->
+    <g id="band-a">
+      <rect x="44" y="249" width="580" height="96" rx="10" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.3"/>
+      <rect x="47" y="256" width="4.5" height="82" rx="2.25" fill="#d97706"/>
+      <rect x="59" y="257" width="54" height="17" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="0.9"/>
+      <text x="86" y="269" text-anchor="middle" font-size="9.2" font-weight="700" fill="#78350f">BAND A</text>
+      <text x="121" y="269.5" font-size="12.5" font-weight="700" fill="#0f172a">New Booking, Bundle &amp; Hold</text>
+      <text x="59" y="286" font-size="10.2" fill="#475569">Sorted asset IDs prevent AB/BA bundle deadlocks; scalar read bypasses L1 cache</text>
+
+      <!-- Chip 1: x=59..205 (w=146) -->
+      <rect x="60.5" y="298" width="146" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="59" y="296" width="146" height="38" rx="8" fill="#ffffff" stroke="#f59e0b" stroke-width="1.3"/>
+      <circle cx="72" cy="315" r="7.5" fill="#d97706"/>
+      <text x="72" y="318.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">1</text>
+      <text x="85" y="311.5" font-size="9.8" font-weight="700" fill="#0f172a">Asset FOR UPDATE</text>
+      <text x="85" y="325" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#b45309">(id ASC)</text>
+
+      <line x1="207" y1="315" x2="218" y2="315" stroke="#d97706" stroke-width="1.6" marker-end="url(#arrow-amber)"/>
+
+      <!-- Chip 2: x=221..340 (w=119) -->
+      <rect x="222.5" y="298" width="119" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="221" y="296" width="119" height="38" rx="8" fill="#ffffff" stroke="#f59e0b" stroke-width="1.3"/>
+      <circle cx="234" cy="315" r="7.5" fill="#d97706"/>
+      <text x="234" y="318.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">2</text>
+      <text x="247" y="311.5" font-size="9.8" font-weight="700" fill="#0f172a">Advisory Lock</text>
+      <text x="247" y="325" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#b45309">(1, uid)</text>
+
+      <line x1="342" y1="315" x2="353" y2="315" stroke="#d97706" stroke-width="1.6" marker-end="url(#arrow-amber)"/>
+
+      <!-- Chip 3: x=356..488 (w=132) -->
+      <rect x="357.5" y="298" width="132" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="356" y="296" width="132" height="38" rx="8" fill="#ffffff" stroke="#f59e0b" stroke-width="1.3"/>
+      <circle cx="369" cy="315" r="7.5" fill="#d97706"/>
+      <text x="369" y="318.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">3</text>
+      <text x="382" y="311.5" font-size="9.8" font-weight="700" fill="#0f172a">Scalar</text>
+      <text x="382" y="325" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.1" font-weight="600" fill="#b45309">findActiveRole()</text>
+
+      <line x1="490" y1="315" x2="501" y2="315" stroke="#d97706" stroke-width="1.6" marker-end="url(#arrow-amber)"/>
+
+      <!-- Chip 4: x=504..614 (w=110) -->
+      <rect x="505.5" y="298" width="110" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="504" y="296" width="110" height="38" rx="8" fill="#ffffff" stroke="#f59e0b" stroke-width="1.3"/>
+      <circle cx="517" cy="315" r="7.5" fill="#d97706"/>
+      <text x="517" y="318.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">4</text>
+      <text x="530" y="311.5" font-size="9.8" font-weight="700" fill="#0f172a">Overlap +</text>
+      <text x="530" y="325" font-size="9.5" font-weight="600" fill="#78350f">Quota</text>
+    </g>
+
+    <!-- ========== BAND B: Existing Booking & Transfer (y=354..450) ========== -->
+    <g id="band-b">
+      <rect x="44" y="354" width="580" height="96" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.3"/>
+      <rect x="47" y="361" width="4.5" height="82" rx="2.25" fill="#2563eb"/>
+      <rect x="59" y="362" width="54" height="17" rx="5" fill="#dbeafe" stroke="#60a5fa" stroke-width="0.9"/>
+      <text x="86" y="374" text-anchor="middle" font-size="9.2" font-weight="700" fill="#1e3a8a">BAND B</text>
+      <text x="121" y="374.5" font-size="12.5" font-weight="700" fill="#0f172a">Existing Booking &amp; Transfer</text>
+      <text x="59" y="391" font-size="10.2" fill="#475569">Reservation ALWAYS locked before Asset and Transfer (#270, #329)</text>
+
+      <!-- Chip 1: x=59..191 (w=132) -->
+      <rect x="60.5" y="403" width="132" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="59" y="401" width="132" height="38" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.3"/>
+      <circle cx="72" cy="420" r="7.5" fill="#2563eb"/>
+      <text x="72" y="423.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">1</text>
+      <text x="85" y="416.5" font-size="9.8" font-weight="700" fill="#0f172a">Reservation</text>
+      <text x="85" y="430" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#1d4ed8">FOR UPDATE</text>
+
+      <line x1="193" y1="420" x2="204" y2="420" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+
+      <!-- Chip 2: x=207..327 (w=120) -->
+      <rect x="208.5" y="403" width="120" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="207" y="401" width="120" height="38" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.3"/>
+      <circle cx="220" cy="420" r="7.5" fill="#2563eb"/>
+      <text x="220" y="423.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">2</text>
+      <text x="233" y="416.5" font-size="9.8" font-weight="700" fill="#0f172a">Asset</text>
+      <text x="233" y="430" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#1d4ed8">FOR UPDATE</text>
+
+      <line x1="329" y1="420" x2="340" y2="420" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+
+      <!-- Chip 3: x=343..468 (w=125) -->
+      <rect x="344.5" y="403" width="125" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="343" y="401" width="125" height="38" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.3"/>
+      <circle cx="356" cy="420" r="7.5" fill="#2563eb"/>
+      <text x="356" y="423.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">3</text>
+      <text x="369" y="416.5" font-size="9.8" font-weight="700" fill="#0f172a">Transfer</text>
+      <text x="369" y="430" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#1d4ed8">FOR UPDATE</text>
+
+      <line x1="470" y1="420" x2="481" y2="420" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+
+      <!-- Chip 4: x=484..614 (w=130) -->
+      <rect x="485.5" y="403" width="130" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="484" y="401" width="130" height="38" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.3"/>
+      <circle cx="497" cy="420" r="7.5" fill="#2563eb"/>
+      <text x="497" y="423.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">4</text>
+      <text x="510" y="416.5" font-size="9.8" font-weight="700" fill="#0f172a">Advisory</text>
+      <text x="510" y="430" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#1d4ed8">(1, recip)</text>
+    </g>
+
+    <!-- ========== BAND C: Incident Report & Triage (y=459..555) ========== -->
+    <g id="band-c">
+      <rect x="44" y="459" width="580" height="96" rx="10" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.3"/>
+      <rect x="47" y="466" width="4.5" height="82" rx="2.25" fill="#7c3aed"/>
+      <rect x="59" y="467" width="54" height="17" rx="5" fill="#ede9fe" stroke="#a78bfa" stroke-width="0.9"/>
+      <text x="86" y="479" text-anchor="middle" font-size="9.2" font-weight="700" fill="#4c1d95">BAND C</text>
+      <text x="121" y="479.5" font-size="12.5" font-weight="700" fill="#0f172a">Incident Report &amp; Triage</text>
+      <text x="59" y="496" font-size="10.2" fill="#475569">Separate advisory namespace (2, uid) never contends with reservation quota (1, uid)</text>
+
+      <!-- Chip 1: x=59..189 (w=130) -->
+      <rect x="60.5" y="508" width="130" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="59" y="506" width="130" height="38" rx="8" fill="#ffffff" stroke="#a78bfa" stroke-width="1.3"/>
+      <circle cx="72" cy="525" r="7.5" fill="#7c3aed"/>
+      <text x="72" y="528.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">1</text>
+      <text x="85" y="521.5" font-size="9.8" font-weight="700" fill="#0f172a">Advisory Lock</text>
+      <text x="85" y="535" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#6d28d9">(2, uid)</text>
+
+      <line x1="191" y1="525" x2="202" y2="525" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#arrow-violet)"/>
+
+      <!-- Chip 2: x=205..329 (w=124) -->
+      <rect x="206.5" y="508" width="124" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="205" y="506" width="124" height="38" rx="8" fill="#ffffff" stroke="#a78bfa" stroke-width="1.3"/>
+      <circle cx="218" cy="525" r="7.5" fill="#7c3aed"/>
+      <text x="218" y="528.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">2</text>
+      <text x="231" y="521.5" font-size="9.8" font-weight="700" fill="#0f172a">Max 3 OPEN</text>
+      <text x="231" y="535" font-size="9.5" font-weight="600" fill="#5b21b6">check</text>
+
+      <line x1="331" y1="525" x2="342" y2="525" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#arrow-violet)"/>
+
+      <!-- Chip 3: x=345..463 (w=118) -->
+      <rect x="346.5" y="508" width="118" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="345" y="506" width="118" height="38" rx="8" fill="#ffffff" stroke="#a78bfa" stroke-width="1.3"/>
+      <circle cx="358" cy="525" r="7.5" fill="#7c3aed"/>
+      <text x="358" y="528.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">3</text>
+      <text x="371" y="521.5" font-size="9.8" font-weight="700" fill="#0f172a">Asset</text>
+      <text x="371" y="535" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#6d28d9">FOR UPDATE</text>
+
+      <line x1="465" y1="525" x2="476" y2="525" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#arrow-violet)"/>
+
+      <!-- Chip 4: x=479..614 (w=135) -->
+      <rect x="480.5" y="508" width="135" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="479" y="506" width="135" height="38" rx="8" fill="#ffffff" stroke="#a78bfa" stroke-width="1.3"/>
+      <circle cx="492" cy="525" r="7.5" fill="#7c3aed"/>
+      <text x="492" y="528.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">4</text>
+      <text x="505" y="521.5" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="700" fill="#0f172a">AFTER_COMMIT</text>
+      <text x="505" y="535" font-size="9.5" font-weight="600" fill="#5b21b6">Event</text>
+    </g>
+
+    <!-- ========== BAND D: Admin Kill-Switch & Cascade (y=564..660) ========== -->
+    <g id="band-d">
+      <rect x="44" y="564" width="580" height="96" rx="10" fill="#f0fdfa" stroke="#5eead4" stroke-width="1.3"/>
+      <rect x="47" y="571" width="4.5" height="82" rx="2.25" fill="#0d9488"/>
+      <rect x="59" y="572" width="54" height="17" rx="5" fill="#ccfbf1" stroke="#2dd4bf" stroke-width="0.9"/>
+      <text x="86" y="584" text-anchor="middle" font-size="9.2" font-weight="700" fill="#134e4a">BAND D</text>
+      <text x="121" y="584.5" font-size="12.5" font-weight="700" fill="#0f172a">Admin Kill-Switch &amp; Cascade</text>
+      <text x="59" y="601" font-size="10.2" fill="#475569">Account stays disabled even if downstream cleanup throws; SSE drops on commit</text>
+
+      <!-- Chip 1: x=59..213 (w=154) -->
+      <rect x="60.5" y="613" width="154" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="59" y="611" width="154" height="38" rx="8" fill="#ffffff" stroke="#2dd4bf" stroke-width="1.3"/>
+      <circle cx="72" cy="630" r="7.5" fill="#0d9488"/>
+      <text x="72" y="633.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">1</text>
+      <text x="85" y="626.5" font-size="9.6" font-weight="700" fill="#0f172a">Admins FOR UPDATE</text>
+      <text x="85" y="640" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#0f766e">(id ASC)</text>
+
+      <line x1="215" y1="630" x2="226" y2="630" stroke="#0d9488" stroke-width="1.6" marker-end="url(#arrow-teal)"/>
+
+      <!-- Chip 2: x=229..333 (w=104) -->
+      <rect x="230.5" y="613" width="104" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="229" y="611" width="104" height="38" rx="8" fill="#ffffff" stroke="#2dd4bf" stroke-width="1.3"/>
+      <circle cx="242" cy="630" r="7.5" fill="#0d9488"/>
+      <text x="242" y="633.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">2</text>
+      <text x="255" y="626.5" font-size="9.8" font-weight="700" fill="#0f172a">User</text>
+      <text x="255" y="640" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.2" font-weight="600" fill="#0f766e">FOR UPDATE</text>
+
+      <line x1="335" y1="630" x2="346" y2="630" stroke="#0d9488" stroke-width="1.6" marker-end="url(#arrow-teal)"/>
+
+      <!-- Chip 3: x=349..433 (w=84) -->
+      <rect x="350.5" y="613" width="84" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="349" y="611" width="84" height="38" rx="8" fill="#ffffff" stroke="#2dd4bf" stroke-width="1.3"/>
+      <circle cx="362" cy="630" r="7.5" fill="#0d9488"/>
+      <text x="362" y="633.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">3</text>
+      <text x="375" y="633.5" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="10" font-weight="700" fill="#134e4a">COMMIT</text>
+
+      <line x1="435" y1="630" x2="446" y2="630" stroke="#0d9488" stroke-width="1.6" marker-end="url(#arrow-teal)"/>
+
+      <!-- Chip 4: x=449..614 (w=165) -->
+      <rect x="450.5" y="613" width="165" height="38" rx="8" fill="#0f172a" opacity="0.04"/>
+      <rect x="449" y="611" width="165" height="38" rx="8" fill="#ffffff" stroke="#2dd4bf" stroke-width="1.3"/>
+      <circle cx="462" cy="630" r="7.5" fill="#0d9488"/>
+      <text x="462" y="633.3" text-anchor="middle" font-size="9.5" font-weight="700" fill="#ffffff">4</text>
+      <text x="475" y="626.5" font-size="9.8" font-weight="700" fill="#0f172a">SSE Drop +</text>
+      <text x="475" y="640" font-size="9.2" font-weight="600" fill="#0f766e">REQUIRES_NEW Cancel</text>
+    </g>
+  </g>
+
+  <!-- ==================== RIGHT PANEL (x=660..1172, y=92..674) ==================== -->
+  <g id="right-panel" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <!-- Offset sketch shadow -->
+    <rect x="664" y="96" width="512" height="582" rx="14" fill="#0f172a" opacity="0.06"/>
+    <!-- Card frame -->
+    <rect x="660" y="92" width="512" height="582" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <!-- Header band -->
+    <path d="M 660 106 Q 660 92 674 92 L 1158 92 Q 1172 92 1172 106 L 1172 134 L 660 134 Z" fill="#f8fafc"/>
+    <line x1="660" y1="134" x2="1172" y2="134" stroke="#e2e8f0" stroke-width="1"/>
+    <circle cx="678" cy="113" r="4.5" fill="#dc2626"/>
+    <text x="690" y="118" font-size="14" font-weight="700" fill="#0f172a">6 Real Bugs One-Shot Code Misses (Proved in PRs)</text>
+
+    <!-- ========== BUG 1: #310 / #312 (y=144..222) ========== -->
+    <g id="bug-1">
+      <rect x="676" y="146" width="484" height="78" rx="9" fill="#0f172a" opacity="0.04"/>
+      <rect x="674" y="144" width="484" height="78" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+      <rect x="677" y="151" width="4.5" height="64" rx="2.25" fill="#2563eb"/>
+      <text x="692" y="167" font-size="11.8" font-weight="700" fill="#0f172a">Hibernate L1 Stale User Cache</text>
+      <rect x="1048" y="152" width="98" height="19" rx="9.5" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
+      <text x="1097" y="164.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#1e3a8a">PR #310 / #312</text>
+      <text x="692" y="188" font-size="9.6" fill="#334155"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">findById()</tspan> cached <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">enabled=true</tspan> before quota lock, missing concurrent disable</text>
+      <text x="692" y="206" font-size="9.6" fill="#1e293b"><tspan font-weight="700" fill="#1d4ed8">Fix:</tspan> scalar JPQL <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">findActiveRoleById</tspan> after lock · <tspan font-weight="700" fill="#1e3a8a">FindActiveRoleFreshReadIT</tspan></text>
+    </g>
+
+    <!-- ========== BUG 2: #327 / #333 (y=232..310) ========== -->
+    <g id="bug-2">
+      <rect x="676" y="234" width="484" height="78" rx="9" fill="#0f172a" opacity="0.04"/>
+      <rect x="674" y="232" width="484" height="78" rx="9" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+      <rect x="677" y="239" width="4.5" height="64" rx="2.25" fill="#7c3aed"/>
+      <text x="692" y="255" font-size="11.8" font-weight="700" fill="#0f172a">Spring Proxy Bypass via <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="11.2">default</tspan> API Methods</text>
+      <rect x="1048" y="240" width="98" height="19" rx="9.5" fill="#ffffff" stroke="#c4b5fd" stroke-width="1"/>
+      <text x="1097" y="252.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#4c1d95">PR #327 / #333</text>
+      <text x="692" y="276" font-size="9.6" fill="#334155"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">default</tspan> overload on <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">ReservationApi</tspan> self-invoked <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">this</tspan>, skipping <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">@Transactional</tspan></text>
+      <text x="692" y="294" font-size="9.6" fill="#1e293b"><tspan font-weight="700" fill="#6d28d9">Fix:</tspan> deleted overloads + ArchUnit rule banning <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">default</tspan> in <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">..api..</tspan></text>
+    </g>
+
+    <!-- ========== BUG 3: #270 / #329 (y=320..398) ========== -->
+    <g id="bug-3">
+      <rect x="676" y="322" width="484" height="78" rx="9" fill="#0f172a" opacity="0.04"/>
+      <rect x="674" y="320" width="484" height="78" rx="9" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.2"/>
+      <rect x="677" y="327" width="4.5" height="64" rx="2.25" fill="#d97706"/>
+      <text x="692" y="343" font-size="11.8" font-weight="700" fill="#0f172a">AB/BA Deadlocks &amp; <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="11.2">@Version</tspan> Rollbacks</text>
+      <rect x="1048" y="328" width="98" height="19" rx="9.5" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+      <text x="1097" y="340.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#78350f">PR #270 / #329</text>
+      <text x="692" y="364" font-size="9.5" fill="#334155"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.9">extend</tspan> locked Asset→Res while <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.9">return</tspan> locked Res→Asset; <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.9">acceptTransfer</tspan> inverted order</text>
+      <text x="692" y="382" font-size="9.5" fill="#1e293b"><tspan font-weight="700" fill="#b45309">Fix:</tspan> unified <tspan font-weight="700">Reservation → Asset → Transfer</tspan> order · <tspan font-weight="700" fill="#78350f">ReservationConcurrencyIT</tspan></text>
+    </g>
+
+    <!-- ========== BUG 4: #112 / #149 (y=408..486) ========== -->
+    <g id="bug-4">
+      <rect x="676" y="410" width="484" height="78" rx="9" fill="#0f172a" opacity="0.04"/>
+      <rect x="674" y="408" width="484" height="78" rx="9" fill="#f0fdfa" stroke="#5eead4" stroke-width="1.2"/>
+      <rect x="677" y="415" width="4.5" height="64" rx="2.25" fill="#0d9488"/>
+      <text x="692" y="431" font-size="11.8" font-weight="700" fill="#0f172a">Batch Tx Rollback After Email Sent</text>
+      <rect x="1048" y="416" width="98" height="19" rx="9.5" fill="#ffffff" stroke="#5eead4" stroke-width="1"/>
+      <text x="1097" y="428.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#134e4a">PR #112 / #149</text>
+      <text x="692" y="452" font-size="9.6" fill="#334155">Concurrent cancel on booking #2 rolled back booking #1 after notification fired</text>
+      <text x="692" y="470" font-size="9.6" fill="#1e293b"><tspan font-weight="700" fill="#0f766e">Fix:</tspan> <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">REQUIRES_NEW</tspan> per booking + <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">noRollbackFor</tspan> · <tspan font-weight="700" fill="#134e4a">ReassignmentRollbackIT</tspan></text>
+    </g>
+
+    <!-- ========== BUG 5: #319 (y=496..574) ========== -->
+    <g id="bug-5">
+      <rect x="676" y="498" width="484" height="78" rx="9" fill="#0f172a" opacity="0.04"/>
+      <rect x="674" y="496" width="484" height="78" rx="9" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.2"/>
+      <rect x="677" y="503" width="4.5" height="64" rx="2.25" fill="#dc2626"/>
+      <text x="692" y="519" font-size="11.8" font-weight="700" fill="#0f172a">Concurrent Damage + Retire Double-Move</text>
+      <rect x="1088" y="504" width="58" height="19" rx="9.5" fill="#ffffff" stroke="#fca5a5" stroke-width="1"/>
+      <text x="1117" y="516.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#991b1b">PR #319</text>
+      <text x="692" y="540" font-size="9.6" fill="#334155">Parallel <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">AssetDamagedEvent</tspan> + <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">AssetRetiredEvent</tspan> moved the same booking twice</text>
+      <text x="692" y="558" font-size="9.6" fill="#1e293b"><tspan font-weight="700" fill="#b91c1c">Fix:</tspan> <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">expectedSourceAssetId</tspan> guard under <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">FOR UPDATE</tspan> · <tspan font-weight="700" fill="#991b1b">AssetRetiredReassignmentIT</tspan></text>
+    </g>
+
+    <!-- ========== BUG 6: #263 / #347 (y=584..662) ========== -->
+    <g id="bug-6">
+      <rect x="676" y="586" width="484" height="78" rx="9" fill="#0f172a" opacity="0.04"/>
+      <rect x="674" y="584" width="484" height="78" rx="9" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.2"/>
+      <rect x="677" y="591" width="4.5" height="64" rx="2.25" fill="#059669"/>
+      <text x="692" y="607" font-size="11.8" font-weight="700" fill="#0f172a">Incident Quota Race &amp; SSE Starvation</text>
+      <rect x="1048" y="592" width="98" height="19" rx="9.5" fill="#ffffff" stroke="#6ee7b7" stroke-width="1"/>
+      <text x="1097" y="604.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#065f46">PR #263 / #347</text>
+      <text x="692" y="628" font-size="9.6" fill="#334155">Parallel reports bypassed max-3 cap; 1-thread <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">@Scheduled</tspan> stalled 20s SSE <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9">:hb</tspan></text>
+      <text x="692" y="646" font-size="9.4" fill="#1e293b"><tspan font-weight="700" fill="#047857">Fix:</tspan> advisory lock <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.8">(2, uid)</tspan> + 3-thread <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.8">campus-sched-</tspan> pool · <tspan font-weight="700" fill="#065f46">IncidentQuotaConcurrencyIT</tspan></text>
+    </g>
+  </g>
+</svg>

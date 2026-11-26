@@ -6,6 +6,45 @@ University project for **Fundamentele Ingineriei Software (FIS)**.
 Students reserve shared lab equipment by time slot and report broken equipment with a photo.
 When an asset is reported damaged, an **auto-reassignment engine** moves its upcoming bookings to a substitute (or cancels them) and notifies the students.
 
+## Why This Isn't a Simple CRUD App (And Can't Be One-Shotted)
+
+On paper, *"book lab equipment and report broken items"* sounds like a weekend CRUD prompt. Under real concurrency, failing hardware, security abuse, and cloud latency, a one-shot generated app breaks immediately — double-booking gear, deadlocking on multi-item kits, letting disabled users keep booking for 8 hours, or stranding students with broken equipment.
+
+![Why Campus Hub Isn't a One-Shot CRUD App](docs/diagrams/progress-beyond-crud.svg)
+
+What makes this system genuinely hard — and empirically proved on `main` across **`1,221` automated tests** (`2.16×` larger than backend production code) and **`40` real bugs closed with regression tests**:
+
+- **Deadlock-free PostgreSQL 18 concurrency:** `10` `SELECT ... FOR UPDATE` queries, `2` PostgreSQL advisory lock namespaces (`(1, userId)` for booking quota, `(2, userId)` for incident quota), `5` `@Version` entities, `Idempotency-Key` replay/takeover protection in isolated `REQUIRES_NEW` transactions, and a strict lock-ordering DAG proved by multi-thread `pg_stat_activity` tests ([`ReservationConcurrencyIT`](backend/src/test/java/com/campus/reservation/service/ReservationConcurrencyIT.java), [`IdempotencyServiceIT`](backend/src/test/java/com/campus/reservation/service/IdempotencyServiceIT.java)).
+- **Event-driven auto-reassignment & 90-day dry-run simulator:** `HIGH`/`CRITICAL` damage or retirement fires `AFTER_COMMIT` events into a Strategy pipeline (`SameModelStrategy` → `SameCategoryStrategy`, same lab room first) with per-booking `REQUIRES_NEW` isolation, PostgreSQL SQLState (`40P01`/`55P03`/`40001`) retry, an `expectedSourceAssetId` double-move guard, and a zero-write virtual allocation simulator ([`MaintenanceImpactSimulator`](backend/src/main/java/com/campus/reassignment/service/MaintenanceImpactSimulator.java)).
+- **Zero-delay security kill-switch, rotating QR pass & real-time SSE:** every JWT request runs a scalar `findActiveRoleById` query bypassing Hibernate's L1 cache (`0s` account revocation), 30-second HMAC-SHA256 rotating 6-digit/QR pickup passes verified in constant time, binary magic-byte photo validation, and `/api/v1/live/stream` SSE toasts with 20s `:hb` heartbeats tuned below CloudFront's 30s idle timeout and instant disconnect on disable.
+- **Rich state machines & temporal invariants:** 7-state reservations with open-ended `OVERDUE` overlap checks, session-counted multi-asset bundles (`coalesce(bundleId, id)`), 1-minute holds with 2-minute anti-hoarding cooldown, 3-in-24h transfers, preventive 60-minute overdue cascades, bilingual RO/EN project search + atomic *"Reserve all"*, and an injected `Clock` (`Europe/Bucharest` vs UTC on AWS).
+- **Machine-enforced modular monolith (`28` `@ArchTest` rules):** `api`-only module encapsulation, acyclic dependency DAG, banning `default` methods on `..api..` interfaces after catching a real Spring `@Transactional` proxy bypass (`#327`/`#333`), banning `LocalDateTime.now()` without `Clock`, and on-demand PIT mutation testing (`./gradlew pitest`).
+- **Production AWS with zero static deploy keys:** 3-stage CVE-patched single-origin Docker image, Terraform VPC + private RDS + CloudFront prefix-list security group + IMDSv2 + SSM-only (no SSH), and immutable GitHub OIDC [`deploy.yml`](.github/workflows/deploy.yml).
+
+<details>
+<summary><strong>▶ Prove it in 60 seconds — run the 75-test live proof suite on PostgreSQL 18</strong></summary>
+
+With local PostgreSQL 18 running (Quick start step 1), run this single command inside `backend/` to execute **75 live tests** (`DemoFlowIT` E2E auto-reassignment, `SecurityPassIT` IDOR/admin-route reflection, `28` ArchUnit rules, and all multi-thread locking, idempotency, rollback, and L1-cache-bypass ITs — verified green in ~41 s):
+
+```bash
+cd backend && ./gradlew test --rerun \
+  --tests "com.campus.DemoFlowIT" \
+  --tests "com.campus.config.SecurityPassIT" \
+  --tests "com.campus.architecture.*" \
+  --tests "com.campus.reservation.service.ReservationConcurrencyIT" \
+  --tests "com.campus.reservation.service.IdempotencyServiceIT" \
+  --tests "com.campus.reassignment.service.AssetRetiredReassignmentIT" \
+  --tests "com.campus.reassignment.service.ReassignmentRollbackIT" \
+  --tests "com.campus.user.service.FindActiveRoleFreshReadIT" \
+  --tests "com.campus.incident.service.IncidentQuotaConcurrencyIT"
+```
+
+</details>
+
+> **Full technical case, PostgreSQL lock-ordering diagram, 6 real concurrency bugs caught in PRs, and a 3-minute live two-window browser demo:** see **[`PROGRESS.md` §1](PROGRESS.md#1-why-this-isnt-a-simple-crud-app-and-cant-be-one-shotted)** (auto-synced to the **[GitHub Wiki](https://github.com/FundamenteleInginerieiSoftware/campus-hub/wiki)**).
+
+---
+
 ## ▶ Quick start: run it, open it, test it
 
 Needs JDK 25, PostgreSQL 18 with the `campus` user and databases, and Node.js 24 (first time? sections 1 and 1.1).
