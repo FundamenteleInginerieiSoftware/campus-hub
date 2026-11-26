@@ -22,6 +22,9 @@ import { nowInBucharest } from '../api/reservations.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 
+const MAX_WINDOW_DAYS = 90
+const MAX_WINDOW_MS = MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000
+
 const STRATEGY_LABELS: Record<string, string> = {
   SameModelStrategy: 'Same model',
   SameCategoryStrategy: 'Same category',
@@ -30,7 +33,8 @@ const STRATEGY_LABELS: Record<string, string> = {
 function defaultWindowInputs(): { start: string; end: string } {
   const d = nowInBucharest()
   const day = d.getDay()
-  const offset = day === 0 ? 1 : day === 6 ? 2 : 1
+  // Skip weekend days: Friday (+3) and Saturday (+2) default to Monday; Sunday (+1) -> Monday.
+  const offset = day === 5 ? 3 : day === 6 ? 2 : 1
   d.setDate(d.getDate() + offset)
   const yyyy = d.getFullYear()
   const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -45,6 +49,20 @@ function normalizeDateTimeLocal(value: string): string {
   return value.length === 16 ? `${value}:00` : value
 }
 
+// Parse local datetime string into DST-free UTC milliseconds to match Java Duration.between(LocalDateTime).
+function parseLocalDateTimeUtcMs(value: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
+  if (!match) return Number.NaN
+  return Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6] ?? '0'),
+  )
+}
+
 /**
  * Admin dashboard page for simulating planned maintenance impact (#58) without mutating bookings.
  */
@@ -56,6 +74,7 @@ export default function MaintenanceSimulatorPage() {
   const [windowEnd, setWindowEnd] = useState(defaults.end)
   const [loadingAssets, setLoadingAssets] = useState(true)
   const [simulating, setSimulating] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [result, setResult] = useState<MaintenanceImpactResponse | null>(null)
 
@@ -65,9 +84,6 @@ export default function MaintenanceSimulatorPage() {
       .then((page) => {
         if (ignore) return
         setAssets(page.content)
-        if (page.content.length > 0) {
-          setSelectedAssetId(String(page.content[0].id))
-        }
       })
       .catch((err) => {
         if (!ignore) setError(err)
@@ -82,8 +98,26 @@ export default function MaintenanceSimulatorPage() {
 
   async function handleSimulate() {
     if (!selectedAssetId) return
-    setSimulating(true)
+    setResult(null)
     setError(null)
+    setValidationError(null)
+
+    const startMs = parseLocalDateTimeUtcMs(windowStart)
+    const endMs = parseLocalDateTimeUtcMs(windowEnd)
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+      setValidationError('Enter valid maintenance window start and end times.')
+      return
+    }
+    if (endMs <= startMs) {
+      setValidationError('Maintenance window end must be after start.')
+      return
+    }
+    if (endMs - startMs > MAX_WINDOW_MS) {
+      setValidationError(`Maintenance window cannot exceed ${MAX_WINDOW_DAYS} days.`)
+      return
+    }
+
+    setSimulating(true)
     try {
       const response = await simulateMaintenanceImpact({
         assetId: Number(selectedAssetId),
@@ -102,9 +136,14 @@ export default function MaintenanceSimulatorPage() {
     <>
       <PageHeader
         title="Maintenance simulator"
-        description="Dry-run what happens to upcoming bookings if an equipment unit is taken offline during a planned maintenance window. No reservations are modified."
+        description="Dry-run what happens to upcoming bookings if an available equipment unit (up to 100 listed) is taken offline during a planned maintenance window. No reservations are modified."
       />
 
+      {validationError && (
+        <Alert color="red" icon={<IconAlertTriangle size={18} />} mb="md">
+          {validationError}
+        </Alert>
+      )}
       <ErrorAlert error={error} />
 
       <Card withBorder radius="md" p="md" bg="var(--app-surface)" mb="lg">
@@ -112,6 +151,7 @@ export default function MaintenanceSimulatorPage() {
           <SimpleGrid cols={{ base: 1, md: 3 }}>
             <Select
               label="Equipment unit"
+              description="Available units (max 100)"
               placeholder={loadingAssets ? 'Loading equipment...' : 'Select asset'}
               searchable
               data={assets.map((a) => ({
@@ -119,20 +159,29 @@ export default function MaintenanceSimulatorPage() {
                 label: `${a.name} (${a.model} · ${a.labRoomCode})`,
               }))}
               value={selectedAssetId}
-              onChange={setSelectedAssetId}
+              onChange={(val) => {
+                setSelectedAssetId(val)
+                setValidationError(null)
+              }}
               disabled={loadingAssets}
             />
             <TextInput
               label="Maintenance window start"
               type="datetime-local"
               value={windowStart}
-              onChange={(e) => setWindowStart(e.currentTarget.value)}
+              onChange={(e) => {
+                setWindowStart(e.currentTarget.value)
+                setValidationError(null)
+              }}
             />
             <TextInput
               label="Maintenance window end"
               type="datetime-local"
               value={windowEnd}
-              onChange={(e) => setWindowEnd(e.currentTarget.value)}
+              onChange={(e) => {
+                setWindowEnd(e.currentTarget.value)
+                setValidationError(null)
+              }}
             />
           </SimpleGrid>
 
@@ -253,9 +302,9 @@ export default function MaintenanceSimulatorPage() {
                         </Table.Td>
                         <Table.Td>
                           {b.outcome === 'REASSIGNED' ? (
-                            <Badge color="green">Moved</Badge>
+                            <Badge color="green">Would move</Badge>
                           ) : (
-                            <Badge color="red">Force-cancelled</Badge>
+                            <Badge color="red">Would cancel</Badge>
                           )}
                         </Table.Td>
                         <Table.Td>
