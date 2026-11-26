@@ -1,0 +1,216 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" width="1200" height="740" role="img" aria-label="Why Campus Hub Isn't a One-Shot CRUD App">
+  <defs>
+    <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#cbd5e1" opacity="0.45"/>
+    </pattern>
+  </defs>
+
+  <!-- Explicit light canvas background (legible in GitHub Light & Dark modes) -->
+  <rect x="0" y="0" width="1200" height="740" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+  <rect x="8" y="8" width="1184" height="724" rx="12" fill="url(#dot-grid)"/>
+
+  <!-- ==================== HEADER (y=18..76) ==================== -->
+  <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <text x="32" y="42" font-size="20" font-weight="700" fill="#0f172a">Why Campus Hub Isn't a One-Shot CRUD App</text>
+    <text x="32" y="64" font-size="12.5" fill="#475569">What a single-prompt CRUD generator produces vs. the concurrent, event-driven &amp; cloud engineering verified in this repo</text>
+
+    <!-- Summary pill on top right -->
+    <rect x="942" y="24" width="230" height="30" rx="15" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.25"/>
+    <circle cx="958" cy="39" r="4" fill="#2563eb"/>
+    <text x="969" y="43" font-size="11.5" font-weight="700" fill="#1e3a8a">1,221 tests · 2.16x test-to-prod</text>
+  </g>
+
+  <!-- ==================== LEFT PANEL: ONE-SHOT CRUD PROMPT (x=28..540, y=92..678) ==================== -->
+  <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <!-- Offset sketch shadow -->
+    <rect x="33" y="97" width="512" height="586" rx="14" fill="#0f172a" opacity="0.06"/>
+    <!-- Main white column panel -->
+    <rect x="28" y="92" width="512" height="586" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+
+    <!-- Header banner (soft rose) -->
+    <path d="M 42 92 L 526 92 Q 540 92 540 106 L 540 132 L 28 132 L 28 106 Q 28 92 42 92 Z" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5"/>
+
+    <!-- Tiny warning X icon -->
+    <circle cx="47" cy="112" r="8.5" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4"/>
+    <path d="M 43.8 108.8 L 50.2 115.2 M 50.2 108.8 L 43.8 115.2" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="64" y="117" font-size="13.5" font-weight="700" fill="#991b1b">One-Shot CRUD Prompt (Fragile Defaults)</text>
+
+    <!-- Left Row 1 (y=142..222, w=492) -->
+    <rect x="38" y="142" width="492" height="80" rx="9" fill="#fffafa" stroke="#fecaca" stroke-width="1.25"/>
+    <rect x="38" y="142" width="5" height="80" rx="2.5" fill="#f87171"/>
+    <text x="52" y="162" font-size="11.2" font-weight="700" fill="#7f1d1d">Naive check-then-insert</text>
+    <rect x="384" y="149" width="134" height="18" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.9"/>
+    <text x="451" y="161" font-size="9.2" font-weight="600" fill="#475569" text-anchor="middle">Concurrency &amp; Locking</text>
+    <text x="52" y="185" font-size="10.4" fill="#334155"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#991b1b">if (!existsOverlap()) save()</tspan> races under 2 threads</text>
+    <text x="52" y="204" font-size="10.4" fill="#475569">Double-books assets, bypasses quotas, deadlocks on bundles</text>
+
+    <!-- Left Row 2 (y=231..311, w=492) -->
+    <rect x="38" y="231" width="492" height="80" rx="9" fill="#fffafa" stroke="#fecaca" stroke-width="1.25"/>
+    <rect x="38" y="231" width="5" height="80" rx="2.5" fill="#f87171"/>
+    <text x="52" y="251" font-size="11.2" font-weight="700" fill="#7f1d1d">Single-table status flip</text>
+    <rect x="356" y="238" width="162" height="18" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.9"/>
+    <text x="437" y="250" font-size="9.2" font-weight="600" fill="#475569" text-anchor="middle">Equipment Damage &amp; Failures</text>
+    <text x="52" y="274" font-size="9.9" font-weight="600" fill="#991b1b" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace">UPDATE assets SET status = 'BROKEN'</text>
+    <text x="52" y="293" font-size="10.4" fill="#475569">Future bookings silently orphaned; students arrive to broken gear</text>
+
+    <!-- Left Row 3 (y=320..400, w=492) -->
+    <rect x="38" y="320" width="492" height="80" rx="9" fill="#fffafa" stroke="#fecaca" stroke-width="1.25"/>
+    <rect x="38" y="320" width="5" height="80" rx="2.5" fill="#f87171"/>
+    <text x="52" y="340" font-size="11.2" font-weight="700" fill="#7f1d1d">Stateless JWT + basic file upload</text>
+    <rect x="362" y="327" width="156" height="18" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.9"/>
+    <text x="440" y="339" font-size="9.2" font-weight="600" fill="#475569" text-anchor="middle">Security &amp; Real-Time State</text>
+    <text x="52" y="363" font-size="10.4" fill="#334155">Disabled user keeps booking until 8h token expires</text>
+    <text x="52" y="382" font-size="10.4" fill="#475569">BCrypt truncates &gt;72B; no magic-byte check; manual page refresh</text>
+
+    <!-- Left Row 4 (y=409..489, w=492) -->
+    <rect x="38" y="409" width="492" height="80" rx="9" fill="#fffafa" stroke="#fecaca" stroke-width="1.25"/>
+    <rect x="38" y="409" width="5" height="80" rx="2.5" fill="#f87171"/>
+    <text x="52" y="429" font-size="11.2" font-weight="700" fill="#7f1d1d">Flat MVC + <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="10.4">LocalDateTime.now()</tspan></text>
+    <rect x="372" y="416" width="146" height="18" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.9"/>
+    <text x="445" y="428" font-size="9.2" font-weight="600" fill="#475569" text-anchor="middle">Architecture &amp; Timezones</text>
+    <text x="52" y="452" font-size="10.4" fill="#334155">Controllers return <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#991b1b">@Entity</tspan>; cross-module repo imports everywhere</text>
+    <text x="52" y="471" font-size="10.4" fill="#475569">Local vs UTC cloud drift; Spring proxy traps hidden in interfaces</text>
+
+    <!-- Left Row 5 (y=498..578, w=492) -->
+    <rect x="38" y="498" width="492" height="80" rx="9" fill="#fffafa" stroke="#fecaca" stroke-width="1.25"/>
+    <rect x="38" y="498" width="5" height="80" rx="2.5" fill="#f87171"/>
+    <text x="52" y="518" font-size="11.2" font-weight="700" fill="#7f1d1d">Happy-path mocks only</text>
+    <rect x="362" y="505" width="156" height="18" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.9"/>
+    <text x="440" y="517" font-size="9.2" font-weight="600" fill="#475569" text-anchor="middle">Verification &amp; Bug Defense</text>
+    <text x="52" y="541" font-size="10.4" fill="#334155">5-10 unit tests passing on H2; zero real-DB race coverage</text>
+    <text x="52" y="560" font-size="10.4" fill="#475569">Hidden IDOR leaks, stack traces in 500s, untested mutant branches</text>
+
+    <!-- Left Row 6 (y=587..667, w=492) -->
+    <rect x="38" y="587" width="492" height="80" rx="9" fill="#fffafa" stroke="#fecaca" stroke-width="1.25"/>
+    <rect x="38" y="587" width="5" height="80" rx="2.5" fill="#f87171"/>
+    <text x="52" y="607" font-size="11.2" font-weight="700" fill="#7f1d1d">"Works on localhost"</text>
+    <rect x="412" y="594" width="106" height="18" rx="9" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.9"/>
+    <text x="465" y="606" font-size="9.2" font-weight="600" fill="#475569" text-anchor="middle">Cloud &amp; Delivery</text>
+    <text x="52" y="630" font-size="10.4" fill="#334155">H2 in-memory DB, <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#991b1b">@CrossOrigin("*")</tspan>, hardcoded secrets</text>
+    <text x="52" y="649" font-size="10.4" fill="#475569">Manual ZIP/JAR deploys, SSH port 22 open, zero IaC or rollback</text>
+  </g>
+
+  <!-- ==================== CENTER ARROW GUTTER (x=540..616) ==================== -->
+  <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <!-- Row 1 connector (cy=182, Amber) -->
+    <rect x="550" y="160" width="56" height="18" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="578" y="172.5" font-size="9.2" font-weight="700" fill="#1e3a8a" text-anchor="middle">01 LOCK</text>
+    <line x1="546" y1="191" x2="604" y2="191" stroke="#d97706" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="602,186.2 612,191 602,195.8" fill="#d97706"/>
+
+    <!-- Row 2 connector (cy=271, Teal) -->
+    <rect x="548" y="249" width="60" height="18" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="578" y="261.5" font-size="9.2" font-weight="700" fill="#1e3a8a" text-anchor="middle">02 EVENT</text>
+    <line x1="546" y1="280" x2="604" y2="280" stroke="#0d9488" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="602,275.2 612,280 602,284.8" fill="#0d9488"/>
+
+    <!-- Row 3 connector (cy=360, Blue) -->
+    <rect x="550" y="338" width="56" height="18" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="578" y="350.5" font-size="9.2" font-weight="700" fill="#1e3a8a" text-anchor="middle">03 AUTH</text>
+    <line x1="546" y1="369" x2="604" y2="369" stroke="#2563eb" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="602,364.2 612,369 602,373.8" fill="#2563eb"/>
+
+    <!-- Row 4 connector (cy=449, Violet) -->
+    <rect x="550" y="427" width="56" height="18" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="578" y="439.5" font-size="9.2" font-weight="700" fill="#1e3a8a" text-anchor="middle">04 ARCH</text>
+    <line x1="546" y1="458" x2="604" y2="458" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="602,453.2 612,458 602,462.8" fill="#7c3aed"/>
+
+    <!-- Row 5 connector (cy=538, Sky) -->
+    <rect x="550" y="516" width="56" height="18" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="578" y="528.5" font-size="9.2" font-weight="700" fill="#1e3a8a" text-anchor="middle">05 TEST</text>
+    <line x1="546" y1="547" x2="604" y2="547" stroke="#0284c7" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="602,542.2 612,547 602,551.8" fill="#0284c7"/>
+
+    <!-- Row 6 connector (cy=627, Emerald) -->
+    <rect x="548" y="605" width="60" height="18" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="578" y="617.5" font-size="9.2" font-weight="700" fill="#1e3a8a" text-anchor="middle">06 CLOUD</text>
+    <line x1="546" y1="636" x2="604" y2="636" stroke="#059669" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="602,631.2 612,636 602,640.8" fill="#059669"/>
+  </g>
+
+  <!-- ==================== RIGHT PANEL: CAMPUS HUB VERIFIED SYSTEMS ENGINEERING (x=616..1172, y=92..678) ==================== -->
+  <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <!-- Offset sketch shadow -->
+    <rect x="621" y="97" width="556" height="586" rx="14" fill="#0f172a" opacity="0.06"/>
+    <!-- Main white column panel -->
+    <rect x="616" y="92" width="556" height="586" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+
+    <!-- Header banner (soft emerald) -->
+    <path d="M 630 92 L 1158 92 Q 1172 92 1172 106 L 1172 132 L 616 132 L 616 106 Q 616 92 630 92 Z" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.5"/>
+
+    <!-- Tiny shield/check icon -->
+    <path d="M 636 102.5 L 644 105.5 L 644 113 C 644 118 640 121 636 123 C 632 121 628 118 628 113 L 628 105.5 Z" fill="#d1fae5" stroke="#059669" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M 632.8 112.5 L 635.2 114.9 L 639.5 110" fill="none" stroke="#059669" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="653" y="117" font-size="13.5" font-weight="700" fill="#065f46">Campus Hub — Verified Systems Engineering</text>
+
+    <!-- Right Row 1: Concurrency & Locking (Amber #d97706, y=142..222, w=536) -->
+    <rect x="626" y="142" width="536" height="80" rx="9" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.25"/>
+    <rect x="626" y="142" width="5" height="80" rx="2.5" fill="#d97706"/>
+    <text x="640" y="162" font-size="11.2" font-weight="700" fill="#78350f">Multi-Layer PostgreSQL 18 Locking</text>
+    <rect x="978" y="148" width="172" height="19" rx="9.5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+    <text x="1064" y="161" font-size="9.8" font-weight="700" fill="#92400e" text-anchor="middle">10 FOR UPDATE · 2 advisory</text>
+    <text x="640" y="185" font-size="10.4" fill="#334155">Sorted Asset locks → <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#78350f">pg_advisory_xact_lock(1, uid)</tspan> → fresh role</text>
+    <text x="640" y="204" font-size="10.4" fill="#475569">5 <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#78350f">@Version</tspan> entities + <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#78350f">Idempotency-Key</tspan> (REQUIRES_NEW) + 13 race ITs</text>
+
+    <!-- Right Row 2: Equipment Damage & Failures (Teal #0d9488, y=231..311, w=536) -->
+    <rect x="626" y="231" width="536" height="80" rx="9" fill="#f0fdfa" stroke="#5eead4" stroke-width="1.25"/>
+    <rect x="626" y="231" width="5" height="80" rx="2.5" fill="#0d9488"/>
+    <text x="640" y="251" font-size="11.2" font-weight="700" fill="#134e4a">Observer + Strategy Auto-Reassignment &amp; Simulator</text>
+    <rect x="1042" y="237" width="108" height="19" rx="9.5" fill="#ccfbf1" stroke="#14b8a6" stroke-width="1"/>
+    <text x="1096" y="250" font-size="9.6" font-weight="700" fill="#115e59" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace">AFTER_COMMIT</text>
+    <text x="640" y="274" font-size="10.4" fill="#334155">SameModel → SameCategory (same lab first); <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#134e4a">REQUIRES_NEW</tspan> per booking</text>
+    <text x="640" y="293" font-size="10.4" fill="#475569">SQLState <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#134e4a">40P01/55P03</tspan> retry, <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#134e4a">expectedSourceAssetId</tspan> guard, 90d dry-run</text>
+
+    <!-- Right Row 3: Security & Real-Time State (Blue #2563eb, y=320..400, w=536) -->
+    <rect x="626" y="320" width="536" height="80" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.25"/>
+    <rect x="626" y="320" width="5" height="80" rx="2.5" fill="#2563eb"/>
+    <text x="640" y="340" font-size="11.2" font-weight="700" fill="#1e3a8a">Live Kill-Switch, Rotating QR Pass &amp; Cross-Tab SSE</text>
+    <rect x="1074" y="326" width="76" height="19" rx="9.5" fill="#dbeafe" stroke="#60a5fa" stroke-width="1"/>
+    <text x="1112" y="339" font-size="9.8" font-weight="700" fill="#1e40af" text-anchor="middle">0s revoke</text>
+    <text x="640" y="363" font-size="10.4" fill="#334155">Scalar <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#1e3a8a">findActiveRole</tspan> bypasses L1 cache; HMAC-SHA256 30s QR pass</text>
+    <text x="640" y="382" font-size="10.4" fill="#475569">Magic-byte photo checks; SSE 20s <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#1e3a8a">:hb</tspan> (&lt;30s CloudFront), instant drop</text>
+
+    <!-- Right Row 4: Architecture & Timezones (Violet #7c3aed, y=409..489, w=536) -->
+    <rect x="626" y="409" width="536" height="80" rx="9" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.25"/>
+    <rect x="626" y="409" width="5" height="80" rx="2.5" fill="#7c3aed"/>
+    <text x="640" y="429" font-size="11.2" font-weight="700" fill="#4c1d95">Machine-Enforced Modular Monolith</text>
+    <rect x="1024" y="415" width="126" height="19" rx="9.5" fill="#ede9fe" stroke="#a78bfa" stroke-width="1"/>
+    <text x="1087" y="428" font-size="9.8" font-weight="700" fill="#5b21b6" text-anchor="middle">28 @ArchTest rules</text>
+    <text x="640" y="452" font-size="10.4" fill="#334155"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#4c1d95">api</tspan>-only cross-module contracts, acyclic DAG, DTO records only</text>
+    <text x="640" y="471" font-size="10.4" fill="#475569">Injected <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#4c1d95">Clock</tspan> (Europe/Bucharest), bans default <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#4c1d95">api</tspan> methods &amp; Boot 2/3</text>
+
+    <!-- Right Row 5: Verification & Bug Defense (Sky #0284c7, y=498..578, w=536) -->
+    <rect x="626" y="498" width="536" height="80" rx="9" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.25"/>
+    <rect x="626" y="498" width="5" height="80" rx="2.5" fill="#0284c7"/>
+    <text x="640" y="518" font-size="11.2" font-weight="700" fill="#0c4a6e">5-Layer Pyramid + Adversarial Proof</text>
+    <rect x="1032" y="504" width="118" height="19" rx="9.5" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1"/>
+    <text x="1091" y="517" font-size="9.8" font-weight="700" fill="#075985" text-anchor="middle">1,221 tests · PIT</text>
+    <text x="640" y="541" font-size="10.4" fill="#334155"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#0c4a6e">DemoFlowIT</tspan> (10-step E2E) + <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#0c4a6e">SecurityPassIT</tspan> (runtime admin route scan)</text>
+    <text x="640" y="560" font-size="10.4" fill="#475569"><tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#0c4a6e">pg_stat_activity</tspan> lock proofs, 7-test <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#0c4a6e">IdempotencyServiceIT</tspan>, PIT mutation testing</text>
+
+    <!-- Right Row 6: Cloud & Delivery (Emerald #059669, y=587..667, w=536) -->
+    <rect x="626" y="587" width="536" height="80" rx="9" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.25"/>
+    <rect x="626" y="587" width="5" height="80" rx="2.5" fill="#059669"/>
+    <text x="640" y="607" font-size="11.2" font-weight="700" fill="#065f46">Single-Origin Docker + Terraform AWS + OIDC</text>
+    <rect x="1040" y="593" width="110" height="19" rx="9.5" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>
+    <text x="1095" y="606" font-size="9.8" font-weight="700" fill="#065f46" text-anchor="middle">Zero static keys</text>
+    <text x="640" y="630" font-size="10.4" fill="#334155">3-stage CVE-patched image; private RDS + CloudFront prefix-list SG</text>
+    <text x="640" y="649" font-size="10.4" fill="#475569">IMDSv2 + SSM-only (no SSH); immutable GitHub OIDC <tspan font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.8" font-weight="600" fill="#065f46">deploy.yml</tspan></text>
+  </g>
+
+  <!-- ==================== BOTTOM PROOF STRIP (y=692..724) ==================== -->
+  <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <rect x="28" y="692" width="1144" height="32" rx="10" fill="#0f172a"/>
+    <text x="600" y="712" font-size="11" fill="#e2e8f0" text-anchor="middle">
+      <tspan font-weight="700" fill="#6ee7b7">Verified on main:</tspan>
+      <tspan font-weight="700" fill="#ffffff"> 251</tspan> merged PRs
+      <tspan fill="#94a3b8"> · </tspan>
+      <tspan font-weight="700" fill="#ffffff">283</tspan> cross-team peer reviews
+      <tspan fill="#94a3b8"> · </tspan>
+      <tspan font-weight="700" fill="#ffffff">40</tspan> real bugs closed with regression tests
+      <tspan fill="#94a3b8"> · </tspan>
+      <tspan font-weight="700" fill="#38bdf8">29,619</tspan> test lines (<tspan font-weight="700" fill="#6ee7b7">2.16x</tspan> backend prod)
+    </text>
+  </g>
+</svg>

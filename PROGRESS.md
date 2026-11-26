@@ -14,7 +14,112 @@
 
 ---
 
-## 1. System Overview Sketch
+## 1. Why This Isn't a Simple CRUD App (And Can't Be One-Shotted)
+
+At a glance, *"students reserve lab equipment and report broken items"* sounds like a CRUD app an LLM could generate in a single prompt. In reality, CRUD is the easiest 15% of this system. The remaining 85% lives in the failure modes that only appear when multiple students, admins, background sweeps, live browser tabs, and cloud edge proxies collide on real PostgreSQL 18.
+
+![Why Campus Hub Isn't a One-Shot CRUD App](docs/diagrams/progress-beyond-crud.svg)
+
+### PostgreSQL 18 Lock-Ordering Hierarchy & Real Bugs Caught
+
+Every state-mutating workflow obeys a strict lock acquisition order across **`10` `SELECT ... FOR UPDATE` queries**, **`2` PostgreSQL advisory lock namespaces**, and **`5` `@Version` entities**, paired with isolated `REQUIRES_NEW` transactions. Most of these guardrails were hardened after adversarial reviews and multi-thread probes broke earlier versions during development:
+
+![PostgreSQL 18 Lock-Ordering Hierarchy and Real Bugs Caught](docs/diagrams/progress-lock-hierarchy.svg)
+
+### Anatomy of a Real Interleaved Race (Account Disable vs. Live Booking, `#310` / `#312`)
+
+A classic bug a one-shot prompt always ships: a student starts a booking while an admin disables their account. Even with a lock, Hibernate's L1 persistence context caches `User(enabled = true)` if the entity was loaded before waiting on the lock — letting a banned account finish booking, or letting a failing downstream cancellation roll back the admin's disable action. Here is the exact flow enforced in production and proved in [`ReservationConcurrencyIT`](backend/src/test/java/com/campus/reservation/service/ReservationConcurrencyIT.java) and [`FindActiveRoleFreshReadIT`](backend/src/test/java/com/campus/user/service/FindActiveRoleFreshReadIT.java):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Student Thread (POST /reservations)
+    participant PG as PostgreSQL 18 (Lock Manager)
+    participant A as Admin Thread (POST /admin/users/{id}/disable)
+    participant L as AFTER_COMMIT Listeners
+
+    A->>PG: lockEnabledByRole(ADMIN) ORDER BY id + User FOR UPDATE
+    S->>PG: Asset FOR UPDATE (lockForBooking)
+    S->>PG: pg_advisory_xact_lock(1, userId)
+    A->>PG: SET enabled = false & COMMIT
+    A->>L: Publish UserDisabledEvent (AFTER_COMMIT)
+    L-->>S: UserDisabledLiveStreamListener drops open SSE tabs immediately
+    L->>PG: REQUIRES_NEW: lockUserQuota(1, userId) -> cancel CONFIRMED (id ASC)
+    Note over S,PG: Student wakes up after lock wait.<br/>Naive findById() would read stale L1 cache enabled=true!
+    S->>PG: Scalar JPQL findActiveRoleById(userId) (bypasses L1 cache)
+    PG-->>S: Optional.empty() -> 403 USER_DISABLED (booking aborted)
+    Note over A,L: Even if reservation cleanup throws, the account stays disabled<br/>and logs the manual retry endpoint.
+```
+
+### 8 Engineering Arguments Against the "Simple CRUD" Label
+
+| # | Dimension | What a One-Shot Prompt Generates | What Campus Hub Actually Engineers & Proves |
+|---|---|---|---|
+| **1** | **Concurrency & Lock Ordering** | `if (!existsOverlap()) save()` under default `READ COMMITTED`; races on double-bookings, quotas, and bundles | `10` `FOR UPDATE` queries, `2` non-colliding advisory lock namespaces (`(1, uid)` bookings, `(2, uid)` incidents), sorted multi-asset locking, `5` `@Version` entities, and `Idempotency-Key` (`REQUIRES_NEW` + `attemptStartedAt` stale-takeover guard) in [`IdempotencyService.java`](backend/src/main/java/com/campus/reservation/service/IdempotencyService.java) |
+| **2** | **Event-Driven Auto-Reassignment & Dry-Run Simulator** | Flips `assets.status = 'BROKEN'` and strands upcoming bookings | Observer (`@Async` + `@TransactionalEventListener(AFTER_COMMIT)`) → Strategy (`SameModelStrategy` → `SameCategoryStrategy`, same lab room first), per-booking `REQUIRES_NEW` isolation with `noRollbackFor`, PostgreSQL SQLState (`40P01`/`55P03`/`40001`) retry, `expectedSourceAssetId` double-move guard, and a 90-day zero-write [`MaintenanceImpactSimulator`](backend/src/main/java/com/campus/reassignment/service/MaintenanceImpactSimulator.java) with virtual allocations & disruption scoring |
+| **3** | **State Machines & Temporal Invariants** | Flat status strings and `LocalDateTime.now()` | `7`-state `ReservationStatus`, open-ended `OVERDUE` overlap SQL, session-counted bundles (`coalesce(bundleId, id)`), 1-min slot holds + 2-min anti-hoarding cooldown, 3-in-24h transfers with partial unique index (`WHERE status = 'PENDING'`), preventive 60-min overdue cascade, and injected `Clock` (`Europe/Bucharest` vs UTC AWS) |
+| **4** | **Defense-in-Depth Identity & File Security** | Stateless JWT (8h stale access after disable), raw multipart upload | Scalar `findActiveRoleById` on every JWT request (`0s` revoke), BCrypt 72-byte UTF-8 guard, constant-time HMAC-SHA256 30s rotating 6-digit/QR [`PickupCodes`](backend/src/main/java/com/campus/user/service/PickupCodes.java), binary magic-byte + canonical-path photo validation ([`StorageValidation`](backend/src/main/java/com/campus/storage/service/StorageValidation.java)), IDOR `404` masking, and runtime `/api/v1/admin/**` route reflection in [`SecurityPassIT`](backend/src/test/java/com/campus/config/SecurityPassIT.java) |
+| **5** | **Real-Time Cross-Tab SSE** | Polling or manual refresh | [`LiveStreams`](backend/src/main/java/com/campus/notification/service/LiveStreams.java): immediate `:connected` flush, 20s `:hb` heartbeat tuned below CloudFront's 30s timeout on a dedicated 3-thread `@Scheduled` pool (`campus-sched-`), atomic 5-stream/user cap via `ConcurrentHashMap.compute`, per-emitter write sync, and instant `completeAll` on account disable |
+| **6** | **Domain Intelligence Beyond Forms** | Plain list/search tables | Bilingual RO/EN [`ProjectSearch`](backend/src/main/java/com/campus/project/service/ProjectSearch.java) (NFD diacritic folding, stop-words, stem/ambiguity scoring) + atomic multi-asset *"Reserve all"*; [`ReliabilityCalculator`](backend/src/main/java/com/campus/incident/service/ReliabilityCalculator.java) computing failures/100h, MTBF, repair hours, and model-relative `vsModel` (`INSPECT`/`WATCH`) |
+| **7** | **Machine-Enforced Architecture (`28` `@ArchTest`)** | Tangled service/repo imports and leaked `@Entity` controllers | [`ModuleBoundaryArchitectureTest`](backend/src/test/java/com/campus/architecture/ModuleBoundaryArchitectureTest.java) & [`CodingConventionsArchitectureTest`](backend/src/test/java/com/campus/architecture/CodingConventionsArchitectureTest.java): `api`-only contracts, acyclic module DAG, no `default` methods in `..api..`, no unparameterized `*.now()`, no `@Entity` in controllers, Boot 4 / Jakarta / Jackson 3 enforcement |
+| **8** | **Production Cloud & Adversarial Verification** | Localhost H2 + CORS `*` + happy-path mocks | 3-stage CVE-patched single-origin [`Dockerfile`](Dockerfile), Terraform VPC + private RDS + CloudFront prefix-list SG + IMDSv2 + SSM-only (no SSH) in [`infra/`](infra/), immutable GitHub OIDC [`deploy.yml`](.github/workflows/deploy.yml), `2.16×` test-to-prod ratio, PIT mutation testing, and [`defense-playbook.md`](docs/testing/defense-playbook.md) |
+
+### 6 Real Subtle Bugs One-Shot Code Misses (Caught & Proved in PRs)
+
+These are not hypothetical textbook examples — every row below was a real bug hit during peer review, multi-thread probing, or live deploy testing, fixed with a dedicated regression test:
+
+| PRs | What Actually Broke | Why a Prompt Misses It | Fix & Regression Proof |
+|---|---|---|---|
+| `#310`, `#312` | Disabled student finished booking because `findById()` returned an L1-cached `User(enabled=true)` after waiting on the quota lock | Only triggers when two transactions interleave around `pg_advisory_xact_lock` inside one Hibernate session | Scalar JPQL `findActiveRoleById` after lock ([`FindActiveRoleFreshReadIT`](backend/src/test/java/com/campus/user/service/FindActiveRoleFreshReadIT.java)) |
+| `#327`, `#333` | `default` overload methods on `ReservationApi` invoked `this.moveToAsset(...)`, silently bypassing Spring's `@Transactional` AOP proxy | Compiles and passes unit mocks; blows up at runtime with `"No active transaction"` | Removed overloads + added ArchUnit rule banning `default` methods in `..api..` |
+| `#270`, `#329`, `#336` | AB/BA deadlocks (`extend` vs `return`; `acceptTransfer` vs `cancelUpcoming`) and `@Version` batch rollbacks on concurrent `rejectTransfer` | Requires exact cross-thread interleaving across `Reservation`, `Asset`, and `ReservationTransfer` rows | Unified `Reservation → Asset → Transfer` lock order + `ORDER BY r.id ASC` ([`ReservationConcurrencyIT`](backend/src/test/java/com/campus/reservation/service/ReservationConcurrencyIT.java)) |
+| `#112`, `#149` | Concurrent cancel on booking #2 rolled back booking #1 *after* booking #1's reassignment notification had already fired | Single shared `@Transactional` loop looks clean until a mid-loop conflict occurs | Isolated `REQUIRES_NEW` per booking + `noRollbackFor` + candidate lookup outside write tx ([`ReassignmentRollbackIT`](backend/src/test/java/com/campus/reassignment/service/ReassignmentRollbackIT.java)) |
+| `#319` | Parallel `AssetDamagedEvent` + `AssetRetiredEvent` moved the same booking twice and wrote duplicate reassignment logs/emails | Only appears when two async `AFTER_COMMIT` engines race on the same asset | `expectedSourceAssetId` guard under `FOR UPDATE` ([`AssetRetiredReassignmentIT`](backend/src/test/java/com/campus/reassignment/service/AssetRetiredReassignmentIT.java)) |
+| `#263`, `#347` | Parallel incident reports bypassed the 3-open limit; a single `@Scheduled` thread starved 20s SSE heartbeats behind 5-min sweeps | Hidden locally until real concurrent requests or CloudFront's 30s idle timeout hit | Advisory lock `(2, reporterId)` ([`IncidentQuotaConcurrencyIT`](backend/src/test/java/com/campus/incident/service/IncidentQuotaConcurrencyIT.java)) + 3-thread `campus-sched-` pool |
+
+### Live Demos — Prove Every Claim Yourself
+
+#### Demo A: 60-Second Automated Proof Suite (CLI on Real PostgreSQL 18)
+
+With PostgreSQL 18 running, execute this single command inside `backend/` to verify **75 end-to-end, concurrency, idempotency, security, and architecture proofs** live (verified **`75 / 75` green in `41s`** on `main`):
+
+```bash
+cd backend && ./gradlew test --rerun \
+  --tests "com.campus.DemoFlowIT" \
+  --tests "com.campus.config.SecurityPassIT" \
+  --tests "com.campus.architecture.*" \
+  --tests "com.campus.reservation.service.ReservationConcurrencyIT" \
+  --tests "com.campus.reservation.service.IdempotencyServiceIT" \
+  --tests "com.campus.reassignment.service.AssetRetiredReassignmentIT" \
+  --tests "com.campus.reassignment.service.ReassignmentRollbackIT" \
+  --tests "com.campus.user.service.FindActiveRoleFreshReadIT" \
+  --tests "com.campus.incident.service.IncidentQuotaConcurrencyIT"
+```
+
+| Suite | Live Tests | What It Proves in Real Time |
+|---|---:|---|
+| `DemoFlowIT` | `10` | Full 10-step HTTP E2E story: register → twin assets → book → `409` overlap → `HIGH` damage → `UNDER_MAINTENANCE` → `AFTER_COMMIT` auto-move to twin → reassignment audit log |
+| `ReservationConcurrencyIT` | `13` | Multi-thread double-book lock, advisory quota lock, deadlock-free `return`/`extend`, `pg_stat_activity` disable-vs-booking/bundle/hold/transfer races, `checkOut` vs `noShow` |
+| `IdempotencyServiceIT` | `7` | 10-thread same-key race runs action once, `FAILED` key retry under `FOR UPDATE`, `>60s` stale takeover, `attemptStartedAt` anti-clobber guard |
+| `SecurityPassIT` | `7` | Cross-student IDOR `404` masking, spoofed `userId` ignored, reflection sweep of every `/api/v1/admin/**` route (`403`/`401`), zero SQL/stacktrace leaks |
+| `CodingConventions` + `ModuleBoundary` (`ArchUnit`) | `28` | `api`-only boundaries, acyclic module DAG, no `default` in `..api..`, injected `Clock`, DTO records only, Boot 4 / Jackson 3 imports |
+| `AssetRetired` + `ReassignmentRollback` + `FindActiveRole` + `IncidentQuota` ITs | `10` | `CyclicBarrier(2)` double-move guard, `REQUIRES_NEW` rollback isolation, Hibernate L1 bypass, advisory `(2, uid)` 3-open incident cap |
+
+*(Want to try breaking the code yourself? Run `cd backend && ./gradlew pitest` to mutate bytecode on purpose and verify which rules our tests catch — full defense drill in [`docs/testing/defense-playbook.md`](docs/testing/defense-playbook.md).)*
+
+#### Demo B: 3-Minute Live Interactive Browser Demo (2 Windows: Student + Admin)
+
+Start the backend (`./gradlew bootRun`) and frontend (`npm run dev`), then open **Window 1** (`student1@campus.test` / `password`) and **Window 2** (`admin@campus.test` / `password`, incognito):
+
+1. **Atomic Project Kit & Overlap Lock (Window 1):** Open **Projects**, search in Romanian or English (e.g., *"osciloscop"* or *"solar"*), and click **Reserve all** to atomically book every asset in a kit as a single session; try booking an overlapping slot on the same asset → `409 RESERVATION_CONFLICT` RFC 9457 `ProblemDetail`.
+2. **Real-Time Auto-Reassignment + Live SSE Toast (Window 2 → Window 1):** Keep Window 1 open (do **not** refresh). In Window 2 (or `student2@campus.test`), report `HIGH` damage with a photo on the booked asset → the damaged unit flips `UNDER_MAINTENANCE`, the `AFTER_COMMIT` engine moves Window 1's booking to a same-model twin, and **Window 1 immediately pops a live SSE toast** announcing the reassignment.
+3. **Zero-Write Dry-Run Simulator & Equipment Health (Window 2):** Open `/admin/reliability` to inspect MTBF and `vsModel` failure ratios (`INSPECT` / `WATCH`), or call `POST /api/v1/admin/reassignments/simulate` in Swagger (`/swagger-ui.html`) to preview maintenance disruption without modifying a single row.
+4. **30-Second Rotating QR Pickup Pass (Window 1 → Window 2):** Show the rotating 6-digit + QR code on **Pickup pass** (Window 1) and verify/scan it on **Reservations desk** (Window 2) to check out the item.
+5. **Instant Security Kill-Switch (Window 2 → Window 1):** Disable `student1` on **Admin Users** (Window 2) → Window 1's SSE stream drops immediately, upcoming `CONFIRMED` bookings auto-cancel in an isolated transaction, and the very next click in Window 1 returns `401` (not 8 hours later).
+
+---
+
+## 2. System Overview Sketch
 
 ![System Overview Sketch](docs/diagrams/progress-system-overview.svg)
 
@@ -22,7 +127,7 @@ Students and admins interact with the React + Vite + TypeScript single-page app,
 
 ---
 
-## 2. Project Timeline & Milestones (W1–W12)
+## 3. Project Timeline & Milestones (W1–W12)
 
 ```mermaid
 gantt
@@ -55,7 +160,7 @@ gantt
 
 ---
 
-## 3. Who Owns What (Module Ownership & Contracts)
+## 4. Who Owns What (Module Ownership & Contracts)
 
 ![Module Ownership & Public Contracts](docs/diagrams/progress-module-ownership.svg)
 
@@ -70,7 +175,7 @@ Every backend module exposes only its `api` package (facades, summary records, a
 
 ---
 
-## 4. How We Work & Contribution Profile
+## 5. How We Work & Contribution Profile
 
 > **Why commit and PR counts are not a scoreboard:** Our team divides work by ownership and delivered features, not by PR volume. Raw counts reflect the shape of each role rather than relative effort: Matei maintains repo governance, weekly status refreshes, ADRs, and AWS infrastructure (over 40 docs, infra, and CI PRs alongside auth, projects, and pickup pass); Calin ships many small incremental bugfix and test PRs (`28` fix and `9` test PRs) while hardening concurrency and locking rules; Liviu and Stefania deliver cohesive, multi-file PRs that bundle backend services, migrations, tests, and full frontend pages together. Generated lockfiles (`package-lock.json`) and static HTML prototypes are excluded from code-footprint stats.
 
@@ -105,7 +210,7 @@ xychart-beta
 
 ---
 
-## 5. Lines of Code by Explicit Category & Purpose
+## 6. Lines of Code by Explicit Category & Purpose
 
 ![Lines of Code by Category & Purpose](docs/diagrams/progress-codebase-loc.svg)
 
@@ -126,7 +231,7 @@ Every tracked file at `main` `c4b7151` (counted via `git ls-files`) is grouped b
 
 ---
 
-## 6. Testing Pyramid & Concurrency Defense
+## 7. Testing Pyramid & Concurrency Defense
 
 ![Testing Pyramid & Concurrency Defense](docs/diagrams/progress-testing-pyramid.svg)
 
@@ -145,7 +250,7 @@ Tests are layered from fast, isolated unit suites up to full Spring Boot and Pos
 
 ---
 
-## 7. Engineering Process & Review Health
+## 8. Engineering Process & Review Health
 
 ![Engineering Process, PR Discipline & Issue Resolution](docs/diagrams/progress-engineering-health.svg)
 
@@ -158,7 +263,7 @@ Metrics across all **`241` post-reset merged PRs** (`#12–#358`, `21 Oct – 26
 
 ---
 
-## 8. Module Complexity, REST API Surface & Database Map
+## 9. Module Complexity, REST API Surface & Database Map
 
 ```mermaid
 xychart-beta
@@ -176,7 +281,7 @@ All `12` PostgreSQL 18 tables are managed strictly through Flyway migrations (`d
 
 ---
 
-## 9. Detailed Work Delivered per Member
+## 10. Detailed Work Delivered per Member
 
 ### Matei Necula: cloud, security, auth & projects
 
