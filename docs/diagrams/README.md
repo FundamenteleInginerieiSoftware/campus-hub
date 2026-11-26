@@ -24,3 +24,7 @@ These standalone SVGs are embedded in [`PROGRESS.md`](../../PROGRESS.md) as a qu
 | `progress-system-overview.svg` | End-to-end system sketch: browser SPA, Spring Boot 4.1 monolith, PostgreSQL 18 / S3 / SES, and the Observer/Strategy reassignment loop | Matei |
 | `progress-module-ownership.svg` | Module ownership map and public `api` contracts across all four team members | Matei |
 | `progress-work-profile.svg` | Team contribution profile by work type and cross-team peer review collaboration | Matei |
+| `progress-codebase-loc.svg` | Lines of code by explicit authored category (backend tests, backend Java, frontend, infra/CI, DB/config, personal & shared docs) with exclusions | Matei |
+| `progress-testing-pyramid.svg` | Testing pyramid across all 5 test layers (`1,221` tests in `113` files) and PostgreSQL concurrency/integrity guardrails | Matei |
+| `progress-engineering-health.svg` | Engineering process and review health across `241` post-reset PRs (median size, turnaround time, issue closure, and PR type mix) | Matei |
+| `progress-domain-map.svg` | Database schema map of all `12` PostgreSQL 18 tables grouped by module owner with cross-module foreign keys | Matei |
