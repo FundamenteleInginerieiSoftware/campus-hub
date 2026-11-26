@@ -26,6 +26,7 @@ import {
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ApiError } from '../api/client.ts'
 import {
   checkAvailability,
   confirmHold,
@@ -206,6 +207,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     data: AvailabilityResponse | null
     error: unknown
   }>({ checking: true, data: null, error: null })
+  const [availabilityTick, setAvailabilityTick] = useState(0)
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
@@ -275,7 +277,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     return () => {
       cancelled = true
     }
-  }, [asset.id, startIso, endIso])
+  }, [asset.id, startIso, endIso, availabilityTick])
 
   function selectSlot(day: string, time: string) {
     if (holdLoading || bookingLoading) return
@@ -284,6 +286,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     setSelectedStartTime(time)
     setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+    setAvailabilityTick((t) => t + 1)
   }
 
   function handleDurationChange(val: number) {
@@ -431,13 +434,23 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     substituteAssets.length,
   )
 
-  const nextSlotsKey =
-    !availability.checking &&
-    availability.data &&
-    !availability.data.available &&
-    availability.data.conflictReason === 'RESERVATION_CONFLICT'
-      ? `${asset.id}:${startIso}:${effectiveDuration}`
-      : ''
+  const conflictErrorCode =
+    bookingError instanceof ApiError
+      ? bookingError.code
+      : holdError instanceof ApiError
+        ? holdError.code
+        : null
+
+  const hasSlotConflict =
+    (!availability.checking &&
+      Boolean(availability.data) &&
+      !availability.data!.available &&
+      (availability.data!.conflictReason === 'RESERVATION_CONFLICT' ||
+        availability.data!.conflictReason === 'SLOT_HELD')) ||
+    conflictErrorCode === 'RESERVATION_CONFLICT' ||
+    conflictErrorCode === 'SLOT_HELD'
+
+  const nextSlotsKey = hasSlotConflict ? `${asset.id}:${startIso}:${effectiveDuration}` : ''
 
   useEffect(() => {
     if (!nextSlotsKey) return
@@ -461,8 +474,11 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   function handleSelectRecommendedSlot(slot: FreeSlotOption) {
     if (holdLoading || bookingLoading) return
     const parsedStart = parseCampusLocalDateTime(slot.startTime)
-    setCurrentMonday(getMonday(parsedStart))
+    const parsedEnd = parseCampusLocalDateTime(slot.endTime)
     const hhmm = `${String(parsedStart.getHours()).padStart(2, '0')}:${String(parsedStart.getMinutes()).padStart(2, '0')}`
+    const slotDuration = Math.round((parsedEnd.getTime() - parsedStart.getTime()) / 60000)
+    setCurrentMonday(getMonday(parsedStart))
+    setDurationMinutes(slotDuration)
     selectSlot(formatDateKey(parsedStart), hhmm)
   }
 
@@ -943,7 +959,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 </Paper>
               )}
 
-              {!availability.checking && !isSlotAvailable && nextFreeSlots.length > 0 && (
+              {!availability.checking && hasSlotConflict && nextFreeSlots.length > 0 && (
                 <Paper withBorder p="xs" radius="sm" bg="var(--mantine-color-blue-light)">
                   <Stack gap={6}>
                     <Text size="xs" fw={700} c="blue">
