@@ -16,6 +16,13 @@ import java.time.LocalTime;
  */
 final class ReservationSlotValidator {
 
+    static final LocalTime OPEN_TIME = LocalTime.of(8, 0);
+    static final LocalTime CLOSE_TIME = LocalTime.of(20, 0);
+    static final int MAX_ADVANCE_DAYS = 14;
+    static final int MIN_DURATION_MINUTES = 30;
+    static final int MAX_DURATION_MINUTES = 240;
+    static final int SLOT_STEP_MINUTES = 30;
+
     private ReservationSlotValidator() {}
 
     /**
@@ -125,10 +132,10 @@ final class ReservationSlotValidator {
     private static void validateSlotAlignment(LocalDateTime start, LocalDateTime end) {
         if (start.getSecond() != 0
                 || start.getNano() != 0
-                || (start.getMinute() != 0 && start.getMinute() != 30)
+                || (start.getMinute() != 0 && start.getMinute() != SLOT_STEP_MINUTES)
                 || end.getSecond() != 0
                 || end.getNano() != 0
-                || (end.getMinute() != 0 && end.getMinute() != 30)) {
+                || (end.getMinute() != 0 && end.getMinute() != SLOT_STEP_MINUTES)) {
             throw new BusinessRuleException(
                     "SLOT_NOT_ALIGNED",
                     "Reservation start and end times must be aligned to 0 or 30 minutes with zero seconds");
@@ -139,14 +146,14 @@ final class ReservationSlotValidator {
         // Only the upper limit needs checking: validateSlotAlignment already guarantees that end is after
         // start and both sit on :00/:30, so a booking can never be shorter than 30 minutes here.
         Duration duration = Duration.between(start, end);
-        if (duration.compareTo(Duration.ofHours(4)) > 0) {
+        if (duration.compareTo(Duration.ofMinutes(MAX_DURATION_MINUTES)) > 0) {
             throw new BusinessRuleException(
                     "INVALID_DURATION", "Reservation duration must be between 30 minutes and 4 hours");
         }
     }
 
     private static void validateHorizon(LocalDateTime start, LocalDateTime now) {
-        if (start.isAfter(now.plusDays(14))) {
+        if (start.isAfter(now.plusDays(MAX_ADVANCE_DAYS))) {
             throw new BusinessRuleException(
                     "BOOKING_TOO_FAR_AHEAD", "Reservations cannot be made more than 14 days in advance");
         }
@@ -162,9 +169,7 @@ final class ReservationSlotValidator {
             throw new BusinessRuleException(
                     "OUTSIDE_OPENING_HOURS", "Reservations are only permitted Monday through Friday");
         }
-        LocalTime open = LocalTime.of(8, 0);
-        LocalTime close = LocalTime.of(20, 0);
-        if (start.toLocalTime().isBefore(open) || end.toLocalTime().isAfter(close)) {
+        if (start.toLocalTime().isBefore(OPEN_TIME) || end.toLocalTime().isAfter(CLOSE_TIME)) {
             throw new BusinessRuleException(
                     "OUTSIDE_OPENING_HOURS", "Reservations must be within opening hours (08:00 to 20:00)");
         }

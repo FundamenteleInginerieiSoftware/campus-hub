@@ -153,10 +153,20 @@ public class ReservationController {
     })
     @GetMapping("/next-free-slots")
     public ResponseEntity<NextFreeSlotsResponse> nextFreeSlots(
-            @RequestParam Long assetId,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]") LocalDateTime from,
-            @RequestParam(defaultValue = "60") int durationMinutes,
-            @RequestParam(defaultValue = "5") int limit) {
+            @Parameter(description = "ID of the equipment unit to recommend slots for", example = "1") @RequestParam
+                    Long assetId,
+            @Parameter(
+                            description = "Optional campus local start time without timezone offset (defaults to now)",
+                            example = "2026-11-10T10:00:00")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
+                    LocalDateTime from,
+            @Parameter(description = "Slot length in minutes (30 to 240, step 30)", example = "60")
+                    @RequestParam(defaultValue = "60")
+                    int durationMinutes,
+            @Parameter(description = "Maximum number of free slots to return (1 to 10)", example = "5")
+                    @RequestParam(defaultValue = "5")
+                    int limit) {
         return ResponseEntity.ok(nextFreeSlotsService.getNextFreeSlots(assetId, from, durationMinutes, limit));
     }
 

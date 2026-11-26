@@ -35,11 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class NextFreeSlotsService {
 
-    private static final LocalTime OPEN_TIME = LocalTime.of(8, 0);
-    private static final LocalTime CLOSE_TIME = LocalTime.of(20, 0);
-    private static final int STEP_MINUTES = 30;
-    private static final int MAX_DURATION_MINUTES = 240;
-    private static final int MAX_ADVANCE_DAYS = 14;
+    static final int MIN_LIMIT = 1;
+    static final int MAX_LIMIT = 10;
 
     private final ReservationRepository reservationRepository;
     private final ReservationHoldRepository reservationHoldRepository;
@@ -52,13 +49,13 @@ public class NextFreeSlotsService {
      * starting at or after {@code from} within the 14-day weekday 08:00–20:00 booking window.
      */
     public NextFreeSlotsResponse getNextFreeSlots(Long assetId, LocalDateTime from, int durationMinutes, int limit) {
-        if (durationMinutes < STEP_MINUTES
-                || durationMinutes > MAX_DURATION_MINUTES
-                || durationMinutes % STEP_MINUTES != 0) {
+        if (durationMinutes < ReservationSlotValidator.MIN_DURATION_MINUTES
+                || durationMinutes > ReservationSlotValidator.MAX_DURATION_MINUTES
+                || durationMinutes % ReservationSlotValidator.SLOT_STEP_MINUTES != 0) {
             throw new BusinessRuleException(
                     "INVALID_DURATION", "Duration must be a multiple of 30 minutes between 30 and 240");
         }
-        if (limit < 1 || limit > 10) {
+        if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
             throw new InvalidParameterException("limit must be between 1 and 10");
         }
 
@@ -68,7 +65,7 @@ public class NextFreeSlotsService {
         }
 
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
-        LocalDateTime horizonEnd = now.plusDays(MAX_ADVANCE_DAYS);
+        LocalDateTime horizonEnd = now.plusDays(ReservationSlotValidator.MAX_ADVANCE_DAYS);
         LocalDateTime searchStart = ceilToHalfHour((from != null && from.isAfter(now)) ? from : now);
 
         if (searchStart.isAfter(horizonEnd)) {
@@ -88,14 +85,14 @@ public class NextFreeSlotsService {
         List<FreeSlotOption> freeSlots = new ArrayList<>();
         LocalDate day = searchStart.toLocalDate();
         LocalDate lastDay = horizonEnd.toLocalDate();
-        LocalTime lastStart = CLOSE_TIME.minusMinutes(durationMinutes);
+        LocalTime lastStart = ReservationSlotValidator.CLOSE_TIME.minusMinutes(durationMinutes);
 
         while (!day.isAfter(lastDay) && freeSlots.size() < limit) {
             DayOfWeek dow = day.getDayOfWeek();
             if (dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY) {
-                for (LocalTime t = OPEN_TIME;
+                for (LocalTime t = ReservationSlotValidator.OPEN_TIME;
                         !t.isAfter(lastStart) && freeSlots.size() < limit;
-                        t = t.plusMinutes(STEP_MINUTES)) {
+                        t = t.plusMinutes(ReservationSlotValidator.SLOT_STEP_MINUTES)) {
                     LocalDateTime slotStart = LocalDateTime.of(day, t);
                     LocalDateTime slotEnd = slotStart.plusMinutes(durationMinutes);
                     if (slotStart.isBefore(searchStart) || slotStart.isAfter(horizonEnd)) {
