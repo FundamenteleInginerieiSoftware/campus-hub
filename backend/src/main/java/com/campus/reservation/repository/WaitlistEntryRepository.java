@@ -36,7 +36,7 @@ public interface WaitlistEntryRepository extends JpaRepository<WaitlistEntry, Lo
         SELECT w FROM WaitlistEntry w
         WHERE w.userId = :userId
           AND w.status = :status
-        ORDER BY w.id ASC
+        ORDER BY w.createdAt ASC, w.id ASC
         """)
     List<WaitlistEntry> findByUserIdAndStatusForUpdate(
             @Param("userId") Long userId, @Param("status") WaitlistStatus status);

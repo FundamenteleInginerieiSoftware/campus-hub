@@ -87,7 +87,7 @@ cd backend
 ./gradlew test --tests "com.campus.reservation.web.*"
 
 # Integration tests on real PostgreSQL:
-./gradlew test --tests "com.campus.reservation.repository.ReservationRepositoryTest"
+./gradlew test --tests "com.campus.reservation.repository.*" --tests "com.campus.reservation.service.*IT"
 ```
 
 ---
@@ -161,6 +161,16 @@ Students can generate a private subscription link to sync their bookings with ex
 - **`CalendarFeedService`:** Loads the user's reservations overlapping `[campusNow - 30d, campusNow + 30d]` via `ReservationRepository.findByUserIdOverlappingRange`, keeps visible statuses (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, `RETURNED`) so cancelled/no-show bookings disappear from subscribed calendars, caches `CatalogApi.getAsset(assetId)` lookups once per asset (falling back to `Equipment #<id>` if missing), and prefixes `OVERDUE` summaries.
 - **`IcsWriter`:** Pure RFC 5545 serializer emitting `VCALENDAR`/`VEVENT` text with strict `CRLF` endings, text escaping, 75-byte UTF-8 safe line folding, and `Europe/Bucharest` → UTC timestamp conversion.
 - **`CalendarFeedController`:** Exposes `GET /api/v1/calendar/{token}.ics` returning `text/calendar;charset=UTF-8` with `Cache-Control: no-store` (or `404 CALENDAR_FEED_NOT_FOUND`).
+
+---
+
+## 13. FIFO Equipment Waitlist (`#59`)
+
+Students can queue for occupied slots (`waitlist_entries` table, partial unique index `uq_waitlist_active_slot` on `(asset_id, user_id, start_time, end_time) WHERE status = 'WAITING'`, `CHECK (end_time > start_time)`):
+- **`POST /api/v1/reservations/waitlist` (`WaitlistController` / `WaitlistService.joinWaitlist`):** Validates slot rules, acquires `catalogApi.lockForBooking(assetId)` BEFORE `lockUserQuota(userId)` (`asset -> userQuota` order), checks bookability and `OWN_RESERVATION_CONFLICT`, verifies `WAITLIST_ALREADY_JOINED` before the 5-entry `WAITLIST_LIMIT_REACHED` cap, rejects uncontested slots with `409 SLOT_ALREADY_FREE`, and persists a `WAITING` entry.
+- **`GET /api/v1/reservations/waitlist/me`:** Returns a `PageResponse<WaitlistEntryResponse>` ordered newest first.
+- **`DELETE /api/v1/reservations/waitlist/{id}`:** Owner (or admin) cancellation (`404 WAITLIST_ENTRY_NOT_FOUND` for foreign entries, `409 INVALID_WAITLIST_STATUS_TRANSITION` if not `WAITING`).
+- **FIFO Promotion & Disable Cleanup:** `WaitlistService.processPromotionsForAsset` acquires `asset -> waitlist_entries -> userQuota`, expires past-start or disabled-user entries (`EXPIRED`), marks 2-booking-limit students `SKIPPED_QUOTA_FULL`, confirms any owned hold, promotes the first eligible waiter to `CONFIRMED` with system audit (`actorId = null`), and notifies after commit. `UserDisabledReservationListener` cancels the disabled user's `WAITING` entries (`cancelWaitingEntriesForUser` without `lockUserQuota`) in a dedicated `REQUIRES_NEW` transaction before cancelling upcoming bookings so promotion and account disable cannot deadlock.
 
 
 

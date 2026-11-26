@@ -4,12 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.campus.catalog.api.AssetStatus;
-import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
@@ -40,6 +41,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -106,8 +108,6 @@ class WaitlistServiceTest {
     @Test
     @DisplayName("joinWaitlist queues a WAITING entry when the requested slot is occupied")
     void joinWaitlist_succeedsWhenSlotOccupied() {
-        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
-        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, ReservationService.NO_RESERVATION_ID))
                 .thenReturn(true);
@@ -125,15 +125,15 @@ class WaitlistServiceTest {
         assertThat(res.status())
                 .as("new waitlist entry must start in WAITING status; see WaitlistService.joinWaitlist")
                 .isEqualTo(WaitlistStatus.WAITING);
-        verify(reservationRepository).lockUserQuota(USER_1_ID);
+        InOrder lockOrder = inOrder(catalogApi, reservationRepository);
+        lockOrder.verify(catalogApi).lockForBooking(ASSET_ID);
+        lockOrder.verify(reservationRepository).lockUserQuota(USER_1_ID);
         verify(auditService).record(eq(USER_1_ID), eq("JOIN_WAITLIST"), eq("WaitlistEntry"), eq(55L), any());
     }
 
     @Test
     @DisplayName("joinWaitlist rejects with SLOT_ALREADY_FREE when no booking or hold overlaps")
     void joinWaitlist_rejectsWhenSlotIsFree() {
-        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
-        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, ReservationService.NO_RESERVATION_ID))
                 .thenReturn(false);
@@ -151,8 +151,6 @@ class WaitlistServiceTest {
     @Test
     @DisplayName("joinWaitlist rejects duplicate WAITING entry with WAITLIST_ALREADY_JOINED")
     void joinWaitlist_rejectsDuplicateWaitingEntry() {
-        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
-        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(waitlistEntryRepository.existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
                         ASSET_ID, USER_1_ID, slotStart, slotEnd, WaitlistStatus.WAITING))
@@ -166,10 +164,27 @@ class WaitlistServiceTest {
     }
 
     @Test
+    @DisplayName("joinWaitlist checks WAITLIST_ALREADY_JOINED before WAITLIST_LIMIT_REACHED when at cap")
+    void joinWaitlist_alreadyJoinedAtCapReturnsAlreadyJoinedInsteadOfLimitReached() {
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(waitlistEntryRepository.existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
+                        ASSET_ID, USER_1_ID, slotStart, slotEnd, WaitlistStatus.WAITING))
+                .thenReturn(true);
+        lenient()
+                .when(waitlistEntryRepository.countByUserIdAndStatus(USER_1_ID, WaitlistStatus.WAITING))
+                .thenReturn((long) WaitlistService.MAX_WAITING_ENTRIES);
+
+        assertThatThrownBy(() -> waitlistService.joinWaitlist(new JoinWaitlistRequest(ASSET_ID, slotStart, slotEnd)))
+                .as("duplicate join while at 5-entry cap must report WAITLIST_ALREADY_JOINED; "
+                        + "see WaitlistService.joinWaitlist")
+                .isInstanceOf(ConflictException.class)
+                .extracting(ex -> ((ConflictException) ex).getCode())
+                .isEqualTo("WAITLIST_ALREADY_JOINED");
+    }
+
+    @Test
     @DisplayName("joinWaitlist rejects when caller already owns an active reservation for that slot")
     void joinWaitlist_rejectsOwnReservationOverlap() {
-        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
-        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsUserOverlapOnAsset(ASSET_ID, USER_1_ID, slotStart, slotEnd))
                 .thenReturn(true);
@@ -185,8 +200,6 @@ class WaitlistServiceTest {
     @Test
     @DisplayName("joinWaitlist rejects when student reaches active waitlist entry cap (5)")
     void joinWaitlist_rejectsWhenWaitlistLimitReached() {
-        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
-        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(waitlistEntryRepository.countByUserIdAndStatus(USER_1_ID, WaitlistStatus.WAITING))
                 .thenReturn((long) WaitlistService.MAX_WAITING_ENTRIES);
@@ -196,6 +209,28 @@ class WaitlistServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .extracting(ex -> ((ConflictException) ex).getCode())
                 .isEqualTo("WAITLIST_LIMIT_REACHED");
+    }
+
+    @Test
+    @DisplayName("cancelWaitingEntriesForUser cancels entries without locking userQuota")
+    void cancelWaitingEntriesForUser_cancelsEntriesWithoutLockingUserQuota() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        WaitlistEntry entry = new WaitlistEntry(ASSET_ID, USER_1_ID, slotStart, slotEnd, now.minusMinutes(10));
+        ReflectionTestUtils.setField(entry, "id", 72L);
+        when(waitlistEntryRepository.findByUserIdAndStatusForUpdate(USER_1_ID, WaitlistStatus.WAITING))
+                .thenReturn(List.of(entry));
+
+        int cancelled = waitlistService.cancelWaitingEntriesForUser(USER_1_ID);
+
+        assertThat(cancelled)
+                .as("cancelWaitingEntriesForUser must return cancelled count; "
+                        + "see WaitlistService.cancelWaitingEntriesForUser")
+                .isEqualTo(1);
+        assertThat(entry.getStatus())
+                .as("disabled user's waiting entry must transition to CANCELLED; "
+                        + "see WaitlistService.cancelWaitingEntriesForUser")
+                .isEqualTo(WaitlistStatus.CANCELLED);
+        verify(reservationRepository, never()).lockUserQuota(any());
     }
 
     @Test
@@ -284,6 +319,7 @@ class WaitlistServiceTest {
         assertThat(ownedHold.getStatus())
                 .as("promoted waiter's matching active hold must transition to CONFIRMED")
                 .isEqualTo(HoldStatus.CONFIRMED);
+        verify(auditService).record(isNull(), eq("PROMOTE_WAITLIST"), eq("Reservation"), eq(900L), any());
         verify(notificationService).notifyUser(eq(USER_2_ID), eq("Waitlist Spot Confirmed"), any());
     }
 }

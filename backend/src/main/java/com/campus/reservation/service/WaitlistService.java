@@ -1,6 +1,5 @@
 package com.campus.reservation.service;
 
-import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
@@ -58,14 +57,16 @@ public class WaitlistService {
     @Transactional
     public WaitlistEntryResponse joinWaitlist(JoinWaitlistRequest req) {
         Long userId = currentUser.id();
+        Long assetId = req.assetId();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         ReservationSlotValidator.validateSlotRules(req.startTime(), req.endTime(), now);
 
-        AssetSummary asset = catalogApi.getAsset(req.assetId());
-        ReservationSlotValidator.ensureBookable(
-                catalogApi, asset.id(), "Cannot join waitlist for a non-bookable asset");
+        // Lock asset row FIRST (asset -> userQuota, same order as createReservation/createHold) so a
+        // concurrent cancellation + promotion cannot race with the SLOT_ALREADY_FREE check below (#349).
+        catalogApi.lockForBooking(assetId);
+        ReservationSlotValidator.ensureBookable(catalogApi, assetId, "Cannot join waitlist for a non-bookable asset");
 
-        if (reservationRepository.existsUserOverlapOnAsset(asset.id(), userId, req.startTime(), req.endTime())) {
+        if (reservationRepository.existsUserOverlapOnAsset(assetId, userId, req.startTime(), req.endTime())) {
             throw new ConflictException(
                     "OWN_RESERVATION_CONFLICT", "You already have an active reservation covering this slot");
         }
@@ -75,6 +76,12 @@ public class WaitlistService {
         reservationRepository.lockUserQuota(userId);
         Role activeRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
 
+        if (waitlistEntryRepository.existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
+                assetId, userId, req.startTime(), req.endTime(), WaitlistStatus.WAITING)) {
+            throw new ConflictException(
+                    "WAITLIST_ALREADY_JOINED", "You are already on the waitlist for this asset and time slot");
+        }
+
         if (activeRole != Role.ADMIN
                 && waitlistEntryRepository.countByUserIdAndStatus(userId, WaitlistStatus.WAITING)
                         >= MAX_WAITING_ENTRIES) {
@@ -83,29 +90,23 @@ public class WaitlistService {
                     "Student cannot have more than " + MAX_WAITING_ENTRIES + " active waitlist entries");
         }
 
-        if (waitlistEntryRepository.existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
-                asset.id(), userId, req.startTime(), req.endTime(), WaitlistStatus.WAITING)) {
-            throw new ConflictException(
-                    "WAITLIST_ALREADY_JOINED", "You are already on the waitlist for this asset and time slot");
-        }
-
         boolean hasReservationConflict = reservationRepository.existsOverlap(
-                asset.id(), req.startTime(), req.endTime(), ReservationService.NO_RESERVATION_ID);
+                assetId, req.startTime(), req.endTime(), ReservationService.NO_RESERVATION_ID);
         boolean hasHoldConflict = reservationHoldRepository.existsActiveOverlap(
-                asset.id(), req.startTime(), req.endTime(), now, null, userId);
+                assetId, req.startTime(), req.endTime(), now, null, userId);
         if (!hasReservationConflict && !hasHoldConflict) {
             throw new ConflictException(
                     "SLOT_ALREADY_FREE", "Slot is currently available; book it directly instead of joining waitlist");
         }
 
-        WaitlistEntry entry = new WaitlistEntry(asset.id(), userId, req.startTime(), req.endTime(), now);
+        WaitlistEntry entry = new WaitlistEntry(assetId, userId, req.startTime(), req.endTime(), now);
         WaitlistEntry saved = waitlistEntryRepository.save(entry);
         auditService.record(
                 userId,
                 "JOIN_WAITLIST",
                 "WaitlistEntry",
                 saved.getId(),
-                "Asset " + asset.id() + " [" + req.startTime() + ", " + req.endTime() + "]");
+                "Asset " + assetId + " [" + req.startTime() + ", " + req.endTime() + "]");
         return WaitlistEntryResponse.from(saved);
     }
 
@@ -139,13 +140,17 @@ public class WaitlistService {
 
     /**
      * Cancels all active WAITING entries belonging to a disabled user (#349).
+     *
+     * <p>Deliberately does NOT acquire {@code lockUserQuota}: promotion locks
+     * {@code asset -> waitlist_entries -> userQuota}, so holding only {@code waitlist_entries}
+     * here avoids a lock-order cycle, and promotion already expires disabled accounts after its
+     * own quota lock.
      */
     @Transactional
     public int cancelWaitingEntriesForUser(Long userId) {
         if (userId == null) {
             return 0;
         }
-        reservationRepository.lockUserQuota(userId);
         List<WaitlistEntry> waiting =
                 waitlistEntryRepository.findByUserIdAndStatusForUpdate(userId, WaitlistStatus.WAITING);
         if (waiting.isEmpty()) {
@@ -226,11 +231,12 @@ public class WaitlistService {
             promotedCount++;
 
             auditService.record(
-                    entry.getUserId(),
+                    null,
                     "PROMOTE_WAITLIST",
                     "Reservation",
                     promoted.getId(),
-                    "Promoted from waitlist #" + entry.getId() + " for asset " + assetId);
+                    "Promoted user " + entry.getUserId() + " from waitlist #" + entry.getId() + " for asset "
+                            + assetId);
             ReservationServiceSupport.notifyUserAfterCommit(
                     notificationService,
                     entry.getUserId(),
