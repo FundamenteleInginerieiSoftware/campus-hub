@@ -1,6 +1,6 @@
 # What's left: per member, until the defense
 
-**As of Fri 20 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in `README.md` §7 (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
+**As of Fri 20 Nov 2026 (W7).** This file is the one place for **what is still to do**. What is already done is in [PROGRESS.md](../PROGRESS.md) (per member) and `AGENTS.md` §7. The detailed plan for W5–W6 is `docs/plan-w4-w6.md`.
 
 **Keep it current:** when your PR finishes a row, delete the row in the same PR (or tick it in the next status update). If a row is wrong for your module, fix it in a small `docs/` PR.
 

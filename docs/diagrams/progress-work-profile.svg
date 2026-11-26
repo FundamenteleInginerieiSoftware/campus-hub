@@ -1,0 +1,315 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 580" width="1200" height="580" role="img" aria-label="Contribution Profile and Peer Review Collaboration">
+  <defs>
+    <clipPath id="bar-clip-matei">
+      <rect x="130" y="174" width="520" height="30" rx="6"/>
+    </clipPath>
+    <clipPath id="bar-clip-liviu">
+      <rect x="130" y="264" width="520" height="30" rx="6"/>
+    </clipPath>
+    <clipPath id="bar-clip-calin">
+      <rect x="130" y="354" width="520" height="30" rx="6"/>
+    </clipPath>
+    <clipPath id="bar-clip-stefania">
+      <rect x="130" y="444" width="520" height="30" rx="6"/>
+    </clipPath>
+  </defs>
+
+  <style>
+    .sans { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+  </style>
+
+  <!-- Explicit Light Canvas Background (GitHub Light & Dark Mode safe) -->
+  <rect x="0" y="0" width="1200" height="580" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+
+  <!-- Header -->
+  <text x="28" y="42" class="sans" font-size="20" font-weight="700" fill="#0f172a">Contribution Profile &amp; Peer Review Collaboration</text>
+  <text x="28" y="65" class="sans" font-size="12.5" fill="#475569">Snapshot: 26 Nov 2026 (fa0002d)  ·  Normalized by role focus, not raw commit volume (lockfiles &amp; HTML prototypes excluded)</text>
+  <line x1="28" y1="78" x2="1172" y2="78" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- ========================================================= -->
+  <!-- LEFT PANEL: Where Each Member's Work Lives (100% Mix)     -->
+  <!-- ========================================================= -->
+  <g id="left-panel">
+    <!-- Subtle offset shadow & main card -->
+    <rect x="32" y="96" width="652" height="462" rx="12" fill="#0f172a" opacity="0.06"/>
+    <rect x="28" y="92" width="652" height="462" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+
+    <!-- Card header strip -->
+    <path d="M 28 104 Q 28 92 40 92 L 668 92 Q 680 92 680 104 L 680 126 L 28 126 Z" fill="#f8fafc"/>
+    <line x1="28" y1="126" x2="680" y2="126" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="46" y="114" class="sans" font-size="14" font-weight="700" fill="#0f172a">Where Each Member's Work Lives (100% Mix by Area)</text>
+
+    <!-- Legend row -->
+    <g id="area-legend">
+      <rect x="48" y="138" width="11" height="11" rx="2.5" fill="#2563eb"/>
+      <text x="64" y="148" class="sans" font-size="11.5" font-weight="600" fill="#334155">Backend Prod</text>
+
+      <rect x="166" y="138" width="11" height="11" rx="2.5" fill="#8b5cf6"/>
+      <text x="182" y="148" class="sans" font-size="11.5" font-weight="600" fill="#334155">Frontend</text>
+
+      <rect x="256" y="138" width="11" height="11" rx="2.5" fill="#0f766e"/>
+      <text x="272" y="148" class="sans" font-size="11.5" font-weight="600" fill="#334155">Infra / CI</text>
+
+      <rect x="352" y="138" width="11" height="11" rx="2.5" fill="#f59e0b"/>
+      <text x="368" y="148" class="sans" font-size="11.5" font-weight="600" fill="#334155">Backend Tests</text>
+
+      <rect x="474" y="138" width="11" height="11" rx="2.5" fill="#94a3b8"/>
+      <text x="490" y="148" class="sans" font-size="11.5" font-weight="600" fill="#334155">Docs</text>
+
+      <text x="650" y="148" text-anchor="end" class="sans" font-size="10.5" font-weight="600" fill="#64748b">All bars = 100%</text>
+    </g>
+
+    <!-- Row 1: Matei -->
+    <g id="row-matei">
+      <circle cx="50" cy="189" r="4.5" fill="#2563eb"/>
+      <text x="60" y="193" class="sans" font-size="12.5" font-weight="700" fill="#1e3a8a">Matei</text>
+
+      <g clip-path="url(#bar-clip-matei)">
+        <rect x="130" y="174" width="91" height="30" fill="#2563eb"/>
+        <rect x="221" y="174" width="39" height="30" fill="#8b5cf6"/>
+        <rect x="260" y="174" width="51" height="30" fill="#0f766e"/>
+        <rect x="311" y="174" width="120" height="30" fill="#f59e0b"/>
+        <rect x="431" y="174" width="219" height="30" fill="#94a3b8"/>
+        <line x1="221" y1="174" x2="221" y2="204" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="260" y1="174" x2="260" y2="204" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="311" y1="174" x2="311" y2="204" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="431" y1="174" x2="431" y2="204" stroke="#ffffff" stroke-width="1.5"/>
+      </g>
+      <rect x="130" y="174" width="520" height="30" rx="6" fill="none" stroke="#cbd5e1" stroke-width="0.8"/>
+
+      <text x="175.5" y="193" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">18%</text>
+      <text x="285.5" y="193" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">10%</text>
+      <text x="371" y="193" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">23%</text>
+      <text x="540.5" y="193" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">42%</text>
+
+      <text x="130" y="222" class="sans" font-size="10.8" fill="#475569">Prod + Infra: +8.0k net  ·  High docs share reflects weekly status, ADRs, specs &amp; repo setup</text>
+    </g>
+
+    <line x1="48" y1="242" x2="650" y2="242" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+
+    <!-- Row 2: Liviu -->
+    <g id="row-liviu">
+      <circle cx="50" cy="279" r="4.5" fill="#0d9488"/>
+      <text x="60" y="283" class="sans" font-size="12.5" font-weight="700" fill="#134e4a">Liviu</text>
+
+      <g clip-path="url(#bar-clip-liviu)">
+        <rect x="130" y="264" width="147" height="30" fill="#2563eb"/>
+        <rect x="277" y="264" width="118" height="30" fill="#8b5cf6"/>
+        <rect x="395" y="264" width="170" height="30" fill="#f59e0b"/>
+        <rect x="565" y="264" width="85" height="30" fill="#94a3b8"/>
+        <line x1="277" y1="264" x2="277" y2="294" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="395" y1="264" x2="395" y2="294" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="565" y1="264" x2="565" y2="294" stroke="#ffffff" stroke-width="1.5"/>
+      </g>
+      <rect x="130" y="264" width="520" height="30" rx="6" fill="none" stroke="#cbd5e1" stroke-width="0.8"/>
+
+      <text x="203.5" y="283" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">28%</text>
+      <text x="336" y="283" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">23%</text>
+      <text x="480" y="283" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">33%</text>
+      <text x="607.5" y="283" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">16%</text>
+
+      <text x="130" y="312" class="sans" font-size="10.8" fill="#475569">Prod: +5.8k net  ·  Balanced across catalog, shared foundations, SSE live push &amp; UI</text>
+    </g>
+
+    <line x1="48" y1="332" x2="650" y2="332" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+
+    <!-- Row 3: Calin -->
+    <g id="row-calin">
+      <circle cx="50" cy="369" r="4.5" fill="#d97706"/>
+      <text x="60" y="373" class="sans" font-size="12.5" font-weight="700" fill="#78350f">Calin</text>
+
+      <g clip-path="url(#bar-clip-calin)">
+        <rect x="130" y="354" width="106" height="30" fill="#2563eb"/>
+        <rect x="236" y="354" width="51" height="30" fill="#8b5cf6"/>
+        <rect x="287" y="354" width="271" height="30" fill="#f59e0b"/>
+        <rect x="558" y="354" width="92" height="30" fill="#94a3b8"/>
+        <line x1="236" y1="354" x2="236" y2="384" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="287" y1="354" x2="287" y2="384" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="558" y1="354" x2="558" y2="384" stroke="#ffffff" stroke-width="1.5"/>
+      </g>
+      <rect x="130" y="354" width="520" height="30" rx="6" fill="none" stroke="#cbd5e1" stroke-width="0.8"/>
+
+      <text x="183" y="373" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">20%</text>
+      <text x="261.5" y="373" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">10%</text>
+      <text x="422.5" y="373" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">52%</text>
+      <text x="604" y="373" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">18%</text>
+
+      <text x="130" y="402" class="sans" font-size="10.8" fill="#475569">Prod: +9.3k net  ·  Largest automated test, concurrency &amp; mutation (PIT) suite (+16.2k)</text>
+    </g>
+
+    <line x1="48" y1="422" x2="650" y2="422" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 4"/>
+
+    <!-- Row 4: Stefania -->
+    <g id="row-stefania">
+      <circle cx="50" cy="459" r="4.5" fill="#7c3aed"/>
+      <text x="60" y="463" class="sans" font-size="12.5" font-weight="700" fill="#4c1d95">Stefania</text>
+
+      <g clip-path="url(#bar-clip-stefania)">
+        <rect x="130" y="444" width="83" height="30" fill="#2563eb"/>
+        <rect x="213" y="444" width="168" height="30" fill="#8b5cf6"/>
+        <rect x="381" y="444" width="210" height="30" fill="#f59e0b"/>
+        <rect x="591" y="444" width="59" height="30" fill="#94a3b8"/>
+        <line x1="213" y1="444" x2="213" y2="474" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="381" y1="444" x2="381" y2="474" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="591" y1="444" x2="591" y2="474" stroke="#ffffff" stroke-width="1.5"/>
+      </g>
+      <rect x="130" y="444" width="520" height="30" rx="6" fill="none" stroke="#cbd5e1" stroke-width="0.8"/>
+
+      <text x="171.5" y="463" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">16%</text>
+      <text x="297" y="463" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">32%</text>
+      <text x="486" y="463" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">40%</text>
+      <text x="620.5" y="463" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#ffffff">11%</text>
+
+      <text x="130" y="492" class="sans" font-size="10.8" fill="#475569">Prod: +5.2k net  ·  Frontend lead (10 of 20 pages), incidents, reliability &amp; user admin</text>
+    </g>
+
+    <!-- Bottom balance note -->
+    <rect x="46" y="512" width="608" height="28" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="350" y="530" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#334155">Net production + infra code sits in a tight 5.2k – 9.3k range across all four members.</text>
+  </g>
+
+  <!-- ========================================================= -->
+  <!-- RIGHT PANEL: Cross-Team Peer Reviews (249 Merged PRs)     -->
+  <!-- ========================================================= -->
+  <g id="right-panel">
+    <!-- Subtle offset shadow & main card -->
+    <rect x="706" y="96" width="470" height="462" rx="12" fill="#0f172a" opacity="0.06"/>
+    <rect x="702" y="92" width="470" height="462" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+
+    <!-- Card header strip -->
+    <path d="M 702 104 Q 702 92 714 92 L 1160 92 Q 1172 92 1172 104 L 1172 126 L 702 126 Z" fill="#f8fafc"/>
+    <line x1="702" y1="126" x2="1172" y2="126" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="720" y="114" class="sans" font-size="14" font-weight="700" fill="#0f172a">Cross-Team Peer Reviews (249 Merged PRs)</text>
+
+    <!-- Top highlight pill -->
+    <rect x="720" y="138" width="434" height="28" rx="14" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.2"/>
+    <text x="937" y="156" text-anchor="middle" class="sans" font-size="11.5" font-weight="600" fill="#166534">283 formal reviews  ·  0 solo merges  ·  Any 1 teammate approves</text>
+
+    <!-- Heatmap Axis & Column Headers -->
+    <text x="720" y="190" class="sans" font-size="10.5" font-weight="600" fill="#64748b">Reviewer ↓  /  PR Author →</text>
+
+    <text x="852" y="213" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#1e3a8a">Matei</text>
+    <rect x="836" y="217" width="32" height="2.5" rx="1.25" fill="#2563eb"/>
+
+    <text x="922" y="213" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#134e4a">Liviu</text>
+    <rect x="906" y="217" width="32" height="2.5" rx="1.25" fill="#0d9488"/>
+
+    <text x="992" y="213" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#78350f">Calin</text>
+    <rect x="976" y="217" width="32" height="2.5" rx="1.25" fill="#d97706"/>
+
+    <text x="1062" y="213" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#4c1d95">Stefania</text>
+    <rect x="1042" y="217" width="40" height="2.5" rx="1.25" fill="#7c3aed"/>
+
+    <text x="1130" y="213" text-anchor="middle" class="sans" font-size="11.5" font-weight="700" fill="#334155">Given</text>
+    <rect x="1114" y="217" width="32" height="2.5" rx="1.25" fill="#64748b"/>
+
+    <!-- Vertical divider before Given column -->
+    <line x1="1100" y1="224" x2="1100" y2="386" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+
+    <!-- Row 1: Matei (—, 22, 66, 16 | 104) -->
+    <g id="matrix-row-matei">
+      <circle cx="726" cy="242" r="4.5" fill="#2563eb"/>
+      <text x="736" y="246" class="sans" font-size="12.5" font-weight="700" fill="#1e3a8a">Matei</text>
+
+      <rect x="820" y="224" width="64" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="852" y="247" text-anchor="middle" class="sans" font-size="13" font-weight="600" fill="#94a3b8">—</text>
+
+      <rect x="890" y="224" width="64" height="36" rx="6" fill="#bae6fd"/>
+      <text x="922" y="247" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">22</text>
+
+      <rect x="960" y="224" width="64" height="36" rx="6" fill="#38bdf8"/>
+      <text x="992" y="247" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">66</text>
+
+      <rect x="1030" y="224" width="64" height="36" rx="6" fill="#bae6fd"/>
+      <text x="1062" y="247" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">16</text>
+
+      <rect x="1106" y="224" width="48" height="36" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="1130" y="247" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0f172a">104</text>
+    </g>
+
+    <!-- Row 2: Liviu (22, —, 16, 6 | 44) -->
+    <g id="matrix-row-liviu">
+      <circle cx="726" cy="284" r="4.5" fill="#0d9488"/>
+      <text x="736" y="288" class="sans" font-size="12.5" font-weight="700" fill="#134e4a">Liviu</text>
+
+      <rect x="820" y="266" width="64" height="36" rx="6" fill="#bae6fd"/>
+      <text x="852" y="289" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">22</text>
+
+      <rect x="890" y="266" width="64" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="922" y="289" text-anchor="middle" class="sans" font-size="13" font-weight="600" fill="#94a3b8">—</text>
+
+      <rect x="960" y="266" width="64" height="36" rx="6" fill="#bae6fd"/>
+      <text x="992" y="289" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">16</text>
+
+      <rect x="1030" y="266" width="64" height="36" rx="6" fill="#e0f2fe"/>
+      <text x="1062" y="289" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">6</text>
+
+      <rect x="1106" y="266" width="48" height="36" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="1130" y="289" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0f172a">44</text>
+    </g>
+
+    <!-- Row 3: Calin (42, 20, —, 23 | 85) -->
+    <g id="matrix-row-calin">
+      <circle cx="726" cy="326" r="4.5" fill="#d97706"/>
+      <text x="736" y="330" class="sans" font-size="12.5" font-weight="700" fill="#78350f">Calin</text>
+
+      <rect x="820" y="308" width="64" height="36" rx="6" fill="#7dd3fc"/>
+      <text x="852" y="331" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">42</text>
+
+      <rect x="890" y="308" width="64" height="36" rx="6" fill="#bae6fd"/>
+      <text x="922" y="331" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">20</text>
+
+      <rect x="960" y="308" width="64" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="992" y="331" text-anchor="middle" class="sans" font-size="13" font-weight="600" fill="#94a3b8">—</text>
+
+      <rect x="1030" y="308" width="64" height="36" rx="6" fill="#bae6fd"/>
+      <text x="1062" y="331" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">23</text>
+
+      <rect x="1106" y="308" width="48" height="36" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="1130" y="331" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0f172a">85</text>
+    </g>
+
+    <!-- Row 4: Stefania (1, 3, 46, — | 50) -->
+    <g id="matrix-row-stefania">
+      <circle cx="726" cy="368" r="4.5" fill="#7c3aed"/>
+      <text x="736" y="372" class="sans" font-size="12.5" font-weight="700" fill="#4c1d95">Stefania</text>
+
+      <rect x="820" y="350" width="64" height="36" rx="6" fill="#e0f2fe"/>
+      <text x="852" y="373" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">1</text>
+
+      <rect x="890" y="350" width="64" height="36" rx="6" fill="#e0f2fe"/>
+      <text x="922" y="373" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">3</text>
+
+      <rect x="960" y="350" width="64" height="36" rx="6" fill="#7dd3fc"/>
+      <text x="992" y="373" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0c4a6e">46</text>
+
+      <rect x="1030" y="350" width="64" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="1062" y="373" text-anchor="middle" class="sans" font-size="13" font-weight="600" fill="#94a3b8">—</text>
+
+      <rect x="1106" y="350" width="48" height="36" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="1130" y="373" text-anchor="middle" class="sans" font-size="13" font-weight="700" fill="#0f172a">50</text>
+    </g>
+
+    <!-- Heat intensity legend -->
+    <g id="heatmap-scale">
+      <text x="820" y="407" class="sans" font-size="10" font-weight="600" fill="#64748b">Reviews:</text>
+      <rect x="870" y="398" width="12" height="10" rx="2.5" fill="#e0f2fe" stroke="#bae6fd" stroke-width="0.8"/>
+      <text x="886" y="407" class="sans" font-size="10" fill="#475569">1–10</text>
+      <rect x="920" y="398" width="12" height="10" rx="2.5" fill="#bae6fd" stroke="#7dd3fc" stroke-width="0.8"/>
+      <text x="936" y="407" class="sans" font-size="10" fill="#475569">11–25</text>
+      <rect x="976" y="398" width="12" height="10" rx="2.5" fill="#7dd3fc" stroke="#38bdf8" stroke-width="0.8"/>
+      <text x="992" y="407" class="sans" font-size="10" fill="#475569">26–50</text>
+      <rect x="1032" y="398" width="12" height="10" rx="2.5" fill="#38bdf8" stroke="#0284c7" stroke-width="0.8"/>
+      <text x="1048" y="407" class="sans" font-size="10" fill="#475569">51+</text>
+    </g>
+
+    <!-- Bottom takeaway card -->
+    <rect x="720" y="424" width="434" height="114" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <rect x="727" y="434" width="3" height="94" rx="1.5" fill="#64748b"/>
+    <text x="740" y="446" class="sans" font-size="12" font-weight="700" fill="#0f172a">Why review counts vary</text>
+    <text x="740" y="470" class="sans" font-size="11.2" fill="#334155">• Anyone reviews anyone within 24h (CODEOWNERS)</text>
+    <text x="740" y="494" class="sans" font-size="11.2" fill="#334155">• Calin opened 83 small incremental PRs (128 reviews received)</text>
+    <text x="740" y="518" class="sans" font-size="11.2" fill="#334155">• Every teammate actively reviews across module boundaries</text>
+  </g>
+</svg>
