@@ -1,10 +1,12 @@
 package com.campus.notification.service;
 
+import com.campus.config.AsyncConfig;
 import com.campus.notification.api.NotificationService;
 import com.campus.notification.web.LiveEvent;
 import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -50,19 +52,21 @@ public class SesNotificationService implements NotificationService {
 
     // Bug fixed (#171): SES used to be called on the caller's thread. With SES slow, each e-mail could
     // wait up to the 20 s timeout in AwsConfig, so an asset with 10 bookings held Calin's reassignment
-    // for minutes. @Async hands the e-mail to Spring's background pool (spring.task.execution in
-    // application.yml) and returns at once. It only works because Calin calls us through the
-    // NotificationService bean (Spring's proxy), never from inside this class. The pool's queue has
-    // no limit, so an e-mail is never refused, only sent later; e-mails still queued when the app
-    // stops are lost (the booking itself is saved, so "My reservations" still shows the change).
-    @Async
+    // for minutes.
+    // Bug fixed: SES also used to share the 2-thread campus-async- pool with LiveStreams.send and
+    // Calin's reassignment listeners, so two slow SES calls blocked queued live toasts and moves.
+    // Fix: run SES on its own mailTaskExecutor (campus-ses- in AsyncConfig), leaving campus-async-
+    // free for live SSE pushes and reassignments.
+    @Async(AsyncConfig.MAIL_EXECUTOR)
     @Override
     public void notifyUser(Long userId, String subject, String body) {
         try {
             // The live push goes first, so an open tab shows the change at once: a slow SES (up to the
             // 20 s timeout) or a failed lookup below can no longer delay or drop it. LiveStreams.send is
-            // @Async too and does nothing when the user has no open tab.
-            liveStreams.send(userId, LiveEvent.notification(subject, body, LocalDateTime.now(clock)));
+            // @Async on campus-async- and does nothing when the user has no open tab. Whole seconds match
+            // LoggingNotificationService and the API contract timestamp format.
+            LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+            liveStreams.send(userId, LiveEvent.notification(subject, body, now));
             // Bug fixed (#148): this lookup used to be outside the try, so an unknown user (e.g. deleted
             // meanwhile) threw out of notifyUser. Now it is one more failed e-mail, logged below.
             // UserApi.getById opens its own read-only transaction, so it also works on the background thread.

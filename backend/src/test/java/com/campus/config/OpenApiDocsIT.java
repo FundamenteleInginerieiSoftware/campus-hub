@@ -60,12 +60,21 @@ class OpenApiDocsIT {
                         .as("%s has an @Operation summary", name)
                         .isNotBlank();
 
-                if (path.startsWith("/api/v1/auth/")) {
+                boolean isPublic = path.startsWith("/api/v1/auth/")
+                        || ("get".equalsIgnoreCase(method) && path.startsWith("/api/v1/calendar/"));
+                if (isPublic) {
                     // An empty list overrides the global bearerAuth: no lock icon on public endpoints.
                     softly.assertThat(operation.has("security")
                                     && operation.get("security").isEmpty())
-                            .as("%s is public, so it shows no lock", name)
+                            .as("%s is public, so it shows no lock; see OpenApiConfig", name)
                             .isTrue();
+                    if (path.startsWith("/api/v1/calendar/")) {
+                        // Unlike /auth/login (which explicitly returns 401 INVALID_CREDENTIALS),
+                        // the public calendar feed answers unknown tokens with 404, never 401.
+                        softly.assertThat(responses.has("401"))
+                                .as("%s is public, so OpenApiConfig must not inject 401", name)
+                                .isFalse();
+                    }
                 } else {
                     softly.assertThat(operation.has("security"))
                             .as("%s keeps the global bearerAuth lock", name)
