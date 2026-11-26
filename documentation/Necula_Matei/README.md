@@ -91,7 +91,8 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 63 | [63-progress-page.md](63-progress-page.md) | Dedicated `PROGRESS.md` page, 3 ownership/work-profile SVG sketches, 2 Mermaid charts, and full PR audit through `fa0002d` | #357 |
 | 64 | [64-wiki-sync-and-readme-nav.md](64-wiki-sync-and-readme-nav.md) | Top navigation bar in `README.md` and `.github/workflows/sync-wiki.yml` auto-syncing `PROGRESS.md` to the GitHub Wiki Home page | #358 |
 | 65 | [65-progress-engineering-stats.md](65-progress-engineering-stats.md) | Engineering stats in `PROGRESS.md` and 4 SVG sketches: categorized LOC (2.16× test-to-prod), 5-layer testing pyramid, PR/issue health (2.7h median cycle time, 89% closed), REST API chart, and 12-table PostgreSQL 18 data map | #359 |
-| 66 | [66-beyond-crud-motivation.md](66-beyond-crud-motivation.md) | "Why This Isn't a Simple CRUD App" motivation in `README.md` and `PROGRESS.md`, 2 SVG sketches (`progress-beyond-crud`, `progress-lock-hierarchy`), `#310`/`#312` race sequence diagram, 6 real bugs caught, and live CLI + browser demos | — |
+| 66 | [66-beyond-crud-motivation.md](66-beyond-crud-motivation.md) | "Why This Isn't a Simple CRUD App" motivation in `README.md` and `PROGRESS.md`, 2 SVG sketches (`progress-beyond-crud`, `progress-lock-hierarchy`), `#310`/`#312` race sequence diagram, 6 real bugs caught, and live CLI + browser demos | #360 |
+| 67 | [67-sketch-color-semantics.md](67-sketch-color-semantics.md) | Semantic color alignment in `progress-beyond-crud.svg` (strict Red → Emerald polarity + color key) and `progress-lock-hierarchy.svg` (1-to-1 band-to-bug colors, `BAND` badges, and header legend) | — |
 
 **Team docs:**
 - [PROGRESS.md](../../PROGRESS.md): what each of us has done, ownership map, timeline and contribution visuals
