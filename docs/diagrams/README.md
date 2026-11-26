@@ -14,3 +14,13 @@ Text sources live next to their exported PNGs. PlantUML (`.puml`) and Mermaid (`
 | `asset-lifecycle.mmd` | State diagram of an equipment asset (`AVAILABLE`, `UNDER_MAINTENANCE`, `RETIRED`) | Liviu |
 | `catalog-and-common-class.mmd` | UML class diagram of `catalog`, `common` (`error`, `paging`, `audit`), `storage`, and `notification` | Liviu |
 | `database-er.mmd` | Entity-Relationship (ER) diagram of all 8 PostgreSQL 18 tables from Flyway migrations | Liviu |
+
+## Progress & team overview visuals (SVG)
+
+These standalone SVGs are embedded in [`PROGRESS.md`](../../PROGRESS.md) as a quick visual snapshot for teammates and the professor.
+
+| File | What it shows | Owner |
+|---|---|---|
+| `progress-system-overview.svg` | End-to-end system sketch: browser SPA, Spring Boot 4.1 monolith, PostgreSQL 18 / S3 / SES, and the Observer/Strategy reassignment loop | Matei |
+| `progress-module-ownership.svg` | Module ownership map and public `api` contracts across all four team members | Matei |
+| `progress-work-profile.svg` | Team contribution profile by work type and cross-team peer review collaboration | Matei |

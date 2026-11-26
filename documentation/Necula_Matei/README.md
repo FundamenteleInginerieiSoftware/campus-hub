@@ -88,9 +88,10 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 60 | [60-ses-live-push.md](60-ses-live-push.md) | On AWS, `SesNotificationService` first pushes each notification live to the user's open tabs (Liviu's `LiveStreams`, #290), then sends the e-mail; a slow or failed SES can't delay or drop the push | #332 |
 | 61 | [61-user-disabled-event-javadoc.md](61-user-disabled-event-javadoc.md) | Fix: `UserDisabledEvent` Javadoc corrected (listener contract vs the `@Async` reassignment listeners) | #335 |
 | 62 | [62-scheduler-thread-pool.md](62-scheduler-thread-pool.md) | `@Scheduled` jobs get 3 threads (`campus-sched-`) instead of 1, so Liviu's SSE heartbeat never waits behind Calin's sweeps | #347 |
+| 63 | [63-progress-page.md](63-progress-page.md) | Dedicated `PROGRESS.md` page, 3 ownership/work-profile SVG sketches, 2 Mermaid charts, and full PR audit through `fa0002d` | — |
 
 **Team docs:**
-- [README.md §7](../../README.md#7-progress-what-each-of-us-has-done): what each of us has done
+- [PROGRESS.md](../../PROGRESS.md): what each of us has done, ownership map, timeline and contribution visuals
 - [docs/whats-left.md](../../docs/whats-left.md): what is still to do, per member
 - [docs/decisions.md](../../docs/decisions.md): team decisions with dates
 - [docs/adr/](../../docs/adr/): why we chose this AWS setup (ADRs 001–005)
