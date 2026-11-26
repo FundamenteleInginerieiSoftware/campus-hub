@@ -1,0 +1,400 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" role="img" aria-label="Database Schema Map — 12 PostgreSQL 18 Tables for Campus Equipment and Incident Hub">
+  <defs>
+    <!-- Subtle Excalidraw-inspired dot grid -->
+    <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.9" fill="#cbd5e1" opacity="0.55"/>
+    </pattern>
+
+    <!-- Color-matched crisp arrowheads -->
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#0d9488"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+
+    <clipPath id="canvas-clip">
+      <rect x="0" y="0" width="1200" height="660" rx="16"/>
+    </clipPath>
+  </defs>
+
+  <!-- Explicit solid light canvas (GitHub Light + Dark mode safe) -->
+  <rect x="0" y="0" width="1200" height="660" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+  <rect x="1" y="1" width="1198" height="658" rx="15" fill="url(#dot-grid)" clip-path="url(#canvas-clip)"/>
+
+  <!-- ==================== HEADER (y=18..96) ==================== -->
+  <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+    <text x="32" y="42" font-size="20" font-weight="700" fill="#0f172a">Database Schema Map — 12 PostgreSQL 18 Tables</text>
+    <text x="32" y="62" font-size="12.5" fill="#475569">17 Flyway migrations<tspan dx="10">·</tspan><tspan dx="10">20 foreign keys</tspan><tspan dx="10">·</tspan><tspan dx="10">29 indexes</tspan><tspan dx="10">·</tspan><tspan dx="10">Cross-module references use plain IDs + real SQL FKs (no JPA cross-module @ManyToOne)</tspan></text>
+
+    <!-- 4-Owner Legend Pills -->
+    <!-- Matei (Blue) -->
+    <rect x="32" y="74" width="154" height="22" rx="11" fill="#eff6ff" stroke="#2563eb" stroke-width="1.2"/>
+    <circle cx="46" cy="85" r="4.2" fill="#2563eb"/>
+    <text x="57" y="89" font-size="11" font-weight="600" fill="#1e3a8a">Matei · user (1)</text>
+
+    <!-- Liviu (Teal) -->
+    <rect x="196" y="74" width="230" height="22" rx="11" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.2"/>
+    <circle cx="210" cy="85" r="4.2" fill="#0d9488"/>
+    <text x="221" y="89" font-size="11" font-weight="600" fill="#134e4a">Liviu · catalog &amp; audit (4)</text>
+
+    <!-- Calin (Amber) -->
+    <rect x="436" y="74" width="286" height="22" rx="11" fill="#fffbeb" stroke="#d97706" stroke-width="1.2"/>
+    <circle cx="450" cy="85" r="4.2" fill="#d97706"/>
+    <text x="461" y="89" font-size="11" font-weight="600" fill="#78350f">Calin · reservation &amp; reassignment (6)</text>
+
+    <!-- Stefania (Violet) -->
+    <rect x="732" y="74" width="186" height="22" rx="11" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.2"/>
+    <circle cx="746" cy="85" r="4.2" fill="#7c3aed"/>
+    <text x="757" y="89" font-size="11" font-weight="600" fill="#4c1d95">Stefania · incident (1)</text>
+
+    <!-- Secondary FK Chip + Arrow Legend Hint -->
+    <rect x="932" y="74" width="240" height="22" rx="11" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.1"/>
+    <rect x="942" y="78" width="54" height="14" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="969" y="88.5" text-anchor="middle" font-size="9" font-weight="600" fill="#1d4ed8">FK: users</text>
+    <text x="1003" y="89" font-size="10.5" fill="#475569">= secondary FK  ·  → 1 : *</text>
+  </g>
+
+  <!-- ==================== OWNER ZONE CONTAINERS (y=108..572) ==================== -->
+  <!-- Zone 1: Top-Left (Matei — user) -->
+  <g>
+    <rect x="28" y="108" width="312" height="188" rx="12" fill="#eff6ff" fill-opacity="0.72" stroke="#93c5fd" stroke-width="1.5" stroke-dasharray="6,4"/>
+    <text x="42" y="126" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="0.5" fill="#1e3a8a">MATEI · USER (CORE ANCHOR)</text>
+  </g>
+
+  <!-- Zone 2: Top-Right (Liviu — catalog & audit) -->
+  <g>
+    <rect x="396" y="108" width="776" height="188" rx="12" fill="#f0fdfa" fill-opacity="0.72" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="6,4"/>
+    <text x="410" y="126" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="0.5" fill="#134e4a">LIVIU · CATALOG &amp; AUDIT (4 TABLES)</text>
+  </g>
+
+  <!-- Zone 3: Bottom-Left (Stefania — incident) -->
+  <g>
+    <rect x="28" y="342" width="312" height="230" rx="12" fill="#f5f3ff" fill-opacity="0.72" stroke="#c4b5fd" stroke-width="1.5" stroke-dasharray="6,4"/>
+    <text x="42" y="360" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="0.5" fill="#4c1d95">STEFANIA · INCIDENT (1 TABLE)</text>
+  </g>
+
+  <!-- Zone 4: Bottom-Right (Calin — reservation & reassignment) -->
+  <g>
+    <rect x="396" y="342" width="776" height="230" rx="12" fill="#fffbeb" fill-opacity="0.78" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="6,4"/>
+    <text x="410" y="360" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="0.5" fill="#78350f">CALIN · RESERVATION &amp; REASSIGNMENT (6 TABLES)</text>
+  </g>
+
+  <!-- ==================== ZONE 1 TABLE: users ==================== -->
+  <g>
+    <rect x="47" y="143" width="280" height="140" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="44" y="140" width="280" height="140" rx="9" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+    <path d="M 44 167 L 44 149 Q 44 140 53 140 L 315 140 Q 324 140 324 149 L 324 167 Z" fill="#dbeafe"/>
+    <line x1="44" y1="167" x2="324" y2="167" stroke="#93c5fd" stroke-width="1"/>
+    <text x="56" y="158" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12.5" font-weight="700" fill="#1e3a8a">users</text>
+    <rect x="266" y="146" width="46" height="16" rx="4" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="289" y="157.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#1d4ed8">PK id</text>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="11" fill="#334155">
+      <text x="56" y="185">email (unique)<tspan dx="8">·</tspan><tspan dx="8">role (VARCHAR 32)</tspan></text>
+      <text x="56" y="202">enabled<tspan dx="8">·</tspan><tspan dx="8">@Version</tspan></text>
+      <text x="56" y="219">pickup secret (check-out verification)</text>
+    </g>
+
+    <rect x="54" y="232" width="260" height="38" rx="6" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+    <text x="64" y="247" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.8" font-weight="700" fill="#1e40af">Referenced by 8 other tables</text>
+    <text x="64" y="262" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.8" fill="#2563eb">Secondary FKs shown as [FK: users] chips</text>
+  </g>
+
+  <!-- ==================== ZONE 2 TABLES: assets, categories, lab_rooms, audit_logs ==================== -->
+  <!-- assets -->
+  <g>
+    <rect x="415" y="143" width="240" height="140" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="412" y="140" width="240" height="140" rx="9" fill="#ffffff" stroke="#0d9488" stroke-width="1.8"/>
+    <path d="M 412 167 L 412 149 Q 412 140 421 140 L 643 140 Q 652 140 652 149 L 652 167 Z" fill="#ccfbf1"/>
+    <line x1="412" y1="167" x2="652" y2="167" stroke="#5eead4" stroke-width="1"/>
+    <text x="424" y="158" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12.5" font-weight="700" fill="#134e4a">assets</text>
+    <rect x="594" y="146" width="46" height="16" rx="4" fill="#ffffff" stroke="#5eead4" stroke-width="1"/>
+    <text x="617" y="157.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#0f766e">PK id</text>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.4" fill="#334155">
+      <text x="424" y="185">model (required — SameModel)</text>
+      <text x="424" y="202">status (AVAILABLE | MAINT | RETIRED)</text>
+      <text x="424" y="219">@Version (optimistic lock)</text>
+    </g>
+
+    <!-- FK chips inside assets -->
+    <rect x="424" y="232" width="96" height="19" rx="5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+    <text x="472" y="245" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#0f766e">FK: categories</text>
+    <rect x="526" y="232" width="92" height="19" rx="5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+    <text x="572" y="245" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#0f766e">FK: lab_rooms</text>
+    <text x="424" y="270" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" fill="#0f766e">No hard-deletes · row-locked on book</text>
+  </g>
+
+  <!-- categories -->
+  <g>
+    <rect x="709" y="143" width="212" height="64" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="706" y="140" width="212" height="64" rx="9" fill="#ffffff" stroke="#0d9488" stroke-width="1.6"/>
+    <path d="M 706 164 L 706 149 Q 706 140 715 140 L 909 140 Q 918 140 918 149 L 918 164 Z" fill="#ccfbf1"/>
+    <line x1="706" y1="164" x2="918" y2="164" stroke="#5eead4" stroke-width="1"/>
+    <text x="718" y="156" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12" font-weight="700" fill="#134e4a">categories</text>
+    <rect x="862" y="145" width="44" height="15" rx="4" fill="#ffffff" stroke="#5eead4" stroke-width="1"/>
+    <text x="884" y="155.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9" font-weight="700" fill="#0f766e">PK id</text>
+    <text x="718" y="187" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="11" fill="#334155">name (equipment taxonomy)</text>
+  </g>
+
+  <!-- lab_rooms -->
+  <g>
+    <rect x="709" y="219" width="212" height="64" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="706" y="216" width="212" height="64" rx="9" fill="#ffffff" stroke="#0d9488" stroke-width="1.6"/>
+    <path d="M 706 240 L 706 225 Q 706 216 715 216 L 909 216 Q 918 216 918 225 L 918 240 Z" fill="#ccfbf1"/>
+    <line x1="706" y1="240" x2="918" y2="240" stroke="#5eead4" stroke-width="1"/>
+    <text x="718" y="232" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12" font-weight="700" fill="#134e4a">lab_rooms</text>
+    <rect x="862" y="221" width="44" height="15" rx="4" fill="#ffffff" stroke="#5eead4" stroke-width="1"/>
+    <text x="884" y="231.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9" font-weight="700" fill="#0f766e">PK id</text>
+    <text x="718" y="263" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="11" fill="#334155">name<tspan dx="8">·</tspan><tspan dx="8">building</tspan></text>
+  </g>
+
+  <!-- audit_logs -->
+  <g>
+    <rect x="945" y="143" width="214" height="140" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="942" y="140" width="214" height="140" rx="9" fill="#ffffff" stroke="#0d9488" stroke-width="1.6"/>
+    <path d="M 942 167 L 942 149 Q 942 140 951 140 L 1147 140 Q 1156 140 1156 149 L 1156 167 Z" fill="#ccfbf1"/>
+    <line x1="942" y1="167" x2="1156" y2="167" stroke="#5eead4" stroke-width="1"/>
+    <text x="954" y="158" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12" font-weight="700" fill="#134e4a">audit_logs</text>
+    <rect x="1100" y="146" width="44" height="16" rx="4" fill="#ffffff" stroke="#5eead4" stroke-width="1"/>
+    <text x="1122" y="157.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#0f766e">PK id</text>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="11" fill="#334155">
+      <text x="954" y="186">action<tspan dx="8">·</tspan><tspan dx="8">entity</tspan></text>
+      <text x="954" y="204">diff (JSON payload)</text>
+    </g>
+
+    <rect x="954" y="220" width="76" height="20" rx="5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="992" y="233.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#1d4ed8">FK: users</text>
+    <text x="954" y="264" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" fill="#0f766e">Append-only admin audit trail</text>
+  </g>
+
+  <!-- ==================== ZONE 3 TABLE: incident_reports ==================== -->
+  <g>
+    <rect x="47" y="375" width="280" height="184" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="44" y="372" width="280" height="184" rx="9" fill="#ffffff" stroke="#7c3aed" stroke-width="1.8"/>
+    <path d="M 44 399 L 44 381 Q 44 372 53 372 L 315 372 Q 324 372 324 381 L 324 399 Z" fill="#ede9fe"/>
+    <line x1="44" y1="399" x2="324" y2="399" stroke="#c4b5fd" stroke-width="1"/>
+    <text x="56" y="390" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12.5" font-weight="700" fill="#4c1d95">incident_reports</text>
+    <rect x="266" y="378" width="46" height="16" rx="4" fill="#ffffff" stroke="#c4b5fd" stroke-width="1"/>
+    <text x="289" y="389.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#6d28d9">PK id</text>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="11" fill="#334155">
+      <text x="56" y="418">severity<tspan dx="8">·</tspan><tspan dx="8">status</tspan></text>
+      <text x="56" y="436">photo_key (Local / S3 storage)</text>
+      <text x="56" y="454">@Version (optimistic lock)</text>
+    </g>
+
+    <line x1="54" y1="466" x2="314" y2="466" stroke="#ede9fe" stroke-width="1.2"/>
+    <text x="56" y="481" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" fill="#6d28d9">FOREIGN KEYS</text>
+
+    <rect x="56" y="489" width="76" height="20" rx="5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+    <text x="94" y="502.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#0f766e">FK: assets</text>
+
+    <rect x="138" y="489" width="110" height="20" rx="5" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
+    <text x="193" y="502.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#b45309">FK: reservations</text>
+
+    <rect x="56" y="514" width="214" height="20" rx="5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="163" y="527.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#1d4ed8">FK: users (reporter &amp; assignee)</text>
+
+    <text x="56" y="548" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" fill="#6d28d9">Publishes domain event → auto-reassignment</text>
+  </g>
+
+  <!-- ==================== ZONE 4 TABLES (Calin — 6 tables) ==================== -->
+  <!-- Column 1: reservations -->
+  <g>
+    <rect x="415" y="375" width="240" height="184" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="412" y="372" width="240" height="184" rx="9" fill="#ffffff" stroke="#d97706" stroke-width="1.8"/>
+    <path d="M 412 399 L 412 381 Q 412 372 421 372 L 643 372 Q 652 372 652 381 L 652 399 Z" fill="#fef3c7"/>
+    <line x1="412" y1="399" x2="652" y2="399" stroke="#fcd34d" stroke-width="1"/>
+    <text x="424" y="390" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="12.5" font-weight="700" fill="#78350f">reservations</text>
+    <rect x="594" y="378" width="46" height="16" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="617" y="389.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="700" fill="#b45309">PK id</text>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.4" fill="#334155">
+      <text x="424" y="418">start / end<tspan dx="8">·</tspan><tspan dx="8">bundle_id</tspan></text>
+      <text x="424" y="436">status (CONFIRMED | OUT | OVERDUE)</text>
+      <text x="424" y="454">@Version (optimistic lock)</text>
+    </g>
+
+    <line x1="422" y1="466" x2="642" y2="466" stroke="#fef3c7" stroke-width="1.2"/>
+    <text x="424" y="481" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" fill="#b45309">FOREIGN KEYS</text>
+
+    <rect x="424" y="489" width="72" height="20" rx="5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="460" y="502.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#1d4ed8">FK: users</text>
+
+    <rect x="424" y="514" width="218" height="20" rx="5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+    <text x="533" y="527.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" font-weight="600" fill="#0f766e">FK: assets (asset &amp; original_asset)</text>
+
+    <text x="424" y="548" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9.5" fill="#92400e">Reassigned bookings stay CONFIRMED</text>
+  </g>
+
+  <!-- Column 2 Top: reassignment_log -->
+  <g>
+    <rect x="695" y="375" width="232" height="88" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="692" y="372" width="232" height="88" rx="9" fill="#ffffff" stroke="#d97706" stroke-width="1.6"/>
+    <path d="M 692 396 L 692 381 Q 692 372 701 372 L 915 372 Q 924 372 924 381 L 924 396 Z" fill="#fef3c7"/>
+    <line x1="692" y1="396" x2="924" y2="396" stroke="#fcd34d" stroke-width="1"/>
+    <text x="703" y="388" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="11.5" font-weight="700" fill="#78350f">reassignment_log</text>
+    <rect x="870" y="377" width="44" height="15" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="892" y="387.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9" font-weight="700" fill="#b45309">PK id</text>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.2" fill="#334155">
+      <text x="703" y="411">strategy<tspan dx="8">·</tspan><tspan dx="8">triggered_by</tspan></text>
+      <text x="703" y="426">incident_id (nullable)</text>
+    </g>
+
+    <rect x="703" y="434" width="96" height="19" rx="5" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
+    <text x="751" y="447" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#b45309">FK: reservations</text>
+    <rect x="804" y="434" width="110" height="19" rx="5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+    <text x="859" y="447" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#0f766e">FK: assets (from/to)</text>
+  </g>
+
+  <!-- Column 2 Bottom: reservation_transfers -->
+  <g>
+    <rect x="695" y="475" width="232" height="84" rx="9" fill="#0f172a" opacity="0.06"/>
+    <rect x="692" y="472" width="232" height="84" rx="9" fill="#ffffff" stroke="#d97706" stroke-width="1.6"/>
+    <path d="M 692 496 L 692 481 Q 692 472 701 472 L 915 472 Q 924 472 924 481 L 924 496 Z" fill="#fef3c7"/>
+    <line x1="692" y1="496" x2="924" y2="496" stroke="#fcd34d" stroke-width="1"/>
+    <text x="703" y="488" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="11.2" font-weight="700" fill="#78350f">reservation_transfers</text>
+    <rect x="870" y="477" width="44" height="15" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="892" y="487.5" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9" font-weight="700" fill="#b45309">PK id</text>
+
+    <text x="703" y="514" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.5" fill="#334155">status<tspan dx="8">·</tspan><tspan dx="8">expires_at</tspan></text>
+
+    <rect x="703" y="527" width="96" height="19" rx="5" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
+    <text x="751" y="540" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#b45309">FK: reservations</text>
+    <rect x="804" y="527" width="110" height="19" rx="5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="859" y="540" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#1d4ed8">FK: users (from/to)</text>
+  </g>
+
+  <!-- Column 3 Row 1: reservation_holds -->
+  <g>
+    <rect x="943" y="375" width="216" height="56" rx="8" fill="#0f172a" opacity="0.06"/>
+    <rect x="940" y="372" width="216" height="56" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <path d="M 940 394 L 940 380 Q 940 372 948 372 L 1148 372 Q 1156 372 1156 380 L 1156 394 Z" fill="#fef3c7"/>
+    <line x1="940" y1="394" x2="1156" y2="394" stroke="#fcd34d" stroke-width="1"/>
+    <text x="950" y="387" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="10.8" font-weight="700" fill="#78350f">reservation_holds</text>
+    <rect x="1106" y="376" width="41" height="14" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="1126.5" y="386" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.5" font-weight="700" fill="#b45309">PK id</text>
+
+    <text x="948" y="414" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.2" fill="#334155">expires_at</text>
+    <rect x="1016" y="401" width="64" height="18" rx="4.5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+    <text x="1048" y="413.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#0f766e">FK: assets</text>
+    <rect x="1085" y="401" width="62" height="18" rx="4.5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="1116" y="413.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#1d4ed8">FK: users</text>
+  </g>
+
+  <!-- Column 3 Row 2: idempotency_records -->
+  <g>
+    <rect x="943" y="439" width="216" height="56" rx="8" fill="#0f172a" opacity="0.06"/>
+    <rect x="940" y="436" width="216" height="56" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <path d="M 940 458 L 940 444 Q 940 436 948 436 L 1148 436 Q 1156 436 1156 444 L 1156 458 Z" fill="#fef3c7"/>
+    <line x1="940" y1="458" x2="1156" y2="458" stroke="#fcd34d" stroke-width="1"/>
+    <text x="950" y="451" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="10.8" font-weight="700" fill="#78350f">idempotency_records</text>
+    <rect x="1106" y="440" width="41" height="14" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="1126.5" y="450" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.5" font-weight="700" fill="#b45309">PK id</text>
+
+    <text x="948" y="478" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10" fill="#334155">key · response_status</text>
+    <rect x="1085" y="465" width="62" height="18" rx="4.5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="1116" y="477.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#1d4ed8">FK: users</text>
+  </g>
+
+  <!-- Column 3 Row 3: calendar_feeds -->
+  <g>
+    <rect x="943" y="503" width="216" height="56" rx="8" fill="#0f172a" opacity="0.06"/>
+    <rect x="940" y="500" width="216" height="56" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <path d="M 940 522 L 940 508 Q 940 500 948 500 L 1148 500 Q 1156 500 1156 508 L 1156 522 Z" fill="#fef3c7"/>
+    <line x1="940" y1="522" x2="1156" y2="522" stroke="#fcd34d" stroke-width="1"/>
+    <text x="950" y="515" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="10.8" font-weight="700" fill="#78350f">calendar_feeds</text>
+    <rect x="1106" y="504" width="41" height="14" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="1126.5" y="514" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="8.5" font-weight="700" fill="#b45309">PK id</text>
+
+    <text x="948" y="542" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10.5" fill="#334155">token_hash</text>
+    <rect x="1085" y="529" width="62" height="18" rx="4.5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="1116" y="541.5" text-anchor="middle" font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="9" font-weight="600" fill="#1d4ed8">FK: users</text>
+  </g>
+
+  <!-- ==================== BACKBONE FK CONNECTORS (8 clean links) ==================== -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 1. categories -> assets -->
+    <circle cx="706" cy="172" r="3" fill="#0d9488"/>
+    <path d="M 703 172 L 656 172" stroke="#0d9488" stroke-width="1.8" marker-end="url(#arrow-teal)"/>
+
+    <!-- 2. lab_rooms -> assets -->
+    <circle cx="706" cy="248" r="3" fill="#0d9488"/>
+    <path d="M 703 248 L 656 248" stroke="#0d9488" stroke-width="1.8" marker-end="url(#arrow-teal)"/>
+
+    <!-- 3. assets -> reservations -->
+    <circle cx="536" cy="280" r="3" fill="#0d9488"/>
+    <path d="M 536 283 L 536 368" stroke="#0d9488" stroke-width="2" marker-end="url(#arrow-teal)"/>
+
+    <!-- 4. assets -> incident_reports (routed cleanly through middle corridor) -->
+    <circle cx="442" cy="280" r="3" fill="#0d9488"/>
+    <path d="M 442 283 L 442 308 Q 442 318 432 318 L 260 318 Q 250 318 250 328 L 250 368" stroke="#0d9488" stroke-width="1.9" marker-end="url(#arrow-teal)"/>
+
+    <!-- 5. users -> reservations (with crisp bridge halo where it crosses assets->incident_reports) -->
+    <path d="M 324 214 L 358 214 Q 368 214 368 224 L 368 416 Q 368 426 378 426 L 408 426" stroke="#fafbfc" stroke-width="7"/>
+    <circle cx="324" cy="214" r="3" fill="#2563eb"/>
+    <path d="M 327 214 L 358 214 Q 368 214 368 224 L 368 416 Q 368 426 378 426 L 408 426" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+    <!-- 6. reservations -> incident_reports -->
+    <circle cx="412" cy="496" r="3" fill="#d97706"/>
+    <path d="M 409 496 L 328 496" stroke="#d97706" stroke-width="1.9" marker-end="url(#arrow-amber)"/>
+
+    <!-- 7. reservations -> reassignment_log -->
+    <circle cx="652" cy="416" r="3" fill="#d97706"/>
+    <path d="M 655 416 L 688 416" stroke="#d97706" stroke-width="1.8" marker-end="url(#arrow-amber)"/>
+
+    <!-- 8. reservations -> reservation_transfers -->
+    <circle cx="652" cy="514" r="3" fill="#d97706"/>
+    <path d="M 655 514 L 688 514" stroke="#d97706" stroke-width="1.8" marker-end="url(#arrow-amber)"/>
+  </g>
+
+  <!-- Crisp connector label pills (zero overlap with cards or borders) -->
+  <g font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="9.5" font-weight="600">
+    <!-- assets -> reservations label -->
+    <rect x="460" y="309" width="152" height="18" rx="9" fill="#ffffff" stroke="#5eead4" stroke-width="1.1"/>
+    <text x="536" y="321" text-anchor="middle" fill="#0f766e">asset &amp; original_asset</text>
+
+    <!-- assets -> incident_reports label -->
+    <rect x="272" y="309" width="64" height="18" rx="9" fill="#ffffff" stroke="#5eead4" stroke-width="1.1"/>
+    <text x="304" y="321" text-anchor="middle" fill="#0f766e">asset_id</text>
+
+    <!-- users -> reservations label -->
+    <rect x="342" y="252" width="52" height="18" rx="9" fill="#ffffff" stroke="#93c5fd" stroke-width="1.1"/>
+    <text x="368" y="264" text-anchor="middle" fill="#1d4ed8">user_id</text>
+
+    <!-- reservations -> incident_reports badge -->
+    <rect x="349" y="472" width="38" height="17" rx="8.5" fill="#ffffff" stroke="#fcd34d" stroke-width="1.1"/>
+    <text x="368" y="483.5" text-anchor="middle" fill="#b45309">1 : *</text>
+  </g>
+
+  <!-- ==================== BOTTOM LEGEND STRIP (y=584..638) ==================== -->
+  <g>
+    <rect x="31" y="587" width="1144" height="54" rx="10" fill="#0f172a" opacity="0.05"/>
+    <rect x="28" y="584" width="1144" height="54" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.3"/>
+    <path d="M 38 584 L 34 584 Q 28 584 28 590 L 28 632 Q 28 638 34 638 L 38 638 Z" fill="#475569"/>
+
+    <g font-family="&quot;Segoe UI&quot;, -apple-system, BlinkMacSystemFont, &quot;Helvetica Neue&quot;, Arial, sans-serif">
+      <text x="48" y="607" font-size="10.5" font-weight="700" letter-spacing="0.4" fill="#475569">KEY POSTGRESQL</text>
+      <text x="48" y="623" font-size="10.5" font-weight="700" letter-spacing="0.4" fill="#0f172a">SCHEMA RULES</text>
+      <line x1="164" y1="595" x2="164" y2="627" stroke="#e2e8f0" stroke-width="1.5"/>
+
+      <text x="180" y="606" font-size="11.5" fill="#1e293b">
+        <tspan font-weight="700" fill="#0f172a">•</tspan> BIGINT IDENTITY PKs<tspan dx="18" font-weight="700" fill="#0f172a">•</tspan> VARCHAR(32) enums (never ORDINAL)<tspan dx="18" font-weight="700" fill="#0f172a">•</tspan> ddl-auto=validate
+      </text>
+      <text x="180" y="625" font-size="11.5" fill="#1e293b">
+        <tspan font-weight="700" fill="#0f172a">•</tspan> Timestamps in Europe/Bucharest<tspan dx="18" font-weight="700" fill="#0f172a">•</tspan> No hard-deletes on assets (RETIRED)
+      </text>
+    </g>
+
+    <!-- Right-side compact metrics pill -->
+    <rect x="844" y="596" width="312" height="30" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+    <text x="1000" y="615" text-anchor="middle" font-family="&quot;SFMono-Regular&quot;, Consolas, &quot;Liberation Mono&quot;, Menlo, monospace" font-size="10.2" font-weight="600" fill="#475569">12 tables · 17 migrations · 20 FKs · 29 indexes</text>
+  </g>
+</svg>

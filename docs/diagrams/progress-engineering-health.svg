@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 580" width="1200" height="580" role="img" aria-label="Engineering Process, PR Discipline and Issue Resolution">
+  <defs>
+    <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#cbd5e1" opacity="0.55"/>
+    </pattern>
+  </defs>
+
+  <style>
+    .sans { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+  </style>
+
+  <!-- Explicit light canvas for GitHub Light & Dark Mode safety -->
+  <rect x="0" y="0" width="1200" height="580" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+  <rect x="8" y="8" width="1184" height="564" rx="12" fill="url(#dot-grid)"/>
+
+  <!-- ==================== HEADER (y=18..74) ==================== -->
+  <g id="header">
+    <rect x="28" y="24" width="5" height="44" rx="2.5" fill="#2563eb"/>
+    <text x="44" y="44" class="sans" font-size="20" font-weight="700" fill="#0f172a">Engineering Process, PR Discipline &amp; Issue Resolution</text>
+    <text x="44" y="66" class="sans" font-size="12.5" font-weight="400" fill="#475569">241 post-reset merged PRs (#12–#358) &amp; 81 tracked GitHub issues  ·  Fast reviews, small PRs, continuous bugfixing</text>
+
+    <!-- Repo snapshot badge -->
+    <rect x="1018" y="27" width="154" height="26" rx="13" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <circle cx="1034" cy="40" r="3.5" fill="#16a34a"/>
+    <text x="1045" y="44" class="mono" font-size="11" font-weight="600" fill="#334155">snapshot c4b7151</text>
+  </g>
+
+  <!-- ==================== LEFT PANEL (x=28..588, y=92..552) ==================== -->
+  <g id="left-panel">
+    <!-- Offset sketch shadow -->
+    <rect x="32" y="96" width="560" height="460" rx="14" fill="#0f172a" opacity="0.06"/>
+    <!-- Card frame -->
+    <rect x="28" y="92" width="560" height="460" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <!-- Header band -->
+    <path d="M 28 106 Q 28 92 42 92 L 574 92 Q 588 92 588 106 L 588 134 L 28 134 Z" fill="#f8fafc"/>
+    <line x1="28" y1="134" x2="588" y2="134" stroke="#e2e8f0" stroke-width="1"/>
+    <circle cx="46" cy="113" r="4.5" fill="#2563eb"/>
+    <text x="60" y="118" class="sans" font-size="14.5" font-weight="700" fill="#0f172a">PR Discipline &amp; Review Velocity</text>
+    <text x="570" y="117" text-anchor="end" class="sans" font-size="11" font-weight="500" fill="#64748b">GitHub Flow · Squash merge</text>
+
+    <!-- 2x2 KPI Cards -->
+    <!-- KPI 1: Blue -->
+    <g id="kpi-cycle-time">
+      <rect x="48" y="150" width="254" height="83" rx="10" fill="#0f172a" opacity="0.04"/>
+      <rect x="46" y="148" width="254" height="83" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+      <rect x="49" y="155" width="4.5" height="69" rx="2.25" fill="#2563eb"/>
+      <text x="65" y="181" class="sans" font-size="26" font-weight="800" fill="#1e3a8a">2.7 h</text>
+      <text x="65" y="201" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">Median PR Cycle Time</text>
+      <text x="65" y="218" class="sans" font-size="10.5" fill="#475569">Open → reviewed → squash-merged</text>
+    </g>
+
+    <!-- KPI 2: Teal -->
+    <g id="kpi-within-24h">
+      <rect x="318" y="150" width="254" height="83" rx="10" fill="#0f172a" opacity="0.04"/>
+      <rect x="316" y="148" width="254" height="83" rx="10" fill="#f0fdfa" stroke="#5eead4" stroke-width="1.2"/>
+      <rect x="319" y="155" width="4.5" height="69" rx="2.25" fill="#0d9488"/>
+      <text x="335" y="181" class="sans" font-size="26" font-weight="800" fill="#134e4a">76%</text>
+      <text x="335" y="201" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">Merged Within 24h</text>
+      <text x="335" y="218" class="sans" font-size="10.5" fill="#475569">184 / 241 PRs hit our 24h review rule</text>
+    </g>
+
+    <!-- KPI 3: Amber -->
+    <g id="kpi-median-size">
+      <rect x="48" y="247" width="254" height="83" rx="10" fill="#0f172a" opacity="0.04"/>
+      <rect x="46" y="245" width="254" height="83" rx="10" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.2"/>
+      <rect x="49" y="252" width="4.5" height="69" rx="2.25" fill="#d97706"/>
+      <text x="65" y="278" class="sans" font-size="26" font-weight="800" fill="#78350f">257</text>
+      <text x="65" y="298" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">Median PR Size (lines)</text>
+      <text x="65" y="315" class="sans" font-size="10.5" fill="#475569">Small, reviewable increments</text>
+    </g>
+
+    <!-- KPI 4: Violet -->
+    <g id="kpi-under-400">
+      <rect x="318" y="247" width="254" height="83" rx="10" fill="#0f172a" opacity="0.04"/>
+      <rect x="316" y="245" width="254" height="83" rx="10" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+      <rect x="319" y="252" width="4.5" height="69" rx="2.25" fill="#7c3aed"/>
+      <text x="335" y="278" class="sans" font-size="26" font-weight="800" fill="#4c1d95">61%</text>
+      <text x="335" y="298" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">Under 400 Lines</text>
+      <text x="335" y="315" class="sans" font-size="10.5" fill="#475569">148 / 241 PRs under team target</text>
+    </g>
+
+    <!-- Dashed divider -->
+    <line x1="46" y1="344" x2="570" y2="344" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4"/>
+
+    <!-- GitHub Issues Lifecycle (81 Total) -->
+    <g id="issues-lifecycle">
+      <text x="46" y="366" class="sans" font-size="13" font-weight="700" fill="#0f172a">GitHub Issues Lifecycle (81 Total)</text>
+
+      <!-- Inline legend -->
+      <circle cx="362" cy="362" r="4" fill="#16a34a"/>
+      <text x="371" y="366" class="sans" font-size="11" font-weight="700" fill="#15803d">72 Closed (89%)</text>
+      <circle cx="482" cy="362" r="4" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1"/>
+      <text x="491" y="366" class="sans" font-size="11" font-weight="600" fill="#475569">9 Open (11%)</text>
+
+      <!-- Horizontal Progress Bar (width=524: 466px closed + 58px open) -->
+      <rect x="46" y="378" width="524" height="28" rx="8" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1"/>
+      <path d="M 54 378 L 512 378 L 512 406 L 54 406 Q 46 406 46 398 L 46 386 Q 46 378 54 378 Z" fill="#16a34a"/>
+      <line x1="512" y1="378" x2="512" y2="406" stroke="#ffffff" stroke-width="2"/>
+      <text x="279" y="396" text-anchor="middle" class="sans" font-size="12" font-weight="700" fill="#ffffff">72 Closed (89%)</text>
+      <text x="541" y="396" text-anchor="middle" class="sans" font-size="11" font-weight="700" fill="#334155">11%</text>
+
+      <!-- 3 Pill Counters -->
+      <g id="pill-bugs">
+        <rect x="46" y="420" width="166" height="56" rx="10" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.2"/>
+        <text x="129" y="443" text-anchor="middle" class="sans" font-size="12" font-weight="700" fill="#991b1b">40 tracked bugs</text>
+        <text x="129" y="461" text-anchor="middle" class="sans" font-size="10" fill="#64748b">found in reviews &amp; testing</text>
+      </g>
+
+      <g id="pill-peer-reviewed">
+        <rect x="225" y="420" width="166" height="56" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+        <text x="308" y="443" text-anchor="middle" class="sans" font-size="12" font-weight="700" fill="#166534">283 formal reviews</text>
+        <text x="308" y="461" text-anchor="middle" class="sans" font-size="10" fill="#64748b">cross-team CODEOWNERS</text>
+      </g>
+
+      <g id="pill-plan">
+        <rect x="404" y="420" width="166" height="56" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="487" y="443" text-anchor="middle" class="sans" font-size="12" font-weight="700" fill="#1e293b">12 weeks plan</text>
+        <text x="487" y="461" text-anchor="middle" class="sans" font-size="10" fill="#64748b">W1–W12 milestone cadence</text>
+      </g>
+
+      <!-- Bottom Note -->
+      <rect x="46" y="490" width="524" height="46" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.1"/>
+      <rect x="49" y="496" width="3.5" height="34" rx="1.75" fill="#64748b"/>
+      <text x="63" y="509" class="sans" font-size="11" fill="#475569">Bugs caught during PR concurrency probes &amp; code read-throughs</text>
+      <text x="63" y="525" class="sans" font-size="11" fill="#475569">are tracked and closed via dedicated fix PRs.</text>
+    </g>
+  </g>
+
+  <!-- ==================== RIGHT PANEL (x=610..1172, y=92..552) ==================== -->
+  <g id="right-panel">
+    <!-- Offset sketch shadow -->
+    <rect x="614" y="96" width="562" height="460" rx="14" fill="#0f172a" opacity="0.06"/>
+    <!-- Card frame -->
+    <rect x="610" y="92" width="562" height="460" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <!-- Header band -->
+    <path d="M 610 106 Q 610 92 624 92 L 1158 92 Q 1172 92 1172 106 L 1172 134 L 610 134 Z" fill="#f8fafc"/>
+    <line x1="610" y1="134" x2="1172" y2="134" stroke="#e2e8f0" stroke-width="1"/>
+    <circle cx="628" cy="113" r="4.5" fill="#7c3aed"/>
+    <text x="642" y="118" class="sans" font-size="14.5" font-weight="700" fill="#0f172a">Merged PR Mix by Conventional Type (241 Post-Reset)</text>
+
+    <!-- Subtle vertical reference gridlines behind bars (x=716..1036, max=91 -> 320px) -->
+    <g id="bar-gridlines" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 3">
+      <line x1="716" y1="146" x2="716" y2="480"/>
+      <line x1="796" y1="146" x2="796" y2="480"/>
+      <line x1="876" y1="146" x2="876" y2="480"/>
+      <line x1="956" y1="146" x2="956" y2="480"/>
+      <line x1="1036" y1="146" x2="1036" y2="480"/>
+    </g>
+
+    <!-- Row 1: feat (91, 37.8%, width=320) -->
+    <g id="row-feat">
+      <rect x="628" y="149" width="76" height="20" rx="5" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+      <text x="666" y="162.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#1e3a8a">feat</text>
+      <rect x="716" y="151" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="151" width="320" height="16" rx="5" fill="#2563eb"/>
+      <text x="1074" y="163" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">91</text>
+      <text x="1082" y="163" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(37.8%)</text>
+      <text x="716" y="181" class="sans" font-size="10.5" fill="#64748b">New backend &amp; frontend capabilities</text>
+      <line x1="628" y1="188" x2="1154" y2="188" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 2: docs (58, 24.1%, width=204) -->
+    <g id="row-docs">
+      <rect x="628" y="191" width="76" height="20" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="666" y="204.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#334155">docs</text>
+      <rect x="716" y="193" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="193" width="204" height="16" rx="5" fill="#64748b"/>
+      <text x="1074" y="205" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">58</text>
+      <text x="1082" y="205" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(24.1%)</text>
+      <text x="716" y="223" class="sans" font-size="10.5" fill="#64748b">Specs, ADRs, API contract &amp; personal notes</text>
+      <line x1="628" y1="230" x2="1154" y2="230" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 3: fix (56, 23.2%, width=197) -->
+    <g id="row-fix">
+      <rect x="628" y="233" width="76" height="20" rx="5" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+      <text x="666" y="246.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#991b1b">fix</text>
+      <rect x="716" y="235" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="235" width="197" height="16" rx="5" fill="#ef4444"/>
+      <text x="1074" y="247" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#dc2626">56</text>
+      <text x="1082" y="247" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(23.2%)</text>
+      <text x="716" y="265" class="sans" font-size="10.5" fill="#64748b">Bug fixes, race locks &amp; review hardening</text>
+      <line x1="628" y1="272" x2="1154" y2="272" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 4: test (14, 5.8%, width=49) -->
+    <g id="row-test">
+      <rect x="628" y="275" width="76" height="20" rx="5" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
+      <text x="666" y="288.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#78350f">test</text>
+      <rect x="716" y="277" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="277" width="49" height="16" rx="5" fill="#d97706"/>
+      <text x="1074" y="289" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">14</text>
+      <text x="1082" y="289" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(5.8%)</text>
+      <text x="716" y="307" class="sans" font-size="10.5" fill="#64748b">Dedicated PIT, ArchUnit &amp; concurrency PRs</text>
+      <line x1="628" y1="314" x2="1154" y2="314" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 5: chore (7, 2.9%, width=25) -->
+    <g id="row-chore">
+      <rect x="628" y="317" width="76" height="20" rx="5" fill="#f0fdfa" stroke="#5eead4" stroke-width="1"/>
+      <text x="666" y="330.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#134e4a">chore</text>
+      <rect x="716" y="319" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="319" width="25" height="16" rx="5" fill="#0d9488"/>
+      <text x="1074" y="331" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">7</text>
+      <text x="1082" y="331" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(2.9%)</text>
+      <text x="716" y="349" class="sans" font-size="10.5" fill="#64748b">Build, config &amp; repo hygiene</text>
+      <line x1="628" y1="356" x2="1154" y2="356" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 6: refactor (7, 2.9%, width=25) -->
+    <g id="row-refactor">
+      <rect x="628" y="359" width="76" height="20" rx="5" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1"/>
+      <text x="666" y="372.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#4c1d95">refactor</text>
+      <rect x="716" y="361" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="361" width="25" height="16" rx="5" fill="#7c3aed"/>
+      <text x="1074" y="373" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">7</text>
+      <text x="1082" y="373" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(2.9%)</text>
+      <text x="716" y="391" class="sans" font-size="10.5" fill="#64748b">Service splits &amp; code simplification</text>
+      <line x1="628" y1="398" x2="1154" y2="398" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 7: infra (6, 2.5%, width=21) -->
+    <g id="row-infra">
+      <rect x="628" y="401" width="76" height="20" rx="5" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1"/>
+      <text x="666" y="414.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#075985">infra</text>
+      <rect x="716" y="403" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="403" width="21" height="16" rx="5" fill="#0284c7"/>
+      <text x="1074" y="415" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">6</text>
+      <text x="1082" y="415" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(2.5%)</text>
+      <text x="716" y="433" class="sans" font-size="10.5" fill="#64748b">Terraform AWS, Docker &amp; deploy OIDC</text>
+      <line x1="628" y1="440" x2="1154" y2="440" stroke="#f1f5f9" stroke-width="1"/>
+    </g>
+
+    <!-- Row 8: ci (2, 0.8%, width=7) -->
+    <g id="row-ci">
+      <rect x="628" y="443" width="76" height="20" rx="5" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1"/>
+      <text x="666" y="456.5" text-anchor="middle" class="mono" font-size="11" font-weight="700" fill="#065f46">ci</text>
+      <rect x="716" y="445" width="320" height="16" rx="5" fill="#f1f5f9"/>
+      <rect x="716" y="445" width="7" height="16" rx="3.5" fill="#059669"/>
+      <text x="1074" y="457" text-anchor="end" class="sans" font-size="12.5" font-weight="700" fill="#0f172a">2</text>
+      <text x="1082" y="457" class="sans" font-size="11.5" font-weight="500" fill="#64748b">(0.8%)</text>
+      <text x="716" y="475" class="sans" font-size="10.5" fill="#64748b">GitHub Actions workflows &amp; guards</text>
+    </g>
+
+    <!-- Bottom Note -->
+    <rect x="628" y="490" width="526" height="46" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.1"/>
+    <rect x="631" y="496" width="3.5" height="34" rx="1.75" fill="#ef4444"/>
+    <text x="645" y="509" class="sans" font-size="11" fill="#475569"><tspan font-weight="700" fill="#0f172a">Over 31% of all merged PRs</tspan> are dedicated to bug fixes, tests,</text>
+    <text x="645" y="525" class="sans" font-size="11" fill="#475569">and refactoring — not just new features.</text>
+  </g>
+</svg>

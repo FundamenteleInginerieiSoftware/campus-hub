@@ -1,6 +1,6 @@
 # Campus Equipment & Incident Hub — Project Progress & Team Contributions
 
-> **Snapshot as of 26 Nov 2026 (Week 8, `main` `fa0002d`).** Maintained manually alongside weekly status refreshes. What is still left to do: [`docs/whats-left.md`](docs/whats-left.md). Back to setup & quick start: [`README.md`](README.md).
+> **Snapshot as of 26 Nov 2026 (Week 8, `main` `c4b7151`).** Maintained manually alongside weekly status refreshes. What is still left to do: [`docs/whats-left.md`](docs/whats-left.md). Back to setup & quick start: [`README.md`](README.md).
 
 | Milestone | Date / Target | Status |
 |---|---|---|
@@ -72,9 +72,11 @@ Every backend module exposes only its `api` package (facades, summary records, a
 
 ## 4. How We Work & Contribution Profile
 
-> **Why commit and PR counts are not a scoreboard:** Our team divides work by ownership and delivered features, not by PR volume. Raw counts reflect the shape of each role rather than relative effort: Matei maintains repo governance, weekly status refreshes, ADRs, and AWS infrastructure (`43` docs, `6` infra, and `3` CI PRs alongside auth, projects, and pickup pass); Calin ships many small incremental bugfix and test PRs (`28` fix and `9` test PRs) while hardening concurrency and locking rules; Liviu and Stefania deliver cohesive, multi-file PRs that bundle backend services, migrations, tests, and full frontend pages together. Generated lockfiles (`package-lock.json`) and static HTML prototypes are excluded from code-footprint stats.
+> **Why commit and PR counts are not a scoreboard:** Our team divides work by ownership and delivered features, not by PR volume. Raw counts reflect the shape of each role rather than relative effort: Matei maintains repo governance, weekly status refreshes, ADRs, and AWS infrastructure (over 40 docs, infra, and CI PRs alongside auth, projects, and pickup pass); Calin ships many small incremental bugfix and test PRs (`28` fix and `9` test PRs) while hardening concurrency and locking rules; Liviu and Stefania deliver cohesive, multi-file PRs that bundle backend services, migrations, tests, and full frontend pages together. Generated lockfiles (`package-lock.json`) and static HTML prototypes are excluded from code-footprint stats.
 
 ![Contribution Profile & Peer Review Collaboration](docs/diagrams/progress-work-profile.svg)
+
+*(Per-member role-mix and peer-review heatmap snapshotted at `fa0002d`, prior to the `PROGRESS.md` docs PRs `#357` and `#358`.)*
 
 ### Team Weekly Delivery Pace (W1–W8)
 
@@ -83,26 +85,98 @@ xychart-beta
     title "Team Weekly Delivery Pace (W1-W8)"
     x-axis [W1, W2, W3, W4, W5, W6, W7, W8]
     y-axis "Merged PRs (team total)" 0 --> 100
-    bar [10, 0, 16, 37, 91, 34, 58, 3]
+    bar [10, 0, 16, 37, 91, 34, 58, 5]
 ```
 
-*Notes:* W2 had `0` merges during the 21 Oct repository restart; W6 ended with M1 (`v0.1.0`) tagged on 11 Nov; W7 covered the first live AWS deploy and the four individual features; W8 is a partial week through 26 Nov (`8` PRs are currently open in review).
+*Notes:* W2 had `0` merges during the 21 Oct repository restart; W6 ended with M1 (`v0.1.0`) tagged on 11 Nov; W7 covered the first live AWS deploy and the four individual features; W8 is a partial week through 26 Nov (`251` merged PRs total, `241` post-reset incl. `#73`; `8` PRs are currently open in review).
 
 ### Codebase Footprint Snapshot
 
-| Area | Snapshot (`main` `fa0002d`) |
+| Area | Snapshot (`main` `c4b7151`) |
 |---|---|
-| Backend Java files | `215` main + `113` test across `11` packages |
+| Engineering code + tests | `58,211` lines (`50,927` non-empty) across `481` files (`51%` automated tests / `49%` production app, config & infra) |
+| Backend Java files | `215` main + `113` test across `11` packages (`126` files total under `backend/src/test/`) |
 | Automated tests | `1,221` test methods (`1,163` `@Test`, `30` `@ParameterizedTest`, `28` `@ArchTest`) |
-| REST API surface | `21` `@RestController`s, `69` endpoints |
-| Database | `17` Flyway migrations (PostgreSQL 18) |
-| Frontend | `67` `.ts`/`.tsx` files, `20` `*Page.tsx` route pages |
-| Documentation | `155` personal docs (`documentation/`), shared API contract, diagrams, pattern guides, defense playbook |
-| Collaboration | `249` merged PRs (`238` post-reset commits on `main`), `283` formal cross-team peer reviews, `0` solo merges |
+| REST API surface | `21` `@RestController`s, `69` endpoints (`33` POST, `29` GET, `4` PUT, `3` DELETE) |
+| Database | `12` PostgreSQL 18 tables via `17` Flyway migrations |
+| Frontend | `67` `.ts`/`.tsx` files (`10,833` lines), `20` `*Page.tsx` route pages |
+| Documentation | `157` personal docs (`documentation/`), `52` shared docs & diagrams (`docs/`, root `.md`) |
+| Collaboration | `251` merged PRs (`240` post-reset commits on `main`, `241` post-reset PRs incl. `#73`), `283` formal cross-team peer reviews |
 
 ---
 
-## 5. Detailed Work Delivered per Member
+## 5. Lines of Code by Explicit Category & Purpose
+
+![Lines of Code by Category & Purpose](docs/diagrams/progress-codebase-loc.svg)
+
+Every tracked file at `main` `c4b7151` (counted via `git ls-files`) is grouped by purpose below, keeping production source, automated tests, written documentation, and excluded artifacts clearly separated.
+
+| Category & Path | Files | Total Lines | Non-empty Lines | Purpose |
+|---|---:|---:|---:|---|
+| Backend Automated Tests (`backend/src/test/`) | `126` | `29,619` | `25,082` | Unit, Slice, IT, Concurrency, ArchUnit (**2.16× backend production code**) |
+| Backend Production Java (`backend/src/main/java/`) | `215` | `13,729` | `12,125` | 8 domain modules, 69 REST endpoints |
+| Frontend Application Source (`frontend/src/`) | `67` | `10,833` | `10,021` | 20 React pages, Mantine UI, SSE client |
+| Infra, Docker, Gradle & CI (`infra/`, `Dockerfile`, `.github/`, build files) | `43` | `2,456` | `2,155` | AWS Terraform, Docker image, CI/deploy/docs-check/sync-wiki workflows |
+| DB Migrations & Spring Config (`backend/src/main/resources/`) | `30` | `1,574` | `1,544` | 17 Flyway SQL migrations & Spring YAML profiles |
+| **Engineering Code Subtotal** | **`481`** | **`58,211`** | **`50,927`** | **`51%` automated tests / `49%` production app, config & infra** |
+| Personal Engineering Docs (`documentation/`) | `157` | `11,059` | `8,343` | Part 1 + Part 2 notes across all 4 teammates |
+| Shared Docs, API Contract & Diagrams (`docs/`, root `.md`) | `52` | `8,491` | `6,814` | API contract, ADRs, SVGs, report chapters, test plans |
+
+**Excluded from code LOC (listed transparently):** `docs/prototype/*.html` (`2` files, `2,073` lines: clickable pre-React UI mockups), `frontend/package-lock.json` & Gradle wrapper (`2,229` lines), and `62` binary PNGs.
+
+---
+
+## 6. Testing Pyramid & Concurrency Defense
+
+![Testing Pyramid & Concurrency Defense](docs/diagrams/progress-testing-pyramid.svg)
+
+Tests are layered from fast, isolated unit suites up to full Spring Boot and PostgreSQL 18 concurrency tests, backed by automated architecture rules so module boundaries cannot drift.
+
+| Layer | Test Files | Tests / Rules | Scope |
+|---|---:|---:|---|
+| Pure Unit | `62` | `796` | Service rules, calculators, state transitions, and boundary checks with Mockito and a fixed `Clock` |
+| Web Slice (`@WebMvcTest`) | `21` | `213` | HTTP status codes, validation errors, RFC 9457 `ProblemDetail` payloads, and role guards |
+| Full Integration & Concurrency (`@SpringBootTest`) | `20` | `130` | End-to-end HTTP flows (`DemoFlowIT`, `SecurityPassIT`), multi-thread race tests, and live Postgres locking |
+| JPA Slice (`@DataJpaTest`) | `8` | `54` | Custom repository queries, overlap checks, and Flyway-migrated PostgreSQL 18 schema behavior |
+| Architecture (`ArchUnit`) | `2` | `28` | Module `api` boundaries, Boot 4 conventions, `@Transactional` placement, and shared `Clock` usage |
+| **Total** | **`113`** | **`1,221`** | **Full backend verification run on every PR in CI** |
+
+**Concurrency & data-integrity guardrails:** `19` pessimistic row locks (`FOR UPDATE`), `4` PostgreSQL advisory locks, `11` `@Version` optimistic locks, `20` foreign keys, `29` database indexes, `Idempotency-Key` replay protection on booking creation, and on-demand PIT mutation testing (`./gradlew pitest`).
+
+---
+
+## 7. Engineering Process & Review Health
+
+![Engineering Process, PR Discipline & Issue Resolution](docs/diagrams/progress-engineering-health.svg)
+
+Metrics across all **`241` post-reset merged PRs** (`#12–#358`, `21 Oct – 26 Nov 2026`):
+
+- **Small, reviewable PRs:** median size is **`257` lines**, with **`61.4%`** at or below the `400`-line guideline in `AGENTS.md`.
+- **Fast peer review:** median open-to-merge time is **`2.7 hours`**, with **`76.3%`** merged within the 24-hour review rule (`0` solo merges).
+- **Issue closure:** **`72 / 81` GitHub issues closed (`89%`)**, including `40` tracked bugs resolved with regression tests.
+- **Balanced PR mix:** `91` `feat`, `58` `docs`, `56` `fix`, `14` `test`, `7` `chore`, `7` `refactor`, `6` `infra`, and `2` `ci`. Over **`31%`** of merged PRs focus on bugfixes, automated tests, and refactoring.
+
+---
+
+## 8. Module Complexity, REST API Surface & Database Map
+
+```mermaid
+xychart-beta
+    title "REST Endpoints per Backend Module"
+    x-axis [reservation, catalog, user, incident, project, reassignment, common, notification]
+    y-axis "REST Endpoints" 0 --> 32
+    bar [28, 13, 11, 10, 3, 2, 1, 1]
+```
+
+**API surface:** **`69` endpoints total** (`33` POST · `29` GET · `4` PUT · `3` DELETE), split by access tier into **`4` Public** (auth and `.ics` calendar token), **`38` Authenticated Student/User**, and **`27` Admin-only (`/api/v1/admin/**`)**.
+
+![Database Schema Map — 12 PostgreSQL 18 Tables](docs/diagrams/progress-domain-map.svg)
+
+All `12` PostgreSQL 18 tables are managed strictly through Flyway migrations (`ddl-auto=validate`). Cross-module references stay plain `BIGINT` IDs in Java entities while keeping real SQL foreign keys in the database, so modules remain decoupled without sacrificing referential integrity. For full column definitions and relations, see [`docs/diagrams/database-er.mmd`](docs/diagrams/database-er.mmd).
+
+---
+
+## 9. Detailed Work Delivered per Member
 
 ### Matei Necula: cloud, security, auth & projects
 
@@ -176,7 +250,9 @@ xychart-beta
 | Live SES notifications also pushed to open tabs | #332 |
 | `UserDisabledEvent` listener contract Javadoc + personal doc 61 | #335 |
 | 3-thread `@Scheduled` pool (`campus-sched-`) so background sweeps do not block the 20 s SSE heartbeat | #347 |
-| Personal docs 01-62 + README index of them | #14 + each PR above, #137 |
+| Dedicated `PROGRESS.md` page with 3 SVG architecture/contribution sketches and 2 Mermaid charts | #357 |
+| Top navigation bar in `README.md` and `.github/workflows/sync-wiki.yml` auto-syncing `PROGRESS.md` to the GitHub Wiki | #358 |
+| Personal docs 01-64 + README index of them | #14 + each PR above, #137 |
 
 *Note: pre-reset PRs `#1–#10` (6–8 Oct 2026) preceded the 21 Oct repository restart.*
 
@@ -361,7 +437,7 @@ xychart-beta
 
 ---
 
-## 6. Everyone & Further Reading
+## 10. Everyone & Further Reading
 
 **Open team items:** only two items remain open in [`docs/decisions.md`](docs/decisions.md): the recurring weekly meeting time (`⏳`) and the exact defense date (to be announced by the professor).
 
@@ -370,4 +446,4 @@ xychart-beta
 - **REST API & error contract:** [`docs/api-contract.md`](docs/api-contract.md)
 - **Team decision log:** [`docs/decisions.md`](docs/decisions.md)
 - **Defense playbook:** [`docs/testing/defense-playbook.md`](docs/testing/defense-playbook.md)
-- **Personal member docs (`155` files):** [`documentation/`](documentation/)
+- **Personal member docs (`157` files):** [`documentation/`](documentation/)
