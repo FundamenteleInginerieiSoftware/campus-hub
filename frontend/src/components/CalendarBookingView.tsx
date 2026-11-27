@@ -290,11 +290,13 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleDurationChange(val: number) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || val === durationMinutes) return
     discardActiveHold()
     setDurationMinutes(val)
     setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+    // Increment availabilityTick so changing duration when endIso stays capped at 20:00 still finishes re-checking.
+    setAvailabilityTick((t) => t + 1)
   }
 
   const isPrevWeekDisabled = currentMonday.getTime() <= initialSchedule.monday.getTime()
@@ -445,12 +447,11 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     (!availability.checking &&
       Boolean(availability.data) &&
       !availability.data!.available &&
-      (availability.data!.conflictReason === 'RESERVATION_CONFLICT' ||
-        availability.data!.conflictReason === 'SLOT_HELD')) ||
+      availability.data!.conflictReason === 'RESERVATION_CONFLICT') ||
     conflictErrorCode === 'RESERVATION_CONFLICT' ||
     conflictErrorCode === 'SLOT_HELD'
 
-  const nextSlotsKey = hasSlotConflict ? `${asset.id}:${startIso}:${effectiveDuration}` : ''
+  const nextSlotsKey = hasSlotConflict ? `${asset.id}:${startIso}:${effectiveDuration}:${availabilityTick}` : ''
 
   useEffect(() => {
     if (!nextSlotsKey) return
@@ -462,7 +463,10 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
         }
       })
       .catch(() => {
-        // Non-blocking recommendation helper
+        // Non-blocking recommendation helper; clear any stale items for this key on failure.
+        if (!cancelled) {
+          setNextSlotsState({ key: nextSlotsKey, items: [] })
+        }
       })
     return () => {
       cancelled = true

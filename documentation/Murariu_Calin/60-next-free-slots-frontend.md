@@ -11,4 +11,4 @@ When a student selects an occupied time slot on the booking calendar, **Calendar
 | File | Change |
 |---|---|
 | `frontend/src/api/reservations.ts` | Added `FreeSlotOption`, `NextFreeSlotsResponse`, and `fetchNextFreeSlots`. |
-| `frontend/src/components/CalendarBookingView.tsx` | Fetches next free slots on `RESERVATION_CONFLICT` availability or `RESERVATION_CONFLICT`/`SLOT_HELD` API errors and renders one-click jump buttons that align `currentMonday`, `durationMinutes`, `selectedDay`, and `selectedStartTime` (and force-recheck availability if the same window is selected again). |
+| `frontend/src/components/CalendarBookingView.tsx` | Fetches next free slots on `RESERVATION_CONFLICT` availability or `RESERVATION_CONFLICT`/`SLOT_HELD` API errors (keyed by `availabilityTick` and clearing items on fetch error), fixes `handleDurationChange` no-op/evening-cap re-check spinner, and renders one-click jump buttons that align `currentMonday`, `durationMinutes`, `selectedDay`, and `selectedStartTime`. |
