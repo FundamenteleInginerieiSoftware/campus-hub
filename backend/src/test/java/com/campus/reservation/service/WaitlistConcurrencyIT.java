@@ -442,7 +442,7 @@ class WaitlistConcurrencyIT {
                 }
             });
 
-            assertThat(waitUntilBlockedOnUserQuotaLock(waiterId, promoDone))
+            assertThat(waitUntilBlockedOnUserQuotaLock(waiterId, 1, promoDone))
                     .as("promotion thread must hold waitlist_entries FOR UPDATE and block on lockUserQuota(waiterId); "
                             + "see WaitlistService.processPromotionsForAsset")
                     .isTrue();
@@ -460,9 +460,10 @@ class WaitlistConcurrencyIT {
                 }
             });
 
-            assertThat(waitUntilBlockedOnWaitlistRowLock(disableDone))
-                    .as("disable listener must reach cancelWaitingEntriesForUser and wait on waitlist_entries "
-                            + "WITHOUT holding lockUserQuota; see UserDisabledReservationListener.onUserDisabled")
+            assertThat(waitUntilBlockedOnUserQuotaLock(waiterId, 2, disableDone))
+                    .as(
+                            "disable listener Step 1 must wait on lockUserQuota(waiterId) before Step 2 scans waitlist_entries; "
+                                    + "see UserDisabledReservationListener.onUserDisabled")
                     .isTrue();
 
             releaseQuota.countDown();
@@ -506,7 +507,94 @@ class WaitlistConcurrencyIT {
                 .isEqualTo(WaitlistStatus.PROMOTED);
     }
 
-    private boolean waitUntilBlockedOnUserQuotaLock(Long targetUserId, AtomicBoolean actionDone)
+    @Test
+    @DisplayName(
+            "Disable listener drains in-flight joinWaitlist holding lockUserQuota so zero orphan WAITING rows remain (#349)")
+    void disablingUserDrainsInFlightJoinWaitlistLeavingZeroOrphanWaitingRows() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = nextWeekdayAt14(now);
+        LocalDateTime end = start.plusHours(2);
+
+        reservationRepository.saveAndFlush(new Reservation(holderId, assetId, start, end, now));
+
+        CountDownLatch inFlightJoinPaused = new CountDownLatch(1);
+        CountDownLatch releaseInFlightJoin = new CountDownLatch(1);
+        AtomicBoolean disableDone = new AtomicBoolean(false);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+        List<Long> createdEntryIds = new CopyOnWriteArrayList<>();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            // Simulate an in-flight joinWaitlist that already acquired lockUserQuota(waiterId) and
+            // passed requireActiveUserAfterLock right before the admin disabled the user, pausing before commit.
+            Future<?> inFlightJoin = executor.submit(() -> {
+                try {
+                    transactionTemplate.executeWithoutResult(status -> {
+                        reservationRepository.lockUserQuota(waiterId);
+                        WaitlistEntry saved = waitlistEntryRepository.saveAndFlush(
+                                new WaitlistEntry(assetId, waiterId, start, end, now));
+                        createdEntryIds.add(saved.getId());
+                        inFlightJoinPaused.countDown();
+                        try {
+                            releaseInFlightJoin.await(10, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    });
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                }
+            });
+
+            assertThat(inFlightJoinPaused.await(5, TimeUnit.SECONDS))
+                    .as("in-flight joinWaitlist simulation must hold lockUserQuota before commit")
+                    .isTrue();
+
+            Future<?> disableThread = executor.submit(() -> {
+                try {
+                    mockMvc.perform(post("/api/v1/admin/users/{id}/disable", waiterId)
+                                    .with(jwt().jwt(j -> j.subject(String.valueOf(adminId)))
+                                            .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                            .andExpect(status().isOk());
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    disableDone.set(true);
+                }
+            });
+
+            assertThat(waitUntilBlockedOnUserQuotaLock(waiterId, 1, disableDone))
+                    .as("disable listener Step 1 must block on lockUserQuota(waiterId) until in-flight join commits; "
+                            + "see UserDisabledReservationListener.onUserDisabled")
+                    .isTrue();
+
+            releaseInFlightJoin.countDown();
+            inFlightJoin.get(10, TimeUnit.SECONDS);
+            disableThread.get(10, TimeUnit.SECONDS);
+        } finally {
+            releaseInFlightJoin.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+
+        assertThat(unexpected)
+                .as("disable draining in-flight joinWaitlist must complete without errors; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .isEmpty();
+        assertThat(createdEntryIds).hasSize(1);
+        WaitlistEntry reloaded =
+                waitlistEntryRepository.findById(createdEntryIds.getFirst()).orElseThrow();
+        assertThat(reloaded.getStatus())
+                .as("Step 2 must cancel the WAITING entry committed by the drained in-flight joinWaitlist; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .isEqualTo(WaitlistStatus.CANCELLED);
+        assertThat(waitlistEntryRepository.countByUserIdAndStatus(waiterId, WaitlistStatus.WAITING))
+                .as("disabled user must have zero orphan WAITING rows after listener finishes; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .isZero();
+    }
+
+    private boolean waitUntilBlockedOnUserQuotaLock(Long targetUserId, int minWaiters, AtomicBoolean actionDone)
             throws InterruptedException {
         long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
@@ -523,29 +611,7 @@ class WaitlistConcurrencyIT {
                       AND l.objid = ?
                       AND NOT l.granted
                     """, Integer.class, targetUserId.intValue());
-            if (waiting != null && waiting > 0) {
-                return true;
-            }
-            TimeUnit.MILLISECONDS.sleep(10);
-        }
-        return false;
-    }
-
-    private boolean waitUntilBlockedOnWaitlistRowLock(AtomicBoolean actionDone) throws InterruptedException {
-        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (!actionDone.get() && System.nanoTime() < deadlineNanos) {
-            Integer waiting = jdbcTemplate.queryForObject("""
-                    SELECT COUNT(*)
-                    FROM pg_stat_activity a
-                    JOIN pg_locks l ON l.pid = a.pid
-                    WHERE a.datname = current_database()
-                      AND a.pid <> pg_backend_pid()
-                      AND a.wait_event_type = 'Lock'
-                      AND a.wait_event IN ('transactionid', 'tuple')
-                      AND l.locktype IN ('transactionid', 'tuple')
-                      AND NOT l.granted
-                    """, Integer.class);
-            if (waiting != null && waiting > 0) {
+            if (waiting != null && waiting >= minWaiters) {
                 return true;
             }
             TimeUnit.MILLISECONDS.sleep(10);

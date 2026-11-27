@@ -2,6 +2,7 @@ package com.campus.reservation.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campus.reservation.domain.ReservationHold;
 import com.campus.reservation.domain.WaitlistEntry;
 import com.campus.reservation.domain.WaitlistStatus;
 import jakarta.persistence.EntityManager;
@@ -27,6 +28,9 @@ class WaitlistEntryRepositoryTest {
 
     @Autowired
     private WaitlistEntryRepository waitlistEntryRepository;
+
+    @Autowired
+    private ReservationHoldRepository reservationHoldRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -117,5 +121,32 @@ class WaitlistEntryRepositoryTest {
                 .as("bulk expireOldEntries must bump @Version column; see WaitlistEntryRepository.expireOldEntries")
                 .isEqualTo(1L);
         assertThat(reloadedFuture.getStatus()).isEqualTo(WaitlistStatus.WAITING);
+    }
+
+    @Test
+    @DisplayName(
+            "findActiveOverlappingForUserAndAssetsForUpdate locks overlapping active own holds in ascending id order")
+    void findActiveOverlappingForUserAndAssetsForUpdate_matchesOverlappingOwnHoldsOnly() {
+        LocalDateTime now = LocalDateTime.now(TEST_CLOCK).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.plusHours(4);
+        LocalDateTime end = start.plusHours(2);
+
+        ReservationHold partialOverlap = reservationHoldRepository.saveAndFlush(
+                new ReservationHold(assetId, user1Id, start, start.plusHours(1), now.plusMinutes(1), now));
+        reservationHoldRepository.saveAndFlush(new ReservationHold(
+                assetId, user1Id, end, end.plusHours(1), now.plusMinutes(1), now)); // adjacent, non-overlapping
+        reservationHoldRepository.saveAndFlush(
+                new ReservationHold(assetId, user2Id, start, end, now.plusMinutes(1), now)); // different user
+        reservationHoldRepository.saveAndFlush(
+                new ReservationHold(assetId, user1Id, start, end, now.minusSeconds(1), now.minusMinutes(2))); // expired
+
+        List<ReservationHold> locked = reservationHoldRepository.findActiveOverlappingForUserAndAssetsForUpdate(
+                user1Id, List.of(assetId), start, end, now);
+
+        assertThat(locked)
+                .as("must lock only active unexpired overlapping holds owned by the user; "
+                        + "see ReservationHoldRepository.findActiveOverlappingForUserAndAssetsForUpdate")
+                .extracting(ReservationHold::getId)
+                .containsExactly(partialOverlap.getId());
     }
 }

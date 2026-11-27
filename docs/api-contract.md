@@ -468,7 +468,7 @@ Next free slots recommender (`GET /api/v1/reservations/next-free-slots?assetId=1
 ```
 
 Waitlist endpoints (`/api/v1/reservations/waitlist`, authenticated student/admin, `#59`):
-- `POST /api/v1/reservations/waitlist` → `201 Created` (`WaitlistEntryResponse`) for an occupied slot (`SLOT_ALREADY_FREE` 409 if free, `WAITLIST_ALREADY_JOINED` 409 if already `WAITING`, `WAITLIST_LIMIT_REACHED` 409 at 5 active entries, `OWN_RESERVATION_CONFLICT` 409 if caller already booked the slot, `MALFORMED_REQUEST` 400 on timezone offset).
+- `POST /api/v1/reservations/waitlist` → `201 Created` (`WaitlistEntryResponse`) for an occupied slot (`ASSET_NOT_FOUND` 404 for missing assets or `RETIRED` assets queried by students, `SLOT_ALREADY_FREE` 409 if free, `WAITLIST_ALREADY_JOINED` 409 if already `WAITING`, `WAITLIST_LIMIT_REACHED` 409 at 5 active entries, `OWN_RESERVATION_CONFLICT` 409 if caller already booked the slot, `MALFORMED_REQUEST` 400 on timezone offset).
 - `GET /api/v1/reservations/waitlist/me?page=0&size=20` → `200 OK` (`PageResponse<WaitlistEntryResponse>`, newest first).
 - `DELETE /api/v1/reservations/waitlist/{id}` → `204 No Content` (`WAITLIST_ENTRY_NOT_FOUND` 404 for non-owners, `INVALID_WAITLIST_STATUS_TRANSITION` 409 if not `WAITING`).
 

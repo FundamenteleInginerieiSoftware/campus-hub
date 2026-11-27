@@ -5,7 +5,6 @@ import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.api.NotificationService;
-import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
@@ -135,8 +134,8 @@ final class ReservationServiceSupport {
             return;
         }
         // Lock overlapping own holds FOR UPDATE ORDER BY id ASC (last in Quota -> Reservation -> Asset -> Transfer ->
-        // Hold)
-        // so concurrent releaseHold waits instead of tripping @Version and partial-overlap holds are confirmed (#362).
+        // Waitlist -> Hold) so concurrent releaseHold waits instead of tripping @Version and partial-overlap holds
+        // are confirmed cleanly (#349, #362).
         reservationHoldRepository
                 .findActiveOverlappingForUserAndAssetsForUpdate(userId, assetIds, start, end, now)
                 .stream()

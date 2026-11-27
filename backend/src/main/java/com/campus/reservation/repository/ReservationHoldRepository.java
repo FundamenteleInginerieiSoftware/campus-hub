@@ -33,7 +33,8 @@ public interface ReservationHoldRepository extends JpaRepository<ReservationHold
     List<ReservationHold> findByUserIdAndStatusAndExpiresAtAfter(Long userId, HoldStatus status, LocalDateTime now);
 
     // Locks active own holds overlapping [startTime, endTime] in ascending id order (last in the global DAG)
-    // so a concurrent releaseHold waits instead of tripping @Version and partial-overlap holds are confirmed (#362).
+    // so concurrent releaseHold waits instead of tripping @Version, and partial-overlap holds are also
+    // confirmed when direct-booking or waitlist-promoting a wider slot (#349, #362).
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         SELECT h FROM ReservationHold h

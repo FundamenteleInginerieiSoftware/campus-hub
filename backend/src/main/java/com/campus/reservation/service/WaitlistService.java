@@ -1,5 +1,7 @@
 package com.campus.reservation.service;
 
+import com.campus.catalog.api.AssetStatus;
+import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
@@ -20,14 +22,18 @@ import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Manages the student FIFO waitlist for occupied equipment slots and promotes eligible waiters
@@ -35,8 +41,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class WaitlistService {
 
     static final int MAX_WAITING_ENTRIES = 5;
@@ -50,6 +54,32 @@ public class WaitlistService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final Clock clock;
+    private final TransactionTemplate requiresNewTx;
+
+    public WaitlistService(
+            WaitlistEntryRepository waitlistEntryRepository,
+            ReservationRepository reservationRepository,
+            ReservationHoldRepository reservationHoldRepository,
+            CatalogApi catalogApi,
+            UserApi userApi,
+            CurrentUser currentUser,
+            AuditService auditService,
+            NotificationService notificationService,
+            Clock clock,
+            PlatformTransactionManager transactionManager) {
+        this.waitlistEntryRepository = waitlistEntryRepository;
+        this.reservationRepository = reservationRepository;
+        this.reservationHoldRepository = reservationHoldRepository;
+        this.catalogApi = catalogApi;
+        this.userApi = userApi;
+        this.currentUser = currentUser;
+        this.auditService = auditService;
+        this.notificationService = notificationService;
+        this.clock = clock;
+        TransactionTemplate tt = new TransactionTemplate(transactionManager);
+        tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.requiresNewTx = tt;
+    }
 
     /**
      * Adds the current user to the FIFO waitlist for an occupied slot.
@@ -61,10 +91,17 @@ public class WaitlistService {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         ReservationSlotValidator.validateSlotRules(req.startTime(), req.endTime(), now);
 
-        // Lock asset row FIRST (asset -> userQuota, same order as createReservation/createHold) so a
-        // concurrent cancellation + promotion cannot race with the SLOT_ALREADY_FREE check below (#349).
+        // Lock asset row FIRST (asset -> userQuota, matching current main's createReservation/createHold)
+        // so a concurrent cancellation + promotion cannot race with SLOT_ALREADY_FREE (#349).
         catalogApi.lockForBooking(assetId);
-        ReservationSlotValidator.ensureBookable(catalogApi, assetId, "Cannot join waitlist for a non-bookable asset");
+        AssetSummary asset = catalogApi.getAsset(assetId);
+        if (asset.status() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
+            // Hide retired assets from students with 404, matching GET /api/v1/assets/{id} (#278, #362).
+            throw new NotFoundException("ASSET_NOT_FOUND", "Asset not found: " + assetId);
+        }
+        if (asset.status() != AssetStatus.AVAILABLE) {
+            throw new ConflictException("ASSET_NOT_BOOKABLE", "Cannot join waitlist for a non-bookable asset");
+        }
 
         if (reservationRepository.existsUserOverlapOnAsset(assetId, userId, req.startTime(), req.endTime())) {
             throw new ConflictException(
@@ -113,6 +150,7 @@ public class WaitlistService {
     /**
      * Lists the current user's waitlist entries, newest first.
      */
+    @Transactional(readOnly = true)
     public PageResponse<WaitlistEntryResponse> getMyWaitlist(int page, int size) {
         ReservationServiceSupport.validatePagination(page, size);
         Page<WaitlistEntry> result = waitlistEntryRepository.findByUserIdOrderByCreatedAtDescIdDesc(
@@ -143,12 +181,18 @@ public class WaitlistService {
      *
      * <p>Deliberately does NOT acquire {@code lockUserQuota}: promotion locks
      * {@code asset -> waitlist_entries -> userQuota}, so holding only {@code waitlist_entries}
-     * here avoids a lock-order cycle, and promotion already expires disabled accounts after its
-     * own quota lock.
+     * here avoids a lock-order cycle. Caller {@link UserDisabledReservationListener} runs
+     * {@code cancelUpcomingReservationsForUser} first (whose {@code lockUserQuota} drains any
+     * in-flight {@code joinWaitlist}), and we also bail out early if the account was already
+     * re-enabled.
      */
     @Transactional
     public int cancelWaitingEntriesForUser(Long userId) {
         if (userId == null) {
+            return 0;
+        }
+        if (userApi.findActiveRole(userId).isPresent()) {
+            // Account was re-enabled before this cleanup ran; leave its entries intact (#349).
             return 0;
         }
         List<WaitlistEntry> waiting =
@@ -168,22 +212,46 @@ public class WaitlistService {
     }
 
     /**
-     * Scans WAITING entries for {@code assetId} in strict FIFO order under row locks and promotes
-     * any whose slot is now free, following {@code asset -> waitlist_entries -> userQuota} lock order.
+     * Scans WAITING entries for {@code assetId} in strict FIFO order, executing at most one
+     * user-quota-locked promotion, skip, or disable-expiry step per {@code REQUIRES_NEW} transaction
+     * so concurrent promotions across different assets never hold multiple user locks and deadlock
+     * (#349, #350).
      */
-    @Transactional
     public int processPromotionsForAsset(Long assetId) {
+        int promotedCount = 0;
+        Set<Long> visitedEntryIds = new HashSet<>();
+        while (true) {
+            PromotionStepOutcome outcome =
+                    requiresNewTx.execute(status -> processNextPromotionStep(assetId, visitedEntryIds));
+            if (outcome == null || outcome == PromotionStepOutcome.DONE) {
+                return promotedCount;
+            }
+            if (outcome == PromotionStepOutcome.PROMOTED) {
+                promotedCount++;
+            }
+        }
+    }
+
+    private enum PromotionStepOutcome {
+        PROMOTED,
+        CONTINUE,
+        DONE
+    }
+
+    private PromotionStepOutcome processNextPromotionStep(Long assetId, Set<Long> visitedEntryIds) {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         catalogApi.lockForBooking(assetId);
         if (!catalogApi.isBookable(assetId)) {
-            return 0;
+            return PromotionStepOutcome.DONE;
         }
 
         List<WaitlistEntry> waiting =
                 waitlistEntryRepository.findByAssetIdAndStatusForUpdate(assetId, WaitlistStatus.WAITING);
-        int promotedCount = 0;
 
         for (WaitlistEntry entry : waiting) {
+            if (entry.getId() != null && !visitedEntryIds.add(entry.getId())) {
+                continue;
+            }
             if (!entry.getStartTime().isAfter(now)) {
                 entry.markExpired(now);
                 continue;
@@ -195,12 +263,13 @@ public class WaitlistService {
                 continue;
             }
 
-            // Lock user quota before reading role/active count, matching createReservation (#310).
+            // Lock only ONE user quota per REQUIRES_NEW transaction before reading role/active count (#310, #349).
+            // Committing immediately after handling this waiter releases the lock before moving to the next.
             reservationRepository.lockUserQuota(entry.getUserId());
             Optional<Role> activeRole = userApi.findActiveRole(entry.getUserId());
             if (activeRole.isEmpty()) {
                 entry.markExpired(now);
-                continue;
+                return PromotionStepOutcome.CONTINUE;
             }
             if (activeRole.get() == Role.STUDENT
                     && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
@@ -213,10 +282,10 @@ public class WaitlistService {
                         "WaitlistEntry",
                         entry.getId(),
                         "User " + entry.getUserId() + " reached active booking limit");
-                continue;
+                return PromotionStepOutcome.CONTINUE;
             }
 
-            // Confirm any matching active hold already owned by the promoted waiter.
+            // Confirm any overlapping active hold already owned by the promoted waiter.
             ReservationServiceSupport.confirmOwnedHoldsForSlots(
                     reservationHoldRepository,
                     entry.getUserId(),
@@ -228,7 +297,6 @@ public class WaitlistService {
             Reservation promoted = reservationRepository.save(
                     new Reservation(entry.getUserId(), assetId, entry.getStartTime(), entry.getEndTime(), now));
             entry.markPromoted(promoted.getId(), now);
-            promotedCount++;
 
             auditService.record(
                     null,
@@ -246,8 +314,9 @@ public class WaitlistService {
                             + " was promoted to confirmed reservation #"
                             + promoted.getId()
                             + ".");
+            return PromotionStepOutcome.PROMOTED;
         }
-        return promotedCount;
+        return PromotionStepOutcome.DONE;
     }
 
     /**
