@@ -37,6 +37,7 @@ Following the concurrency & lock-DAG fixes in PR #370, this PR closes the remain
 - **Empty bundle cancel:** `ReservationService.cancelBundle` tracks `cancelledCount` and throws `409 CANCELLATION_NOT_ALLOWED` if `cancelledCount == 0`.
 - **Deterministic pagination & Swagger:** Added `IdAsc` tie-breakers to `ReservationRepository.findByUserId*OrderByStartTimeAscIdAsc`, `IdDesc` to `ReassignmentLogRepository.findAllByOrderByCreatedAtDescIdDesc`, and fixed `09:00-20:00` → `08:00-20:00` in `ReservationController`.
 - **Partial index & entity encapsulation (#362 §5):** Added Flyway migration `V2026_11_27_1400__reservation_add_checked_out_at_index.sql` (`CREATE INDEX idx_reservations_checked_out_at ON reservations (checked_out_at) WHERE checked_out_at IS NOT NULL`) and removed class-level `@Setter` on `ReservationHold`.
+- **#370 review polish:** `HoldService.confirmHold` and `ReservationService.extendReservation` check the fresh DB `callerRole == Role.ADMIN` returned by `requireActiveUserAfterLock` (closing the narrow in-flight admin-demotion window); `ReassignmentBookingProcessor.backoffBeforeRetry` aborts retries on `InterruptedException` while keeping the interrupt flag restored; updated the `moveToAsset` return-value comment in `ReservationLifecycleService`.
 
 ### 3. Verification
 

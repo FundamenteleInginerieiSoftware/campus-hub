@@ -454,10 +454,11 @@ public class ReservationService implements ReservationApi {
     public ReservationResponse extendReservation(Long id, ExtendReservationRequest req) {
         Long callerId = currentUser.id();
         reservationRepository.lockUserQuota(callerId);
-        ReservationServiceSupport.requireActiveUserAfterLock(userApi, callerId);
+        // Use fresh DB role (not stale JWT claim) so an admin demoted mid-flight cannot extend another user's booking.
+        Role callerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, callerId);
 
-        Reservation reservation =
-                ReservationServiceSupport.loadOwnedOrAdminForUpdate(reservationRepository, currentUser, id);
+        Reservation reservation = ReservationServiceSupport.loadOwnedOrAdminForUpdate(
+                reservationRepository, callerId, callerRole == Role.ADMIN, id);
         LocalDateTime now = now();
 
         if (reservation.getStatus() != ReservationStatus.CONFIRMED
@@ -588,7 +589,7 @@ public class ReservationService implements ReservationApi {
             // Match Liviu's GET /assets/{id} (#278) and NextFreeSlotsService (#353): hide RETIRED assets
             // from students with 404 ASSET_NOT_FOUND so non-admins cannot probe retired asset IDs (#362).
             if (asset.status() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
-                throw new NotFoundException("ASSET_NOT_FOUND", "Asset not found: " + assetId);
+                throw new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found");
             }
             String conflictReason = null;
             if (asset.status() != AssetStatus.AVAILABLE) {

@@ -4322,10 +4322,12 @@ class ReservationServiceTest {
         when(currentUser.isAdmin()).thenReturn(false);
 
         assertThatThrownBy(() -> reservationService.checkAvailability(ASSET_ID, null, start, end))
-                .as("non-admin checking availability on a RETIRED asset must get 404 ASSET_NOT_FOUND; "
-                        + "see ReservationService.checkAvailability")
+                .as(
+                        "non-admin checking availability on a RETIRED asset must get 404 ASSET_NOT_FOUND matching AssetService; "
+                                + "see ReservationService.checkAvailability")
                 .isInstanceOf(NotFoundException.class)
-                .hasFieldOrPropertyWithValue("code", "ASSET_NOT_FOUND");
+                .hasFieldOrPropertyWithValue("code", "ASSET_NOT_FOUND")
+                .hasMessage("Asset " + ASSET_ID + " was not found");
     }
 
     @Test
@@ -4376,5 +4378,35 @@ class ReservationServiceTest {
                 .hasFieldOrPropertyWithValue("code", "CANCELLATION_NOT_ALLOWED");
 
         verify(notificationService, never()).notifyUser(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName(
+            "extendReservation: rejects admin demoted in DB (stale ADMIN JWT) extending another student's booking (#370 follow-up)")
+    void extendReservation_rejectsDemotedAdminExtendingOtherUsersBooking() {
+        Long adminId = 99L;
+        Reservation studentBooking = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(studentBooking, "id", 202L);
+
+        when(currentUser.id()).thenReturn(adminId);
+        // Lenient because extendReservation must ignore the stale JWT claim and rely solely on DB findActiveRole.
+        lenient().when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.findByIdForUpdate(202L)).thenReturn(Optional.of(studentBooking));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(
+                        202L, new ExtendReservationRequest(LocalDateTime.of(2026, 11, 2, 17, 0))))
+                .as("admin demoted in DB must not extend another student's booking using stale JWT ADMIN claim; "
+                        + "see ReservationService.extendReservation")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+
+        verify(catalogApi, never()).lockForBooking(anyLong());
+        verify(reservationRepository, never()).save(any());
     }
 }

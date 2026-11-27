@@ -74,11 +74,16 @@ final class ReservationServiceSupport {
 
     static Reservation loadOwnedOrAdminForUpdate(
             ReservationRepository reservationRepository, CurrentUser currentUser, Long id) {
+        return loadOwnedOrAdminForUpdate(reservationRepository, currentUser.id(), currentUser.isAdmin(), id);
+    }
+
+    static Reservation loadOwnedOrAdminForUpdate(
+            ReservationRepository reservationRepository, Long callerId, boolean isAdmin, Long id) {
         Reservation reservation = reservationRepository
                 .findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id));
 
-        if (!reservation.getUserId().equals(currentUser.id()) && !currentUser.isAdmin()) {
+        if (!reservation.getUserId().equals(callerId) && !isAdmin) {
             throw new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found: " + id);
         }
 
