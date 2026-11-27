@@ -114,7 +114,7 @@ class ReservationLifecycleServiceTest {
                         SUB_ASSET_ID, threatenedRes.getStartTime(), threatenedRes.getEndTime(), 33L))
                 .thenReturn(true);
         when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(103L));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -210,7 +210,7 @@ class ReservationLifecycleServiceTest {
                         SUB_ASSET_ID, threatenedRes.getStartTime(), threatenedRes.getEndTime(), 33L))
                 .thenReturn(true);
         when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
-                .thenReturn(false);
+                .thenReturn(Optional.empty());
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -341,7 +341,7 @@ class ReservationLifecycleServiceTest {
         when(reservationService.isAssetFree(SUB_ASSET_ID, threatened1.getStartTime(), threatened1.getEndTime(), 33L))
                 .thenReturn(true);
         when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(103L));
 
         LifecycleSweepSummary sweep1 = lifecycleService.runLifecycleSweep();
 
@@ -363,7 +363,7 @@ class ReservationLifecycleServiceTest {
         when(reservationService.isAssetFree(SUB_ASSET_ID, threatened2.getStartTime(), threatened2.getEndTime(), 44L))
                 .thenReturn(true);
         when(reservationService.moveToAsset(eq(44L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(104L));
 
         LifecycleSweepSummary sweep2 = service2.runLifecycleSweep();
 
@@ -430,9 +430,9 @@ class ReservationLifecycleServiceTest {
         // ordering alone determines that sameRoomSub (25L) is selected first over differentRoomSub (15L).
         when(reservationService.isAssetFree(anyLong(), any(), any(), anyLong())).thenReturn(true);
         when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(25L), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(103L));
         when(reservationService.moveToAsset(eq(44L), eq(ASSET_ID), eq(25L), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(104L));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -524,5 +524,54 @@ class ReservationLifecycleServiceTest {
                 .isEqualTo(1);
         verify(notificationService).notifyUser(eq(202L), eq("Reservation Marked as No-Show"), any());
         verify(notificationService, never()).notifyUser(eq(101L), any(), any());
+    }
+
+    @Test
+    @DisplayName(
+            "Preventive cascade notifies the locked owner returned by moveToAsset rather than the stale unlocked read (#362 §2.1)")
+    void cascadeNotifiesLockedOwnerAfterConcurrentTransfer() {
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        Reservation overdueRes = new Reservation(
+                102L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 8, 0),
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 1, 12, 0));
+        ReflectionTestUtils.setField(overdueRes, "id", 22L);
+
+        // Stale unlocked read still shows original owner 103L before concurrent acceptTransfer changed it to 205L.
+        Reservation threatenedRes = new Reservation(
+                103L,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 10, 30),
+                LocalDateTime.of(2026, 11, 2, 12, 0),
+                LocalDateTime.of(2026, 11, 1, 15, 0));
+        ReflectionTestUtils.setField(threatenedRes, "id", 33L);
+
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope 1", "Tek-100", 1L, 1L, AssetStatus.AVAILABLE);
+        AssetSummary sub = new AssetSummary(SUB_ASSET_ID, "Scope 2", "Tek-100", 1L, 1L, AssetStatus.AVAILABLE);
+
+        when(reservationRepository.findConfirmedBeforeCutoff(now.minusMinutes(30)))
+                .thenReturn(List.of());
+        when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of());
+        when(reservationRepository.findByStatus(ReservationStatus.OVERDUE)).thenReturn(List.of(overdueRes));
+        when(reservationRepository.findUpcomingConfirmedByAsset(ASSET_ID, now)).thenReturn(List.of(threatenedRes));
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(catalogApi.findAvailableByModel("Tek-100", ASSET_ID)).thenReturn(List.of(sub));
+        when(reservationService.isAssetFree(
+                        SUB_ASSET_ID, threatenedRes.getStartTime(), threatenedRes.getEndTime(), 33L))
+                .thenReturn(true);
+        when(reservationService.moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any()))
+                .thenReturn(Optional.of(205L));
+
+        LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
+
+        assertThat(summary.preventivelyReassignedCount())
+                .as(
+                        "preventive cascade must count the moved reservation; see ReservationLifecycleService.tryPreventiveMove")
+                .isEqualTo(1);
+        verify(notificationService).notifyUser(eq(205L), eq("Proactive Reservation Reassignment"), any());
+        verify(notificationService, never()).notifyUser(eq(103L), any(), any());
     }
 }

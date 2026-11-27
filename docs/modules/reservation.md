@@ -20,8 +20,8 @@ Other modules may only interact with this module through `ReservationApi` or by 
 public interface ReservationApi {
     List<ReservationSummary> findUpcomingActiveByAsset(Long assetId, LocalDateTime from);
     boolean isAssetFree(Long assetId, LocalDateTime start, LocalDateTime end, Long ignoreReservationId);
-    boolean moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason);
-    boolean forceCancel(Long reservationId, Long expectedSourceAssetId, String reason);
+    Optional<Long> moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason);
+    Optional<Long> forceCancel(Long reservationId, Long expectedSourceAssetId, String reason);
     Optional<ReservationSummary> findCurrentCheckout(Long assetId);
     UUID bookBundle(Long userId, List<Long> assetIds, LocalDateTime start, LocalDateTime end);
     int cancelUpcomingReservationsForUser(Long userId, String reason);
@@ -45,12 +45,13 @@ ReservationController (@RestController)
        ▼
 ReservationService (@Service, implements ReservationApi)
   ├── 1. Temporal Validations (Clock, opening hours, duration, slot alignment)
-  ├── 2. CatalogApi.lockForBooking (Pessimistic row lock on asset FIRST)
-  ├── 3. CatalogApi.isBookable (Operational status check: AVAILABLE)
-  ├── 4. ReservationRepository.existsOverlap (Interval collision check)
-  ├── 5. ReservationRepository.lockUserQuota + User Quota Verification (pg_advisory_xact_lock(userId), count < 2; bypassed by admins)
-  ├── 6. ReservationRepository.save (Persist entity)
-  └── 7. AuditService.record (CREATE_RESERVATION)
+  ├── 2. ReservationRepository.lockUserQuota + UserApi.findActiveRole (pg_advisory_xact_lock(1, userId) FIRST for all callers incl. admins)
+  ├── 3. CatalogApi.lockForBooking (Pessimistic row lock on asset SECOND)
+  ├── 4. CatalogApi.isBookable (Operational status check: AVAILABLE)
+  ├── 5. ReservationRepository.existsOverlap & ReservationHoldRepository.existsActiveOverlap (Interval collision check)
+  ├── 6. Student Quota Verification (count < 2; bypassed by Role.ADMIN)
+  ├── 7. Confirm overlapping own holds (FOR UPDATE ORDER BY id ASC) & ReservationRepository.save
+  └── 8. AuditService.record (CREATE_RESERVATION)
        │
        ▼
 PostgreSQL Table: `reservations`
@@ -60,11 +61,12 @@ PostgreSQL Table: `reservations`
 
 ## 4. Concurrency & Race-Condition Prevention
 
-When multiple students attempt to book the same asset at the same second:
-1. **Pessimistic Row Lock:** `ReservationService` calls `catalogApi.lockForBooking(assetId)` which executes `SELECT ... FOR UPDATE` on the `assets` table.
-2. **Serialization:** The database serializes simultaneous requests for that asset ID. The second transaction pauses until the first transaction commits or rolls back.
-3. **Overlap Re-check:** When the second transaction unblocks, it queries `existsOverlap` which now sees the newly committed reservation from the first transaction and returns `RESERVATION_CONFLICT` (HTTP 409).
-4. **Optimistic Locking:** The `@Version` column on `Reservation` prevents lost updates during concurrent status transitions (e.g. check-out vs cancellation).
+All transactional write paths follow one strict **global lock DAG** (`Quota -> Reservation -> Asset -> Transfer -> Hold`, #362) so concurrent bookings, extensions, hold confirmations, transfers, and user-disable cancellations can never form an AB-BA or 3-way deadlock cycle:
+1. **Per-User Quota Lock FIRST:** `ReservationRepository.lockUserQuota(userId)` (`pg_advisory_xact_lock(1, userId)`) + `UserApi.findActiveRole(userId)` runs first for all callers (including admins) in `createReservation`, `executeBundleBooking`, `extendReservation`, `createHold`, `confirmHold`, and `acceptTransfer`. When an admin confirms another student's hold, both user quotas are locked in ascending `userId` order.
+2. **Reservation Row Lock SECOND:** `findByIdForUpdate` / `findByBundleIdForUpdate` (`ORDER BY id ASC`) / `findUpcomingConfirmedByUserForUpdate` (`ORDER BY id ASC`).
+3. **Asset Row Lock THIRD:** `catalogApi.lockForBooking(assetId)` (`SELECT ... FOR UPDATE` on `assets`, sorted ascending for bundles) serializes simultaneous requests for the same asset so the second transaction sees the first one's commit and returns `409 RESERVATION_CONFLICT`.
+4. **Transfer / Hold Row Locks LAST:** `ReservationTransferRepository.findByIdForUpdate`, `ReservationHoldRepository.findByIdForUpdate`, and `findActiveOverlappingForUserAndAssetsForUpdate` (`ORDER BY id ASC`).
+5. **Optimistic Locking:** The `@Version` column on `Reservation`, `ReservationHold`, and `ReservationTransfer` acts as an additional safety net.
 
 ---
 
