@@ -11,6 +11,7 @@ import CatalogPage from './pages/CatalogPage.tsx'
 import IncidentDetailsPage from './pages/IncidentDetailsPage.tsx'
 import IncidentQueuePage from './pages/IncidentQueuePage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import MaintenanceSimulatorPage from './pages/MaintenanceSimulatorPage.tsx'
 import MyIncidentsPage from './pages/MyIncidentsPage.tsx'
 import MyReservationsPage from './pages/MyReservationsPage.tsx'
 import NotFoundPage from './pages/NotFoundPage.tsx'
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="reservations" element={<ReservationsDeskPage />} />
           <Route path="incidents" element={<IncidentQueuePage />} />
           <Route path="reassignments" element={<ReassignmentLogPage />} />
+          <Route path="maintenance-simulator" element={<MaintenanceSimulatorPage />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="inventory" element={<AdminInventoryPage />} />
           <Route path="reliability" element={<AdminReliabilityPage />} />

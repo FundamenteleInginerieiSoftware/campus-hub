@@ -9,6 +9,7 @@ import {
   IconHistory,
   IconLayoutGrid,
   IconQrcode,
+  IconTool,
   type Icon,
   IconUsers,
 } from '@tabler/icons-react'
@@ -44,6 +45,7 @@ const ADMIN_MENU: NavGroup[] = [
       { label: 'Reservations desk', path: '/admin/reservations', icon: IconClipboardList },
       { label: 'Incident queue', path: '/admin/incidents', icon: IconAlertTriangle },
       { label: 'Reassignment log', path: '/admin/reassignments', icon: IconArrowsExchange },
+      { label: 'Maintenance simulator', path: '/admin/maintenance-simulator', icon: IconTool },
       { label: 'Audit log', path: '/admin/audit-logs', icon: IconHistory },
       { label: 'Users', path: '/admin/users', icon: IconUsers },
     ],
