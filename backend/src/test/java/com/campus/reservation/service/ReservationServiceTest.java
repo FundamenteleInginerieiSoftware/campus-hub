@@ -56,11 +56,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -1876,7 +1874,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_success() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(20L, 10L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(20L, 10L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
@@ -1914,7 +1912,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_rejectsIfOneAssetOverlaps() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
@@ -1936,7 +1934,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_rejectsIfLessThanTwoAssets() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L), start, end);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -1949,7 +1947,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateMultiAssetReservationRequest req =
-                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
+                new CreateMultiAssetReservationRequest(List.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -2025,7 +2023,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateMultiAssetReservationRequest req =
-                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L), start, end);
+                new CreateMultiAssetReservationRequest(List.of(10L, 20L, 30L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2043,7 +2041,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateMultiAssetReservationRequest req =
-                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L), start, end);
+                new CreateMultiAssetReservationRequest(List.of(10L, 20L, 30L, 40L, 50L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2472,7 +2470,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_boundaryQuota_activeCountOneAllows() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2494,7 +2492,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_boundaryQuota_activeCountTwoRejects() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2511,7 +2509,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_validatesSlotRules() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 20, 30); // 20:30 outside opening hours
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 21, 30);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -3294,7 +3292,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_rejectsIfAssetHeldByAnotherStudent() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
@@ -3323,7 +3321,7 @@ class ReservationServiceTest {
         LocalDateTime start =
                 now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime end = start.plusHours(2);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         ReservationHold matchingHold =
                 new ReservationHold(10L, USER_ID, start, end, now.plusMinutes(1), now.minusMinutes(1));
@@ -3378,7 +3376,7 @@ class ReservationServiceTest {
         LocalDateTime start =
                 now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime end = start.plusHours(2);
-        Set<Long> idsWithNull = new HashSet<>();
+        List<Long> idsWithNull = new ArrayList<>();
         idsWithNull.add(10L);
         idsWithNull.add(null);
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(idsWithNull, start, end);
@@ -3390,6 +3388,27 @@ class ReservationServiceTest {
                         "bundle validation: null asset ID in bundle must throw INVALID_BUNDLE_SIZE; see ReservationService.createMultiAssetReservation")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("Multi-asset booking must include between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName(
+            "Bundle: rejects duplicate asset IDs via HTTP DTO List<Long> with DUPLICATE_ASSET_IN_BUNDLE (#362, #371)")
+    void createMultiAssetReservation_rejectsDuplicateAssetIds() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(List.of(10L, 10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .as(
+                        "bundle validation: duplicate asset IDs in HTTP request list must throw DUPLICATE_ASSET_IN_BUNDLE instead of silent deduplication; "
+                                + "see ReservationService.validateBundleAssetIds")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "DUPLICATE_ASSET_IN_BUNDLE");
     }
 
     @Test

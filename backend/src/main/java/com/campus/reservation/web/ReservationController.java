@@ -211,7 +211,8 @@ public class ReservationController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Bundle reservations cancelled"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user")
+        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user"),
+        @ApiResponse(responseCode = "409", description = "No CONFIRMED items remaining in bundle to cancel")
     })
     @PostMapping("/bundle/{bundleId}/cancel")
     public ResponseEntity<List<ReservationResponse>> cancelBundle(
