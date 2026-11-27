@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -100,7 +101,7 @@ class ReassignmentBookingProcessorTest {
         AssetSummary substitute = new AssetSummary(20L, "Substitute Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
         when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(substitute));
         when(strategy1.name()).thenReturn("SameModelStrategy");
-        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100")).thenReturn(true);
+        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100")).thenReturn(Optional.of(1L));
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
@@ -109,17 +110,21 @@ class ReassignmentBookingProcessorTest {
         ReassignmentBookingProcessor.ReassignmentExecutionResult result = resultOpt.get();
         assertThat(result.outcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
         assertThat(result.substituteAssetName()).isEqualTo("Substitute Scope");
+        assertThat(result.ownerUserId())
+                .as(
+                        "result must carry locked ownerUserId returned by moveToAsset; see ReassignmentBookingProcessor.processSingleBooking")
+                .isEqualTo(1L);
 
         verify(reassignmentLogRepository).save(any(ReassignmentLog.class));
         verify(reservationApi, never()).forceCancel(any(), any(), any());
     }
 
     @Test
-    @DisplayName("processSingleBooking skips booking cleanly if moveToAsset returns false (e.g. no longer CONFIRMED)")
+    @DisplayName("processSingleBooking skips booking cleanly if moveToAsset returns empty (e.g. no longer CONFIRMED)")
     void processSingleBookingSkipsWhenNoLongerConfirmed() {
         AssetSummary substitute = new AssetSummary(20L, "Substitute Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
         when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(substitute));
-        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100")).thenReturn(false);
+        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100")).thenReturn(Optional.empty());
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
@@ -140,7 +145,7 @@ class ReassignmentBookingProcessorTest {
         when(strategy1.name()).thenReturn("SameModelStrategy");
         when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100"))
                 .thenThrow(new SubstituteNoLongerFreeException("Asset 20 busy"));
-        when(reservationApi.moveToAsset(50L, 10L, 30L, "Incident #100")).thenReturn(true);
+        when(reservationApi.moveToAsset(50L, 10L, 30L, "Incident #100")).thenReturn(Optional.of(1L));
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
@@ -160,7 +165,7 @@ class ReassignmentBookingProcessorTest {
         when(strategy2.findCandidates(booking, damagedAsset)).thenReturn(List.of(candidate));
         when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100"))
                 .thenThrow(new SubstituteNoLongerFreeException("Asset 20 busy"));
-        when(reservationApi.forceCancel(eq(50L), eq(10L), any())).thenReturn(true);
+        when(reservationApi.forceCancel(eq(50L), eq(10L), any())).thenReturn(Optional.of(1L));
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
@@ -177,7 +182,7 @@ class ReassignmentBookingProcessorTest {
         when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(strategy2.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(reservationApi.forceCancel(50L, 10L, "Equipment failure, incident #100"))
-                .thenReturn(true);
+                .thenReturn(Optional.of(1L));
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
@@ -185,16 +190,20 @@ class ReassignmentBookingProcessorTest {
         assertThat(resultOpt).isPresent();
         assertThat(resultOpt.get().outcome()).isEqualTo(ReassignmentOutcome.FORCE_CANCELLED);
         assertThat(resultOpt.get().substituteAssetName()).isNull();
+        assertThat(resultOpt.get().ownerUserId())
+                .as(
+                        "force-cancel result must carry locked ownerUserId returned by forceCancel; see ReassignmentBookingProcessor.processSingleBooking")
+                .isEqualTo(1L);
         verify(reassignmentLogRepository).save(any(ReassignmentLog.class));
     }
 
     @Test
-    @DisplayName("processSingleBooking returns empty if forceCancel returns false (already cancelled)")
+    @DisplayName("processSingleBooking returns empty if forceCancel returns empty (already cancelled)")
     void processSingleBookingReturnsEmptyWhenForceCancelReturnsFalse() {
         when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(strategy2.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(reservationApi.forceCancel(50L, 10L, "Equipment failure, incident #100"))
-                .thenReturn(false);
+                .thenReturn(Optional.empty());
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
@@ -204,25 +213,54 @@ class ReassignmentBookingProcessorTest {
     }
 
     @Test
-    @DisplayName("processSingleBooking retries next candidate when candidate throws ConcurrencyFailureException")
-    void processSingleBookingRetriesNextCandidateOnConcurrencyFailure() {
-        AssetSummary racedCandidate = new AssetSummary(20L, "Raced Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
-        AssetSummary secondCandidate =
-                new AssetSummary(30L, "Second Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+    @DisplayName(
+            "processSingleBooking retries the same candidate up to MAX_TRANSIENT_CONCURRENCY_RETRIES on transient lock errors (#362 §2.2)")
+    void processSingleBookingRetriesSameCandidateOnTransientConcurrencyFailure() {
+        AssetSummary candidate = new AssetSummary(20L, "Preferred Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary fallback = new AssetSummary(30L, "Fallback Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
 
-        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(racedCandidate, secondCandidate));
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(candidate, fallback));
         when(strategy1.name()).thenReturn("SameModelStrategy");
         when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100"))
-                .thenThrow(new CannotAcquireLockException("Lock timeout on candidate asset 20"));
-        when(reservationApi.moveToAsset(50L, 10L, 30L, "Incident #100")).thenReturn(true);
+                .thenThrow(new CannotAcquireLockException("Transient lock error 1"))
+                .thenThrow(new RuntimeException("deadlock", new SQLException("deadlock", "40P01")))
+                .thenReturn(Optional.of(1L));
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> resultOpt =
                 processor.processSingleBooking(event, booking, damagedAsset);
 
-        assertThat(resultOpt).isPresent();
+        assertThat(resultOpt)
+                .as(
+                        "transient lock failure must retry the same candidate and succeed; see ReassignmentBookingProcessor.processSingleBooking")
+                .isPresent();
         assertThat(resultOpt.get().outcome()).isEqualTo(ReassignmentOutcome.REASSIGNED);
-        assertThat(resultOpt.get().substituteAssetName()).isEqualTo("Second Scope");
+        assertThat(resultOpt.get().substituteAssetName()).isEqualTo("Preferred Scope");
+        verify(reservationApi, times(3)).moveToAsset(50L, 10L, 20L, "Incident #100");
+        verify(reservationApi, never()).moveToAsset(50L, 10L, 30L, "Incident #100");
+        verify(reservationApi, never()).forceCancel(any(), any(), any());
         verify(reassignmentLogRepository).save(any(ReassignmentLog.class));
+    }
+
+    @Test
+    @DisplayName(
+            "processSingleBooking rethrows after exhausting transient concurrency retries without force-cancelling (#362 §2.2)")
+    void processSingleBookingRethrowsAfterExhaustingTransientConcurrencyRetriesWithoutForceCancelling() {
+        AssetSummary onlyCandidate = new AssetSummary(20L, "Only Scope", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(onlyCandidate));
+        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100"))
+                .thenThrow(new CannotAcquireLockException("Persistent lock contention"));
+
+        assertThatThrownBy(() -> processor.processSingleBooking(event, booking, damagedAsset))
+                .as(
+                        "exhausted transient concurrency retries must rethrow instead of force-cancelling a free substitute; "
+                                + "see ReassignmentBookingProcessor.processSingleBooking")
+                .isInstanceOf(CannotAcquireLockException.class);
+
+        verify(reservationApi, times(ReassignmentBookingProcessor.MAX_TRANSIENT_CONCURRENCY_RETRIES + 1))
+                .moveToAsset(50L, 10L, 20L, "Incident #100");
+        verify(reservationApi, never()).forceCancel(any(), any(), any());
+        verify(reassignmentLogRepository, never()).save(any());
     }
 
     @Test
@@ -245,40 +283,35 @@ class ReassignmentBookingProcessorTest {
 
     @Test
     @DisplayName(
-            "processSingleBooking retries next candidate when cause chain contains ConcurrencyFailureException or Postgres lock/deadlock SQLState")
+            "processSingleBooking retries same candidate for wrapped lock/SQLState causes and advances on wrapped SubstituteNoLongerFreeException (#362 §2.2)")
     void processSingleBookingRetriesOnWrappedConcurrencyCauses() {
-        AssetSummary c1 = new AssetSummary(20L, "Scope 1", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
-        AssetSummary c2 = new AssetSummary(21L, "Scope 2", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
-        AssetSummary c3 = new AssetSummary(22L, "Scope 3", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
-        AssetSummary c4 = new AssetSummary(23L, "Scope 4", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
-        AssetSummary c5 = new AssetSummary(24L, "Scope 5", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
-        AssetSummary winner = new AssetSummary(30L, "Scope Winner", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary wrappedTaken = new AssetSummary(21L, "Scope Taken", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        AssetSummary transientWinner =
+                new AssetSummary(30L, "Scope Winner", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
 
-        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(c1, c2, c3, c4, c5, winner));
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(wrappedTaken, transientWinner));
         when(strategy1.name()).thenReturn("SameModelStrategy");
-        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100"))
-                .thenThrow(new RuntimeException("wrap", new CannotAcquireLockException("inner lock")));
         when(reservationApi.moveToAsset(50L, 10L, 21L, "Incident #100"))
                 .thenThrow(new RuntimeException("wrap", new SubstituteNoLongerFreeException("inner taken")));
-        when(reservationApi.moveToAsset(50L, 10L, 22L, "Incident #100"))
-                .thenThrow(new RuntimeException("deadlock", new SQLException("deadlock", "40P01")));
-        when(reservationApi.moveToAsset(50L, 10L, 23L, "Incident #100"))
-                .thenThrow(new RuntimeException("lock_not_available", new SQLException("lock", "55P03")));
-        when(reservationApi.moveToAsset(50L, 10L, 24L, "Incident #100"))
-                .thenThrow(new RuntimeException("serialization", new SQLException("ser", "40001")));
-        when(reservationApi.moveToAsset(50L, 10L, 30L, "Incident #100")).thenReturn(true);
+        when(reservationApi.moveToAsset(50L, 10L, 30L, "Incident #100"))
+                .thenThrow(new RuntimeException("lock_not_available", new SQLException("lock", "55P03")))
+                .thenThrow(new RuntimeException("serialization", new SQLException("ser", "40001")))
+                .thenReturn(Optional.of(1L));
 
         Optional<ReassignmentBookingProcessor.ReassignmentExecutionResult> result =
                 processor.processSingleBooking(event, booking, damagedAsset);
 
         assertThat(result)
-                .as("wrapped concurrency/SQLState causes must retry until a free candidate wins; "
-                        + "see ReassignmentBookingProcessor.isConcurrencyConflict")
+                .as(
+                        "wrapped SubstituteNoLongerFreeException must advance to next candidate and wrapped SQLState 55P03/40001 must retry; "
+                                + "see ReassignmentBookingProcessor.isTransientConcurrencyError")
                 .isPresent();
         assertThat(result.get().substituteAssetName())
-                .as("winner candidate must be selected after retrying transient lock errors; "
+                .as("winner candidate must be selected after retrying transient SQLState errors; "
                         + "see ReassignmentBookingProcessor.processSingleBooking")
                 .isEqualTo("Scope Winner");
+        verify(reservationApi, times(1)).moveToAsset(50L, 10L, 21L, "Incident #100");
+        verify(reservationApi, times(3)).moveToAsset(50L, 10L, 30L, "Incident #100");
     }
 
     @Test
@@ -291,7 +324,7 @@ class ReassignmentBookingProcessorTest {
 
         assertThatThrownBy(() -> processor.processSingleBooking(event, booking, damagedAsset))
                 .as("non-concurrency SQLState (23505) must be rethrown, not treated as a concurrency retry; "
-                        + "see ReassignmentBookingProcessor.isConcurrencyConflict")
+                        + "see ReassignmentBookingProcessor.isTransientConcurrencyError")
                 .isInstanceOf(RuntimeException.class);
         verify(reservationApi, never()).forceCancel(any(), any(), any());
     }

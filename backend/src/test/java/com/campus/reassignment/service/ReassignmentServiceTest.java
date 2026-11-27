@@ -117,7 +117,7 @@ class ReassignmentServiceTest {
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(primaryStrategy.name()).thenReturn("SameModelStrategy");
         when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(event);
 
@@ -150,7 +150,7 @@ class ReassignmentServiceTest {
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(primaryStrategy.name()).thenReturn("SameModelStrategy");
         when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
         doThrow(new RuntimeException("SES service down"))
                 .when(notificationService)
                 .notifyUser(any(), any(), any());
@@ -182,7 +182,7 @@ class ReassignmentServiceTest {
         when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(fallbackSubstitute));
         when(secondaryStrategy.name()).thenReturn("SameCategoryStrategy");
         when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, 30L, "Incident #" + INCIDENT_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(event);
 
@@ -214,7 +214,7 @@ class ReassignmentServiceTest {
                 .when(reservationApi)
                 .moveToAsset(1L, DAMAGED_ASSET_ID, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID);
         when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, 25L, "Incident #" + INCIDENT_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(event);
 
@@ -252,7 +252,7 @@ class ReassignmentServiceTest {
                 .thenReturn(List.of(substituteAsset, fallbackSubstitute));
         when(secondaryStrategy.name()).thenReturn("SameCategoryStrategy");
         when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, 30L, "Incident #" + INCIDENT_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(event);
 
@@ -280,7 +280,7 @@ class ReassignmentServiceTest {
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
         when(reservationApi.forceCancel(1L, DAMAGED_ASSET_ID, "Equipment failure, incident #" + INCIDENT_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(event);
 
@@ -334,7 +334,7 @@ class ReassignmentServiceTest {
                 .thenReturn(List.of(booking));
         when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
         when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
-                .thenReturn(false);
+                .thenReturn(Optional.empty());
 
         reassignmentService.handle(event);
 
@@ -365,12 +365,12 @@ class ReassignmentServiceTest {
 
         when(mockProcessor.processSingleBooking(eq(event), eq(b1), eq(damagedAsset)))
                 .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
-                        ReassignmentOutcome.REASSIGNED, "Sub 1")));
+                        ReassignmentOutcome.REASSIGNED, "Sub 1", 10L)));
         when(mockProcessor.processSingleBooking(eq(event), eq(b2), eq(damagedAsset)))
                 .thenThrow(new ObjectOptimisticLockingFailureException("Stale version on b2", new Throwable()));
         when(mockProcessor.processSingleBooking(eq(event), eq(b3), eq(damagedAsset)))
                 .thenReturn(Optional.of(new ReassignmentBookingProcessor.ReassignmentExecutionResult(
-                        ReassignmentOutcome.REASSIGNED, "Sub 3")));
+                        ReassignmentOutcome.REASSIGNED, "Sub 3", 30L)));
 
         service.handle(event);
 
@@ -484,7 +484,7 @@ class ReassignmentServiceTest {
         when(primaryStrategy.findCandidates(booking, retiredAsset)).thenReturn(List.of(substituteAsset));
         when(reservationApi.moveToAsset(
                         1L, DAMAGED_ASSET_ID, SUBSTITUTE_ASSET_ID, "Asset retired #" + DAMAGED_ASSET_ID))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(retiredEvent);
 
@@ -516,7 +516,7 @@ class ReassignmentServiceTest {
         when(primaryStrategy.findCandidates(booking, retiredAsset)).thenReturn(List.of());
         when(secondaryStrategy.findCandidates(booking, retiredAsset)).thenReturn(List.of());
         when(reservationApi.forceCancel(1L, DAMAGED_ASSET_ID, "Equipment retired (asset #" + DAMAGED_ASSET_ID + ")"))
-                .thenReturn(true);
+                .thenReturn(Optional.of(USER_ID));
 
         reassignmentService.handle(retiredEvent);
 
@@ -529,5 +529,55 @@ class ReassignmentServiceTest {
                         && log.getOutcome() == ReassignmentOutcome.FORCE_CANCELLED
                         && log.getStrategy() == null));
         verify(notificationService).notifyUser(eq(USER_ID), eq("Reservation Cancelled"), contains("retired"));
+    }
+
+    @Test
+    @DisplayName(
+            "handle(AssetDamagedEvent): notifies the locked owner returned by moveToAsset after a concurrent transfer (#362 §2.1)")
+    void reassignsAndNotifiesLockedOwnerAfterConcurrentTransfer() {
+        Long newOwnerId = 777L;
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        // Stale unlocked snapshot still carries original sender USER_ID.
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of(substituteAsset));
+        when(primaryStrategy.name()).thenReturn("SameModelStrategy");
+        when(reservationApi.moveToAsset(1L, DAMAGED_ASSET_ID, SUBSTITUTE_ASSET_ID, "Incident #" + INCIDENT_ID))
+                .thenReturn(Optional.of(newOwnerId));
+
+        reassignmentService.handle(event);
+
+        verify(notificationService)
+                .notifyUser(eq(newOwnerId), eq("Reservation Reassigned"), contains("Substitute Scope"));
+        verify(notificationService, never()).notifyUser(eq(USER_ID), any(), any());
+    }
+
+    @Test
+    @DisplayName(
+            "handle(AssetDamagedEvent): notifies the locked owner returned by forceCancel after a concurrent transfer (#362 §2.1)")
+    void forceCancelsAndNotifiesLockedOwnerAfterConcurrentTransfer() {
+        Long newOwnerId = 777L;
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        ReservationSummary booking =
+                new ReservationSummary(1L, USER_ID, DAMAGED_ASSET_ID, start, end, ReservationStatus.CONFIRMED);
+
+        when(catalogApi.getAsset(DAMAGED_ASSET_ID)).thenReturn(damagedAsset);
+        when(reservationApi.findUpcomingActiveByAsset(eq(DAMAGED_ASSET_ID), eq(FIXED_NOW)))
+                .thenReturn(List.of(booking));
+        when(primaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
+        when(secondaryStrategy.findCandidates(booking, damagedAsset)).thenReturn(List.of());
+        when(reservationApi.forceCancel(1L, DAMAGED_ASSET_ID, "Equipment failure, incident #" + INCIDENT_ID))
+                .thenReturn(Optional.of(newOwnerId));
+
+        reassignmentService.handle(event);
+
+        verify(notificationService).notifyUser(eq(newOwnerId), eq("Reservation Cancelled"), contains("cancelled"));
+        verify(notificationService, never()).notifyUser(eq(USER_ID), any(), any());
     }
 }

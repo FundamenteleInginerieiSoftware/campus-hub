@@ -6,6 +6,7 @@ import com.campus.common.error.ConflictException;
 import com.campus.common.error.ForbiddenException;
 import com.campus.common.error.InvalidStateTransitionException;
 import com.campus.reservation.api.ReservationStatus;
+import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.domain.ReservationHold;
 import com.campus.reservation.domain.ReservationTransfer;
@@ -13,6 +14,7 @@ import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.repository.ReservationTransferRepository;
+import com.campus.reservation.web.CreateHoldRequest;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ExtendReservationRequest;
 import java.time.Clock;
@@ -807,6 +809,262 @@ class ReservationConcurrencyIT {
                 .isEqualTo(ReservationStatus.CHECKED_OUT);
     }
 
+    @Test
+    @DisplayName(
+            "Global lock DAG (#362 §1.1): 3-way race between createReservation, cancelUpcomingReservationsForUser, and extendReservation never deadlocks")
+    void threeWayCreateCancelUpcomingExtendIsDeadlockFree() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        // Fixed clock is Wed 2026-11-04; pick 5 weekdays (Thu, Fri, Mon, Tue, Wed) inside the 14-day horizon.
+        int[] weekdayOffsets = {1, 2, 5, 6, 7};
+
+        for (int round = 0; round < weekdayOffsets.length; round++) {
+            LocalDateTime existingStart =
+                    now.plusDays(weekdayOffsets[round]).withHour(10).withMinute(0);
+            LocalDateTime existingEnd = existingStart.plusHours(1);
+            LocalDateTime extendedEnd = existingStart.plusHours(2);
+            LocalDateTime newSlotStart = existingStart.withHour(14);
+            LocalDateTime newSlotEnd = newSlotStart.plusHours(2);
+
+            Reservation existing =
+                    reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, existingStart, existingEnd, now));
+
+            ExecutorService executor = Executors.newFixedThreadPool(3);
+            CountDownLatch readyLatch = new CountDownLatch(3);
+            CountDownLatch startLatch = new CountDownLatch(1);
+            List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+            Future<?> createTask = executor.submit(() -> {
+                setupSecurityContext(USER_1_ID);
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    reservationService.createReservation(
+                            new CreateReservationRequest(ASSET_ID, newSlotStart, newSlotEnd));
+                } catch (ConflictException | ForbiddenException expected) {
+                    // Clean domain outcome if quota or conflict applied.
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+
+            Future<?> cancelTask = executor.submit(() -> {
+                setupSecurityContext(ADMIN_ID, "ADMIN");
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    reservationService.cancelUpcomingReservationsForUser(USER_1_ID, "Account disabled");
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+
+            Future<?> extendTask = executor.submit(() -> {
+                setupSecurityContext(USER_1_ID);
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    reservationService.extendReservation(existing.getId(), new ExtendReservationRequest(extendedEnd));
+                } catch (InvalidStateTransitionException | ConflictException | ForbiddenException expected) {
+                    // Expected if cancelUpcomingReservationsForUser committed first.
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+
+            try {
+                assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                        .as("all 3 threads in round %d must reach start barrier", round)
+                        .isTrue();
+                startLatch.countDown();
+                createTask.get(10, TimeUnit.SECONDS);
+                cancelTask.get(10, TimeUnit.SECONDS);
+                extendTask.get(10, TimeUnit.SECONDS);
+            } finally {
+                executor.shutdownNow();
+            }
+
+            assertThat(unexpected)
+                    .as(
+                            "round %d: global DAG (Quota -> Reservation -> Asset) must prevent 3-way 40P01 deadlocks; "
+                                    + "see ReservationService.createReservation & extendReservation",
+                            round)
+                    .isEmpty();
+
+            reservationRepository.deleteAll();
+        }
+    }
+
+    @Test
+    @DisplayName(
+            "Global lock DAG (#362 §1.2): concurrent confirmHold and direct createReservation on the same slot never deadlocks and produces exactly 1 booking")
+    void confirmHoldAndDirectCreateReservationOnSameSlotIsDeadlockFree() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        int[] weekdayOffsets = {1, 2, 5, 6, 7};
+
+        for (int round = 0; round < weekdayOffsets.length; round++) {
+            LocalDateTime start =
+                    now.plusDays(weekdayOffsets[round]).withHour(14).withMinute(0);
+            LocalDateTime end = start.plusHours(2);
+
+            ReservationHold hold = reservationHoldRepository.save(
+                    new ReservationHold(ASSET_ID, USER_1_ID, start, end, now.plusMinutes(5), now));
+
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch readyLatch = new CountDownLatch(2);
+            CountDownLatch startLatch = new CountDownLatch(1);
+            AtomicInteger successCount = new AtomicInteger(0);
+            List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+            Future<?> confirmTask = executor.submit(() -> {
+                setupSecurityContext(USER_1_ID);
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    holdService.confirmHold(hold.getId());
+                    successCount.incrementAndGet();
+                } catch (InvalidStateTransitionException | ConflictException expected) {
+                    // Expected if direct createReservation auto-confirmed the hold first.
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+
+            Future<?> directCreateTask = executor.submit(() -> {
+                setupSecurityContext(USER_1_ID);
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    reservationService.createReservation(new CreateReservationRequest(ASSET_ID, start, end));
+                    successCount.incrementAndGet();
+                } catch (ConflictException expected) {
+                    // Expected if confirmHold committed first and booked the slot.
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+
+            try {
+                assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                        .as("confirmHold and createReservation threads in round %d must reach start gate", round)
+                        .isTrue();
+                startLatch.countDown();
+                confirmTask.get(10, TimeUnit.SECONDS);
+                directCreateTask.get(10, TimeUnit.SECONDS);
+            } finally {
+                executor.shutdownNow();
+            }
+
+            assertThat(unexpected)
+                    .as(
+                            "round %d: Quota -> Asset -> Hold order must prevent Hold <-> Asset AB-BA deadlock; "
+                                    + "see HoldService.confirmHold & ReservationServiceSupport.confirmOwnedHoldsForSlots",
+                            round)
+                    .isEmpty();
+            assertThat(successCount.get())
+                    .as("round %d: exactly one of confirmHold / createReservation must succeed", round)
+                    .isEqualTo(1);
+            assertThat(reservationRepository.findAll())
+                    .as("round %d: exactly one CONFIRMED reservation must be committed", round)
+                    .hasSize(1);
+            assertThat(reservationHoldRepository
+                            .findById(hold.getId())
+                            .orElseThrow()
+                            .getStatus())
+                    .as("round %d: the hold must end in CONFIRMED status", round)
+                    .isEqualTo(HoldStatus.CONFIRMED);
+
+            reservationHoldRepository.deleteAll();
+            reservationRepository.deleteAll();
+        }
+    }
+
+    @Test
+    @DisplayName(
+            "Disabled-admin race (#362 §3): disabled ADMIN waiting on lockUserQuota is rejected with 403 USER_DISABLED across createReservation, createHold, confirmHold, and extendReservation")
+    void disabledAdminIsRejectedOnBookingHoldConfirmAndExtend() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(1);
+        LocalDateTime extendedEnd = start.plusHours(2);
+
+        // 1. createReservation
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                ADMIN_ID,
+                "ADMIN",
+                () -> reservationService.createReservation(new CreateReservationRequest(ASSET_ID, start, end)),
+                "ReservationService.createReservation (admin)");
+
+        // Re-enable admin between sub-checks so each path tests a fresh concurrent disable race.
+        jdbcTemplate.update("UPDATE users SET enabled = true WHERE id = ?", ADMIN_ID);
+
+        // 2. createHold
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                ADMIN_ID,
+                "ADMIN",
+                () -> holdService.createHold(new CreateHoldRequest(ASSET_ID, start, end)),
+                "HoldService.createHold (admin)");
+
+        jdbcTemplate.update("UPDATE users SET enabled = true WHERE id = ?", ADMIN_ID);
+
+        // 3. confirmHold
+        ReservationHold adminHold = reservationHoldRepository.save(
+                new ReservationHold(ASSET_ID, ADMIN_ID, start, end, now.plusMinutes(5), now));
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                ADMIN_ID, "ADMIN", () -> holdService.confirmHold(adminHold.getId()), "HoldService.confirmHold (admin)");
+
+        jdbcTemplate.update("UPDATE users SET enabled = true WHERE id = ?", ADMIN_ID);
+
+        // 4. extendReservation
+        Reservation adminBooking =
+                reservationRepository.save(new Reservation(ADMIN_ID, ASSET_ID, start, end, now.minusHours(1)));
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+                ADMIN_ID,
+                "ADMIN",
+                () -> reservationService.extendReservation(
+                        adminBooking.getId(), new ExtendReservationRequest(extendedEnd)),
+                "ReservationService.extendReservation (admin)");
+    }
+
+    @Test
+    @DisplayName(
+            "Locked owner return (#362 §2.1): moveToAsset returns the post-transfer owner userId after concurrent acceptTransfer")
+    void moveToAssetReturnsNewLockedOwnerAfterConcurrentTransferAcceptance() {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = now.withHour(14).withMinute(0);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation booking = reservationRepository.save(new Reservation(USER_1_ID, ASSET_ID, start, end, now));
+        ReservationTransfer transfer =
+                reservationTransferRepository.save(new ReservationTransfer(booking.getId(), USER_1_ID, USER_2_ID, now));
+
+        // Simulate transfer accepting between ReassignmentService's unlocked query (USER_1_ID) and moveToAsset.
+        setupSecurityContext(USER_2_ID);
+        try {
+            transferService.acceptTransfer(transfer.getId());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        Optional<Long> movedOwnerId =
+                reservationService.moveToAsset(booking.getId(), ASSET_ID, ASSET_ID_2, "Incident #1");
+
+        assertThat(movedOwnerId)
+                .as(
+                        "moveToAsset must return the real owner under FOR UPDATE (USER_2_ID) so notifications reach the new owner; "
+                                + "see ReservationService.moveToAsset")
+                .contains(USER_2_ID);
+    }
+
     /**
      * Thread 1 runs {@code cancelUpcomingReservationsForUser} inside an explicit transaction (holding the
      * reservation row lock and cancelling the pending transfer), polls {@code pg_stat_activity} until
@@ -933,6 +1191,11 @@ class ReservationConcurrencyIT {
      */
     private void assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
             Long targetUserId, Runnable action, String ownerPath) throws Exception {
+        assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(targetUserId, "STUDENT", action, ownerPath);
+    }
+
+    private void assertRejectedWithUserDisabledWhileWaitingOnQuotaLock(
+            Long targetUserId, String role, Runnable action, String ownerPath) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch quotaLockHeld = new CountDownLatch(1);
         CountDownLatch actionStarted = new CountDownLatch(1);
@@ -956,7 +1219,7 @@ class ReservationConcurrencyIT {
         }));
 
         Future<?> concurrentAction = executor.submit(() -> {
-            setupSecurityContext(targetUserId);
+            setupSecurityContext(targetUserId, role);
             try {
                 assertThat(quotaLockHeld.await(5, TimeUnit.SECONDS))
                         .as("disable transaction acquired lockUserQuota first")
