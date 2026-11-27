@@ -239,6 +239,10 @@ public class WaitlistService {
                 requiresNewTx.executeWithoutResult(status -> expirePastEntriesForAsset(assetId));
                 return promotedCount;
             }
+            if (peek.kind() == PeekKind.EXPIRE_RETIRED) {
+                requiresNewTx.executeWithoutResult(status -> expireRetiredAssetEntries(assetId));
+                return promotedCount;
+            }
             Long candidateUserId = peek.userId();
             PromotionStepOutcome outcome =
                     requiresNewTx.execute(status -> processNextPromotionStep(assetId, candidateUserId));
@@ -265,6 +269,7 @@ public class WaitlistService {
     private enum PeekKind {
         CANDIDATE,
         EXPIRE_ONLY,
+        EXPIRE_RETIRED,
         NONE
     }
 
@@ -275,6 +280,10 @@ public class WaitlistService {
 
         static PromotionPeek expireOnly() {
             return new PromotionPeek(PeekKind.EXPIRE_ONLY, null);
+        }
+
+        static PromotionPeek expireRetired() {
+            return new PromotionPeek(PeekKind.EXPIRE_RETIRED, null);
         }
 
         static PromotionPeek none() {
@@ -291,7 +300,11 @@ public class WaitlistService {
 
     private PromotionPeek peekNextCandidate(Long assetId) {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
-        if (!catalogApi.isBookable(assetId)) {
+        AssetSummary asset = catalogApi.getAsset(assetId);
+        if (asset.status() == AssetStatus.RETIRED) {
+            return PromotionPeek.expireRetired();
+        }
+        if (asset.status() != AssetStatus.AVAILABLE) {
             return PromotionPeek.none();
         }
         List<WaitlistEntry> waiting =
@@ -316,6 +329,21 @@ public class WaitlistService {
         return foundExpired ? PromotionPeek.expireOnly() : PromotionPeek.none();
     }
 
+    private void expireRetiredAssetEntries(Long assetId) {
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+        catalogApi.lockForBooking(assetId);
+        if (catalogApi.getAsset(assetId).status() != AssetStatus.RETIRED) {
+            return;
+        }
+        List<WaitlistEntry> waiting =
+                waitlistEntryRepository.findByAssetIdAndStatusForUpdate(assetId, WaitlistStatus.WAITING);
+        for (WaitlistEntry entry : waiting) {
+            if (entry.getStatus() == WaitlistStatus.WAITING) {
+                entry.markExpired(now);
+            }
+        }
+    }
+
     private void expirePastEntriesForAsset(Long assetId) {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         catalogApi.lockForBooking(assetId);
@@ -335,7 +363,18 @@ public class WaitlistService {
         // Global lock DAG (#349, #370): Quota FIRST, Asset SECOND, Waitlist THIRD, Hold LAST.
         reservationRepository.lockUserQuota(expectedUserId);
         catalogApi.lockForBooking(assetId);
-        if (!catalogApi.isBookable(assetId)) {
+        AssetSummary asset = catalogApi.getAsset(assetId);
+        if (asset.status() == AssetStatus.RETIRED) {
+            // Retirement is permanent: expire any remaining WAITING rows once so future sweeps never
+            // re-lock this retired asset (#350).
+            List<WaitlistEntry> waitingOnRetired =
+                    waitlistEntryRepository.findByAssetIdAndStatusForUpdate(assetId, WaitlistStatus.WAITING);
+            for (WaitlistEntry entry : waitingOnRetired) {
+                entry.markExpired(now);
+            }
+            return PromotionStepOutcome.DONE;
+        }
+        if (asset.status() != AssetStatus.AVAILABLE) {
             return PromotionStepOutcome.DONE;
         }
 

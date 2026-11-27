@@ -173,11 +173,12 @@ export default function MyReservationsPage() {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
   const [waitlistCancellingId, setWaitlistCancellingId] = useState<number | null>(null)
   const [waitlistActionError, setWaitlistActionError] = useState<unknown>(null)
-  // A later success elsewhere on the page hides an old transfer error.
+  // A later success elsewhere on the page hides old transfer/waitlist errors.
   function setActionNotice(notice: string | null) {
     setActionNoticeState(notice)
     if (notice) {
       setTransferActionError(null)
+      setWaitlistActionError(null)
     }
   }
 
@@ -687,6 +688,7 @@ export default function MyReservationsPage() {
                     variant="subtle"
                     color="red"
                     loading={waitlistCancellingId === w.id}
+                    disabled={waitlistCancellingId !== null && waitlistCancellingId !== w.id}
                     onClick={async () => {
                       setWaitlistCancellingId(w.id)
                       setWaitlistActionError(null)

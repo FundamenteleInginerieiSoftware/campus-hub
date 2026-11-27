@@ -286,6 +286,7 @@ public class ReservationService implements ReservationApi {
         List<ReservationResponse> results = new ArrayList<>();
         Set<Long> ownerIds = new HashSet<>();
         int cancelledCount = 0;
+        Set<Long> cancelledAssetIds = new LinkedHashSet<>();
         for (Reservation r : items) {
             if (r.getStatus() == ReservationStatus.CONFIRMED) {
                 if (currentUser.isAdmin()) {
@@ -305,6 +306,7 @@ public class ReservationService implements ReservationApi {
                 auditService.record(userId, "CANCEL_RESERVATION", "Reservation", r.getId(), "Bundle " + bundleId);
                 ownerIds.add(r.getUserId());
                 cancelledCount++;
+                cancelledAssetIds.add(r.getAssetId());
             }
             results.add(ReservationResponse.from(r));
         }
@@ -324,11 +326,7 @@ public class ReservationService implements ReservationApi {
                     "Reservation Bundle Cancelled",
                     "Your reservation bundle #" + bundleId + " was cancelled.");
         }
-        items.stream()
-                .filter(r -> r.getStatus() == ReservationStatus.CANCELLED)
-                .map(Reservation::getAssetId)
-                .distinct()
-                .forEach(assetId -> eventPublisher.publishEvent(new SlotFreedEvent(assetId)));
+        cancelledAssetIds.forEach(assetId -> eventPublisher.publishEvent(new SlotFreedEvent(assetId)));
 
         return results;
     }

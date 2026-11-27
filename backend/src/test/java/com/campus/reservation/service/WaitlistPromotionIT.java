@@ -479,6 +479,34 @@ class WaitlistPromotionIT {
                 .isEqualTo(student2Id);
     }
 
+    @Test
+    @DisplayName("Lifecycle sweep expires WAITING entries on a RETIRED asset so future sweeps stop locking it (#350)")
+    void retiredAssetExpiresWaitingEntriesDuringLifecycleSweep() {
+        LocalDateTime start = nextWeekdaySlot(14);
+        LocalDateTime end = start.plusHours(2);
+
+        setAuth(student1Id);
+        reservationService.createReservation(new CreateReservationRequest(assetId, start, end));
+
+        setAuth(student2Id);
+        WaitlistEntryResponse joined = waitlistService.joinWaitlist(new JoinWaitlistRequest(assetId, start, end));
+        SecurityContextHolder.clearContext();
+
+        jdbcTemplate.update("UPDATE assets SET status = 'RETIRED' WHERE id = ?", assetId);
+
+        reservationLifecycleService.runLifecycleSweep();
+
+        WaitlistEntry afterSweep = waitlistEntryRepository.findById(joined.id()).orElseThrow();
+        assertThat(afterSweep.getStatus())
+                .as("WAITING entry on a permanently RETIRED asset must expire on lifecycle sweep; "
+                        + "see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(WaitlistStatus.EXPIRED);
+        assertThat(waitlistService.findAssetIdsWithWaitingEntries())
+                .as("retired asset must no longer appear in findAssetIdsWithWaitingEntries after expiring; "
+                        + "see ReservationLifecycleService.promoteWaitingAssets")
+                .doesNotContain(assetId);
+    }
+
     private LocalDateTime nextWeekdaySlot(int hour) {
         LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime slot =

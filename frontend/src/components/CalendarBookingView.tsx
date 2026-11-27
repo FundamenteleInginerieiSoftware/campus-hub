@@ -284,7 +284,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }, [asset.id, startIso, endIso, availabilityTick])
 
   function selectSlot(day: string, time: string) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     discardActiveHold()
     setSelectedDay(day)
     setSelectedStartTime(time)
@@ -295,7 +295,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleDurationChange(val: number) {
-    if (holdLoading || bookingLoading || val === durationMinutes) return
+    if (holdLoading || bookingLoading || waitlistLoading || val === durationMinutes) return
     discardActiveHold()
     setDurationMinutes(val)
     setBookingError(null)
@@ -317,7 +317,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     ) > maxBookingDate
 
   function handlePrevWeek() {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     if (isPrevWeekDisabled) return
     const prevMon = new Date(currentMonday)
     prevMon.setDate(prevMon.getDate() - 7)
@@ -349,7 +349,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleNextWeek() {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     if (isNextWeekDisabled) return
     const nextMon = new Date(currentMonday)
     nextMon.setDate(nextMon.getDate() + 7)
@@ -368,7 +368,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   // Recompute from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
   function handleToday() {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     const freshToday = nowInBucharest()
     const schedule = getInitialSchedule(freshToday)
     setToday(freshToday)
@@ -524,7 +524,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleSwitchToSubstitute(sub: AssetSummary) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     discardActiveHold()
     setBookingError(null)
     setWaitlistError(null)
@@ -588,7 +588,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="lg"
                   onClick={handlePrevWeek}
-                  disabled={isPrevWeekDisabled || holdLoading || bookingLoading}
+                  disabled={isPrevWeekDisabled || holdLoading || bookingLoading || waitlistLoading}
                   aria-label="Previous week"
                 >
                   <IconChevronLeft size={18} />
@@ -597,7 +597,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="xs"
                   onClick={handleToday}
-                  disabled={holdLoading || bookingLoading}
+                  disabled={holdLoading || bookingLoading || waitlistLoading}
                 >
                   Today
                 </Button>
@@ -605,7 +605,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="lg"
                   onClick={handleNextWeek}
-                  disabled={isNextWeekDisabled || holdLoading || bookingLoading}
+                  disabled={isNextWeekDisabled || holdLoading || bookingLoading || waitlistLoading}
                   aria-label="Next week"
                 >
                   <IconChevronRight size={18} />
@@ -627,7 +627,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 </Text>
                 <Group gap={4}>
                   {BOOKING_DURATIONS.map((dur) => {
-                    const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading
+                    const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading || waitlistLoading
                     const isSelected = effectiveDuration === dur.value
                     return (
                       <Tooltip
@@ -875,7 +875,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     <Button
                       size="xs"
                       variant="subtle"
-                      disabled={holdLoading || bookingLoading}
+                      disabled={holdLoading || bookingLoading || waitlistLoading}
                       onClick={() => handleSwitchToSubstitute(initialAsset)}
                     >
                       Back to {initialAsset.name}
@@ -985,7 +985,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                           size="xs"
                           variant="light"
                           color="teal"
-                          disabled={holdLoading || bookingLoading}
+                          disabled={holdLoading || bookingLoading || waitlistLoading}
                           onClick={() => handleSwitchToSubstitute(sub)}
                         >
                           Switch unit
@@ -1107,7 +1107,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       leftSection={<IconCheck size={14} />}
                       onClick={handleConfirmBooking}
                       loading={bookingLoading}
-                      disabled={holdLoading}
+                      disabled={holdLoading || waitlistLoading}
                     >
                       Confirm reservation
                     </Button>
@@ -1116,7 +1116,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       variant="default"
                       leftSection={<IconLockOpen size={14} />}
                       onClick={handleReleaseHold}
-                      disabled={bookingLoading || holdLoading}
+                      disabled={bookingLoading || holdLoading || waitlistLoading}
                     >
                       Release hold
                     </Button>
@@ -1135,7 +1135,9 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       void handleAcquireHold()
                     }}
                     loading={holdLoading}
-                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || bookingLoading}
+                    disabled={
+                      !isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || bookingLoading || waitlistLoading
+                    }
                   >
                     Lock slot (1-min hold)
                   </Button>
@@ -1145,7 +1147,9 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     fullWidth
                     onClick={handleConfirmBooking}
                     loading={bookingLoading}
-                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || holdLoading}
+                    disabled={
+                      !isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || holdLoading || waitlistLoading
+                    }
                   >
                     Confirm booking
                   </Button>

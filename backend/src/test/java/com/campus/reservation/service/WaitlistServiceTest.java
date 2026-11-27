@@ -354,7 +354,6 @@ class WaitlistServiceTest {
                 new ReservationHold(ASSET_ID, USER_2_ID, slotStart, slotStart.plusHours(1), now.plusMinutes(1), now);
 
         List<WaitlistEntry> queue = List.of(firstQuotaFull, secondDisabled, thirdEligible);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
                 .thenReturn(queue);
         when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
@@ -425,7 +424,6 @@ class WaitlistServiceTest {
         ReflectionTestUtils.setField(e3, "id", 3L);
         List<WaitlistEntry> queue = List.of(e1, e2, e3);
 
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
                 .thenReturn(queue);
         when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
@@ -495,7 +493,6 @@ class WaitlistServiceTest {
         ReflectionTestUtils.setField(e2, "id", 2L);
         List<WaitlistEntry> queue = List.of(e1, e2);
 
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
                 .thenReturn(queue);
         when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
@@ -547,5 +544,43 @@ class WaitlistServiceTest {
                         "when e1 frees between peek and lock, step must retry and promote USER_1 before USER_2 in strict FIFO order; "
                                 + "see WaitlistService.processNextPromotionStep")
                 .containsExactly(USER_1_ID, USER_2_ID);
+    }
+
+    @Test
+    @DisplayName("processPromotionsForAsset expires remaining WAITING entries when asset is permanently RETIRED (#350)")
+    void processPromotionsForAsset_expiresWaitingEntriesOnRetiredAsset() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        WaitlistEntry entry = new WaitlistEntry(ASSET_ID, USER_1_ID, slotStart, slotEnd, now.minusMinutes(10));
+        ReflectionTestUtils.setField(entry, "id", 81L);
+
+        when(catalogApi.getAsset(ASSET_ID))
+                .thenReturn(new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED));
+        when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(List.of(entry));
+
+        int promoted = waitlistService.processPromotionsForAsset(ASSET_ID);
+
+        assertThat(promoted)
+                .as("retired asset must promote 0 waiters; see WaitlistService.processPromotionsForAsset")
+                .isZero();
+        assertThat(entry.getStatus())
+                .as("WAITING entries on a permanently RETIRED asset must transition to EXPIRED; "
+                        + "see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(WaitlistStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("processPromotionsForAsset keeps WAITING entries active while asset is UNDER_MAINTENANCE (#350)")
+    void processPromotionsForAsset_keepsWaitingEntriesDuringMaintenance() {
+        when(catalogApi.getAsset(ASSET_ID))
+                .thenReturn(new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE));
+
+        int promoted = waitlistService.processPromotionsForAsset(ASSET_ID);
+
+        assertThat(promoted)
+                .as("asset UNDER_MAINTENANCE must promote 0 waiters until repaired; "
+                        + "see WaitlistService.processPromotionsForAsset")
+                .isZero();
+        verify(waitlistEntryRepository, never()).findByAssetIdAndStatusForUpdate(any(), any());
     }
 }
