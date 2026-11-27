@@ -135,18 +135,27 @@ public class TransferService {
 
     /**
      * Accepts a pending transfer offer and atomically moves reservation ownership to the recipient.
+     *
+     * <p>Follows the global lock DAG ({@code Quota -> Reservation -> Transfer}, #362 §1.1 & §3):
+     * locks the recipient's quota and re-checks active status first, before locking the reservation
+     * and transfer rows.
      */
     @Transactional
     public ReservationTransferResponse acceptTransfer(Long transferId) {
         Long userId = currentUser.id();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
 
-        // Lock order: reservation row, then transfer row (same as cancelUpcomingReservationsForUser,
+        // 1. Lock recipient quota FIRST (Quota -> Reservation -> Transfer) for ALL callers including admins (#362).
+        reservationRepository.lockUserQuota(userId);
+        Role recipientRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+
+        // 2. Lock reservation row BEFORE transfer row (same as cancelUpcomingReservationsForUser,
         // extend, check-out, moveToAsset) to prevent deadlocks and @Version rollbacks (#229, #329).
         reservationTransferRepository
                 .findReservationIdById(transferId)
                 .ifPresent(reservationRepository::findByIdForUpdate);
 
+        // 3. Lock transfer row.
         ReservationTransfer transfer = reservationTransferRepository
                 .findByIdForUpdate(transferId)
                 .orElseThrow(() -> new NotFoundException("TRANSFER_NOT_FOUND", "Transfer request not found"));
@@ -164,7 +173,7 @@ public class TransferService {
             throw new ConflictException("TRANSFER_NOT_ALLOWED", "Sender account is no longer active");
         }
 
-        // Reservation row was already locked above before the transfer row and before lockUserQuota(userId).
+        // Reservation row was already locked above before the transfer row.
         Reservation reservation = reservationRepository
                 .findByIdForUpdate(transfer.getReservationId())
                 .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
@@ -178,18 +187,12 @@ public class TransferService {
             throw new ConflictException("TRANSFER_NOT_ALLOWED", "Reservation owner no longer matches transfer sender");
         }
 
-        // Bug fixed (#229, #310): do not look up the recipient before lockUserQuota so Hibernate never
-        // serves a stale L1-cached User after waiting on the lock, and always return 403 USER_DISABLED.
-        if (!currentUser.isAdmin()) {
-            reservationRepository.lockUserQuota(userId);
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
-            if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
-                    >= 2) {
-                throw new ConflictException(
-                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
-            }
-        } else {
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+        if (recipientRole != Role.ADMIN
+                && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                                userId, ReservationStatus.ACTIVE_STATUSES)
+                        >= 2) {
+            throw new ConflictException(
+                    "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
         }
 
         transfer.accept(now);

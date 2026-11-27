@@ -174,8 +174,8 @@ class ReservationServiceRulesTest {
         when(reservationRepository.findByIdForUpdate(777L)).thenReturn(Optional.empty());
 
         assertThat(reservationService.moveToAsset(777L, null, OTHER_ASSET_ID, "reason"))
-                .isFalse();
-        assertThat(reservationService.forceCancel(777L, null, "reason")).isFalse();
+                .isEmpty();
+        assertThat(reservationService.forceCancel(777L, null, "reason")).isEmpty();
         assertThat(reservationService.markNoShow(777L)).isEmpty();
         assertThat(reservationService.markOverdue(777L)).isFalse();
     }
@@ -190,7 +190,7 @@ class ReservationServiceRulesTest {
 
         confirmed.markNoShow();
         assertThat(reservationService.markNoShow(1L)).isEmpty();
-        assertThat(reservationService.forceCancel(1L, null, "reason")).isFalse();
+        assertThat(reservationService.forceCancel(1L, null, "reason")).isEmpty();
     }
 
     @Test
