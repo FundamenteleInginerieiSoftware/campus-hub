@@ -5,6 +5,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
 import java.net.URI;
 import java.util.List;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
@@ -42,11 +43,14 @@ public class GlobalExceptionHandler {
         return buildProblem(ex.getStatus(), ex.getCode(), ex.getMessage());
     }
 
-    // Collects all field validation errors in a list so multiple violations on the same field are preserved.
+    // Collects all field and class-level (global) validation errors in one list so multiple violations are preserved.
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
-        List<FieldErrorItem> errors = ex.getBindingResult().getFieldErrors().stream()
-                .map(err -> new FieldErrorItem(err.getField(), err.getDefaultMessage()))
+        List<FieldErrorItem> errors = Stream.concat(
+                        ex.getBindingResult().getFieldErrors().stream()
+                                .map(err -> new FieldErrorItem(err.getField(), err.getDefaultMessage())),
+                        ex.getBindingResult().getGlobalErrors().stream()
+                                .map(err -> new FieldErrorItem(err.getObjectName(), err.getDefaultMessage())))
                 .toList();
         ProblemDetail problem = buildProblem(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Validation failed");
         problem.setProperty("errors", errors);
