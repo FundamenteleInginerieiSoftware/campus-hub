@@ -57,6 +57,8 @@ const ACTION_OPTIONS = [
       'FORCE_CANCEL_RESERVATION',
       'AUTO_NO_SHOW',
       'MARK_OVERDUE',
+      'CALENDAR_FEED_CREATED',
+      'CALENDAR_FEED_REVOKED',
     ],
   },
   {
@@ -157,7 +159,14 @@ export default function AdminAuditLogPage() {
     fromDate !== '' ||
     toDate !== ''
 
+  const dateRangeInvalid = Boolean(fromDate && toDate && fromDate > toDate)
+
   useEffect(() => {
+    if (dateRangeInvalid) {
+      void Promise.resolve().then(() => setLoading(false))
+      return
+    }
+
     let ignore = false
 
     // Bug fixed (#230): the effect alone manages the loading spinner right when an API fetch begins.
@@ -201,7 +210,17 @@ export default function AdminAuditLogPage() {
     return () => {
       ignore = true
     }
-  }, [entityType, action, debouncedActorId, debouncedEntityId, fromDate, toDate, pageNumber, reloadToken])
+  }, [
+    entityType,
+    action,
+    debouncedActorId,
+    debouncedEntityId,
+    fromDate,
+    toDate,
+    dateRangeInvalid,
+    pageNumber,
+    reloadToken,
+  ])
 
   function handleResetFilters() {
     setEntityType(null)
@@ -241,6 +260,13 @@ export default function AdminAuditLogPage() {
         if (row.entityType === 'ASSET' && row.entityId !== null) {
           return (
             <Anchor component={Link} to={`/catalog/${row.entityId}`} size="sm" fw={500}>
+              {label}
+            </Anchor>
+          )
+        }
+        if (row.entityType === 'INCIDENT' && row.entityId !== null) {
+          return (
+            <Anchor component={Link} to={`/incidents/${row.entityId}`} size="sm" fw={500}>
               {label}
             </Anchor>
           )
@@ -365,6 +391,7 @@ export default function AdminAuditLogPage() {
                 setToDate(event.currentTarget.value)
                 setPageNumber(0)
               }}
+              error={dateRangeInvalid ? 'To date must be on or after From date' : undefined}
             />
 
             <Group align="flex-end">

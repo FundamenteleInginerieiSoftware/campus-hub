@@ -50,7 +50,8 @@ function statusLabel(status: AssetStatus): string {
 
 export default function AssetDetailsPage() {
   const { id } = useParams<{ id: string }>()
-  const assetId = id && !isNaN(Number(id)) ? Number(id) : null
+  // Strict positive-integer check: rejects whitespace (" " -> 0), floats, and negatives (#363).
+  const assetId = id && /^\d+$/.test(id) && Number(id) > 0 ? Number(id) : null
 
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -69,10 +70,12 @@ export default function AssetDetailsPage() {
 
     let active = true
 
-    // Bug fixed (#268): reset loading and error on assetId change to prevent flashing previous asset details.
+    // Bug fixed (#268, #363): reset asset, loading, and error on assetId change so stale details
+    // never linger when navigating to another asset (especially if the new ID returns 404).
     // Microtask avoids React cascading render / linter warnings when updating state inside an effect.
     void Promise.resolve().then(() => {
       if (active) {
+        setAsset(null)
         setLoading(true)
         setError(null)
       }
@@ -87,6 +90,7 @@ export default function AssetDetailsPage() {
       })
       .catch((err) => {
         if (active) {
+          setAsset(null)
           setError(err)
         }
       })
@@ -316,7 +320,17 @@ export default function AssetDetailsPage() {
       )}
 
       {/* Confirmation Modal for Retiring an Asset */}
-      <Modal opened={retireOpened} onClose={closeRetire} title="Retire Equipment Asset" centered>
+      <Modal
+        opened={retireOpened}
+        onClose={() => {
+          if (!retireLoading) closeRetire()
+        }}
+        closeOnClickOutside={!retireLoading}
+        closeOnEscape={!retireLoading}
+        withCloseButton={!retireLoading}
+        title="Retire Equipment Asset"
+        centered
+      >
         <Stack gap="md">
           {retireError ? <ErrorAlert error={retireError} /> : null}
           <Text size="sm">
