@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -128,8 +129,10 @@ class AdminUserConcurrencyIT {
             first.get(15, TimeUnit.SECONDS);
             second.get(15, TimeUnit.SECONDS);
         } finally {
-            // shutdownNow() so a timeout does not leave the threads running.
+            // shutdownNow() so a timeout does not leave the threads running, and awaitTermination so an
+            // interrupted thread has finished before tearDown deletes its rows.
             executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
         }
         return outcome;
     }
@@ -168,7 +171,10 @@ class AdminUserConcurrencyIT {
         assertThat(outcome.unexpected)
                 .as("no other error than the last-admin rule")
                 .isEmpty();
-        assertThat(outcome.succeeded.get()).as("the first request goes through").isEqualTo(1);
+        assertThat(outcome.succeeded.get())
+                .as("only the first request goes through; 2 means both counted 2 enabled admins at the same "
+                        + "time: see lockEnabledByRole in AdminUserService.changeRole and disable")
+                .isEqualTo(1);
         assertThat(outcome.lastAdminRequired.get())
                 .as("the second one waits at the lock, then finds one admin left: 409 LAST_ADMIN_REQUIRED")
                 .isEqualTo(1);
@@ -193,7 +199,8 @@ class AdminUserConcurrencyIT {
         });
     }
 
-    // Same token shape as SecurityConfig builds after login: the user id in "sub".
+    // The user id in "sub" and ROLE_ADMIN as an authority, so CurrentUser.id() and CurrentUser.isAdmin() both
+    // answer as for a real admin request (the service only reads id(), but a copy of this should be complete).
     private static void loginAs(Long userId) {
         Jwt jwt = Jwt.withTokenValue("mock-token")
                 .header("alg", "none")
@@ -201,7 +208,7 @@ class AdminUserConcurrencyIT {
                 .claim("roles", List.of("ROLE_ADMIN"))
                 .build();
         SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new JwtAuthenticationToken(jwt));
+        context.setAuthentication(new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
         SecurityContextHolder.setContext(context);
     }
 

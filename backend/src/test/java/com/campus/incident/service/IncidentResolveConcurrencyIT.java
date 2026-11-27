@@ -115,7 +115,8 @@ class IncidentResolveConcurrencyIT {
             }
         };
 
-        // shutdownNow() in finally so a timeout does not leave the threads running.
+        // shutdownNow() in finally so a timeout does not leave the threads running, and awaitTermination so an
+        // interrupted thread has finished before tearDown deletes its rows.
         try {
             Future<?> first = executor.submit(() -> resolve.accept(firstIncidentId));
             Future<?> second = executor.submit(() -> resolve.accept(secondIncidentId));
@@ -127,6 +128,7 @@ class IncidentResolveConcurrencyIT {
             second.get(15, TimeUnit.SECONDS);
         } finally {
             executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
         }
 
         assertThat(errors).as("both resolves succeed").isEmpty();
