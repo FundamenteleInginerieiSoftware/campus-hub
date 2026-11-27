@@ -74,6 +74,7 @@ Each document is structured in two parts:
 | 57 | [`57-maintenance-simulator-backend.md`](./57-maintenance-simulator-backend.md) | Maintenance Impact Simulator Backend (#58, PR 1) | `@Transactional(readOnly = true)` `MaintenanceImpactSimulator` reusing `SubstituteStrategy`, `POST /api/v1/admin/reassignments/simulate`, unit + WebMvc tests |
 | 58 | [`58-maintenance-simulator-admin-page.md`](./58-maintenance-simulator-admin-page.md) | Maintenance Impact Simulator Admin Dashboard Page (#58, PR 2) | `MaintenanceSimulatorPage`, `simulateMaintenanceImpact`, `/admin/maintenance-simulator` admin route & sidebar entry |
 | 62 | [`62-reservation-deadlocks-and-reassignment-fixes.md`](./62-reservation-deadlocks-and-reassignment-fixes.md) | Reservation Deadlocks, Stale Transfer Notifications & Transient Concurrency Retry (#362 PR 1) | Global lock DAG (`Quota -> Reservation -> Asset -> Transfer -> Hold`), disabled-admin check, locked-owner `Optional<Long>` return, bounded concurrency retry, `FOR UPDATE` overlapping own-hold confirm |
+| 64 | [`64-reservation-frontend-audit-fixes.md`](./64-reservation-frontend-audit-fixes.md) | Reservation Frontend Action Guards, Late-Evening Calendar Fix & Cancel Bundle UI (#362 PR 3) | Hide invalid Extend/Transfer buttons (`MyReservationsPage`), `CancelBundleModal`, disable Today column header after 19:30 (`CalendarBookingView`) |
 
 
 

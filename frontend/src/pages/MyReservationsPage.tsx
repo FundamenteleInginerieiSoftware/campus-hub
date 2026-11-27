@@ -46,7 +46,13 @@ import { useAuth } from '../auth/useAuth.ts'
 import ErrorAlert from '../components/ErrorAlert.tsx'
 import PageHeader from '../components/PageHeader.tsx'
 import PagedTable, { type Column } from '../components/PagedTable.tsx'
-import { MAX_ACTIVE_RESERVATIONS } from '../components/reservation/bookingRules.ts'
+import {
+  CLOSE_MINUTES,
+  MAX_ACTIVE_RESERVATIONS,
+  MAX_DURATION_MINUTES,
+  SLOT_STEP_MINUTES,
+} from '../components/reservation/bookingRules.ts'
+import CancelBundleModal from '../components/reservation/CancelBundleModal.tsx'
 import CancelReservationModal from '../components/reservation/CancelReservationModal.tsx'
 import ExtendReservationModal from '../components/reservation/ExtendReservationModal.tsx'
 import { formatSlotDate, formatSlotTime } from '../components/reservation/reservationFormatters.ts'
@@ -142,6 +148,7 @@ export default function MyReservationsPage() {
 
   // Modal targets (each modal owns its own form/submission state while mounted).
   const [cancellingReservation, setCancellingReservation] = useState<Reservation | null>(null)
+  const [cancellingBundle, setCancellingBundle] = useState<{ bundleId: string; reservation: Reservation } | null>(null)
   const [extendingReservation, setExtendingReservation] = useState<Reservation | null>(null)
   const [transferringReservation, setTransferringReservation] = useState<Reservation | null>(null)
 
@@ -377,7 +384,19 @@ export default function MyReservationsPage() {
       render: (r) => {
         const now = nowInBucharest()
         const start = parseCampusLocalDateTime(r.startTime)
+        const end = parseCampusLocalDateTime(r.endTime)
+        const isBundleItem = Boolean(r.bundleId)
         const hasStartedInBucharest = now >= start
+        const hasEndedInBucharest = now >= end
+        // Match backend ReservationService.extendReservation: CONFIRMED cannot extend past start+30m,
+        // bundle items cannot be extended or transferred individually, and max duration/closing hour caps apply (#362).
+        const checkOutWindowClosed =
+          r.status === 'CONFIRMED' && now.getTime() > start.getTime() + 30 * 60 * 1000
+        const startMins = start.getHours() * 60 + start.getMinutes()
+        const endMins = end.getHours() * 60 + end.getMinutes()
+        const maxExtendableEndMins = Math.min(startMins + MAX_DURATION_MINUTES, CLOSE_MINUTES)
+        const hasExtensionRoom = endMins + SLOT_STEP_MINUTES <= maxExtendableEndMins
+
         // Desk check-out only opens near the slot (start - 15 min .. start + 30 min in
         // ReservationService.checkOutReservation), so only show the pickup pass on today's CONFIRMED rows.
         const startsTodayInBucharest =
@@ -386,8 +405,14 @@ export default function MyReservationsPage() {
           start.getDate() === now.getDate()
         const canShowPickupPass = r.status === 'CONFIRMED' && startsTodayInBucharest
         const canCancel = r.status === 'CONFIRMED' && !hasStartedInBucharest
-        const canExtend = r.status === 'CONFIRMED' || r.status === 'CHECKED_OUT'
-        const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest
+        const canCancelBundle = isBundleItem && canCancel
+        const canExtend =
+          (r.status === 'CONFIRMED' || r.status === 'CHECKED_OUT') &&
+          !isBundleItem &&
+          !hasEndedInBucharest &&
+          !checkOutWindowClosed &&
+          hasExtensionRoom
+        const canTransfer = r.status === 'CONFIRMED' && !hasStartedInBucharest && !isBundleItem
 
         return (
           <Group gap="xs" wrap="wrap">
@@ -443,6 +468,20 @@ export default function MyReservationsPage() {
               >
                 Cancel
               </Button>
+            )}
+
+            {canCancelBundle && r.bundleId && (
+              <Tooltip label="Cancel all remaining confirmed items in this bundle">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  color="red"
+                  leftSection={<IconPackage size={14} />}
+                  onClick={() => setCancellingBundle({ bundleId: r.bundleId!, reservation: r })}
+                >
+                  Cancel bundle
+                </Button>
+              </Tooltip>
             )}
 
             <Tooltip label="Report an issue or damage on this equipment">
@@ -690,6 +729,19 @@ export default function MyReservationsPage() {
           onCancelled={(cancelledId) => {
             setCancellingReservation(null)
             setActionNotice(`Reservation #${cancelledId} was successfully cancelled.`)
+            reloadReservations()
+          }}
+        />
+      )}
+
+      {cancellingBundle && (
+        <CancelBundleModal
+          bundleId={cancellingBundle.bundleId}
+          reservation={cancellingBundle.reservation}
+          onClose={() => setCancellingBundle(null)}
+          onCancelled={() => {
+            setCancellingBundle(null)
+            setActionNotice('Bundle booking cancelled — remaining confirmed items released.')
             reloadReservations()
           }}
         />

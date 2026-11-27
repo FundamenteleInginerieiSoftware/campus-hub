@@ -134,6 +134,15 @@ export function cancelReservation(id: number) {
   return apiFetch<Reservation>(`/api/v1/reservations/${id}/cancel`, { method: 'POST' })
 }
 
+/**
+ * Cancels all remaining confirmed reservations in a multi-asset bundle (POST /api/v1/reservations/bundle/{bundleId}/cancel).
+ */
+export function cancelBundle(bundleId: string) {
+  return apiFetch<Reservation[]>(`/api/v1/reservations/bundle/${encodeURIComponent(bundleId)}/cancel`, {
+    method: 'POST',
+  })
+}
+
 // Remembers the Idempotency-Key of the latest unfinished booking attempt for a given
 // (assetId, startTime, endTime) slot so a retry or double-click reuses the exact same key,
 // while selecting a different slot or starting a new booking after success generates a fresh key.
