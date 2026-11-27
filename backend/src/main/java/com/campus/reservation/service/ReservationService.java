@@ -169,6 +169,12 @@ public class ReservationService implements ReservationApi {
                     "INVALID_BUNDLE_SIZE",
                     "Multi-asset booking must include between " + minSize + " and " + maxSize + " assets");
         }
+        // Bug fixed (#362 §3): reject duplicate asset IDs (possible via bookBundle(List<Long>)) before
+        // locking/persisting so a kit never inserts two overlapping reservations on the same asset.
+        if (Set.copyOf(assetIds).size() != assetIds.size()) {
+            throw new BusinessRuleException(
+                    "DUPLICATE_ASSET_IN_BUNDLE", "Multi-asset booking cannot contain duplicate asset IDs");
+        }
     }
 
     private MultiAssetReservationResponse executeBundleBooking(
@@ -277,6 +283,7 @@ public class ReservationService implements ReservationApi {
 
         List<ReservationResponse> results = new ArrayList<>();
         Set<Long> ownerIds = new HashSet<>();
+        int cancelledCount = 0;
         for (Reservation r : items) {
             if (r.getStatus() == ReservationStatus.CONFIRMED) {
                 if (currentUser.isAdmin()) {
@@ -295,8 +302,16 @@ public class ReservationService implements ReservationApi {
                                 + " was cancelled because the bundle was cancelled.");
                 auditService.record(userId, "CANCEL_RESERVATION", "Reservation", r.getId(), "Bundle " + bundleId);
                 ownerIds.add(r.getUserId());
+                cancelledCount++;
             }
             results.add(ReservationResponse.from(r));
+        }
+
+        // Bug fixed (#362 §4): do not return 200 OK when 0 items were CONFIRMED (e.g. already cancelled or checked
+        // out).
+        if (cancelledCount == 0) {
+            throw new ConflictException(
+                    "CANCELLATION_NOT_ALLOWED", "No CONFIRMED reservations remain in this bundle to cancel");
         }
 
         // Notify each owner of the cancelled items (fixes notifying admin on admin cancel, #228 point 12)
@@ -349,13 +364,13 @@ public class ReservationService implements ReservationApi {
 
         Page<Reservation> reservationPage;
         if (statuses == null || statuses.isEmpty()) {
-            reservationPage = reservationRepository.findByUserIdOrderByStartTimeAsc(userId, pageable);
+            reservationPage = reservationRepository.findByUserIdOrderByStartTimeAscIdAsc(userId, pageable);
         } else if (statuses.size() == 1) {
-            reservationPage = reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(
+            reservationPage = reservationRepository.findByUserIdAndStatusOrderByStartTimeAscIdAsc(
                     userId, statuses.getFirst(), pageable);
         } else {
             reservationPage =
-                    reservationRepository.findByUserIdAndStatusInOrderByStartTimeAsc(userId, statuses, pageable);
+                    reservationRepository.findByUserIdAndStatusInOrderByStartTimeAscIdAsc(userId, statuses, pageable);
         }
 
         return PageResponse.from(reservationPage, ReservationResponse::from);
@@ -570,6 +585,11 @@ public class ReservationService implements ReservationApi {
         if (assetId != null) {
             // Reuse asset.status() from getAsset(assetId) to avoid a second SELECT via catalogApi.isBookable().
             AssetSummary asset = catalogApi.getAsset(assetId);
+            // Match Liviu's GET /assets/{id} (#278) and NextFreeSlotsService (#353): hide RETIRED assets
+            // from students with 404 ASSET_NOT_FOUND so non-admins cannot probe retired asset IDs (#362).
+            if (asset.status() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
+                throw new NotFoundException("ASSET_NOT_FOUND", "Asset not found: " + assetId);
+            }
             String conflictReason = null;
             if (asset.status() != AssetStatus.AVAILABLE) {
                 conflictReason = "ASSET_NOT_BOOKABLE";
@@ -881,10 +901,12 @@ public class ReservationService implements ReservationApi {
         LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
         LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
 
-        if (now.isBefore(windowStart) || now.isAfter(windowEnd)) {
+        // Bug fixed (#362 §3): for a 30-minute slot (e.g. 10:00-10:30), startTime + 30m equals endTime;
+        // checking out at exact endTime must be rejected so we never create a CHECKED_OUT row that already ended.
+        if (now.isBefore(windowStart) || now.isAfter(windowEnd) || !now.isBefore(reservation.getEndTime())) {
             throw new BusinessRuleException(
                     "CHECKOUT_WINDOW_CLOSED",
-                    "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
+                    "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start (and before slot end)");
         }
 
         // Lock the asset row SECOND to serialize simultaneous desk check-outs on the same physical equipment

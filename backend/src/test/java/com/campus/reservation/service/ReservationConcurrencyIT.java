@@ -11,9 +11,11 @@ import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.domain.ReservationHold;
 import com.campus.reservation.domain.ReservationTransfer;
 import com.campus.reservation.domain.TransferStatus;
+import com.campus.reservation.repository.CalendarFeedRepository;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.repository.ReservationTransferRepository;
+import com.campus.reservation.web.CalendarFeedCreatedResponse;
 import com.campus.reservation.web.CreateHoldRequest;
 import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.ExtendReservationRequest;
@@ -77,6 +79,12 @@ class ReservationConcurrencyIT {
 
     @Autowired
     private TransferService transferService;
+
+    @Autowired
+    private CalendarTokenService calendarTokenService;
+
+    @Autowired
+    private CalendarFeedRepository calendarFeedRepository;
 
     @Autowired
     private ReservationRepository reservationRepository;
@@ -150,6 +158,7 @@ class ReservationConcurrencyIT {
         reservationTransferRepository.deleteAll();
         reservationHoldRepository.deleteAll();
         reservationRepository.deleteAll();
+        jdbcTemplate.update("DELETE FROM calendar_feeds WHERE user_id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
         jdbcTemplate.update("DELETE FROM audit_logs WHERE actor_id IN (?, ?, ?)", USER_1_ID, USER_2_ID, ADMIN_ID);
         jdbcTemplate.update("DELETE FROM assets WHERE id IN (?, ?, ?)", ASSET_ID, ASSET_ID_2, ASSET_ID_3);
         jdbcTemplate.update("DELETE FROM lab_rooms WHERE id = ?", labRoomId);
@@ -664,6 +673,7 @@ class ReservationConcurrencyIT {
         AtomicBoolean bundleCancelDone = new AtomicBoolean(false);
         AtomicBoolean bundleCancelBlockedOnLock = new AtomicBoolean(false);
         AtomicInteger disableCancelledCount = new AtomicInteger(-1);
+        AtomicInteger bundleCancelNotAllowedCount = new AtomicInteger(0);
         List<Throwable> unexpected = new CopyOnWriteArrayList<>();
 
         Future<?> disableTask = executor.submit(() -> {
@@ -695,6 +705,12 @@ class ReservationConcurrencyIT {
                         .isTrue();
                 bundleCancelStarted.countDown();
                 reservationService.cancelBundle(bundleId, "Changed plans");
+            } catch (ConflictException expected) {
+                if ("CANCELLATION_NOT_ALLOWED".equals(expected.getCode())) {
+                    bundleCancelNotAllowedCount.incrementAndGet();
+                } else {
+                    unexpected.add(expected);
+                }
             } catch (Throwable t) {
                 unexpected.add(t);
             } finally {
@@ -718,6 +734,10 @@ class ReservationConcurrencyIT {
                 .as("cancelBundle waiting behind cancelUpcomingReservationsForUser must finish without STALE_VERSION; "
                         + "see ReservationService.cancelBundle")
                 .isEmpty();
+        assertThat(bundleCancelNotAllowedCount.get())
+                .as(
+                        "cancelBundle after disable-cancel must report 409 CANCELLATION_NOT_ALLOWED when 0 CONFIRMED items remain (#362 §4)")
+                .isEqualTo(1);
         assertThat(disableCancelledCount.get())
                 .as("cancelUpcomingReservationsForUser must cancel both bundle items")
                 .isEqualTo(2);
@@ -1063,6 +1083,60 @@ class ReservationConcurrencyIT {
                         "moveToAsset must return the real owner under FOR UPDATE (USER_2_ID) so notifications reach the new owner; "
                                 + "see ReservationService.moveToAsset")
                 .contains(USER_2_ID);
+    }
+
+    @Test
+    @DisplayName(
+            "Concurrent CalendarTokenService.create() (#362 §3): atomic ON CONFLICT upsert prevents SQLState 23505 on double-click")
+    void concurrentCalendarTokenCreateNeverThrowsUniqueViolation() throws Exception {
+        for (int round = 0; round < 3; round++) {
+            jdbcTemplate.update("DELETE FROM calendar_feeds WHERE user_id = ?", USER_1_ID);
+
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch readyLatch = new CountDownLatch(2);
+            CountDownLatch startLatch = new CountDownLatch(1);
+            List<CalendarFeedCreatedResponse> responses = new CopyOnWriteArrayList<>();
+            List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+            Runnable createTask = () -> {
+                setupSecurityContext(USER_1_ID);
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    responses.add(calendarTokenService.create());
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            };
+
+            try {
+                Future<?> f1 = executor.submit(createTask);
+                Future<?> f2 = executor.submit(createTask);
+                assertThat(readyLatch.await(5, TimeUnit.SECONDS))
+                        .as("both create threads in round %d must reach start barrier", round)
+                        .isTrue();
+                startLatch.countDown();
+                f1.get(10, TimeUnit.SECONDS);
+                f2.get(10, TimeUnit.SECONDS);
+            } finally {
+                executor.shutdownNow();
+            }
+
+            assertThat(unexpected)
+                    .as(
+                            "round %d: concurrent CalendarTokenService.create() must never fail with SQLState 23505; "
+                                    + "see CalendarFeedRepository.upsertToken",
+                            round)
+                    .isEmpty();
+            assertThat(responses)
+                    .as("round %d: both concurrent create() calls must return valid feed paths", round)
+                    .hasSize(2);
+            assertThat(calendarFeedRepository.findByUserId(USER_1_ID))
+                    .as("round %d: user must end up with exactly one active calendar_feeds row", round)
+                    .isPresent();
+        }
     }
 
     /**

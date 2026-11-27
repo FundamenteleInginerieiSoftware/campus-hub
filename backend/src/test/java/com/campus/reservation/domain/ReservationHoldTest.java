@@ -30,17 +30,26 @@ class ReservationHoldTest {
     }
 
     @Test
-    @DisplayName("confirm() succeeds while hold is unexpired, including exact expiry boundary")
+    @DisplayName(
+            "confirm() succeeds strictly before expiresAt and throws HOLD_EXPIRED at exact expiry second (#362 §4)")
     void confirmBeforeExpirySucceeds() {
         ReservationHold hold = new ReservationHold(10L, 1L, START, END, EXPIRES, NOW);
 
-        hold.confirm(NOW.plusSeconds(30));
-        assertThat(hold.getStatus()).isEqualTo(HoldStatus.CONFIRMED);
+        hold.confirm(EXPIRES.minusSeconds(1));
+        assertThat(hold.getStatus())
+                .as("hold must confirm 1 second before expiresAt; see ReservationHold.confirm")
+                .isEqualTo(HoldStatus.CONFIRMED);
 
-        // Exact boundary: now == expiresAt
+        // Exact boundary: now == expiresAt is already expired (matches existsActiveOverlap & expire)
         ReservationHold boundaryHold = new ReservationHold(10L, 1L, START, END, EXPIRES, NOW);
-        boundaryHold.confirm(EXPIRES);
-        assertThat(boundaryHold.getStatus()).isEqualTo(HoldStatus.CONFIRMED);
+        assertThatThrownBy(() -> boundaryHold.confirm(EXPIRES))
+                .as("now == expiresAt must throw HOLD_EXPIRED consistently with existsActiveOverlap and expire; "
+                        + "see ReservationHold.confirm")
+                .isInstanceOf(ConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "HOLD_EXPIRED");
+        assertThat(boundaryHold.getStatus())
+                .as("expired hold at exact boundary must not mutate before rollback; see ReservationHold.confirm")
+                .isEqualTo(HoldStatus.ACTIVE);
     }
 
     @Test

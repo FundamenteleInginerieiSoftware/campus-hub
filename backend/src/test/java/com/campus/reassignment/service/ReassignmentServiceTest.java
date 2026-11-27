@@ -400,7 +400,7 @@ class ReassignmentServiceTest {
         org.springframework.data.domain.Page<ReassignmentLog> page = new org.springframework.data.domain.PageImpl<>(
                 List.of(logEntry), org.springframework.data.domain.PageRequest.of(0, 10), 1);
 
-        when(reassignmentLogRepository.findAllByOrderByCreatedAtDesc(
+        when(reassignmentLogRepository.findAllByOrderByCreatedAtDescIdDesc(
                         any(org.springframework.data.domain.Pageable.class)))
                 .thenReturn(page);
 
@@ -458,7 +458,7 @@ class ReassignmentServiceTest {
                 .hasMessageContaining("Page offset exceeds maximum supported value");
 
         // Valid boundaries: size = 1, size = 100, page * size == Integer.MAX_VALUE
-        when(reassignmentLogRepository.findAllByOrderByCreatedAtDesc(any(Pageable.class)))
+        when(reassignmentLogRepository.findAllByOrderByCreatedAtDescIdDesc(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         assertThatCode(() -> reassignmentService.getLogs(0, 1)).doesNotThrowAnyException();
