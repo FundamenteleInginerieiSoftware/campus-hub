@@ -18,7 +18,8 @@ spring:
     execution:
       thread-name-prefix: campus-async-   # shows in the logs which lines came from an @Async listener
       pool:
-        core-size: 2        # small: only a few listeners (reassignment, notifications) run in the background
+        core-size: 4        # fast work (reassignment, live SSE); slow SES calls run on campus-ses- in AsyncConfig
+        allow-core-thread-timeout: true
     # Spring runs every @Scheduled method on ONE thread by default. Liviu's SSE heartbeat (every 20 s) would wait
     # behind Calin's sweeps (no-show/overdue every 5 min, which also send emails; holds every minute), and a slow
     # sweep would stop the heartbeats, so CloudFront closes idle live-toast streams after 30 s.
