@@ -295,7 +295,12 @@ export default function InventoryAssetsTab({
 
       <Modal
         opened={assetModalOpened}
-        onClose={closeAssetModal}
+        onClose={() => {
+          if (!assetFormLoading) closeAssetModal()
+        }}
+        closeOnClickOutside={!assetFormLoading}
+        closeOnEscape={!assetFormLoading}
+        withCloseButton={!assetFormLoading}
         title={editingAsset ? 'Edit Equipment Asset' : 'Add New Equipment Asset'}
         size="lg"
         centered
@@ -377,7 +382,17 @@ export default function InventoryAssetsTab({
         </Stack>
       </Modal>
 
-      <Modal opened={retireModalOpened} onClose={closeRetireModal} title="Retire Equipment" centered>
+      <Modal
+        opened={retireModalOpened}
+        onClose={() => {
+          if (!retireLoading) closeRetireModal()
+        }}
+        closeOnClickOutside={!retireLoading}
+        closeOnEscape={!retireLoading}
+        withCloseButton={!retireLoading}
+        title="Retire Equipment"
+        centered
+      >
         <Stack gap="md">
           {retireModalError ? <ErrorAlert error={retireModalError} /> : null}
           <Text size="sm">

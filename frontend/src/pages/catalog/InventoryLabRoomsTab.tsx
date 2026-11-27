@@ -152,7 +152,12 @@ export default function InventoryLabRoomsTab({ labRooms, onChanged }: InventoryL
 
       <Modal
         opened={roomModalOpened}
-        onClose={closeRoomModal}
+        onClose={() => {
+          if (!roomFormLoading) closeRoomModal()
+        }}
+        closeOnClickOutside={!roomFormLoading}
+        closeOnEscape={!roomFormLoading}
+        withCloseButton={!roomFormLoading}
         title={editingRoom ? 'Edit Lab Room' : 'Add New Lab Room'}
         centered
       >
@@ -193,7 +198,17 @@ export default function InventoryLabRoomsTab({ labRooms, onChanged }: InventoryL
         </Stack>
       </Modal>
 
-      <Modal opened={deleteRoomModalOpened} onClose={closeDeleteRoomModal} title="Delete Lab Room" centered>
+      <Modal
+        opened={deleteRoomModalOpened}
+        onClose={() => {
+          if (!deleteRoomLoading) closeDeleteRoomModal()
+        }}
+        closeOnClickOutside={!deleteRoomLoading}
+        closeOnEscape={!deleteRoomLoading}
+        withCloseButton={!deleteRoomLoading}
+        title="Delete Lab Room"
+        centered
+      >
         <Stack gap="md">
           {deleteModalError ? <ErrorAlert error={deleteModalError} /> : null}
           <Text size="sm">

@@ -143,7 +143,12 @@ export default function InventoryCategoriesTab({ categories, onChanged }: Invent
 
       <Modal
         opened={categoryModalOpened}
-        onClose={closeCategoryModal}
+        onClose={() => {
+          if (!categoryFormLoading) closeCategoryModal()
+        }}
+        closeOnClickOutside={!categoryFormLoading}
+        closeOnEscape={!categoryFormLoading}
+        withCloseButton={!categoryFormLoading}
         title={editingCategory ? 'Edit Category' : 'Add New Category'}
         centered
       >
@@ -174,7 +179,17 @@ export default function InventoryCategoriesTab({ categories, onChanged }: Invent
         </Stack>
       </Modal>
 
-      <Modal opened={deleteCatModalOpened} onClose={closeDeleteCatModal} title="Delete Category" centered>
+      <Modal
+        opened={deleteCatModalOpened}
+        onClose={() => {
+          if (!deleteCatLoading) closeDeleteCatModal()
+        }}
+        closeOnClickOutside={!deleteCatLoading}
+        closeOnEscape={!deleteCatLoading}
+        withCloseButton={!deleteCatLoading}
+        title="Delete Category"
+        centered
+      >
         <Stack gap="md">
           {deleteModalError ? <ErrorAlert error={deleteModalError} /> : null}
           <Text size="sm">
