@@ -2,7 +2,6 @@ package com.campus.reservation.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +10,7 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.InvalidParameterException;
+import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.HoldStatus;
@@ -65,6 +65,10 @@ class NextFreeSlotsServiceTest {
     }
 
     private void stubAvailableAssetWithNoBusySlots() {
+        stubAvailableAssetWithNoBusySlots(ReservationServiceSupport.truncatedNow(clock));
+    }
+
+    private void stubAvailableAssetWithNoBusySlots(LocalDateTime expectedNow) {
         AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(currentUser.id()).thenReturn(USER_ID);
@@ -72,14 +76,14 @@ class NextFreeSlotsServiceTest {
                         ASSET_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(List.of());
         when(reservationHoldRepository.findByAssetIdAndStatusAndExpiresAtAfter(
-                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), any()))
+                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), eq(expectedNow)))
                 .thenReturn(List.of());
     }
 
     @Test
     @DisplayName("getNextFreeSlots skips active reservations and weekend days")
     void getNextFreeSlots_skipsBusyAndWeekends() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(currentUser.id()).thenReturn(USER_ID);
@@ -95,7 +99,7 @@ class NextFreeSlotsServiceTest {
                         ASSET_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(List.of(fridayBooking));
         when(reservationHoldRepository.findByAssetIdAndStatusAndExpiresAtAfter(
-                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), any()))
+                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), eq(now)))
                 .thenReturn(List.of());
 
         NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, null, 60, 2);
@@ -116,9 +120,64 @@ class NextFreeSlotsServiceTest {
     }
 
     @Test
+    @DisplayName("getNextFreeSlots offers a free slot immediately before a busy booking and skips overlapping starts")
+    void getNextFreeSlots_offersSlotBeforeBusyBlock() {
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+        AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
+        when(currentUser.id()).thenReturn(USER_ID);
+
+        // Monday 09:00-10:00 is booked: 08:00-09:00 fits right before it, 08:30/09:00/09:30 overlap, 10:00-11:00 fits
+        // after.
+        Reservation mondayBooking = new Reservation(
+                OTHER_USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 9, 9, 0),
+                LocalDateTime.of(2026, 11, 9, 10, 0),
+                now.minusDays(1));
+        when(reservationRepository.findByAssetIdAndStatusInOrderByStartTimeAsc(
+                        ASSET_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(List.of(mondayBooking));
+        when(reservationHoldRepository.findByAssetIdAndStatusAndExpiresAtAfter(
+                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), eq(now)))
+                .thenReturn(List.of());
+
+        NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, LocalDateTime.of(2026, 11, 9, 8, 0), 60, 2);
+
+        assertThat(response.slots())
+                .as(
+                        "adjacent slot 08:00-09:00 before busy 09:00-10:00 and 10:00-11:00 after it must both be returned; see NextFreeSlotsService.getNextFreeSlots")
+                .hasSize(2);
+        assertThat(response.slots().get(0).startTime())
+                .as("slot ending at busy start 09:00 must not be blocked; see NextFreeSlotsService.getNextFreeSlots")
+                .isEqualTo(LocalDateTime.of(2026, 11, 9, 8, 0));
+        assertThat(response.slots().get(1).startTime())
+                .as("slot starting at busy end 10:00 must be offered next; see NextFreeSlotsService.getNextFreeSlots")
+                .isEqualTo(LocalDateTime.of(2026, 11, 9, 10, 0));
+    }
+
+    @Test
+    @DisplayName("getNextFreeSlots clamps 'from' in the past up to ceilToHalfHour(now)")
+    void getNextFreeSlots_clampsPastFromToNow() {
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+        stubAvailableAssetWithNoBusySlots(now);
+
+        // clock is Friday 2026-11-06 18:10 -> ceilToHalfHour(now) is 18:30; past 'from' must not return earlier slots.
+        NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, now.minusDays(1), 60, 1);
+
+        assertThat(response.slots())
+                .as("past 'from' must still yield the first upcoming slot; see NextFreeSlotsService.getNextFreeSlots")
+                .hasSize(1);
+        assertThat(response.slots().get(0).startTime())
+                .as(
+                        "past 'from' must be clamped to ceilToHalfHour(now) = 18:30; see NextFreeSlotsService.getNextFreeSlots")
+                .isEqualTo(LocalDateTime.of(2026, 11, 6, 18, 30));
+    }
+
+    @Test
     @DisplayName("getNextFreeSlots blocks slots overlapping another student's active hold")
     void getNextFreeSlots_skipsForeignHold() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(currentUser.id()).thenReturn(USER_ID);
@@ -126,33 +185,37 @@ class NextFreeSlotsServiceTest {
         ReservationHold foreignHold = new ReservationHold(
                 ASSET_ID,
                 OTHER_USER_ID,
-                LocalDateTime.of(2026, 11, 9, 8, 0),
                 LocalDateTime.of(2026, 11, 9, 9, 0),
+                LocalDateTime.of(2026, 11, 9, 10, 0),
                 now.plusMinutes(1),
                 now);
         when(reservationRepository.findByAssetIdAndStatusInOrderByStartTimeAsc(
                         ASSET_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(List.of());
         when(reservationHoldRepository.findByAssetIdAndStatusAndExpiresAtAfter(
-                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), any()))
+                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), eq(now)))
                 .thenReturn(List.of(foreignHold));
 
-        NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, LocalDateTime.of(2026, 11, 9, 8, 0), 60, 1);
+        NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, LocalDateTime.of(2026, 11, 9, 8, 0), 60, 2);
 
         assertThat(response.slots())
                 .as(
-                        "foreign hold 08:00-09:00 must block 08:00 and 08:30, recommending adjacent 09:00-10:00; see NextFreeSlotsService.getNextFreeSlots")
-                .hasSize(1);
+                        "foreign hold 09:00-10:00 must allow 08:00-09:00 before it, skip 08:30/09:00/09:30, and offer 10:00-11:00; see NextFreeSlotsService.getNextFreeSlots")
+                .hasSize(2);
         assertThat(response.slots().get(0).startTime())
                 .as(
-                        "adjacent slot starting at foreign hold end 09:00 must be offered; see NextFreeSlotsService.getNextFreeSlots")
-                .isEqualTo(LocalDateTime.of(2026, 11, 9, 9, 0));
+                        "slot 08:00-09:00 ending at foreign hold start must be offered; see NextFreeSlotsService.getNextFreeSlots")
+                .isEqualTo(LocalDateTime.of(2026, 11, 9, 8, 0));
+        assertThat(response.slots().get(1).startTime())
+                .as(
+                        "adjacent slot starting at foreign hold end 10:00 must be offered; see NextFreeSlotsService.getNextFreeSlots")
+                .isEqualTo(LocalDateTime.of(2026, 11, 9, 10, 0));
     }
 
     @Test
     @DisplayName("getNextFreeSlots does not block slots held by the caller themselves")
     void getNextFreeSlots_ignoresOwnHold() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(currentUser.id()).thenReturn(USER_ID);
@@ -168,7 +231,7 @@ class NextFreeSlotsServiceTest {
                         ASSET_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(List.of());
         when(reservationHoldRepository.findByAssetIdAndStatusAndExpiresAtAfter(
-                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), any()))
+                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), eq(now)))
                 .thenReturn(List.of(ownHold));
 
         NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, LocalDateTime.of(2026, 11, 9, 8, 0), 60, 1);
@@ -184,7 +247,7 @@ class NextFreeSlotsServiceTest {
     @Test
     @DisplayName("getNextFreeSlots treats OVERDUE booking as open-ended blocker and returns empty")
     void getNextFreeSlots_overdueBlocksOpenEnded() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         AssetSummary asset = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.AVAILABLE);
         when(catalogApi.getAsset(ASSET_ID)).thenReturn(asset);
         when(currentUser.id()).thenReturn(USER_ID);
@@ -202,7 +265,7 @@ class NextFreeSlotsServiceTest {
                         ASSET_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(List.of(overdue));
         when(reservationHoldRepository.findByAssetIdAndStatusAndExpiresAtAfter(
-                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), any()))
+                        eq(ASSET_ID), eq(HoldStatus.ACTIVE), eq(now)))
                 .thenReturn(List.of());
 
         NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, null, 60, 5);
@@ -224,7 +287,7 @@ class NextFreeSlotsServiceTest {
         Clock alignedClock = Clock.fixed(Instant.parse("2026-11-06T12:00:00Z"), ZoneId.of("Europe/Bucharest"));
         NextFreeSlotsService alignedService = new NextFreeSlotsService(
                 reservationRepository, reservationHoldRepository, catalogApi, currentUser, alignedClock);
-        stubAvailableAssetWithNoBusySlots();
+        stubAvailableAssetWithNoBusySlots(ReservationServiceSupport.truncatedNow(alignedClock));
 
         NextFreeSlotsResponse atEdge =
                 alignedService.getNextFreeSlots(ASSET_ID, LocalDateTime.of(2026, 11, 20, 14, 0), 60, 5);
@@ -244,20 +307,53 @@ class NextFreeSlotsServiceTest {
                 .isEmpty();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"UNDER_MAINTENANCE", "RETIRED"})
-    @DisplayName("getNextFreeSlots returns bookable=false when asset is UNDER_MAINTENANCE or RETIRED")
-    void getNextFreeSlots_nonBookableAssetReturnsEmpty(AssetStatus status) {
-        AssetSummary nonBookable = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, status);
-        when(catalogApi.getAsset(ASSET_ID)).thenReturn(nonBookable);
+    @Test
+    @DisplayName("getNextFreeSlots returns bookable=false when asset is UNDER_MAINTENANCE")
+    void getNextFreeSlots_underMaintenanceReturnsNotBookable() {
+        AssetSummary maintenance =
+                new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.UNDER_MAINTENANCE);
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(maintenance);
 
         NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, null, 60, 5);
 
         assertThat(response.bookable())
-                .as("status " + status + " must report bookable=false; see NextFreeSlotsService.getNextFreeSlots")
+                .as("UNDER_MAINTENANCE asset must report bookable=false; see NextFreeSlotsService.getNextFreeSlots")
                 .isFalse();
         assertThat(response.slots())
-                .as("status " + status + " must return empty slots; see NextFreeSlotsService.getNextFreeSlots")
+                .as("UNDER_MAINTENANCE asset must return empty slots; see NextFreeSlotsService.getNextFreeSlots")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("getNextFreeSlots throws 404 ASSET_NOT_FOUND for students querying a RETIRED asset (#278, #362)")
+    void getNextFreeSlots_retiredAssetThrowsNotFoundForStudent() {
+        AssetSummary retired = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED);
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(retired);
+        when(currentUser.isAdmin()).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getNextFreeSlots(ASSET_ID, null, 60, 5))
+                .as(
+                        "RETIRED asset must be hidden from students with 404 ASSET_NOT_FOUND; see NextFreeSlotsService.getNextFreeSlots")
+                .isInstanceOf(NotFoundException.class)
+                .extracting(ex -> ((NotFoundException) ex).getCode())
+                .isEqualTo("ASSET_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("getNextFreeSlots returns bookable=false for admins querying a RETIRED asset")
+    void getNextFreeSlots_retiredAssetReturnsNotBookableForAdmin() {
+        AssetSummary retired = new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED);
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(retired);
+        when(currentUser.isAdmin()).thenReturn(true);
+
+        NextFreeSlotsResponse response = service.getNextFreeSlots(ASSET_ID, null, 60, 5);
+
+        assertThat(response.bookable())
+                .as(
+                        "RETIRED asset queried by admin must report bookable=false; see NextFreeSlotsService.getNextFreeSlots")
+                .isFalse();
+        assertThat(response.slots())
+                .as("RETIRED asset queried by admin must return empty slots; see NextFreeSlotsService.getNextFreeSlots")
                 .isEmpty();
     }
 

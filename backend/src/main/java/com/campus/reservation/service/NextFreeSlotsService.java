@@ -5,6 +5,7 @@ import com.campus.catalog.api.AssetSummary;
 import com.campus.catalog.api.CatalogApi;
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.InvalidParameterException;
+import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.HoldStatus;
@@ -60,6 +61,10 @@ public class NextFreeSlotsService {
         }
 
         AssetSummary asset = catalogApi.getAsset(assetId);
+        if (asset.status() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
+            // Hide retired assets from students with 404, matching GET /api/v1/assets/{id} (#278, #362).
+            throw new NotFoundException("ASSET_NOT_FOUND", "Asset not found: " + assetId);
+        }
         if (asset.status() != AssetStatus.AVAILABLE) {
             return new NextFreeSlotsResponse(assetId, durationMinutes, false, List.of());
         }
