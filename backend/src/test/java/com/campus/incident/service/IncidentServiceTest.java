@@ -902,7 +902,8 @@ class IncidentServiceTest {
             verify(auditService).record(reporterId, "INCIDENT_PHOTO_ADDED", "INCIDENT", 1L, "Asset 10");
         }
 
-        // No transaction in a plain unit test, so the old file goes straight away (IncidentFlowIT covers commit).
+        // No transaction in a plain unit test, so the old file goes straight away (the outcomes inside a
+        // transaction: insideATransaction_theCleanupFollowsTheOutcome).
         @Test
         void replacingAPhoto_deletesTheOldFile_andIsAuditedAsReplaced() {
             givenIncident(withPhoto(1L, IncidentStatus.IN_REPAIR, OLD_KEY));

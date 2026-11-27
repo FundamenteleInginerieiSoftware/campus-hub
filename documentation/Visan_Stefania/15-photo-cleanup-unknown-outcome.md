@@ -2,7 +2,7 @@
 
 **Role:** Member 4 (incidents)
 **Date:** 2026-11-27
-**Files:** `backend/src/main/java/com/campus/incident/service/IncidentService.java`, `backend/src/test/java/com/campus/incident/service/IncidentServiceTest.java`, `docs/whats-left.md`
+**Files:** `backend/src/main/java/com/campus/incident/service/IncidentService.java`, `backend/src/test/java/com/campus/incident/service/IncidentServiceTest.java`, `docs/whats-left.md`, `AGENTS.md`, `documentation/Visan_Stefania/README.md`
 **PR:** #368 (Refs #269, point 4 of Matei's read-through)
 
 ---

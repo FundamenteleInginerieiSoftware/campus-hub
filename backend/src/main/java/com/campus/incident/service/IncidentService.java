@@ -329,7 +329,7 @@ public class IncidentService {
                     default ->
                         log.warn(
                                 "Photo transaction ended with unknown status; keeping both files (old {}, new {})",
-                                oldKey,
+                                oldKey == null ? "none, first photo" : oldKey,
                                 newKey);
                 }
             }
