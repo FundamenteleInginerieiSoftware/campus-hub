@@ -12,7 +12,9 @@ export default function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('')
+  // Set by RegisterPage when the account was created but the automatic login after it failed (#364).
+  const registeredEmail = (location.state as { registeredEmail?: string } | null)?.registeredEmail ?? null
+  const [email, setEmail] = useState(registeredEmail ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -42,6 +44,9 @@ export default function LoginPage() {
     <AuthLayout title="Sign in" subtitle="Book lab equipment by the half hour and report anything broken.">
       <form onSubmit={handleSubmit}>
         <Stack>
+          {registeredEmail && !error && (
+            <Alert color="green">Your account was created. Sign in to continue.</Alert>
+          )}
           {error && <Alert color="red">{error}</Alert>}
           <TextInput
             label="University email"

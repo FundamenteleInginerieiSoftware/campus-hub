@@ -21,7 +21,7 @@ Before every push: `npm run lint && npm run build` (CI runs the same two command
 
 | Folder | What goes there | Owner |
 |---|---|---|
-| `src/api/client.ts` | `apiFetch()`: adds the token, turns errors into `ApiError` | Stefania (shared) |
+| `src/api/client.ts` | `apiFetch()`: adds the token, turns errors into `ApiError`; extra per-request headers via `options.headers` (e.g. `Idempotency-Key`, #364) | Stefania (shared) |
 | `src/api/errorMessages.ts` | Friendly text per error `code` | everyone adds their module's codes |
 | `src/api/types.ts` | Shared shapes (`PageResponse<T>`) | Stefania (shared) |
 | `src/api/<module>.ts` | Your module's calls and types, e.g. `src/api/catalog.ts` | module owner |

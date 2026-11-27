@@ -152,6 +152,8 @@ export default function AdminReliabilityPage() {
             data={WINDOWS}
             onChange={(value) => {
               if (value === days) return
+              // #364: the error of the old period must not stay on screen while the new one loads.
+              setError(null)
               setLoading(true)
               setDays(value)
             }}

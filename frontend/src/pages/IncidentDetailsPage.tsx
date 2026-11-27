@@ -46,9 +46,18 @@ import PageHeader from '../components/PageHeader.tsx'
  * Reassignment log. Everything the list rows cut short is here: the whole description, the photo, who closed
  * it and why. An admin can also start the repair, resolve or reject from here; the reporter or an admin can
  * add or replace the photo while the incident is open. Someone else's incident is a 404 from the backend.
+ *
+ * Bug fixed (#364): going from one incident straight to another (a link, or Back/Forward) kept the same
+ * component, so the old incident stayed on screen and a 404 for the new id was never shown, because the
+ * error only renders when no incident is loaded. The key makes React start fresh for every id: all state,
+ * the photo included, is reset, and the page loads like on the first visit.
  */
 export default function IncidentDetailsPage() {
   const { id } = useParams()
+  return <IncidentDetails key={id ?? ''} id={id} />
+}
+
+function IncidentDetails({ id }: { id: string | undefined }) {
   const incidentId = Number(id)
   const validId = Number.isInteger(incidentId) && incidentId > 0
   const { user } = useAuth()

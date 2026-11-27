@@ -55,11 +55,14 @@ type RequestOptions = {
   // A plain object is sent as JSON. FormData (a file upload) is sent as multipart/form-data:
   // the browser then sets the Content-Type itself, with the boundary between the parts.
   body?: unknown
+  // Extra headers for one request, e.g. Idempotency-Key on a booking (#364). The token, Accept and
+  // Content-Type are still set here, so a caller cannot forget them.
+  headers?: Record<string, string>
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = tokenStorage.get()
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = { Accept: 'application/json', ...options.headers }
   const isForm = options.body instanceof FormData
   if (options.body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json'
