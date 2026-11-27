@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -80,7 +81,7 @@ class ReservationLifecycleFailureTest {
     void noShowThatChangedNothingIsNotCountedNorNotified() {
         Reservation unclaimed = reservation(1L, 101L, 9, 11);
         when(reservationRepository.findConfirmedBeforeCutoff(any())).thenReturn(List.of(unclaimed));
-        when(reservationService.markNoShow(1L)).thenReturn(false);
+        when(reservationService.markNoShow(1L)).thenReturn(Optional.empty());
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -130,7 +131,7 @@ class ReservationLifecycleFailureTest {
         when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
                 .thenThrow(new SubstituteNoLongerFreeException("taken"));
         when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(21L), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(106L));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -154,7 +155,7 @@ class ReservationLifecycleFailureTest {
     void aFailingEmailNeverBreaksTheSweep() {
         threatenedBookingWithTwoSubstitutes();
         when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(106L));
         doThrow(new RuntimeException("SES down")).when(notificationService).notifyUser(anyLong(), any(), any());
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();

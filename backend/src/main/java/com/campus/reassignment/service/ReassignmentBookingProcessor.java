@@ -75,7 +75,10 @@ class ReassignmentBookingProcessor {
         this.requiresNewTx = tt;
     }
 
-    record ReassignmentExecutionResult(ReassignmentOutcome outcome, String substituteAssetName) {}
+    static final int MAX_TRANSIENT_CONCURRENCY_RETRIES = 2;
+    private static final long RETRY_BACKOFF_BASE_MS = 25L;
+
+    record ReassignmentExecutionResult(ReassignmentOutcome outcome, String substituteAssetName, Long ownerUserId) {}
 
     /**
      * Processes a single reservation on a damaged asset, trying all candidates of each strategy
@@ -130,55 +133,74 @@ class ReassignmentBookingProcessor {
                 if (!attemptedCandidateIds.add(candidate.id())) {
                     continue;
                 }
-                try {
-                    return inRequiresNewTransaction(() -> {
-                        boolean moved =
-                                reservationApi.moveToAsset(booking.id(), sourceAssetId, candidate.id(), moveReason);
+                for (int attempt = 0; ; attempt++) {
+                    try {
+                        return inRequiresNewTransaction(() -> {
+                            Optional<Long> movedOwnerId =
+                                    reservationApi.moveToAsset(booking.id(), sourceAssetId, candidate.id(), moveReason);
 
-                        if (moved) {
-                            ReassignmentLog logEntry = new ReassignmentLog(
-                                    incidentId,
-                                    trigger,
-                                    booking.id(),
-                                    sourceAssetId,
+                            if (movedOwnerId.isPresent()) {
+                                ReassignmentLog logEntry = new ReassignmentLog(
+                                        incidentId,
+                                        trigger,
+                                        booking.id(),
+                                        sourceAssetId,
+                                        candidate.id(),
+                                        ReassignmentOutcome.REASSIGNED,
+                                        strategy.name(),
+                                        LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
+                                reassignmentLogRepository.save(logEntry);
+
+                                return Optional.of(new ReassignmentExecutionResult(
+                                        ReassignmentOutcome.REASSIGNED, candidate.name(), movedOwnerId.get()));
+                            }
+                            // Reservation was no longer CONFIRMED or already moved off sourceAssetId (#319); skip
+                            // cleanly.
+                            return Optional.empty();
+                        });
+                    } catch (SubstituteNoLongerFreeException e) {
+                        log.warn(
+                                "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
+                                candidate.id(),
+                                booking.id(),
+                                e);
+                        break;
+                    } catch (RuntimeException e) {
+                        if (isWrappedSubstituteNoLongerFree(e)) {
+                            log.warn(
+                                    "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
                                     candidate.id(),
-                                    ReassignmentOutcome.REASSIGNED,
-                                    strategy.name(),
-                                    LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
-                            reassignmentLogRepository.save(logEntry);
-
-                            return Optional.of(
-                                    new ReassignmentExecutionResult(ReassignmentOutcome.REASSIGNED, candidate.name()));
+                                    booking.id(),
+                                    e);
+                            break;
                         }
-                        // Reservation was no longer CONFIRMED or already moved off sourceAssetId (#319); skip cleanly.
-                        return Optional.empty();
-                    });
-                } catch (SubstituteNoLongerFreeException e) {
-                    log.warn(
-                            "Candidate asset {} was no longer free when moving reservation #{}, trying next candidate",
-                            candidate.id(),
-                            booking.id(),
-                            e);
-                } catch (RuntimeException e) {
-                    // Bug fixed (#267): a lock/version conflict now tries the next candidate. Any other error is
-                    // rethrown (ReassignmentService.handle logs it), so a bug never force-cancels a student's booking.
-                    if (!isConcurrencyConflict(e)) {
+                        // Bug fixed (#362 §2.2): previously, catching ConcurrencyFailureException fell through
+                        // to forceCancel when no other candidates existed, permanently cancelling a booking whose
+                        // substitute was actually free. Fix: retry the same candidate up to 2 times with brief
+                        // backoff, and if transient lock/deadlock errors persist, rethrow so ReassignmentService
+                        // logs and skips rather than permanently force-cancelling the student's reservation.
+                        if (isTransientConcurrencyError(e) && attempt < MAX_TRANSIENT_CONCURRENCY_RETRIES) {
+                            log.warn(
+                                    "Transient concurrency error moving reservation #{} to candidate asset {} (attempt {}/{}), retrying",
+                                    booking.id(),
+                                    candidate.id(),
+                                    attempt + 1,
+                                    MAX_TRANSIENT_CONCURRENCY_RETRIES + 1,
+                                    e);
+                            backoffBeforeRetry(attempt);
+                            continue;
+                        }
                         throw e;
                     }
-                    log.warn(
-                            "Concurrency conflict moving reservation #{} to candidate asset {}, trying next candidate",
-                            booking.id(),
-                            candidate.id(),
-                            e);
                 }
             }
         }
 
         // If no strategy found a free substitute, force-cancel the reservation in a fresh REQUIRES_NEW transaction
         return inRequiresNewTransaction(() -> {
-            boolean cancelled = reservationApi.forceCancel(booking.id(), sourceAssetId, cancelReason);
+            Optional<Long> cancelledOwnerId = reservationApi.forceCancel(booking.id(), sourceAssetId, cancelReason);
 
-            if (cancelled) {
+            if (cancelledOwnerId.isPresent()) {
                 ReassignmentLog logEntry = new ReassignmentLog(
                         incidentId,
                         trigger,
@@ -190,7 +212,8 @@ class ReassignmentBookingProcessor {
                         LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
                 reassignmentLogRepository.save(logEntry);
 
-                return Optional.of(new ReassignmentExecutionResult(ReassignmentOutcome.FORCE_CANCELLED, null));
+                return Optional.of(new ReassignmentExecutionResult(
+                        ReassignmentOutcome.FORCE_CANCELLED, null, cancelledOwnerId.get()));
             }
 
             return Optional.empty();
@@ -201,22 +224,38 @@ class ReassignmentBookingProcessor {
         return requiresNewTx.execute(status -> action.get());
     }
 
-    private static boolean isConcurrencyConflict(Throwable t) {
-        if (t instanceof SubstituteNoLongerFreeException || t instanceof ConcurrencyFailureException) {
-            return true;
+    private static void backoffBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(RETRY_BACKOFF_BASE_MS * (attempt + 1L));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         }
+    }
+
+    private static boolean isWrappedSubstituteNoLongerFree(Throwable t) {
         Throwable cause = t.getCause();
         while (cause != null) {
-            if (cause instanceof ConcurrencyFailureException || cause instanceof SubstituteNoLongerFreeException) {
+            if (cause instanceof SubstituteNoLongerFreeException) {
                 return true;
             }
-            if (cause instanceof SQLException sqlEx) {
+            cause = cause.getCause();
+        }
+        return false;
+    }
+
+    private static boolean isTransientConcurrencyError(Throwable t) {
+        Throwable current = t;
+        while (current != null) {
+            if (current instanceof ConcurrencyFailureException) {
+                return true;
+            }
+            if (current instanceof SQLException sqlEx) {
                 String sqlState = sqlEx.getSQLState();
                 if ("40P01".equals(sqlState) || "55P03".equals(sqlState) || "40001".equals(sqlState)) {
                     return true;
                 }
             }
-            cause = cause.getCause();
+            current = current.getCause();
         }
         return false;
     }

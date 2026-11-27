@@ -1,0 +1,98 @@
+name: sync-wiki
+
+# Keeps the GitHub Wiki Home page in sync with PROGRESS.md on main so there is
+# a single source of truth reviewed through normal pull requests.
+# Kept apart from Stefania's ci.yml: runs only after merges to main or manual dispatch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'PROGRESS.md'
+      - 'docs/diagrams/progress-*.svg'
+      - '.github/workflows/sync-wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-wiki
+  cancel-in-progress: false
+
+jobs:
+  sync-wiki:
+    name: sync-wiki
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out main repository
+        uses: actions/checkout@v7
+        with:
+          path: repo
+          persist-credentials: false
+
+      - name: Check out wiki repository
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository }}.wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: wiki
+
+      - name: Generate wiki Home.md from PROGRESS.md
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          src = pathlib.Path("repo/PROGRESS.md").read_text(encoding="utf-8")
+
+          skip_prefixes = ("http://", "https://", "mailto:", "#")
+
+          def rewrite_link(match: re.Match[str]) -> str:
+              bang, label, target = match.groups()
+              if target.startswith(skip_prefixes):
+                  return match.group(0)
+              clean = target.removeprefix("./")
+              if bang:
+                  url = f"https://raw.githubusercontent.com/{repo}/main/{clean}"
+              elif clean.endswith("/"):
+                  url = f"https://github.com/{repo}/tree/main/{clean}"
+              else:
+                  url = f"https://github.com/{repo}/blob/main/{clean}"
+              return f"{bang}[{label}]({url})"
+
+          # Rewrite relative Markdown images and links so they resolve from the separate .wiki repo.
+          out = re.sub(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)", rewrite_link, src)
+
+          banner = (
+              f"> **Auto-synced from [`PROGRESS.md`](https://github.com/{repo}/blob/main/PROGRESS.md) on `main`.** "
+              "Edit `PROGRESS.md` via pull request to update this page."
+          )
+          out = re.sub(
+              r"^(# .+\n)",
+              lambda m: f"{m.group(1)}\n{banner}\n",
+              out,
+              count=1,
+              flags=re.MULTILINE,
+          )
+
+          pathlib.Path("wiki/Home.md").write_text(out, encoding="utf-8")
+          PY
+
+      - name: Commit and push wiki Home.md
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Home.md
+          if git diff --cached --quiet Home.md; then
+            echo "Wiki Home.md is already up to date."
+            exit 0
+          fi
+          git commit -m "Sync Wiki Home from PROGRESS.md"
+          git push

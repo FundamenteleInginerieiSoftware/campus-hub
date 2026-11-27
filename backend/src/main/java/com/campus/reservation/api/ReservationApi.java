@@ -43,10 +43,10 @@ public interface ReservationApi {
      * @param expectedSourceAssetId the asset ID the booking must currently belong to (nullable to skip check)
      * @param newAssetId the target substitute asset ID
      * @param reason the reason for reassignment (e.g., incident report ID or note)
-     * @return {@code true} if the reservation was moved, or {@code false} if it was no longer CONFIRMED
-     *     or no longer on {@code expectedSourceAssetId}
+     * @return the current owner {@code userId} read under the {@code FOR UPDATE} lock if the reservation
+     *     was moved, or empty if it was no longer CONFIRMED or no longer on {@code expectedSourceAssetId}
      */
-    boolean moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason);
+    Optional<Long> moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason);
 
     /**
      * Force-cancels a confirmed reservation only if it is still on {@code expectedSourceAssetId}
@@ -56,10 +56,10 @@ public interface ReservationApi {
      * @param reservationId the ID of the reservation to force-cancel
      * @param expectedSourceAssetId the asset ID the booking must currently belong to (nullable to skip check)
      * @param reason the cancellation explanation
-     * @return {@code true} if the reservation was force-cancelled, or {@code false} if it was no longer CONFIRMED
-     *     or no longer on {@code expectedSourceAssetId}
+     * @return the current owner {@code userId} read under the {@code FOR UPDATE} lock if the reservation
+     *     was force-cancelled, or empty if it was no longer CONFIRMED or no longer on {@code expectedSourceAssetId}
      */
-    boolean forceCancel(Long reservationId, Long expectedSourceAssetId, String reason);
+    Optional<Long> forceCancel(Long reservationId, Long expectedSourceAssetId, String reason);
 
     /**
      * Finds the active check-out summary for an asset if currently checked out or overdue.

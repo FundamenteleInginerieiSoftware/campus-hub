@@ -4,6 +4,7 @@ import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.ReservationHold;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,11 +15,42 @@ import org.springframework.data.repository.query.Param;
 
 public interface ReservationHoldRepository extends JpaRepository<ReservationHold, Long> {
 
+    interface HoldLockTarget {
+        Long getAssetId();
+
+        Long getUserId();
+    }
+
+    // Scalar lookup (does not load ReservationHold into L1 cache) so confirmHold can acquire locks in
+    // strict global DAG order Quota -> Asset -> Hold, eliminating the Hold <-> Asset deadlock (#362 §1.2).
+    @Query("SELECT h.assetId AS assetId, h.userId AS userId FROM ReservationHold h WHERE h.id = :id")
+    Optional<HoldLockTarget> findLockTargetById(@Param("id") Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT h FROM ReservationHold h WHERE h.id = :id")
     Optional<ReservationHold> findByIdForUpdate(@Param("id") Long id);
 
     List<ReservationHold> findByUserIdAndStatusAndExpiresAtAfter(Long userId, HoldStatus status, LocalDateTime now);
+
+    // Locks active own holds overlapping [startTime, endTime] in ascending id order (last in the global DAG)
+    // so a concurrent releaseHold waits instead of tripping @Version and partial-overlap holds are confirmed (#362).
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT h FROM ReservationHold h
+        WHERE h.userId = :userId
+          AND h.assetId IN :assetIds
+          AND h.status = com.campus.reservation.domain.HoldStatus.ACTIVE
+          AND h.expiresAt > :now
+          AND h.startTime < :endTime
+          AND h.endTime > :startTime
+        ORDER BY h.id ASC
+        """)
+    List<ReservationHold> findActiveOverlappingForUserAndAssetsForUpdate(
+            @Param("userId") Long userId,
+            @Param("assetIds") Collection<Long> assetIds,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("now") LocalDateTime now);
 
     long countByUserIdAndStatusAndExpiresAtAfter(Long userId, HoldStatus status, LocalDateTime now);
 

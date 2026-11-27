@@ -1,9 +1,12 @@
 package com.campus.reassignment.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,7 +15,9 @@ import com.campus.common.paging.PageResponse;
 import com.campus.config.SecurityConfig;
 import com.campus.reassignment.domain.ReassignmentOutcome;
 import com.campus.reassignment.domain.ReassignmentTrigger;
+import com.campus.reassignment.service.MaintenanceImpactSimulator;
 import com.campus.reassignment.service.ReassignmentService;
+import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -20,9 +25,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(AdminReassignmentController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -33,6 +40,9 @@ class AdminReassignmentControllerTest {
 
     @MockitoBean
     private ReassignmentService reassignmentService;
+
+    @MockitoBean
+    private MaintenanceImpactSimulator maintenanceImpactSimulator;
 
     private final ReassignmentLogResponse sampleLog = new ReassignmentLogResponse(
             1L,
@@ -104,5 +114,104 @@ class AdminReassignmentControllerTest {
         mockMvc.perform(get("/api/v1/admin/reassignments").param("size", "101")).andExpect(status().isBadRequest());
 
         verifyNoInteractions(reassignmentService);
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    @DisplayName("POST /api/v1/admin/reassignments/simulate returns 403 when user is student")
+    void simulateForbiddenForStudent() throws Exception {
+        MvcResult result = mockMvc.perform(
+                        post("/api/v1/admin/reassignments/simulate")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00\",\"windowEnd\":\"2026-11-10T17:00:00\"}"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+        assertThat(result.getResponse().getStatus())
+                .as("students must be denied access to admin simulator endpoint; body=%s", body)
+                .isEqualTo(403);
+
+        verifyNoInteractions(maintenanceImpactSimulator);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/simulate returns 200 with dry-run result for admin")
+    void simulateSuccessForAdmin() throws Exception {
+        MaintenanceImpactResponse response = new MaintenanceImpactResponse(
+                1L,
+                "Scope 1",
+                LocalDateTime.of(2026, 11, 10, 9, 0),
+                LocalDateTime.of(2026, 11, 10, 17, 0),
+                1,
+                1,
+                0,
+                1,
+                List.of());
+        when(maintenanceImpactSimulator.simulate(any())).thenReturn(response);
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/v1/admin/reassignments/simulate")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00\",\"windowEnd\":\"2026-11-10T17:00:00\"}"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(result.getResponse().getStatus())
+                .as("admin simulator request must return 200; see AdminReassignmentController.simulate; body=%s", body)
+                .isEqualTo(200);
+        assertThat(JsonPath.<Integer>read(body, "$.assetId"))
+                .as("response assetId must match simulated asset; body=%s", body)
+                .isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(body, "$.reassignedCount"))
+                .as("response reassignedCount must match simulator output; body=%s", body)
+                .isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(body, "$.disruptionScore"))
+                .as("response disruptionScore must match simulator output; body=%s", body)
+                .isEqualTo(1);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("POST /api/v1/admin/reassignments/simulate returns 400 MALFORMED_REQUEST when Z offset is sent")
+    void simulateWithZOffsetReturns400() throws Exception {
+        MvcResult result = mockMvc.perform(
+                        post("/api/v1/admin/reassignments/simulate")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00Z\",\"windowEnd\":\"2026-11-10T17:00:00Z\"}"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(result.getResponse().getStatus())
+                .as("timezone offsets must be rejected with 400; see SimulateMaintenanceRequest; body=%s", body)
+                .isEqualTo(400);
+        assertThat(JsonPath.<String>read(body, "$.code"))
+                .as("timezone offset rejection must use MALFORMED_REQUEST code; body=%s", body)
+                .isEqualTo("MALFORMED_REQUEST");
+        verifyNoInteractions(maintenanceImpactSimulator);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName(
+            "POST /api/v1/admin/reassignments/simulate returns 400 VALIDATION_FAILED when required field is missing")
+    void simulateWithMissingFieldReturns400() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/admin/reassignments/simulate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assetId\":1,\"windowStart\":\"2026-11-10T09:00:00\"}"))
+                .andReturn();
+        String body = result.getResponse().getContentAsString();
+
+        assertThat(result.getResponse().getStatus())
+                .as(
+                        "missing windowEnd must fail Bean Validation with 400; see SimulateMaintenanceRequest; body=%s",
+                        body)
+                .isEqualTo(400);
+        assertThat(JsonPath.<String>read(body, "$.code"))
+                .as("missing required field must return VALIDATION_FAILED code; body=%s", body)
+                .isEqualTo("VALIDATION_FAILED");
+        verifyNoInteractions(maintenanceImpactSimulator);
     }
 }

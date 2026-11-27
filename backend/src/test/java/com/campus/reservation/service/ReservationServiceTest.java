@@ -156,7 +156,6 @@ class ReservationServiceTest {
         CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -171,12 +170,13 @@ class ReservationServiceTest {
         assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThat(response.createdAt().getNano()).isZero();
 
-        // Strict lock order verification
-        InOrder inOrder = inOrder(catalogApi, reservationRepository, auditService);
+        // Global lock DAG verification (#362 §1.1): Quota -> Asset -> Hold
+        InOrder inOrder = inOrder(reservationRepository, userApi, catalogApi, auditService);
+        inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
+        inOrder.verify(userApi).findActiveRole(USER_ID);
         inOrder.verify(catalogApi).lockForBooking(ASSET_ID);
         inOrder.verify(catalogApi).isBookable(ASSET_ID);
         inOrder.verify(reservationRepository).existsOverlap(ASSET_ID, start, end, -1L);
-        inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
         inOrder.verify(reservationRepository)
                 .countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES);
         inOrder.verify(reservationRepository).save(any(Reservation.class));
@@ -184,14 +184,15 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("Admin user bypasses active reservation limit check")
+    @DisplayName(
+            "Admin user bypasses active reservation limit check but still locks quota and verifies active status (#362)")
     void adminBypassesActiveReservationLimit() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.ADMIN));
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -199,6 +200,7 @@ class ReservationServiceTest {
         ReservationResponse response = reservationService.createReservation(req);
 
         assertThat(response).isNotNull();
+        verify(reservationRepository).lockUserQuota(USER_ID);
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
@@ -533,7 +535,6 @@ class ReservationServiceTest {
         CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -1088,9 +1089,9 @@ class ReservationServiceTest {
         when(reservationRepository.existsOverlap(eq(newAssetId), any(), any(), anyLong()))
                 .thenReturn(false);
 
-        boolean moved = reservationService.moveToAsset(1L, null, newAssetId, "Damaged in lab");
+        Optional<Long> movedOwnerId = reservationService.moveToAsset(1L, null, newAssetId, "Damaged in lab");
 
-        assertThat(moved).isTrue();
+        assertThat(movedOwnerId).contains(USER_ID);
         assertThat(r.getAssetId()).isEqualTo(newAssetId);
         assertThat(r.getOriginalAssetId()).isEqualTo(ASSET_ID);
         verify(catalogApi).lockForBooking(newAssetId);
@@ -1117,7 +1118,7 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("ReservationApi: moveToAsset returns false if reservation not CONFIRMED")
+    @DisplayName("ReservationApi: moveToAsset returns empty if reservation not CONFIRMED")
     void moveToAssetSilentlyReturnsWhenNotConfirmed() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -1128,15 +1129,15 @@ class ReservationServiceTest {
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean moved = reservationService.moveToAsset(1L, null, 20L, "Damaged");
+        Optional<Long> movedOwnerId = reservationService.moveToAsset(1L, null, 20L, "Damaged");
 
-        assertThat(moved).isFalse();
+        assertThat(movedOwnerId).isEmpty();
         verify(catalogApi, never()).lockForBooking(anyLong());
     }
 
     @Test
     @DisplayName(
-            "ReservationApi: moveToAsset returns false when booking was already moved off expectedSourceAssetId (#319)")
+            "ReservationApi: moveToAsset returns empty when booking was already moved off expectedSourceAssetId (#319)")
     void moveToAssetReturnsFalseWhenSourceAssetMismatch() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -1147,21 +1148,21 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean moved = reservationService.moveToAsset(1L, ASSET_ID, 30L, "Asset retired #" + ASSET_ID);
+        Optional<Long> movedOwnerId = reservationService.moveToAsset(1L, ASSET_ID, 30L, "Asset retired #" + ASSET_ID);
 
-        assertThat(moved)
-                .as("concurrent incident/retire guard (#319): moveToAsset must return false when booking is no longer "
+        assertThat(movedOwnerId)
+                .as("concurrent incident/retire guard (#319): moveToAsset must return empty when booking is no longer "
                         + "on expectedSourceAssetId; see ReservationService.moveToAsset")
-                .isFalse();
+                .isEmpty();
         assertThat(r.getAssetId())
-                .as("booking must remain on substitute 20L when stale handler returns false")
+                .as("booking must remain on substitute 20L when stale handler returns empty")
                 .isEqualTo(20L);
         verify(catalogApi, never()).lockForBooking(anyLong());
         verify(auditService, never()).record(any(), any(), any(), any(), any());
     }
 
     @Test
-    @DisplayName("ReservationApi: forceCancel returns false if reservation not CONFIRMED")
+    @DisplayName("ReservationApi: forceCancel returns empty if reservation not CONFIRMED")
     void forceCancelReturnsFalseWhenNotConfirmed() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -1172,15 +1173,15 @@ class ReservationServiceTest {
         r.cancel(LocalDateTime.of(2026, 11, 2, 11, 0), "Cancelled");
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean cancelled = reservationService.forceCancel(1L, null, "Damaged");
+        Optional<Long> cancelledOwnerId = reservationService.forceCancel(1L, null, "Damaged");
 
-        assertThat(cancelled).isFalse();
+        assertThat(cancelledOwnerId).isEmpty();
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
     }
 
     @Test
     @DisplayName(
-            "ReservationApi: forceCancel returns false when booking was already moved off expectedSourceAssetId (#319)")
+            "ReservationApi: forceCancel returns empty when booking was already moved off expectedSourceAssetId (#319)")
     void forceCancelReturnsFalseWhenSourceAssetMismatch() {
         Reservation r = new Reservation(
                 USER_ID,
@@ -1191,12 +1192,12 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean cancelled = reservationService.forceCancel(1L, ASSET_ID, "Equipment retired");
+        Optional<Long> cancelledOwnerId = reservationService.forceCancel(1L, ASSET_ID, "Equipment retired");
 
-        assertThat(cancelled)
-                .as("concurrent incident/retire guard (#319): forceCancel must return false when booking is no longer "
+        assertThat(cancelledOwnerId)
+                .as("concurrent incident/retire guard (#319): forceCancel must return empty when booking is no longer "
                         + "on expectedSourceAssetId; see ReservationService.forceCancel")
-                .isFalse();
+                .isEmpty();
         assertThat(r.getStatus())
                 .as("booking already moved to substitute 20L must stay CONFIRMED")
                 .isEqualTo(ReservationStatus.CONFIRMED);
@@ -1215,10 +1216,15 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(confirmed, "id", 10L);
         when(reservationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(confirmed));
 
-        assertThat(reservationService.markNoShow(10L)).isTrue();
+        assertThat(reservationService.markNoShow(10L))
+                .as(
+                        "markNoShow must return the locked owner userId when transitioning CONFIRMED -> NO_SHOW; see ReservationService.markNoShow")
+                .contains(USER_ID);
         assertThat(confirmed.getStatus()).isEqualTo(ReservationStatus.NO_SHOW);
         verify(auditService).record(isNull(), eq("AUTO_NO_SHOW"), eq("Reservation"), eq(10L), any());
-        assertThat(reservationService.markNoShow(10L)).isFalse();
+        assertThat(reservationService.markNoShow(10L))
+                .as("markNoShow must return empty when booking is already NO_SHOW; see ReservationService.markNoShow")
+                .isEmpty();
 
         Reservation checkedOut = new Reservation(
                 USER_ID,
@@ -1261,9 +1267,9 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(r, "id", 1L);
         when(reservationRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(r));
 
-        boolean cancelled = reservationService.forceCancel(1L, null, "Damaged beyond repair");
+        Optional<Long> cancelledOwnerId = reservationService.forceCancel(1L, null, "Damaged beyond repair");
 
-        assertThat(cancelled).isTrue();
+        assertThat(cancelledOwnerId).contains(USER_ID);
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.FORCE_CANCELLED);
         verify(auditService).record(isNull(), eq("FORCE_CANCEL_RESERVATION"), eq("Reservation"), any(), any());
     }
@@ -1873,7 +1879,6 @@ class ReservationServiceTest {
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(20L, 10L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
@@ -1893,8 +1898,9 @@ class ReservationServiceTest {
         assertThat(response.totalAssets()).isEqualTo(2);
         assertThat(response.reservations()).hasSize(2);
 
-        // Verify deterministic ascending lock order: 10L locked before 20L (deadlock prevention)
-        InOrder inOrder = inOrder(catalogApi);
+        // Verify global DAG order: Quota FIRST, then deterministic ascending assets 10L -> 20L (#362 §1.1)
+        InOrder inOrder = inOrder(reservationRepository, catalogApi);
+        inOrder.verify(reservationRepository).lockUserQuota(USER_ID);
         inOrder.verify(catalogApi).lockForBooking(10L);
         inOrder.verify(catalogApi).lockForBooking(20L);
 
@@ -1911,7 +1917,6 @@ class ReservationServiceTest {
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
         when(reservationRepository.existsOverlap(eq(10L), eq(start), eq(end), eq(-1L)))
@@ -2023,7 +2028,6 @@ class ReservationServiceTest {
                 new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L); // Already at limit of 2
@@ -2042,7 +2046,6 @@ class ReservationServiceTest {
                 new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
@@ -2064,8 +2067,6 @@ class ReservationServiceTest {
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         List<Long> assetIds = List.of(20L, 10L);
 
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
@@ -2101,8 +2102,6 @@ class ReservationServiceTest {
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         List<Long> assetIds = List.of(10L);
 
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
@@ -2179,8 +2178,6 @@ class ReservationServiceTest {
         LocalDateTime end = start.plusHours(2);
         List<Long> fiveAssets = List.of(1L, 2L, 3L, 4L, 5L);
 
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
@@ -2203,9 +2200,6 @@ class ReservationServiceTest {
         LocalDateTime end = start.plusHours(2);
         List<Long> assetIds = List.of(10L, 20L);
 
-        // currentUser has no admin role in JWT context, but userApi finds Role.ADMIN
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.ADMIN));
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
@@ -2217,7 +2211,7 @@ class ReservationServiceTest {
                 .as(
                         "admin bypass: user with ADMIN role in userApi must bypass quota in bookBundle; see ReservationService.bookBundle")
                 .isNotNull();
-        // #310: lockUserQuota runs before userApi.findActiveRole to avoid L1-cache stale reads;
+        // #310 & #362: lockUserQuota runs first before userApi.findActiveRole to avoid L1-cache stale reads;
         // once ADMIN is resolved after the lock, the student quota count query is bypassed.
         verify(reservationRepository).lockUserQuota(USER_ID);
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
@@ -2232,8 +2226,6 @@ class ReservationServiceTest {
         LocalDateTime end = start.plusHours(2);
         List<Long> assetIds = List.of(10L, 20L);
 
-        when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -2246,14 +2238,14 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("bookBundle facade: admin bypasses student active reservation quota limit (#140)")
+    @DisplayName(
+            "bookBundle facade: admin bypasses student active reservation quota limit but still locks quota (#140, #362)")
     void bookBundle_adminBypassesQuota() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         List<Long> assetIds = List.of(10L, 20L);
 
-        when(currentUser.id()).thenReturn(999L);
-        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(999L)).thenReturn(Optional.of(Role.ADMIN));
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.existsOverlap(anyLong(), eq(start), eq(end), eq(-1L)))
                 .thenReturn(false);
@@ -2262,7 +2254,7 @@ class ReservationServiceTest {
         UUID bundleId = reservationService.bookBundle(999L, assetIds, start, end);
 
         assertThat(bundleId).isNotNull();
-        verify(reservationRepository, never()).lockUserQuota(anyLong());
+        verify(reservationRepository).lockUserQuota(999L);
         verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(anyLong(), any());
     }
 
@@ -2483,7 +2475,6 @@ class ReservationServiceTest {
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(1L); // Boundary: 1 active reservation (1 + 1 <= 2) -> allowed!
@@ -2506,7 +2497,6 @@ class ReservationServiceTest {
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L); // Boundary: 2 active reservations -> (2 + 1 > 2) rejects!
@@ -2742,15 +2732,14 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(hold, "id", 77L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
-        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
-                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+        when(reservationHoldRepository.findActiveOverlappingForUserAndAssetsForUpdate(
+                        eq(USER_ID), eq(List.of(ASSET_ID)), eq(start), eq(end), any()))
                 .thenReturn(List.of(hold));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -2763,6 +2752,49 @@ class ReservationServiceTest {
         assertThat(response).isNotNull();
         assertThat(hold.getStatus()).isEqualTo(HoldStatus.CONFIRMED);
         verify(reservationHoldRepository).save(hold);
+    }
+
+    @Test
+    @DisplayName(
+            "createReservation: auto-confirms partially overlapping active hold owned by current student under FOR UPDATE (#362 §4)")
+    void createReservation_autoConfirmsPartiallyOverlappingOwnHold() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
+
+        // Hold covers 14:00-15:00 while direct booking covers 14:00-16:00.
+        ReservationHold partialHold = new ReservationHold(
+                ASSET_ID,
+                USER_ID,
+                start,
+                LocalDateTime.of(2026, 11, 2, 15, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 1),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(partialHold, "id", 78L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
+                .thenReturn(false);
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
+                .thenReturn(0L);
+        when(reservationHoldRepository.findActiveOverlappingForUserAndAssetsForUpdate(
+                        eq(USER_ID), eq(List.of(ASSET_ID)), eq(start), eq(end), any()))
+                .thenReturn(List.of(partialHold));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", 103L);
+            return r;
+        });
+
+        reservationService.createReservation(req);
+
+        assertThat(partialHold.getStatus())
+                .as("partial-overlap own hold must be confirmed when direct booking covers it; "
+                        + "see ReservationServiceSupport.confirmOwnedHoldsForSlots")
+                .isEqualTo(HoldStatus.CONFIRMED);
+        verify(reservationHoldRepository).save(partialHold);
     }
 
     @Test
@@ -2788,15 +2820,14 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(differentSlotHold, "id", 89L);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
         when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), eq(start), eq(end), any(), any(), eq(USER_ID)))
                 .thenReturn(false);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(0L);
-        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
-                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+        when(reservationHoldRepository.findActiveOverlappingForUserAndAssetsForUpdate(
+                        eq(USER_ID), eq(List.of(ASSET_ID)), eq(start), eq(end), any()))
                 .thenReturn(List.of(differentAssetHold, differentSlotHold));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
@@ -2964,11 +2995,12 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean cancelled = reservationService.forceCancel(100L, null, "Asset broken");
+        Optional<Long> cancelledOwnerId = reservationService.forceCancel(100L, null, "Asset broken");
 
-        assertThat(cancelled)
-                .as("force cancel: method must return true on success; see ReservationService.forceCancel")
-                .isTrue();
+        assertThat(cancelledOwnerId)
+                .as(
+                        "force cancel: method must return locked owner userId on success; see ReservationService.forceCancel")
+                .contains(USER_ID);
         assertThat(transfer.getStatus())
                 .as("force cancel: pending transfer must transition to CANCELLED; see ReservationService.forceCancel")
                 .isEqualTo(TransferStatus.CANCELLED);
@@ -2995,11 +3027,12 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean marked = reservationService.markNoShow(100L);
+        Optional<Long> markedUserId = reservationService.markNoShow(100L);
 
-        assertThat(marked)
-                .as("mark no-show: method must return true on success; see ReservationService.markNoShow")
-                .isTrue();
+        assertThat(markedUserId)
+                .as(
+                        "mark no-show: method must return locked owner userId on success; see ReservationService.markNoShow")
+                .contains(USER_ID);
         assertThat(transfer.getStatus())
                 .as("mark no-show: pending transfer must transition to CANCELLED; see ReservationService.markNoShow")
                 .isEqualTo(TransferStatus.CANCELLED);
@@ -3028,11 +3061,12 @@ class ReservationServiceTest {
         when(reservationTransferRepository.findByReservationIdAndStatus(100L, TransferStatus.PENDING))
                 .thenReturn(Optional.of(transfer));
 
-        boolean moved = reservationService.moveToAsset(100L, null, 200L, "Reassigned");
+        Optional<Long> movedOwnerId = reservationService.moveToAsset(100L, null, 200L, "Reassigned");
 
-        assertThat(moved)
-                .as("move to asset: method must return true on success; see ReservationService.moveToAsset")
-                .isTrue();
+        assertThat(movedOwnerId)
+                .as(
+                        "move to asset: method must return locked owner userId on success; see ReservationService.moveToAsset")
+                .contains(USER_ID);
         assertThat(transfer.getStatus())
                 .as("move to asset: pending transfer must transition to CANCELLED; see ReservationService.moveToAsset")
                 .isEqualTo(TransferStatus.CANCELLED);
@@ -3058,12 +3092,12 @@ class ReservationServiceTest {
                         eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID)))
                 .thenReturn(false);
 
-        boolean moved = reservationService.moveToAsset(100L, null, 200L, "Reassigned");
+        Optional<Long> movedOwnerId = reservationService.moveToAsset(100L, null, 200L, "Reassigned");
 
-        assertThat(moved)
+        assertThat(movedOwnerId)
                 .as(
                         "active holds: booking owner's own hold on substitute must not block move; see ReservationService.moveToAsset")
-                .isTrue();
+                .contains(USER_ID);
         verify(reservationHoldRepository)
                 .existsActiveOverlap(eq(200L), eq(r.getStartTime()), eq(r.getEndTime()), any(), isNull(), eq(USER_ID));
     }
@@ -3238,7 +3272,6 @@ class ReservationServiceTest {
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
         when(catalogApi.isBookable(10L)).thenReturn(true);
         when(catalogApi.isBookable(20L)).thenReturn(true);
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
@@ -3293,8 +3326,8 @@ class ReservationServiceTest {
             ReflectionTestUtils.setField(r, "id", 801L);
             return r;
         });
-        when(reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(
-                        eq(USER_ID), eq(HoldStatus.ACTIVE), any()))
+        when(reservationHoldRepository.findActiveOverlappingForUserAndAssetsForUpdate(
+                        eq(USER_ID), eq(List.of(10L, 20L)), eq(start), eq(end), any()))
                 .thenReturn(List.of(matchingHold, unrelatedHold));
 
         MultiAssetReservationResponse response = reservationService.createMultiAssetReservation(req);
@@ -3858,6 +3891,7 @@ class ReservationServiceTest {
     @DisplayName("extendReservation: throws 404 RESERVATION_NOT_FOUND when reservation does not exist")
     void extendReservation_notFound_throws404() {
         LocalDateTime newEnd = LocalDateTime.now(clock).plusDays(1).withHour(18).withMinute(0);
+        when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.extendReservation(999L, new ExtendReservationRequest(newEnd)))
@@ -3896,7 +3930,7 @@ class ReservationServiceTest {
 
     @Test
     @DisplayName(
-            "bookBundle: non-web context without CurrentUser treats caller as non-admin and enforces student quota")
+            "bookBundle: non-web context without CurrentUser resolves role from userApi after locking quota (#362)")
     void bookBundle_nonWebContextEnforcesStudentQuota() {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime start =
@@ -3904,14 +3938,13 @@ class ReservationServiceTest {
         LocalDateTime end = start.plusHours(2);
 
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(currentUser.id()).thenThrow(new IllegalStateException("no HTTP request context"));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(USER_ID, ReservationStatus.ACTIVE_STATUSES))
                 .thenReturn(2L);
 
         assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(ASSET_ID), start, end))
                 .as(
-                        "non-web context: CurrentUser failure must default isCurrentUserAdmin to false so student quota applies; see ReservationServiceSupport.isCurrentUserAdmin")
+                        "non-web context: bookBundle must resolve role via userApi without touching CurrentUser; see ReservationService.executeBundleBooking")
                 .isInstanceOf(ConflictException.class)
                 .hasFieldOrPropertyWithValue("code", "RESERVATION_LIMIT_REACHED");
     }
@@ -4112,20 +4145,18 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("createReservation: rejects disabled student after acquiring quota lock (#229)")
+    @DisplayName(
+            "createReservation: rejects disabled user (including admin) right after acquiring quota lock (#229, #362)")
     void createReservation_rejectsDisabledUserAfterLockingQuota() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateReservationRequest req = new CreateReservationRequest(ASSET_ID, start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
-        when(currentUser.isAdmin()).thenReturn(false);
-        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
-        when(reservationRepository.existsOverlap(ASSET_ID, start, end, -1L)).thenReturn(false);
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.createReservation(req))
-                .as("disabled user after lockUserQuota must be rejected with 403 USER_DISABLED; "
+                .as("disabled user after lockUserQuota must be rejected with 403 USER_DISABLED before asset lock; "
                         + "see ReservationService.createReservation")
                 .isInstanceOf(ForbiddenException.class)
                 .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
@@ -4133,28 +4164,49 @@ class ReservationServiceTest {
         InOrder order = inOrder(reservationRepository, userApi);
         order.verify(reservationRepository).lockUserQuota(USER_ID);
         order.verify(userApi).findActiveRole(USER_ID);
+        verify(catalogApi, never()).lockForBooking(anyLong());
         verify(reservationRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("bookBundle: rejects disabled student after acquiring quota lock (#229)")
+    @DisplayName("bookBundle: rejects disabled user right after acquiring quota lock before asset locks (#229, #362)")
     void bookBundle_rejectsDisabledUserAfterLockingQuota() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
 
-        when(catalogApi.isBookable(10L)).thenReturn(true);
-        when(catalogApi.isBookable(20L)).thenReturn(true);
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(10L, 20L), start, end))
-                .as("disabled user after lockUserQuota in bundle path must be rejected with 403 USER_DISABLED; "
-                        + "see ReservationService.executeBundleBooking")
+                .as(
+                        "disabled user after lockUserQuota in bundle path must be rejected with 403 USER_DISABLED before asset locks; "
+                                + "see ReservationService.executeBundleBooking")
                 .isInstanceOf(ForbiddenException.class)
                 .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
 
         InOrder order = inOrder(reservationRepository, userApi);
         order.verify(reservationRepository).lockUserQuota(USER_ID);
         order.verify(userApi).findActiveRole(USER_ID);
+        verify(catalogApi, never()).lockForBooking(anyLong());
         verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("extendReservation: rejects disabled caller right after acquiring quota lock (#362 §1.1 & §3)")
+    void extendReservation_rejectsDisabledCallerAfterLockingQuota() {
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 2, 16, 0);
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
+                .as("disabled caller must be rejected with 403 USER_DISABLED before locking reservation or asset; "
+                        + "see ReservationService.extendReservation")
+                .isInstanceOf(ForbiddenException.class)
+                .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
+
+        InOrder order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(USER_ID);
+        order.verify(userApi).findActiveRole(USER_ID);
+        verify(reservationRepository, never()).findByIdForUpdate(anyLong());
+        verify(catalogApi, never()).lockForBooking(anyLong());
     }
 }
