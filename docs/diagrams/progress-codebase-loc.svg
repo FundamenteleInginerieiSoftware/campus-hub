@@ -1,0 +1,234 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="580" viewBox="0 0 1200 580" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">Lines of Code by Category and Purpose</title>
+  <desc id="svg-desc">Breakdown of the Campus Equipment and Incident Hub codebase on main (c4b7151) across 77,761 authored lines and 690 tracked files, separating production code, automated tests, documentation, and explicitly excluded artifacts.</desc>
+
+  <defs>
+    <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#cbd5e1" opacity="0.45"/>
+    </pattern>
+  </defs>
+
+  <!-- Explicit solid light canvas for GitHub Light & Dark mode safety -->
+  <rect x="0" y="0" width="1200" height="580" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+  <rect x="1" y="1" width="1198" height="578" rx="15" fill="url(#dot-grid)"/>
+
+  <!-- ==================== HEADER (y=18..74) ==================== -->
+  <g id="header">
+    <rect x="28" y="24" width="6" height="44" rx="3" fill="#2563eb"/>
+    <rect x="28" y="48" width="6" height="20" rx="3" fill="#f59e0b"/>
+
+    <text x="44" y="44" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">Lines of Code by Category &amp; Purpose</text>
+    <text x="44" y="65" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#475569">Current codebase on main (c4b7151)  ·  Total lines shown alongside non-empty lines  ·  Lockfiles, wrappers, binaries &amp; HTML prototypes excluded</text>
+
+    <!-- Highlight callout pill -->
+    <rect x="1008" y="25" width="164" height="30" rx="15" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+    <text x="1090" y="44" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="700" fill="#92400e">2.16x Tests : Backend</text>
+  </g>
+
+  <!-- ==================== TOP SUMMARY STRIP (y=88..160) ==================== -->
+  <g id="summary-cards">
+    <!-- Card 1: Production App, SQL & Infra (Blue) -->
+    <rect x="31" y="91" width="370" height="72" rx="10" fill="#0f172a" opacity="0.06"/>
+    <rect x="28" y="88" width="370" height="72" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <rect x="30" y="96" width="4.5" height="56" rx="2.25" fill="#2563eb"/>
+    <text x="46" y="107" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.4" fill="#1e3a8a">PRODUCTION APP, SQL &amp; INFRA</text>
+    <rect x="320" y="95" width="66" height="18" rx="9" fill="#dbeafe"/>
+    <text x="353" y="108" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" fill="#1e40af">355 files</text>
+    <text x="46" y="131" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" fill="#1d4ed8">
+      <tspan font-size="20" font-weight="800">28,592</tspan>
+      <tspan font-size="12" font-weight="600" fill="#1e40af"> lines</tspan>
+      <tspan font-size="11" font-weight="500" fill="#475569">  ·  25,845 non-empty</tspan>
+    </text>
+    <text x="46" y="150" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.2" font-weight="500" fill="#334155">Backend Java + React TS + Flyway/YAML + Terraform/Docker/CI</text>
+
+    <!-- Card 2: Automated Test Suite (Amber) -->
+    <rect x="418" y="91" width="370" height="72" rx="10" fill="#0f172a" opacity="0.06"/>
+    <rect x="415" y="88" width="370" height="72" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <rect x="417" y="96" width="4.5" height="56" rx="2.25" fill="#f59e0b"/>
+    <text x="433" y="107" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.4" fill="#78350f">AUTOMATED TEST SUITE</text>
+    <rect x="707" y="95" width="66" height="18" rx="9" fill="#fef3c7"/>
+    <text x="740" y="108" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" fill="#92400e">126 files</text>
+    <text x="433" y="131" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" fill="#b45309">
+      <tspan font-size="20" font-weight="800">29,619</tspan>
+      <tspan font-size="12" font-weight="600" fill="#92400e"> lines</tspan>
+      <tspan font-size="11" font-weight="500" fill="#475569">  ·  25,082 non-empty</tspan>
+    </text>
+    <text x="433" y="150" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#92400e">51% of all engineering code  ·  2.16x backend prod code</text>
+
+    <!-- Card 3: Project & Personal Docs (Slate) -->
+    <rect x="805" y="91" width="370" height="72" rx="10" fill="#0f172a" opacity="0.06"/>
+    <rect x="802" y="88" width="370" height="72" rx="10" fill="#f8fafc" stroke="#475569" stroke-width="1.5"/>
+    <rect x="804" y="96" width="4.5" height="56" rx="2.25" fill="#475569"/>
+    <text x="820" y="107" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="0.4" fill="#334155">PROJECT &amp; PERSONAL DOCS</text>
+    <rect x="1094" y="95" width="66" height="18" rx="9" fill="#e2e8f0"/>
+    <text x="1127" y="108" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" fill="#334155">209 files</text>
+    <text x="820" y="131" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" fill="#0f172a">
+      <tspan font-size="20" font-weight="800">19,550</tspan>
+      <tspan font-size="12" font-weight="600" fill="#334155"> lines</tspan>
+      <tspan font-size="11" font-weight="500" fill="#475569">  ·  15,157 non-empty</tspan>
+    </text>
+    <text x="820" y="150" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.4" font-weight="500" fill="#475569">API contract, ADRs, diagrams, specs &amp; 157 member notes</text>
+  </g>
+
+  <!-- ==================== MAIN BAR CHART CARD (y=174..496) ==================== -->
+  <g id="main-chart-card">
+    <rect x="31" y="177" width="1144" height="322" rx="12" fill="#0f172a" opacity="0.05"/>
+    <rect x="28" y="174" width="1144" height="322" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+
+    <!-- Card Header -->
+    <text x="48" y="199" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">Exact Breakdown by Functional Layer <tspan font-size="12.5" font-weight="500" fill="#64748b">(77,761 authored lines across 690 files)</tspan></text>
+
+    <!-- Bar tone legend -->
+    <rect x="888" y="189" width="11" height="11" rx="2.5" fill="#475569"/>
+    <text x="904" y="198" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="500" fill="#475569">Non-empty lines</text>
+    <rect x="1008" y="189" width="11" height="11" rx="2.5" fill="#e2e8f0" stroke="#64748b" stroke-width="1"/>
+    <text x="1024" y="198" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="500" fill="#475569">Total lines (incl. blanks)</text>
+
+    <line x1="28" y1="211" x2="1172" y2="211" stroke="#e2e8f0" stroke-width="1"/>
+
+    <!-- Subtle Row 1 highlight -->
+    <rect x="40" y="218" width="1120" height="36" rx="6" fill="#fffbeb" opacity="0.72"/>
+
+    <!-- Vertical Gridlines across bar zone (x=330..780, max 29,619 = 450px) -->
+    <line x1="330" y1="218" x2="330" y2="472" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="482" y1="218" x2="482" y2="472" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3"/>
+    <line x1="634" y1="218" x2="634" y2="472" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3"/>
+    <line x1="780" y1="218" x2="780" y2="472" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- Row Divider Hairlines -->
+    <line x1="48" y1="254" x2="1152" y2="254" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="48" y1="290" x2="1152" y2="290" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="48" y1="326" x2="1152" y2="326" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="48" y1="362" x2="1152" y2="362" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="48" y1="398" x2="1152" y2="398" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="48" y1="434" x2="1152" y2="434" stroke="#f1f5f9" stroke-width="1"/>
+
+    <!-- ROW 1: Backend Automated Tests (29,619 -> 450px, non-empty 25,082 -> 381px) -->
+    <g id="row-1">
+      <rect x="48" y="231" width="10" height="10" rx="3" fill="#f59e0b"/>
+      <text x="66" y="240" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#78350f">Backend Automated Tests</text>
+
+      <rect x="330" y="226" width="450" height="20" rx="5" fill="#fef3c7"/>
+      <rect x="330" y="226" width="381" height="20" rx="5" fill="#f59e0b" opacity="0.92"/>
+      <rect x="330" y="226" width="450" height="20" rx="5" fill="none" stroke="#d97706" stroke-width="1.25"/>
+
+      <text x="848" y="241" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#92400e">29,619</text>
+      <text x="862" y="234" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">126 files · 25.1k non-empty</text>
+      <rect x="1084" y="222" width="68" height="16" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+      <text x="1118" y="233" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="9.5" font-weight="700" fill="#92400e">2.16x prod</text>
+      <text x="862" y="248" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">Unit, Slice, IT, Concurrency, ArchUnit</text>
+    </g>
+
+    <!-- ROW 2: Backend Production (Java) (13,729 -> 209px, non-empty 12.1k -> 184px) -->
+    <g id="row-2">
+      <rect x="48" y="267" width="10" height="10" rx="3" fill="#2563eb"/>
+      <text x="66" y="276" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#0f172a">Backend Production (Java)</text>
+
+      <rect x="330" y="262" width="450" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="330" y="262" width="209" height="20" rx="5" fill="#dbeafe"/>
+      <rect x="330" y="262" width="184" height="20" rx="5" fill="#2563eb" opacity="0.92"/>
+      <rect x="330" y="262" width="209" height="20" rx="5" fill="none" stroke="#1d4ed8" stroke-width="1.25"/>
+
+      <text x="848" y="277" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#1e3a8a">13,729</text>
+      <text x="862" y="270" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">215 files · 12.1k non-empty</text>
+      <text x="862" y="284" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">8 modules, 69 REST endpoints</text>
+    </g>
+
+    <!-- ROW 3: Personal Engineering Docs (11,059 -> 168px, non-empty 8.3k -> 126px) -->
+    <g id="row-3">
+      <rect x="48" y="303" width="10" height="10" rx="3" fill="#64748b"/>
+      <text x="66" y="312" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#0f172a">Personal Engineering Docs</text>
+
+      <rect x="330" y="298" width="450" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="330" y="298" width="168" height="20" rx="5" fill="#e2e8f0"/>
+      <rect x="330" y="298" width="126" height="20" rx="5" fill="#64748b" opacity="0.92"/>
+      <rect x="330" y="298" width="168" height="20" rx="5" fill="none" stroke="#475569" stroke-width="1.25"/>
+
+      <text x="848" y="313" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#334155">11,059</text>
+      <text x="862" y="306" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">157 files · 8.3k non-empty</text>
+      <text x="862" y="320" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">Part 1 + Part 2 notes (4 members)</text>
+    </g>
+
+    <!-- ROW 4: Frontend App Source (TS/TSX) (10,833 -> 165px, non-empty 10.0k -> 152px) -->
+    <g id="row-4">
+      <rect x="48" y="339" width="10" height="10" rx="3" fill="#7c3aed"/>
+      <text x="66" y="348" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#0f172a">Frontend App Source (TS/TSX)</text>
+
+      <rect x="330" y="334" width="450" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="330" y="334" width="165" height="20" rx="5" fill="#ede9fe"/>
+      <rect x="330" y="334" width="152" height="20" rx="5" fill="#7c3aed" opacity="0.92"/>
+      <rect x="330" y="334" width="165" height="20" rx="5" fill="none" stroke="#6d28d9" stroke-width="1.25"/>
+
+      <text x="848" y="349" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#4c1d95">10,833</text>
+      <text x="862" y="342" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">67 files · 10.0k non-empty</text>
+      <text x="862" y="356" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">20 React pages, Mantine UI, SSE</text>
+    </g>
+
+    <!-- ROW 5: Shared Docs & Diagrams (8,491 -> 129px, non-empty 6.8k -> 103px) -->
+    <g id="row-5">
+      <rect x="48" y="375" width="10" height="10" rx="3" fill="#94a3b8"/>
+      <text x="66" y="384" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#0f172a">Shared Docs &amp; Diagrams</text>
+
+      <rect x="330" y="370" width="450" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="330" y="370" width="129" height="20" rx="5" fill="#e2e8f0"/>
+      <rect x="330" y="370" width="103" height="20" rx="5" fill="#94a3b8" opacity="0.95"/>
+      <rect x="330" y="370" width="129" height="20" rx="5" fill="none" stroke="#64748b" stroke-width="1.25"/>
+
+      <text x="848" y="385" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#475569">8,491</text>
+      <text x="862" y="378" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">52 files · 6.8k non-empty</text>
+      <text x="862" y="392" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">API contract, ADRs, SVGs, report</text>
+    </g>
+
+    <!-- ROW 6: Infra, Docker, Gradle & CI (2,456 -> 37px, non-empty 2.2k -> 33px) -->
+    <g id="row-6">
+      <rect x="48" y="411" width="10" height="10" rx="3" fill="#0d9488"/>
+      <text x="66" y="420" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#0f172a">Infra, Docker, Gradle &amp; CI</text>
+
+      <rect x="330" y="406" width="450" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="330" y="406" width="37" height="20" rx="5" fill="#ccfbf1"/>
+      <rect x="330" y="406" width="33" height="20" rx="5" fill="#0d9488" opacity="0.92"/>
+      <rect x="330" y="406" width="37" height="20" rx="5" fill="none" stroke="#0f766e" stroke-width="1.25"/>
+
+      <text x="848" y="421" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#134e4a">2,456</text>
+      <text x="862" y="414" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">43 files · 2.2k non-empty</text>
+      <text x="862" y="428" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">Terraform AWS, workflows, build</text>
+    </g>
+
+    <!-- ROW 7: DB Migrations & Spring Config (1,574 -> 24px, non-empty 1.5k -> 22px) -->
+    <g id="row-7">
+      <rect x="48" y="447" width="10" height="10" rx="3" fill="#0284c7"/>
+      <text x="66" y="456" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#0f172a">DB Migrations &amp; Spring Config</text>
+
+      <rect x="330" y="442" width="450" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="330" y="442" width="24" height="20" rx="5" fill="#e0f2fe"/>
+      <rect x="330" y="442" width="22" height="20" rx="5" fill="#0284c7" opacity="0.92"/>
+      <rect x="330" y="442" width="24" height="20" rx="5" fill="none" stroke="#0369a1" stroke-width="1.25"/>
+
+      <text x="848" y="457" text-anchor="end" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="13" font-weight="700" fill="#0c4a6e">1,574</text>
+      <text x="862" y="450" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="600" fill="#334155">30 files · 1.5k non-empty</text>
+      <text x="862" y="464" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="400" fill="#64748b">17 Flyway SQL + application*.yml</text>
+    </g>
+
+    <!-- Axis baseline and scale ticks -->
+    <line x1="330" y1="472" x2="780" y2="472" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="330" y="486" text-anchor="middle" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10" fill="#64748b">0</text>
+    <text x="482" y="486" text-anchor="middle" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10" fill="#64748b">10k</text>
+    <text x="634" y="486" text-anchor="middle" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10" fill="#64748b">20k</text>
+    <text x="780" y="486" text-anchor="middle" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10" font-weight="600" fill="#475569">29.6k lines</text>
+  </g>
+
+  <!-- ==================== BOTTOM EXCLUSION TRANSPARENCY STRIP (y=510..560) ==================== -->
+  <g id="exclusion-strip">
+    <rect x="28" y="510" width="1144" height="50" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.25" stroke-dasharray="6,3"/>
+
+    <rect x="42" y="522" width="208" height="26" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+    <text x="146" y="539" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" fill="#92400e">Explicitly excluded from code LOC</text>
+
+    <text x="266" y="531" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#334155">
+      <tspan font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10.5" font-weight="600" fill="#0f172a">docs/prototype/*.html</tspan> (2,073 lines, 2 clickable mockups)   ·   <tspan font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10.5" font-weight="600" fill="#0f172a">frontend/package-lock.json</tspan> &amp; Gradle wrapper (2,229 lines)
+    </text>
+    <text x="266" y="549" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#475569">
+      <tspan font-weight="600" fill="#0f172a">62 binary PNG screenshots/diagrams</tspan>   ·   No generated lockfiles, wrapper scripts, binaries, or HTML mockups inflate the authored totals above.
+    </text>
+  </g>
+</svg>

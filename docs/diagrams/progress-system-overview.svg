@@ -1,0 +1,321 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" role="img" aria-label="Campus Equipment and Incident Hub System Overview">
+  <defs>
+    <!-- Crisp arrowheads -->
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#0d9488"/>
+    </marker>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <!-- Subtle Excalidraw-style dot grid background pattern -->
+    <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="0.85" fill="#cbd5e1" opacity="0.45"/>
+    </pattern>
+  </defs>
+
+  <!-- Explicit solid light canvas for GitHub Light + Dark Mode safety -->
+  <rect x="0" y="0" width="1200" height="700" rx="16" fill="#fafbfc" stroke="#d0d7de" stroke-width="1.5"/>
+  <rect x="1" y="1" width="1198" height="698" rx="15" fill="url(#dot-grid)"/>
+
+  <!-- ==================== HEADER (y=18..96) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <text x="28" y="42" font-size="20" font-weight="700" fill="#0f172a">Campus Equipment &amp; Incident Hub — System Overview</text>
+    <text x="28" y="61" font-size="12.5" fill="#475569">Spring Boot 4.1 (Java 25) modular monolith  ·  React + Vite + TypeScript  ·  PostgreSQL 18  ·  AWS</text>
+
+    <!-- 4-Member Color Legend Strip (y=72..96) -->
+    <!-- Matei (Blue) -->
+    <rect x="28" y="72" width="288" height="24" rx="12" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+    <circle cx="42" cy="84" r="4.5" fill="#2563eb"/>
+    <text x="53" y="88" font-size="11.2" fill="#1e3a8a"><tspan font-weight="700">Matei</tspan> · Cloud, Security, Auth, Projects</text>
+
+    <!-- Liviu (Teal) -->
+    <rect x="326" y="72" width="256" height="24" rx="12" fill="#f0fdfa" stroke="#5eead4" stroke-width="1.2"/>
+    <circle cx="340" cy="84" r="4.5" fill="#0d9488"/>
+    <text x="351" y="88" font-size="11.2" fill="#134e4a"><tspan font-weight="700">Liviu</tspan> · Catalog &amp; Shared Services</text>
+
+    <!-- Calin (Amber) -->
+    <rect x="592" y="72" width="272" height="24" rx="12" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.2"/>
+    <circle cx="606" cy="84" r="4.5" fill="#d97706"/>
+    <text x="617" y="88" font-size="11.2" fill="#78350f"><tspan font-weight="700">Calin</tspan> · Reservations &amp; Reassignment</text>
+
+    <!-- Stefania (Violet) -->
+    <rect x="874" y="72" width="298" height="24" rx="12" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+    <circle cx="888" cy="84" r="4.5" fill="#7c3aed"/>
+    <text x="899" y="88" font-size="11.2" fill="#4c1d95"><tspan font-weight="700">Stefania</tspan> · Incidents, Users &amp; Frontend</text>
+  </g>
+
+  <!-- ==================== LEFT COLUMN: CLIENTS & FRONTEND (x=28..262) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <!-- Top Box: Students & Lab Admins (y=114..232) -->
+    <rect x="31" y="117" width="234" height="118" rx="12" fill="#0f172a" opacity="0.05"/>
+    <rect x="28" y="114" width="234" height="118" rx="12" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
+    <path d="M 28 126 Q 28 114 40 114 L 250 114 Q 262 114 262 126 L 262 144 L 28 144 Z" fill="#f1f5f9"/>
+    <line x1="28" y1="144" x2="262" y2="144" stroke="#cbd5e1" stroke-width="1"/>
+    <!-- Minimal user silhouette icon -->
+    <circle cx="48" cy="126" r="4" fill="#475569"/>
+    <path d="M 41 137 C 41 132.5 55 132.5 55 137" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="62" y="134" font-size="13" font-weight="700" fill="#0f172a">Students &amp; Lab Admins</text>
+
+    <text x="42" y="164" font-size="11.2" fill="#334155">• Browse, reserve &amp; QR pass</text>
+    <text x="42" y="183" font-size="11.2" fill="#334155">• Report damage with photo</text>
+    <text x="42" y="202" font-size="11.2" fill="#334155">• Triage incidents &amp; audit</text>
+    <text x="42" y="221" font-size="11.2" fill="#334155">• Admin pickup &amp; return desk</text>
+
+    <!-- Connector: Users -> React SPA -->
+    <line x1="145" y1="232" x2="145" y2="265" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow-slate)"/>
+    <text x="154" y="253" font-size="10.2" fill="#475569">HTTPS / Browser</text>
+
+    <!-- Main Card: React + Vite + TS SPA (y=268..520) -->
+    <rect x="31" y="271" width="234" height="252" rx="12" fill="#0f172a" opacity="0.05"/>
+    <rect x="28" y="268" width="234" height="252" rx="12" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.6"/>
+    <!-- Top Violet header bar -->
+    <path d="M 28 280 Q 28 268 40 268 L 250 268 Q 262 268 262 280 L 262 308 L 28 308 Z" fill="#ede9fe"/>
+    <line x1="28" y1="308" x2="262" y2="308" stroke="#c4b5fd" stroke-width="1"/>
+    <text x="42" y="289" font-size="13.2" font-weight="700" fill="#4c1d95">React + Vite + TS SPA</text>
+    <text x="42" y="303" font-size="10.2" font-weight="600" fill="#6d28d9">Frontend Lead: Stefania</text>
+
+    <!-- 4 feature rows inside SPA card -->
+    <rect x="40" y="322" width="210" height="38" rx="8" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+    <circle cx="54" cy="341" r="3.5" fill="#7c3aed"/>
+    <text x="64" y="345" font-size="11.2" font-weight="600" fill="#3b0764">20 pages · Mantine UI</text>
+
+    <rect x="40" y="370" width="210" height="38" rx="8" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+    <circle cx="54" cy="389" r="3.5" fill="#0d9488"/>
+    <text x="64" y="393" font-size="11.2" font-weight="600" fill="#3b0764">Live SSE toast alerts</text>
+
+    <rect x="40" y="418" width="210" height="38" rx="8" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+    <circle cx="54" cy="437" r="3.5" fill="#2563eb"/>
+    <text x="64" y="441" font-size="11.2" font-weight="600" fill="#3b0764">QR pass &amp; desk camera scan</text>
+
+    <rect x="40" y="466" width="210" height="38" rx="8" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.2"/>
+    <circle cx="54" cy="485" r="3.5" fill="#d97706"/>
+    <text x="64" y="489" font-size="11.2" font-weight="600" fill="#3b0764">Calendar booking &amp; iCal sync</text>
+  </g>
+
+  <!-- ==================== ARROWS: LEFT -> CENTER (x=262..338) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <!-- Upper solid arrow: REST /api/v1/** + JWT -->
+    <text x="300" y="324" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1e3a8a">REST</text>
+    <text x="300" y="337" text-anchor="middle" font-family='"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace' font-size="9.5" font-weight="600" fill="#2563eb">/api/v1/**</text>
+    <line x1="262" y1="348" x2="334" y2="348" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+    <rect x="281" y="355" width="38" height="16" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="300" y="366.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">JWT</text>
+
+    <!-- Lower dashed return arrow: SSE live stream -->
+    <text x="300" y="418" text-anchor="middle" font-size="10.5" font-weight="700" fill="#134e4a">SSE</text>
+    <text x="300" y="431" text-anchor="middle" font-size="10" fill="#0d9488">live stream</text>
+    <line x1="338" y1="442" x2="266" y2="442" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arrow-teal)"/>
+  </g>
+
+  <!-- ==================== CENTER COLUMN: SPRING BOOT MODULAR MONOLITH (x=338..862) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <!-- Outer dashed container with subtle shadow -->
+    <rect x="341" y="117" width="524" height="406" rx="14" fill="#0f172a" opacity="0.04"/>
+    <rect x="338" y="114" width="524" height="406" rx="14" fill="#ffffff" stroke="#475569" stroke-width="1.8" stroke-dasharray="7 4"/>
+
+    <!-- Monolith Title -->
+    <text x="600" y="136" text-anchor="middle" font-size="13.5" font-weight="700" fill="#0f172a">Spring Boot 4.1 Modular Monolith (Java 25 · 69 REST endpoints)</text>
+
+    <!-- SecurityConfig Top Bar (Blue - Matei) -->
+    <rect x="354" y="148" width="492" height="32" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <rect x="354" y="148" width="6" height="32" rx="3" fill="#2563eb"/>
+    <text x="602" y="168" text-anchor="middle" font-size="11" fill="#1e3a8a"><tspan font-weight="700">SecurityConfig</tspan> · JWT (HS256, 8h) · /api/v1/admin/** · findActiveRole</text>
+
+    <!-- 2x3 MODULE GRID (cards 240x80 each, x=354 and x=606, y=190 / 280 / 370) -->
+
+    <!-- Card 1: user & auth (Blue + Violet tag) -->
+    <rect x="356" y="192" width="240" height="80" rx="10" fill="#0f172a" opacity="0.04"/>
+    <rect x="354" y="190" width="240" height="80" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <rect x="354" y="190" width="6" height="80" rx="3" fill="#2563eb"/>
+    <text x="370" y="213" font-size="13" font-weight="700" fill="#1e3a8a">user &amp; auth</text>
+    <rect x="470" y="199" width="46" height="17" rx="8.5" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+    <text x="493" y="211" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">Matei</text>
+    <rect x="521" y="199" width="63" height="17" rx="8.5" fill="#ede9fe" stroke="#7c3aed" stroke-width="1"/>
+    <text x="552.5" y="211" text-anchor="middle" font-size="9.5" font-weight="700" fill="#5b21b6">Stefania</text>
+    <text x="370" y="238" font-size="11" fill="#1e3a8a">JWT auth, pickup pass (Matei)</text>
+    <text x="370" y="255" font-size="11" fill="#5b21b6">admin users (Stefania)</text>
+
+    <!-- Card 2: catalog (Teal - Liviu) -->
+    <rect x="608" y="192" width="240" height="80" rx="10" fill="#0f172a" opacity="0.04"/>
+    <rect x="606" y="190" width="240" height="80" rx="10" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <rect x="606" y="190" width="6" height="80" rx="3" fill="#0d9488"/>
+    <text x="622" y="213" font-size="13" font-weight="700" fill="#134e4a">catalog</text>
+    <rect x="789" y="199" width="47" height="17" rx="8.5" fill="#ccfbf1" stroke="#0d9488" stroke-width="1"/>
+    <text x="812.5" y="211" text-anchor="middle" font-size="9.5" font-weight="700" fill="#134e4a">Liviu</text>
+    <text x="622" y="238" font-size="11" fill="#134e4a">Assets, categories, lab rooms,</text>
+    <text x="622" y="255" font-size="11" fill="#134e4a">search &amp; row lock</text>
+
+    <!-- Card 3: project (Blue - Matei) -->
+    <rect x="356" y="282" width="240" height="80" rx="10" fill="#0f172a" opacity="0.04"/>
+    <rect x="354" y="280" width="240" height="80" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <rect x="354" y="280" width="6" height="80" rx="3" fill="#2563eb"/>
+    <text x="370" y="303" font-size="13" font-weight="700" fill="#1e3a8a">project</text>
+    <rect x="537" y="289" width="47" height="17" rx="8.5" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+    <text x="560.5" y="301" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e3a8a">Matei</text>
+    <text x="370" y="325" font-size="11" fill="#1e3a8a">Bilingual RO/EN kits &amp; Reserve All</text>
+    <text x="370" y="344" font-size="9.5" fill="#475569">uses Calin's bundles · Liviu's kit seed</text>
+
+    <!-- Card 4: reservation (Amber - Calin) -->
+    <rect x="608" y="282" width="240" height="80" rx="10" fill="#0f172a" opacity="0.04"/>
+    <rect x="606" y="280" width="240" height="80" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <rect x="606" y="280" width="6" height="80" rx="3" fill="#d97706"/>
+    <text x="622" y="303" font-size="13" font-weight="700" fill="#78350f">reservation</text>
+    <rect x="789" y="289" width="47" height="17" rx="8.5" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+    <text x="812.5" y="301" text-anchor="middle" font-size="9.5" font-weight="700" fill="#78350f">Calin</text>
+    <text x="622" y="328" font-size="11" fill="#78350f">Overlap locks, bundles, holds,</text>
+    <text x="622" y="345" font-size="11" fill="#78350f">transfers, sweeps, .ics feed</text>
+
+    <!-- Card 5: incident (Violet - Stefania) -->
+    <rect x="356" y="372" width="240" height="80" rx="10" fill="#0f172a" opacity="0.04"/>
+    <rect x="354" y="370" width="240" height="80" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect x="354" y="370" width="6" height="80" rx="3" fill="#7c3aed"/>
+    <text x="370" y="393" font-size="13" font-weight="700" fill="#4c1d95">incident</text>
+    <rect x="521" y="379" width="63" height="17" rx="8.5" fill="#ede9fe" stroke="#7c3aed" stroke-width="1"/>
+    <text x="552.5" y="391" text-anchor="middle" font-size="9.5" font-weight="700" fill="#5b21b6">Stefania</text>
+    <text x="370" y="418" font-size="11" fill="#4c1d95">Damage reports, photos, triage</text>
+    <text x="370" y="435" font-size="11" fill="#4c1d95">&amp; equipment reliability</text>
+
+    <!-- Card 6: reassignment (Amber - Calin) -->
+    <rect x="608" y="372" width="240" height="80" rx="10" fill="#0f172a" opacity="0.04"/>
+    <rect x="606" y="370" width="240" height="80" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <rect x="606" y="370" width="6" height="80" rx="3" fill="#d97706"/>
+    <text x="622" y="393" font-size="13" font-weight="700" fill="#78350f">reassignment</text>
+    <rect x="789" y="379" width="47" height="17" rx="8.5" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+    <text x="812.5" y="391" text-anchor="middle" font-size="9.5" font-weight="700" fill="#78350f">Calin</text>
+    <text x="622" y="418" font-size="11" fill="#78350f">Auto-substitute engine &amp;</text>
+    <text x="622" y="435" font-size="11" fill="#78350f">maintenance impact simulator</text>
+
+    <!-- Bottom Shared Services Bar (Teal/Slate) -->
+    <rect x="354" y="462" width="492" height="46" rx="8" fill="#f8fafc" stroke="#0d9488" stroke-width="1.4"/>
+    <rect x="354" y="462" width="6" height="46" rx="3" fill="#0d9488"/>
+    <text x="602" y="481" text-anchor="middle" font-size="11" fill="#0f172a"><tspan font-weight="700" fill="#134e4a">Shared:</tspan> RFC 9457 Errors · Audit · Storage · LiveStreams (Liviu)</text>
+    <text x="602" y="498" text-anchor="middle" font-size="11" fill="#334155"><tspan font-weight="600" fill="#78350f">Clock (Calin)</tspan>  ·  <tspan font-weight="600" fill="#4c1d95">CurrentUser (Stefania)</tspan></text>
+  </g>
+
+  <!-- ==================== ARROWS: CENTER -> RIGHT (x=862..938) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <!-- To PostgreSQL 18 -->
+    <text x="900" y="151" text-anchor="middle" font-size="10" font-weight="600" fill="#475569">JPA / JDBC</text>
+    <line x1="862" y1="159" x2="934" y2="159" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow-slate)"/>
+
+    <!-- To Photo Storage -->
+    <text x="900" y="256" text-anchor="middle" font-size="10" font-weight="600" fill="#0d9488">Storage</text>
+    <line x1="862" y1="264" x2="934" y2="264" stroke="#0d9488" stroke-width="1.8" marker-end="url(#arrow-teal)"/>
+
+    <!-- To Notifications -->
+    <text x="900" y="361" text-anchor="middle" font-size="10" font-weight="600" fill="#0d9488">Notify</text>
+    <line x1="862" y1="369" x2="934" y2="369" stroke="#0d9488" stroke-width="1.8" marker-end="url(#arrow-teal)"/>
+
+    <!-- To AWS Production -->
+    <text x="900" y="466" text-anchor="middle" font-size="10" font-weight="600" fill="#2563eb">Docker</text>
+    <line x1="862" y1="474" x2="934" y2="474" stroke="#2563eb" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <!-- ==================== RIGHT COLUMN: DATA, STORAGE & CLOUD (x=938..1172) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <!-- Card R1: PostgreSQL 18 (y=114..204) -->
+    <rect x="941" y="117" width="234" height="90" rx="11" fill="#0f172a" opacity="0.05"/>
+    <rect x="938" y="114" width="234" height="90" rx="11" fill="#f8fafc" stroke="#475569" stroke-width="1.5"/>
+    <rect x="938" y="114" width="6" height="90" rx="3" fill="#475569"/>
+    <text x="955" y="139" font-size="13" font-weight="700" fill="#0f172a">PostgreSQL 18</text>
+    <text x="955" y="164" font-size="11.2" fill="#334155">17 Flyway migrations</text>
+    <text x="955" y="183" font-size="11.2" fill="#334155">row &amp; advisory locks</text>
+
+    <!-- Card R2: Photo Storage (y=219..309, Teal/Blue) -->
+    <rect x="941" y="222" width="234" height="90" rx="11" fill="#0f172a" opacity="0.05"/>
+    <rect x="938" y="219" width="234" height="90" rx="11" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <!-- Two-tone left accent: Teal (dev) + Blue (prod) -->
+    <rect x="938" y="219" width="6" height="45" rx="2" fill="#0d9488"/>
+    <rect x="938" y="264" width="6" height="45" rx="2" fill="#2563eb"/>
+    <text x="955" y="244" font-size="13" font-weight="700" fill="#134e4a">Photo Storage</text>
+    <text x="955" y="269" font-size="11.2" fill="#134e4a">Local disk (dev)</text>
+    <text x="955" y="288" font-size="11.2" fill="#1e3a8a">AWS S3 (prod)</text>
+
+    <!-- Card R3: Notifications (y=324..414, Teal/Blue) -->
+    <rect x="941" y="327" width="234" height="90" rx="11" fill="#0f172a" opacity="0.05"/>
+    <rect x="938" y="324" width="234" height="90" rx="11" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <rect x="938" y="324" width="6" height="45" rx="2" fill="#0d9488"/>
+    <rect x="938" y="369" width="6" height="45" rx="2" fill="#2563eb"/>
+    <text x="955" y="349" font-size="13" font-weight="700" fill="#134e4a">Notifications</text>
+    <text x="955" y="374" font-size="11.2" fill="#134e4a">Console log (dev)</text>
+    <text x="955" y="393" font-size="11.2" fill="#1e3a8a">AWS SES (prod) + SSE push</text>
+
+    <!-- Card R4: AWS Production (eu-central-1) (y=429..519, Blue) -->
+    <rect x="941" y="432" width="234" height="90" rx="11" fill="#0f172a" opacity="0.05"/>
+    <rect x="938" y="429" width="234" height="90" rx="11" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <rect x="938" y="429" width="6" height="90" rx="3" fill="#2563eb"/>
+    <text x="954" y="453" font-size="12.2" font-weight="700" fill="#1e3a8a">AWS Production (eu-central-1)</text>
+    <text x="954" y="477" font-size="11.2" fill="#1e3a8a">CloudFront · EC2 Docker · RDS</text>
+    <text x="954" y="496" font-size="11.2" fill="#2563eb">OIDC deploy (paused idle)</text>
+  </g>
+
+  <!-- Subtle connector linking Monolith to Signature Loop Banner -->
+  <line x1="600" y1="520" x2="600" y2="539" stroke="#d97706" stroke-width="1.8" stroke-dasharray="3 3" marker-end="url(#arrow-amber)"/>
+
+  <!-- ==================== BOTTOM HIGHLIGHT STRIP: SIGNATURE LOOP (y=542..674) ==================== -->
+  <g font-family='"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif'>
+    <rect x="31" y="545" width="1144" height="132" rx="14" fill="#d97706" opacity="0.06"/>
+    <rect x="28" y="542" width="1144" height="132" rx="14" fill="#fffdf5" stroke="#d97706" stroke-width="1.8"/>
+
+    <!-- Banner Title -->
+    <circle cx="52" cy="564" r="5" fill="#d97706"/>
+    <text x="66" y="569" font-size="14" font-weight="700" fill="#78350f">Signature Loop: Auto-Reassignment Engine (Observer + Strategy Patterns)</text>
+
+    <!-- 5-Step Pipeline (each pill 196x74, y=584..658, evenly spaced with 31px arrow gaps) -->
+
+    <!-- Step 1: Trigger (Violet/Teal) -->
+    <rect x="50" y="586" width="196" height="74" rx="11" fill="#0f172a" opacity="0.04"/>
+    <rect x="48" y="584" width="196" height="74" rx="11" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect x="48" y="652" width="196" height="6" rx="3" fill="#0d9488" opacity="0.85"/>
+    <text x="146" y="605" text-anchor="middle" font-size="12" font-weight="700" fill="#4c1d95">1. Trigger</text>
+    <text x="146" y="625" text-anchor="middle" font-size="10.8" fill="#334155">HIGH/CRITICAL report</text>
+    <text x="146" y="642" text-anchor="middle" font-size="10.8" fill="#0f766e">or Asset retired</text>
+
+    <!-- Arrow 1 -> 2 -->
+    <line x1="244" y1="621" x2="271" y2="621" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+    <!-- Step 2: Domain Event (Amber) -->
+    <rect x="277" y="586" width="196" height="74" rx="11" fill="#0f172a" opacity="0.04"/>
+    <rect x="275" y="584" width="196" height="74" rx="11" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <text x="373" y="605" text-anchor="middle" font-size="12" font-weight="700" fill="#78350f">2. Domain Event</text>
+    <text x="373" y="625" text-anchor="middle" font-family='"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace' font-size="10.2" font-weight="600" fill="#b45309">AFTER_COMMIT</text>
+    <text x="373" y="642" text-anchor="middle" font-size="10.5" fill="#78350f">AssetDamaged / Retired</text>
+
+    <!-- Arrow 2 -> 3 -->
+    <line x1="471" y1="621" x2="498" y2="621" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+    <!-- Step 3: Strategy 1 (Amber) -->
+    <rect x="504" y="586" width="196" height="74" rx="11" fill="#0f172a" opacity="0.04"/>
+    <rect x="502" y="584" width="196" height="74" rx="11" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <text x="600" y="605" text-anchor="middle" font-size="12" font-weight="700" fill="#78350f">3. Strategy 1</text>
+    <text x="600" y="625" text-anchor="middle" font-size="10.8" font-weight="600" fill="#92400e">SameModelStrategy</text>
+    <text x="600" y="642" text-anchor="middle" font-size="10.8" fill="#78350f">same lab room first</text>
+
+    <!-- Arrow 3 -> 4 -->
+    <line x1="698" y1="621" x2="725" y2="621" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+    <!-- Step 4: Strategy 2 / Fallback (Amber) -->
+    <rect x="731" y="586" width="196" height="74" rx="11" fill="#0f172a" opacity="0.04"/>
+    <rect x="729" y="584" width="196" height="74" rx="11" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+    <text x="827" y="605" text-anchor="middle" font-size="11.5" font-weight="700" fill="#78350f">4. Strategy 2 / Fallback</text>
+    <text x="827" y="625" text-anchor="middle" font-size="10.8" font-weight="600" fill="#92400e">SameCategoryStrategy</text>
+    <text x="827" y="642" text-anchor="middle" font-size="10.8" fill="#78350f">or ForceCancel</text>
+
+    <!-- Arrow 4 -> 5 -->
+    <line x1="925" y1="621" x2="952" y2="621" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+    <!-- Step 5: Student Updated (Teal/Blue) -->
+    <rect x="958" y="586" width="196" height="74" rx="11" fill="#0f172a" opacity="0.04"/>
+    <rect x="956" y="584" width="196" height="74" rx="11" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <rect x="956" y="652" width="196" height="6" rx="3" fill="#2563eb" opacity="0.85"/>
+    <text x="1054" y="605" text-anchor="middle" font-size="12" font-weight="700" fill="#134e4a">5. Student Updated</text>
+    <text x="1054" y="625" text-anchor="middle" font-size="10.8" fill="#134e4a">Reassignment log +</text>
+    <text x="1054" y="642" text-anchor="middle" font-size="10.8" fill="#1e3a8a">Email + Live Toast</text>
+  </g>
+</svg>

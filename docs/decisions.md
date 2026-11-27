@@ -94,6 +94,7 @@ Where the plan PDFs (team handbook + member guides) disagree with this file, **t
 
 | Date | Decision | Status | Notes |
 |---|---|---|---|
+| 2026-11-22 | **Teacher feedback demo moved**: Mon 23 Nov → **Mon 7 Dec** (same day as feature freeze, right after M2 `v0.2.0` on Sun 6 Dec) | ✅ | decided by Matei; updates the demo date in the 20 Nov row below |
 | 2026-11-20 | **Dates**: W1 = week of 5 Oct 2026 · M1 `v0.1.0` done 11 Nov · teacher feedback demo Mon 23 Nov · off-plan/new-feature cut 30 Nov · M2 `v0.2.0` Sun 6 Dec (local + AWS) · feature freeze Mon 7 Dec | ✅ | decided by Matei for the team (the team asked him to settle the open rows). Replaces the two proposed rows below. Defense date: still open, it comes from the professor |
 | 2026-10-21 | W1 = week of **5 Oct 2026**; we are in **W3** and about one week behind (restart) | replaced | Confirm real dates and the defense date; W11–12 hit the Christmas holidays |
 | 2026-10-21 | Shared foundations first: Calin's `Clock` (early W3), Liviu's exceptions + handler + `PageResponse` + stubs (mid-W3), Stefania's `CurrentUser` (mid-W3), Matei's login/JWT (end of W3) | ✅ | Small separate PRs, reviewed the same day |
