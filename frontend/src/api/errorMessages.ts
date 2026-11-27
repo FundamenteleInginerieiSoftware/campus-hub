@@ -67,6 +67,12 @@ const MESSAGES: Record<string, string> = {
   PROJECT_NOT_FOUND: 'This project was not found.',
   PICKUP_CODE_INVALID: 'The pickup code is wrong or has expired.',
   LIVE_STREAM_LIMIT: 'Too many tabs are open for this account. Close some and reload the page.',
+  HOLD_COOLDOWN_ACTIVE: 'You held this slot a moment ago. Wait a little before holding it again, or book it directly.',
+  TRANSFER_LIMIT_REACHED: 'This booking has reached the limit of transfer offers for the last 24 hours.',
+  BUNDLE_EXTEND_NOT_ALLOWED: 'Items booked together cannot be extended one by one.',
+  BUNDLE_TRANSFER_NOT_ALLOWED: 'Items booked together cannot be transferred one by one.',
+  INVALID_BUNDLE_SIZE: 'A group booking has too few or too many items.',
+  CONCURRENT_IDEMPOTENT_REQUEST: 'This booking is already being processed. Wait a moment and check My reservations.',
 
   // Generic codes from the error handler (api-contract §5) that pages can hit (#171)
   INVALID_PARAMETER: 'Some values in the request are not valid. Please check them and try again.',

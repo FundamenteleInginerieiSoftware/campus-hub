@@ -55,20 +55,28 @@ type RequestOptions = {
   // A plain object is sent as JSON. FormData (a file upload) is sent as multipart/form-data:
   // the browser then sets the Content-Type itself, with the boundary between the parts.
   body?: unknown
-  // Extra headers for one request, e.g. Idempotency-Key on a booking (#364). The token, Accept and
-  // Content-Type are still set here, so a caller cannot forget them.
-  headers?: Record<string, string>
+  // Extra headers for one request, e.g. Idempotency-Key on a booking (#364). Accept, Content-Type and
+  // Authorization are always decided here, whatever the caller passes, so a caller cannot break them.
+  headers?: HeadersInit
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = tokenStorage.get()
-  const headers: Record<string, string> = { Accept: 'application/json', ...options.headers }
+  // Headers, not a plain object: names are case-insensitive, so a caller's 'accept' or 'authorization'
+  // cannot sit next to ours with other casing, and set/delete below always win.
+  const headers = new Headers(options.headers)
+  headers.set('Accept', 'application/json')
   const isForm = options.body instanceof FormData
-  if (options.body !== undefined && !isForm) {
-    headers['Content-Type'] = 'application/json'
+  if (isForm) {
+    // The browser sets multipart/form-data with the boundary itself.
+    headers.delete('Content-Type')
+  } else if (options.body !== undefined) {
+    headers.set('Content-Type', 'application/json')
   }
   if (token) {
-    headers.Authorization = `Bearer ${token}`
+    headers.set('Authorization', `Bearer ${token}`)
+  } else {
+    headers.delete('Authorization')
   }
 
   const response = await fetch(path, {

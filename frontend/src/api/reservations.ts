@@ -1,4 +1,4 @@
-import { ApiError, apiFetch } from './client.ts'
+import { ApiError, apiFetch, tokenStorage } from './client.ts'
 import type { PageResponse } from './types.ts'
 
 // Lifecycle statuses of a reservation, matching ReservationStatus.java in the backend.
@@ -166,26 +166,42 @@ export async function createReservation(
     pendingBookingAttempt = { slotSignature, key }
   }
 
-  // Through apiFetch since #364: before, this was a copy of it that cleared an expired token but never sent
-  // the user to the login page, so the next request failed again.
-  try {
-    const reservation = await apiFetch<Reservation>('/api/v1/reservations', {
-      method: 'POST',
-      body: request,
-      headers: { 'Idempotency-Key': key },
-    })
-    if (pendingBookingAttempt?.key === key) {
-      pendingBookingAttempt = null
-    }
-    return reservation
-  } catch (err) {
-    // A 400 or 401 is final for this attempt, so the next try gets a new key. Any other error (a 409, a 5xx,
-    // no network) keeps the key: retrying the same booking must not create it twice.
-    if (err instanceof ApiError && (err.status === 400 || err.status === 401) && pendingBookingAttempt?.key === key) {
-      pendingBookingAttempt = null
-    }
-    throw err
+  const token = tokenStorage.get()
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'Idempotency-Key': key,
   }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch('/api/v1/reservations', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    if ((response.status === 400 || response.status === 401) && pendingBookingAttempt?.key === key) {
+      pendingBookingAttempt = null
+    }
+    if (response.status === 401 && token) {
+      tokenStorage.clear()
+    }
+    throw new ApiError(
+      response.status,
+      problem?.code ?? 'UNKNOWN_ERROR',
+      problem?.detail ?? `Request failed with status ${response.status}`,
+      problem?.errors ?? [],
+    )
+  }
+
+  if (pendingBookingAttempt?.key === key) {
+    pendingBookingAttempt = null
+  }
+  return (await response.json()) as Reservation
 }
 
 /**

@@ -2,7 +2,7 @@
 
 **Role:** Member 4 (frontend lead)
 **Date:** 2026-11-27
-**Files:** `frontend/src/pages/IncidentDetailsPage.tsx`, `AdminUsersPage.tsx`, `AdminReliabilityPage.tsx`, `RegisterPage.tsx`, `LoginPage.tsx`, `frontend/src/api/client.ts`, `reservations.ts`, `errorMessages.ts`, `docs/modules/frontend.md`, `docs/whats-left.md`
+**Files:** `frontend/src/pages/IncidentDetailsPage.tsx`, `AdminUsersPage.tsx`, `AdminReliabilityPage.tsx`, `RegisterPage.tsx`, `LoginPage.tsx`, `frontend/src/api/client.ts`, `errorMessages.ts`, `docs/modules/frontend.md`, `docs/whats-left.md`, `AGENTS.md`, `documentation/Visan_Stefania/README.md`
 **PR:** #369 (Refs #364)
 
 ---
@@ -14,8 +14,8 @@ The #364 audit found a few places where the app showed the wrong thing or got st
 1. **Incident details:** going straight from one incident to another kept the old one on screen, and a "not found" for the new one was never shown. Now the page starts fresh for every incident.
 2. **Users:** typing a letter in the search box and deleting it quickly left the table loading forever. Now it never gets stuck.
 3. **Equipment health:** an error from the previous period stayed on screen while the new period loaded. Now it is cleared.
-4. **Booking:** Calin's booking call had its own copy of the API client; with an expired login it did not send the student to the login page. It now uses the shared client, which can now send extra headers (the booking needs `Idempotency-Key`).
-5. **Error texts:** 7 error codes the backend can send had no friendly text. Added.
+4. **Shared API client:** `apiFetch` can now send extra headers for one request. Calin's booking call needs this (`Idempotency-Key`) to stop using its own copy of the client, which did not send the student to the login page when the login expired. The switch itself is in his file, so he does it in his #362 PR.
+5. **Error texts:** 13 error codes the backend can send had no friendly text. Added.
 6. **Register:** if the account was created but the automatic login after it failed, the error showed on the register form, and trying again gave "email already taken". Now the student lands on the login page, with the email filled in and an "account created" notice.
 
 ---
@@ -53,13 +53,26 @@ The effect stores `requestKey` in `loadedKey` when its search ends (success or e
 
 `setError(null)` before loading the new period.
 
-### 4. `apiFetch` headers + `createReservation`
+### 4. `apiFetch` extra headers
 
-`ApiFetchOptions` gets `headers?: Record<string, string>`, merged after `Accept`; the token and `Content-Type` are still set by `apiFetch`. `createReservation` now calls `apiFetch` with `Idempotency-Key`. The key rules are unchanged: a 400 or 401 drops it (next try gets a new key), any other error keeps it, so a retry never books twice. Gain: a 401 now goes through `onUnauthorized` (back to login) like every other call.
+`RequestOptions` gets `headers?: HeadersInit`. Inside, the headers are built with `new Headers(options.headers)` and then `apiFetch` decides the three that matter:
+
+```ts
+const headers = new Headers(options.headers)
+headers.set('Accept', 'application/json')
+if (isForm) headers.delete('Content-Type')          // the browser adds multipart + boundary
+else if (options.body !== undefined) headers.set('Content-Type', 'application/json')
+if (token) headers.set('Authorization', `Bearer ${token}`)
+else headers.delete('Authorization')
+```
+
+Why `Headers` and not `{ Accept: ..., ...options.headers }` (Matei's review): a plain object is case-sensitive, so a caller's `accept` or `authorization` would sit next to ours with other casing, could override `Accept`, could keep a `Content-Type` on a file upload (which breaks the multipart boundary), or send a caller's `Authorization` when nobody is logged in. `Headers` names are case-insensitive and `set`/`delete` always win.
+
+`createReservation` (`src/api/reservations.ts`) is Calin's file, so it is **not** changed here: he switches it to `apiFetch(..., { headers: { 'Idempotency-Key': key } })` in his #362 PR, keeping his key rules (a 400 or 401 drops the key, anything else keeps it). That also fixes the 401 gap (his copy clears the token but never calls `onUnauthorized`).
 
 ### 5. `errorMessages.ts`
 
-`USER_DISABLED`, `BUNDLE_NOT_FOUND`, `CONFLICTING_PARAMETERS`, `CALENDAR_FEED_NOT_FOUND`, `PROJECT_NOT_FOUND`, `PICKUP_CODE_INVALID`, `LIVE_STREAM_LIMIT`: found by comparing the codes thrown in `backend/src/main` with the keys of `MESSAGES`. Generic fallbacks (`CONFLICT`, `BUSINESS_RULE_VIOLATION`) keep the backend's own text.
+`USER_DISABLED`, `BUNDLE_NOT_FOUND`, `CONFLICTING_PARAMETERS`, `CALENDAR_FEED_NOT_FOUND`, `PROJECT_NOT_FOUND`, `PICKUP_CODE_INVALID`, `LIVE_STREAM_LIMIT`, plus the six from #364 (`HOLD_COOLDOWN_ACTIVE`, `TRANSFER_LIMIT_REACHED`, `BUNDLE_EXTEND_NOT_ALLOWED`, `BUNDLE_TRANSFER_NOT_ALLOWED`, `INVALID_BUNDLE_SIZE`, `CONCURRENT_IDEMPOTENT_REQUEST`). Found by comparing the codes thrown in `backend/src/main` with the keys of `MESSAGES`; a one-line grep misses a code when Spotless puts it on the line after `new ...Exception(`, so the search has to look at the next line too. Generic fallbacks (`CONFLICT`, `BUSINESS_RULE_VIOLATION`) keep the backend's own text.
 
 ### 6. Register → Login when the auto-login fails
 
@@ -75,7 +88,7 @@ Section 3 of #364 (optional backend items) is left for a separate PR.
 2. Admin → Users: type a letter and delete it quickly → the list shows, no endless loader.
 3. Student: report two incidents, open one, go back, open the other → the right incident and photo each time.
 4. Admin → Equipment health: switch the period → no stale error.
-5. Book a slot → still works.
+5. Book a slot and upload an incident photo → both still work (JSON and file upload headers).
 
 ### Checks
 
