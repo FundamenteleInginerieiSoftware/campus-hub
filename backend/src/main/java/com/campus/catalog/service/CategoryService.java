@@ -42,7 +42,7 @@ public class CategoryService {
         Category category = new Category(trimmedName, request.description());
         Category saved = CatalogPersistence.saveOrThrowConflict(
                 () -> categoryRepository.saveAndFlush(category),
-                () -> categoryRepository.existsByNameIgnoreCase(trimmedName),
+                CatalogPersistence.CATEGORY_NAME_CONSTRAINTS,
                 () -> nameTaken(trimmedName));
 
         // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate name.
@@ -62,7 +62,7 @@ public class CategoryService {
         category.update(trimmedName, request.description());
         Category saved = CatalogPersistence.saveOrThrowConflict(
                 () -> categoryRepository.saveAndFlush(category),
-                () -> categoryRepository.existsByNameIgnoreCaseAndIdNot(trimmedName, id),
+                CatalogPersistence.CATEGORY_NAME_CONSTRAINTS,
                 () -> nameTaken(trimmedName));
 
         // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate name.

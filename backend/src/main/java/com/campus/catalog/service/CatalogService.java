@@ -9,7 +9,11 @@ import com.campus.common.error.NotFoundException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -34,6 +38,17 @@ public class CatalogService implements CatalogApi {
 
     @Override
     @Transactional(readOnly = true)
+    public Map<Long, AssetSummary> findAssetsByIds(Collection<Long> assetIds) {
+        if (assetIds == null || assetIds.isEmpty()) {
+            return Map.of();
+        }
+        return assetRepository.findAllById(assetIds).stream()
+                .map(this::toSummary)
+                .collect(Collectors.toMap(AssetSummary::id, Function.identity()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean isBookable(Long assetId) {
         return assetRepository
                 .findById(assetId)
@@ -44,19 +59,21 @@ public class CatalogService implements CatalogApi {
     @Override
     @Transactional(readOnly = true)
     public List<AssetSummary> findAvailableByModel(String model, Long excludeAssetId) {
-        return assetRepository.findByModelAndStatusAndIdNot(model, AssetStatus.AVAILABLE, excludeAssetId).stream()
-                .map(this::toSummary)
-                .toList();
+        // Call the non-excluding query when excludeAssetId is null so SQL never evaluates "id <> NULL" (#363).
+        List<Asset> assets = excludeAssetId == null
+                ? assetRepository.findByModelAndStatus(model, AssetStatus.AVAILABLE)
+                : assetRepository.findByModelAndStatusAndIdNot(model, AssetStatus.AVAILABLE, excludeAssetId);
+        return assets.stream().map(this::toSummary).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<AssetSummary> findAvailableByCategory(Long categoryId, Long excludeAssetId) {
-        return assetRepository
-                .findByCategoryIdAndStatusAndIdNot(categoryId, AssetStatus.AVAILABLE, excludeAssetId)
-                .stream()
-                .map(this::toSummary)
-                .toList();
+        // Call the non-excluding query when excludeAssetId is null so SQL never evaluates "id <> NULL" (#363).
+        List<Asset> assets = excludeAssetId == null
+                ? assetRepository.findByCategoryIdAndStatus(categoryId, AssetStatus.AVAILABLE)
+                : assetRepository.findByCategoryIdAndStatusAndIdNot(categoryId, AssetStatus.AVAILABLE, excludeAssetId);
+        return assets.stream().map(this::toSummary).toList();
     }
 
     @Override

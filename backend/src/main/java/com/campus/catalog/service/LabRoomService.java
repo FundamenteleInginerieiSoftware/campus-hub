@@ -48,7 +48,7 @@ public class LabRoomService {
         LabRoom labRoom = new LabRoom(normalizedCode, request.name(), request.building());
         LabRoom saved = CatalogPersistence.saveOrThrowConflict(
                 () -> labRoomRepository.saveAndFlush(labRoom),
-                () -> labRoomRepository.existsByCodeIgnoreCase(normalizedCode),
+                CatalogPersistence.LAB_ROOM_CODE_CONSTRAINTS,
                 () -> codeTaken(normalizedCode));
 
         // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate code.
@@ -72,7 +72,7 @@ public class LabRoomService {
         labRoom.update(normalizedCode, request.name(), request.building());
         LabRoom saved = CatalogPersistence.saveOrThrowConflict(
                 () -> labRoomRepository.saveAndFlush(labRoom),
-                () -> labRoomRepository.existsByCodeIgnoreCaseAndIdNot(normalizedCode, id),
+                CatalogPersistence.LAB_ROOM_CODE_CONSTRAINTS,
                 () -> codeTaken(normalizedCode));
 
         // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate code.

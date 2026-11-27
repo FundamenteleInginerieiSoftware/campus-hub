@@ -93,7 +93,7 @@ public class AssetService {
 
         Asset saved = CatalogPersistence.saveOrThrowConflict(
                 () -> assetRepository.saveAndFlush(asset),
-                () -> assetRepository.existsBySerialNumberIgnoreCase(normalizedSerial),
+                CatalogPersistence.ASSET_SERIAL_CONSTRAINTS,
                 () -> serialTaken(normalizedSerial));
 
         // Recorded after saveOrThrowConflict so an audit failure is not reported as a duplicate serial.
