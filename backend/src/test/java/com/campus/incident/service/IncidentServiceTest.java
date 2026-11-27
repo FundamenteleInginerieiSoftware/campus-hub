@@ -58,6 +58,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class IncidentServiceTest {
@@ -914,6 +915,41 @@ class IncidentServiceTest {
             verify(storageService).delete(OLD_KEY);
             verify(storageService, never()).delete(NEW_KEY);
             verify(auditService).record(adminId, "INCIDENT_PHOTO_REPLACED", "INCIDENT", 1L, "Asset 10");
+        }
+
+        // #269 point 4: inside a real transaction the cleanup waits for its outcome. STATUS_UNKNOWN (connection
+        // lost during commit) must delete neither file, because the row may or may not have been saved.
+        @ParameterizedTest
+        @CsvSource({
+            "0, OLD", // STATUS_COMMITTED: the replaced photo goes
+            "1, NEW", // STATUS_ROLLED_BACK: the file no row points to goes
+            "2, NONE" // STATUS_UNKNOWN: keep both
+        })
+        void insideATransaction_theCleanupFollowsTheOutcome(int status, String deleted) {
+            givenIncident(withPhoto(1L, IncidentStatus.OPEN, OLD_KEY));
+            givenStoreReturns(NEW_KEY);
+            givenSaveReturnsItsArgument();
+
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                incidentService.attachPhoto(1L, content, 3, "image/png", reporterId, false);
+                verify(storageService, never()).delete(any());
+                TransactionSynchronizationManager.getSynchronizations().forEach(sync -> sync.afterCompletion(status));
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+
+            switch (deleted) {
+                case "OLD" -> {
+                    verify(storageService).delete(OLD_KEY);
+                    verify(storageService, never()).delete(NEW_KEY);
+                }
+                case "NEW" -> {
+                    verify(storageService).delete(NEW_KEY);
+                    verify(storageService, never()).delete(OLD_KEY);
+                }
+                default -> verify(storageService, never()).delete(any());
+            }
         }
 
         @Test

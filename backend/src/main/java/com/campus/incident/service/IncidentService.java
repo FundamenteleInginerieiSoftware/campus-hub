@@ -308,6 +308,12 @@ public class IncidentService {
      * StorageService.store left a file that no row pointed to. Now the cleanup runs once the transaction
      * is over: after a commit the replaced photo is deleted; after a rollback the new file is deleted.
      * Without a transaction (plain unit tests) the old photo is deleted straight away.
+     *
+     * <p>Bug fixed (#269 point 4): Spring can also report STATUS_UNKNOWN, when the connection breaks during the
+     * commit and nobody knows if the row was saved. Before, that case counted as a rollback and the new file
+     * was deleted, so if the commit had in fact gone through, the incident pointed to a photo that no longer
+     * existed. Now both files are kept and only a warning is logged: a spare file wastes a little space, a
+     * missing one breaks the incident.
      */
     private void cleanUpFilesAfterTransaction(String oldKey, String newKey) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -317,7 +323,15 @@ public class IncidentService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
-                deleteQuietly(status == STATUS_COMMITTED ? oldKey : newKey);
+                switch (status) {
+                    case STATUS_COMMITTED -> deleteQuietly(oldKey);
+                    case STATUS_ROLLED_BACK -> deleteQuietly(newKey);
+                    default ->
+                        log.warn(
+                                "Photo transaction ended with unknown status; keeping both files (old {}, new {})",
+                                oldKey,
+                                newKey);
+                }
             }
         });
     }
