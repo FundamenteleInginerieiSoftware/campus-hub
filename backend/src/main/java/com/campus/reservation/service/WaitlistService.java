@@ -22,10 +22,8 @@ import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,6 +42,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class WaitlistService {
 
     static final int MAX_WAITING_ENTRIES = 5;
+    private static final int MAX_HEAD_CHANGE_RETRIES = 10;
 
     private final WaitlistEntryRepository waitlistEntryRepository;
     private final ReservationRepository reservationRepository;
@@ -55,6 +54,7 @@ public class WaitlistService {
     private final NotificationService notificationService;
     private final Clock clock;
     private final TransactionTemplate requiresNewTx;
+    private final TransactionTemplate requiresNewReadOnlyTx;
 
     public WaitlistService(
             WaitlistEntryRepository waitlistEntryRepository,
@@ -79,10 +79,18 @@ public class WaitlistService {
         TransactionTemplate tt = new TransactionTemplate(transactionManager);
         tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.requiresNewTx = tt;
+        TransactionTemplate readOnlyTt = new TransactionTemplate(transactionManager);
+        readOnlyTt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        readOnlyTt.setReadOnly(true);
+        this.requiresNewReadOnlyTx = readOnlyTt;
     }
 
     /**
      * Adds the current user to the FIFO waitlist for an occupied slot.
+     *
+     * <p>Follows the global lock DAG ({@code Quota -> Reservation -> Asset -> Transfer -> Waitlist -> Hold},
+     * #349, #370): acquires {@code lockUserQuota(userId)} FIRST, verifies active account/role, then locks
+     * the asset row before checking overlaps and inserting the {@code WAITING} entry.
      */
     @Transactional
     public WaitlistEntryResponse joinWaitlist(JoinWaitlistRequest req) {
@@ -91,27 +99,27 @@ public class WaitlistService {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
         ReservationSlotValidator.validateSlotRules(req.startTime(), req.endTime(), now);
 
-        // Lock asset row FIRST (asset -> userQuota, matching current main's createReservation/createHold)
-        // so a concurrent cancellation + promotion cannot race with SLOT_ALREADY_FREE (#349).
+        // 1. Lock caller quota FIRST (Quota -> Asset, matching #370 global lock DAG) so parallel requests
+        // from the same student serialize cleanly and never AB-BA deadlock with createReservation/createHold.
+        reservationRepository.lockUserQuota(userId);
+        Role activeRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+
+        // 2. Lock asset row SECOND so a concurrent cancellation + promotion cannot race with SLOT_ALREADY_FREE.
         catalogApi.lockForBooking(assetId);
         AssetSummary asset = catalogApi.getAsset(assetId);
-        if (asset.status() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
-            // Hide retired assets from students with 404, matching GET /api/v1/assets/{id} (#278, #362).
-            throw new NotFoundException("ASSET_NOT_FOUND", "Asset not found: " + assetId);
+        if (asset.status() == AssetStatus.RETIRED && activeRole != Role.ADMIN) {
+            // Hide retired assets from students with the exact AssetService detail message (#278, #349, #362).
+            throw new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found");
         }
         if (asset.status() != AssetStatus.AVAILABLE) {
             throw new ConflictException("ASSET_NOT_BOOKABLE", "Cannot join waitlist for a non-bookable asset");
         }
 
+        // Checked under both Quota and Asset locks to close concurrent acceptTransfer-vs-joinWaitlist races (#349).
         if (reservationRepository.existsUserOverlapOnAsset(assetId, userId, req.startTime(), req.endTime())) {
             throw new ConflictException(
                     "OWN_RESERVATION_CONFLICT", "You already have an active reservation covering this slot");
         }
-
-        // Acquire per-user advisory lock before duplicate/cap checks so parallel requests from the
-        // same student serialize cleanly instead of racing into duplicate WAITING rows (#349).
-        reservationRepository.lockUserQuota(userId);
-        Role activeRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
 
         if (waitlistEntryRepository.existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
                 assetId, userId, req.startTime(), req.endTime(), WaitlistStatus.WAITING)) {
@@ -177,20 +185,18 @@ public class WaitlistService {
     }
 
     /**
-     * Cancels all active WAITING entries belonging to a disabled user (#349).
+     * Cancels all active WAITING entries belonging to a disabled user (#349, #370).
      *
-     * <p>Deliberately does NOT acquire {@code lockUserQuota}: promotion locks
-     * {@code asset -> waitlist_entries -> userQuota}, so holding only {@code waitlist_entries}
-     * here avoids a lock-order cycle. Caller {@link UserDisabledReservationListener} runs
-     * {@code cancelUpcomingReservationsForUser} first (whose {@code lockUserQuota} drains any
-     * in-flight {@code joinWaitlist}), and we also bail out early if the account was already
-     * re-enabled.
+     * <p>Follows the global lock DAG ({@code Quota -> Waitlist}): locks {@code lockUserQuota(userId)} first
+     * to serialize with any in-flight {@code joinWaitlist} or promotion for this user and re-checks
+     * {@code userApi.findActiveRole(userId)} so a re-enabled account keeps its entries intact.
      */
     @Transactional
     public int cancelWaitingEntriesForUser(Long userId) {
         if (userId == null) {
             return 0;
         }
+        reservationRepository.lockUserQuota(userId);
         if (userApi.findActiveRole(userId).isPresent()) {
             // Account was re-enabled before this cleanup ran; leave its entries intact (#349).
             return 0;
@@ -213,33 +219,121 @@ public class WaitlistService {
 
     /**
      * Scans WAITING entries for {@code assetId} in strict FIFO order, executing at most one
-     * user-quota-locked promotion, skip, or disable-expiry step per {@code REQUIRES_NEW} transaction
-     * so concurrent promotions across different assets never hold multiple user locks and deadlock
-     * (#349, #350).
+     * user-quota-locked promotion, skip, or disable-expiry step per {@code REQUIRES_NEW} transaction.
+     *
+     * <p>Uses a lock-free read-only peek to identify the next FIFO candidate's {@code userId}, then
+     * acquires locks in strict global DAG order ({@code Quota -> Asset -> Waitlist -> Hold}, #349, #370)
+     * so concurrent promotions never AB-BA deadlock with {@code createReservation}/{@code createHold}/
+     * {@code joinWaitlist} or account disables. Never caches skipped occupied entries across iterations:
+     * if an earlier slot frees mid-promotion, it is re-evaluated first in strict FIFO order.
      */
     public int processPromotionsForAsset(Long assetId) {
         int promotedCount = 0;
-        Set<Long> visitedEntryIds = new HashSet<>();
+        int headChangeRetries = 0;
         while (true) {
+            PromotionPeek peek = requiresNewReadOnlyTx.execute(status -> peekNextCandidate(assetId));
+            if (peek == null || peek.kind() == PeekKind.NONE) {
+                return promotedCount;
+            }
+            if (peek.kind() == PeekKind.EXPIRE_ONLY) {
+                requiresNewTx.executeWithoutResult(status -> expirePastEntriesForAsset(assetId));
+                return promotedCount;
+            }
+            Long candidateUserId = peek.userId();
             PromotionStepOutcome outcome =
-                    requiresNewTx.execute(status -> processNextPromotionStep(assetId, visitedEntryIds));
+                    requiresNewTx.execute(status -> processNextPromotionStep(assetId, candidateUserId));
             if (outcome == null || outcome == PromotionStepOutcome.DONE) {
                 return promotedCount;
             }
+            if (outcome == PromotionStepOutcome.RETRY_FOR_EARLIER_HEAD) {
+                if (++headChangeRetries > MAX_HEAD_CHANGE_RETRIES) {
+                    log.warn(
+                            "Stopping waitlist promotion for asset #{} after {} concurrent head-change retries",
+                            assetId,
+                            MAX_HEAD_CHANGE_RETRIES);
+                    return promotedCount;
+                }
+                continue;
+            }
+            headChangeRetries = 0;
             if (outcome == PromotionStepOutcome.PROMOTED) {
                 promotedCount++;
             }
         }
     }
 
+    private enum PeekKind {
+        CANDIDATE,
+        EXPIRE_ONLY,
+        NONE
+    }
+
+    private record PromotionPeek(PeekKind kind, Long userId) {
+        static PromotionPeek candidate(Long userId) {
+            return new PromotionPeek(PeekKind.CANDIDATE, userId);
+        }
+
+        static PromotionPeek expireOnly() {
+            return new PromotionPeek(PeekKind.EXPIRE_ONLY, null);
+        }
+
+        static PromotionPeek none() {
+            return new PromotionPeek(PeekKind.NONE, null);
+        }
+    }
+
     private enum PromotionStepOutcome {
         PROMOTED,
         CONTINUE,
+        RETRY_FOR_EARLIER_HEAD,
         DONE
     }
 
-    private PromotionStepOutcome processNextPromotionStep(Long assetId, Set<Long> visitedEntryIds) {
+    private PromotionPeek peekNextCandidate(Long assetId) {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+        if (!catalogApi.isBookable(assetId)) {
+            return PromotionPeek.none();
+        }
+        List<WaitlistEntry> waiting =
+                waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(assetId, WaitlistStatus.WAITING);
+        boolean foundExpired = false;
+        for (WaitlistEntry entry : waiting) {
+            if (entry.getStatus() != WaitlistStatus.WAITING) {
+                continue;
+            }
+            if (!entry.getStartTime().isAfter(now)) {
+                foundExpired = true;
+                continue;
+            }
+            if (reservationRepository.existsOverlap(
+                            assetId, entry.getStartTime(), entry.getEndTime(), ReservationService.NO_RESERVATION_ID)
+                    || reservationHoldRepository.existsActiveOverlap(
+                            assetId, entry.getStartTime(), entry.getEndTime(), now, null, entry.getUserId())) {
+                continue;
+            }
+            return PromotionPeek.candidate(entry.getUserId());
+        }
+        return foundExpired ? PromotionPeek.expireOnly() : PromotionPeek.none();
+    }
+
+    private void expirePastEntriesForAsset(Long assetId) {
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+        catalogApi.lockForBooking(assetId);
+        List<WaitlistEntry> waiting =
+                waitlistEntryRepository.findByAssetIdAndStatusForUpdate(assetId, WaitlistStatus.WAITING);
+        for (WaitlistEntry entry : waiting) {
+            if (entry.getStatus() == WaitlistStatus.WAITING
+                    && !entry.getStartTime().isAfter(now)) {
+                entry.markExpired(now);
+            }
+        }
+    }
+
+    private PromotionStepOutcome processNextPromotionStep(Long assetId, Long expectedUserId) {
+        LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
+
+        // Global lock DAG (#349, #370): Quota FIRST, Asset SECOND, Waitlist THIRD, Hold LAST.
+        reservationRepository.lockUserQuota(expectedUserId);
         catalogApi.lockForBooking(assetId);
         if (!catalogApi.isBookable(assetId)) {
             return PromotionStepOutcome.DONE;
@@ -249,7 +343,10 @@ public class WaitlistService {
                 waitlistEntryRepository.findByAssetIdAndStatusForUpdate(assetId, WaitlistStatus.WAITING);
 
         for (WaitlistEntry entry : waiting) {
-            if (entry.getId() != null && !visitedEntryIds.add(entry.getId())) {
+            // Bug fixed (#349): previously tracked visitedEntryIds across iterations before checking slot overlap,
+            // which caused an earlier entry whose slot freed mid-promotion to be skipped out of FIFO order.
+            // Fix: check live status == WAITING instead of caching skipped IDs across transactions.
+            if (entry.getStatus() != WaitlistStatus.WAITING) {
                 continue;
             }
             if (!entry.getStartTime().isAfter(now)) {
@@ -263,9 +360,12 @@ public class WaitlistService {
                 continue;
             }
 
-            // Lock only ONE user quota per REQUIRES_NEW transaction before reading role/active count (#310, #349).
-            // Committing immediately after handling this waiter releases the lock before moving to the next.
-            reservationRepository.lockUserQuota(entry.getUserId());
+            // If an earlier FIFO waiter for a different user became promotable between peek and locking,
+            // release our locks and re-peek so we lock that waiter's quota first in strict FIFO order.
+            if (!entry.getUserId().equals(expectedUserId)) {
+                return PromotionStepOutcome.RETRY_FOR_EARLIER_HEAD;
+            }
+
             Optional<Role> activeRole = userApi.findActiveRole(entry.getUserId());
             if (activeRole.isEmpty()) {
                 entry.markExpired(now);

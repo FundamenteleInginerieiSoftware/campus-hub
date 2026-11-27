@@ -12,6 +12,7 @@ import com.campus.reservation.domain.WaitlistEntry;
 import com.campus.reservation.domain.WaitlistStatus;
 import com.campus.reservation.repository.ReservationRepository;
 import com.campus.reservation.repository.WaitlistEntryRepository;
+import com.campus.reservation.web.CreateReservationRequest;
 import com.campus.reservation.web.JoinWaitlistRequest;
 import com.campus.reservation.web.WaitlistEntryResponse;
 import java.time.Clock;
@@ -51,6 +52,9 @@ class WaitlistConcurrencyIT {
 
     @Autowired
     private WaitlistService waitlistService;
+
+    @Autowired
+    private ReservationService reservationService;
 
     @Autowired
     private WaitlistEntryRepository waitlistEntryRepository;
@@ -443,8 +447,9 @@ class WaitlistConcurrencyIT {
             });
 
             assertThat(waitUntilBlockedOnUserQuotaLock(waiterId, 1, promoDone))
-                    .as("promotion thread must hold waitlist_entries FOR UPDATE and block on lockUserQuota(waiterId); "
-                            + "see WaitlistService.processPromotionsForAsset")
+                    .as(
+                            "promotion thread must block on lockUserQuota(waiterId) FIRST (Quota -> Asset -> Waitlist DAG); "
+                                    + "see WaitlistService.processPromotionsForAsset")
                     .isTrue();
 
             Future<?> disableThread = executor.submit(() -> {
@@ -592,6 +597,83 @@ class WaitlistConcurrencyIT {
                 .as("disabled user must have zero orphan WAITING rows after listener finishes; "
                         + "see UserDisabledReservationListener.onUserDisabled")
                 .isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "Concurrent createReservation and waitlist promotion for the same user and asset follow Quota -> Asset DAG with zero deadlocks (#349, #370)")
+    void concurrentCreateReservationAndWaitlistPromotionNeverDeadlock() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime start = nextWeekdayAt14(now);
+        LocalDateTime end = start.plusHours(2);
+
+        Reservation holderBooking =
+                reservationRepository.saveAndFlush(new Reservation(holderId, assetId, start, end, now));
+
+        setSecurityContext(waiterId, "ROLE_STUDENT");
+        WaitlistEntryResponse entry = waitlistService.joinWaitlist(new JoinWaitlistRequest(assetId, start, end));
+        SecurityContextHolder.clearContext();
+
+        // Free the slot via SQL so promotion and direct booking race for the exact same (waiterId, assetId, slot).
+        jdbcTemplate.update(
+                "UPDATE reservations SET status = 'CANCELLED', version = version + 1 WHERE id = ?",
+                holderBooking.getId());
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Throwable> unexpected = new CopyOnWriteArrayList<>();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> promoFuture = executor.submit(() -> {
+                ready.countDown();
+                try {
+                    go.await();
+                    waitlistService.processPromotionsForAsset(assetId);
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                }
+            });
+
+            Future<?> bookFuture = executor.submit(() -> {
+                setSecurityContext(waiterId, "ROLE_STUDENT");
+                ready.countDown();
+                try {
+                    go.await();
+                    reservationService.createReservation(new CreateReservationRequest(assetId, start, end));
+                } catch (ConflictException expectedWhenPromoWinsFirst) {
+                    // Acceptable when promotion won the slot first
+                } catch (Throwable t) {
+                    unexpected.add(t);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            go.countDown();
+            promoFuture.get(10, TimeUnit.SECONDS);
+            bookFuture.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+
+        assertThat(unexpected)
+                .as(
+                        "concurrent createReservation and processPromotionsForAsset must both lock Quota -> Asset with zero deadlocks; "
+                                + "see WaitlistService.processPromotionsForAsset and ReservationService.createReservation")
+                .isEmpty();
+
+        Integer activeForSlot = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM reservations WHERE asset_id = ? AND status = 'CONFIRMED'",
+                Integer.class,
+                assetId);
+        assertThat(activeForSlot)
+                .as(
+                        "exactly 1 CONFIRMED booking must exist for the contested slot; see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(1);
+        assertThat(waitlistEntryRepository.findById(entry.id())).isPresent();
     }
 
     private boolean waitUntilBlockedOnUserQuotaLock(Long targetUserId, int minWaiters, AtomicBoolean actionDone)

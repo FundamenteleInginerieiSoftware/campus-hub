@@ -20,6 +20,10 @@ public interface WaitlistEntryRepository extends JpaRepository<WaitlistEntry, Lo
     @Query("SELECT w FROM WaitlistEntry w WHERE w.id = :id")
     Optional<WaitlistEntry> findByIdForUpdate(@Param("id") Long id);
 
+    // Read-only FIFO peek used by processPromotionsForAsset to pick the next candidate's userId
+    // before acquiring locks in global DAG order (Quota -> Asset -> Waitlist -> Hold, #349, #370).
+    List<WaitlistEntry> findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(Long assetId, WaitlistStatus status);
+
     // FIFO ordering under row locks so a concurrent student cancel waits instead of tripping @Version (#349).
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

@@ -138,22 +138,25 @@ class WaitlistServiceTest {
         assertThat(res.status())
                 .as("new waitlist entry must start in WAITING status; see WaitlistService.joinWaitlist")
                 .isEqualTo(WaitlistStatus.WAITING);
-        InOrder lockOrder = inOrder(catalogApi, reservationRepository);
-        lockOrder.verify(catalogApi).lockForBooking(ASSET_ID);
+        InOrder lockOrder = inOrder(reservationRepository, userApi, catalogApi);
         lockOrder.verify(reservationRepository).lockUserQuota(USER_1_ID);
+        lockOrder.verify(userApi).findActiveRole(USER_1_ID);
+        lockOrder.verify(catalogApi).lockForBooking(ASSET_ID);
         verify(auditService).record(eq(USER_1_ID), eq("JOIN_WAITLIST"), eq("WaitlistEntry"), eq(55L), any());
     }
 
     @Test
-    @DisplayName("joinWaitlist hides RETIRED asset from students with 404 ASSET_NOT_FOUND (#278, #362)")
+    @DisplayName(
+            "joinWaitlist hides RETIRED asset from students with 404 ASSET_NOT_FOUND matching AssetService (#278, #349, #362)")
     void joinWaitlist_retiredAssetThrowsNotFoundForStudent() {
         when(catalogApi.getAsset(ASSET_ID))
                 .thenReturn(new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED));
-        when(currentUser.isAdmin()).thenReturn(false);
 
         assertThatThrownBy(() -> waitlistService.joinWaitlist(new JoinWaitlistRequest(ASSET_ID, slotStart, slotEnd)))
-                .as("retired asset must throw 404 ASSET_NOT_FOUND for students; see WaitlistService.joinWaitlist")
+                .as("retired asset must throw 404 ASSET_NOT_FOUND with exact AssetService detail message; "
+                        + "see WaitlistService.joinWaitlist")
                 .isInstanceOf(NotFoundException.class)
+                .hasMessage("Asset " + ASSET_ID + " was not found")
                 .extracting(ex -> ((NotFoundException) ex).getCode())
                 .isEqualTo("ASSET_NOT_FOUND");
     }
@@ -173,7 +176,7 @@ class WaitlistServiceTest {
 
         when(catalogApi.getAsset(ASSET_ID))
                 .thenReturn(new AssetSummary(ASSET_ID, "Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED));
-        when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(USER_1_ID)).thenReturn(Optional.of(Role.ADMIN));
 
         assertThatThrownBy(() -> waitlistService.joinWaitlist(new JoinWaitlistRequest(ASSET_ID, slotStart, slotEnd)))
                 .as("RETIRED asset for admin must throw 409 ASSET_NOT_BOOKABLE; see WaitlistService.joinWaitlist")
@@ -231,7 +234,7 @@ class WaitlistServiceTest {
     }
 
     @Test
-    @DisplayName("joinWaitlist rejects when caller already owns an active reservation for that slot")
+    @DisplayName("joinWaitlist rejects own-reservation overlap under Quota -> Asset locks (#349)")
     void joinWaitlist_rejectsOwnReservationOverlap() {
         when(reservationRepository.existsUserOverlapOnAsset(ASSET_ID, USER_1_ID, slotStart, slotEnd))
                 .thenReturn(true);
@@ -242,6 +245,12 @@ class WaitlistServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .extracting(ex -> ((ConflictException) ex).getCode())
                 .isEqualTo("OWN_RESERVATION_CONFLICT");
+
+        InOrder order = inOrder(reservationRepository, userApi, catalogApi);
+        order.verify(reservationRepository).lockUserQuota(USER_1_ID);
+        order.verify(userApi).findActiveRole(USER_1_ID);
+        order.verify(catalogApi).lockForBooking(ASSET_ID);
+        order.verify(reservationRepository).existsUserOverlapOnAsset(ASSET_ID, USER_1_ID, slotStart, slotEnd);
     }
 
     @Test
@@ -258,8 +267,9 @@ class WaitlistServiceTest {
     }
 
     @Test
-    @DisplayName("cancelWaitingEntriesForUser cancels disabled user's entries without locking userQuota")
-    void cancelWaitingEntriesForUser_cancelsEntriesWithoutLockingUserQuota() {
+    @DisplayName(
+            "cancelWaitingEntriesForUser locks userQuota first (Quota -> Waitlist DAG) and cancels disabled user's entries")
+    void cancelWaitingEntriesForUser_locksUserQuotaFirstAndCancelsEntries() {
         LocalDateTime now = LocalDateTime.now(clock);
         when(userApi.findActiveRole(USER_1_ID)).thenReturn(Optional.empty());
         WaitlistEntry entry = new WaitlistEntry(ASSET_ID, USER_1_ID, slotStart, slotEnd, now.minusMinutes(10));
@@ -277,7 +287,10 @@ class WaitlistServiceTest {
                 .as("disabled user's waiting entry must transition to CANCELLED; "
                         + "see WaitlistService.cancelWaitingEntriesForUser")
                 .isEqualTo(WaitlistStatus.CANCELLED);
-        verify(reservationRepository, never()).lockUserQuota(any());
+        InOrder order = inOrder(reservationRepository, userApi, waitlistEntryRepository);
+        order.verify(reservationRepository).lockUserQuota(USER_1_ID);
+        order.verify(userApi).findActiveRole(USER_1_ID);
+        order.verify(waitlistEntryRepository).findByUserIdAndStatusForUpdate(USER_1_ID, WaitlistStatus.WAITING);
     }
 
     @Test
@@ -340,9 +353,12 @@ class WaitlistServiceTest {
         ReservationHold ownedHold =
                 new ReservationHold(ASSET_ID, USER_2_ID, slotStart, slotStart.plusHours(1), now.plusMinutes(1), now);
 
+        List<WaitlistEntry> queue = List.of(firstQuotaFull, secondDisabled, thirdEligible);
         when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(queue);
         when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
-                .thenReturn(List.of(firstQuotaFull, secondDisabled, thirdEligible));
+                .thenReturn(queue);
         when(reservationRepository.existsOverlap(ASSET_ID, slotStart, slotEnd, ReservationService.NO_RESERVATION_ID))
                 .thenReturn(false);
         when(reservationHoldRepository.existsActiveOverlap(
@@ -383,7 +399,153 @@ class WaitlistServiceTest {
         assertThat(ownedHold.getStatus())
                 .as("promoted waiter's overlapping active hold must transition to CONFIRMED")
                 .isEqualTo(HoldStatus.CONFIRMED);
+        InOrder dagOrder = inOrder(reservationRepository, catalogApi, waitlistEntryRepository);
+        dagOrder.verify(reservationRepository).lockUserQuota(USER_1_ID);
+        dagOrder.verify(catalogApi).lockForBooking(ASSET_ID);
+        dagOrder.verify(waitlistEntryRepository).findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING);
         verify(auditService).record(isNull(), eq("PROMOTE_WAITLIST"), eq("Reservation"), eq(900L), any());
         verify(notificationService).notifyUser(eq(USER_2_ID), eq("Waitlist Spot Confirmed"), any());
+    }
+
+    @Test
+    @DisplayName(
+            "processPromotionsForAsset promotes earlier entry in strict FIFO order when its slot frees mid-promotion (#349)")
+    void processPromotionsForAsset_preservesStrictFifoWhenEarlierSlotFreesMidPromotion() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime s1Start = slotStart;
+        LocalDateTime s1End = slotEnd;
+        LocalDateTime s2Start = slotEnd;
+        LocalDateTime s2End = slotEnd.plusHours(2);
+
+        WaitlistEntry e1 = new WaitlistEntry(ASSET_ID, USER_1_ID, s1Start, s1End, now.minusMinutes(15));
+        ReflectionTestUtils.setField(e1, "id", 1L);
+        WaitlistEntry e2 = new WaitlistEntry(ASSET_ID, USER_2_ID, s2Start, s2End, now.minusMinutes(10));
+        ReflectionTestUtils.setField(e2, "id", 2L);
+        WaitlistEntry e3 = new WaitlistEntry(ASSET_ID, USER_3_ID, s1Start, s1End, now.minusMinutes(5));
+        ReflectionTestUtils.setField(e3, "id", 3L);
+        List<WaitlistEntry> queue = List.of(e1, e2, e3);
+
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(queue);
+        when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(queue);
+        when(userApi.findActiveRole(USER_1_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_2_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                        any(), eq(ReservationStatus.ACTIVE_STATUSES)))
+                .thenReturn(0L);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), any(), any(), any(), eq(null), any()))
+                .thenReturn(false);
+
+        // S1 starts occupied while S2 is free; after e2 is promoted, S1 frees and then becomes occupied once e1 wins.
+        boolean[] s1Occupied = {true};
+        boolean[] s2Occupied = {false};
+        when(reservationRepository.existsOverlap(ASSET_ID, s1Start, s1End, ReservationService.NO_RESERVATION_ID))
+                .thenAnswer(inv -> s1Occupied[0]);
+        when(reservationRepository.existsOverlap(ASSET_ID, s2Start, s2End, ReservationService.NO_RESERVATION_ID))
+                .thenAnswer(inv -> s2Occupied[0]);
+
+        long[] nextReservationId = {1000L};
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", nextReservationId[0]++);
+            if (r.getStartTime().equals(s2Start)) {
+                s2Occupied[0] = true;
+                // Simulate S1 becoming free right after e2 commits!
+                s1Occupied[0] = false;
+            } else if (r.getStartTime().equals(s1Start)) {
+                s1Occupied[0] = true;
+            }
+            return r;
+        });
+
+        int promoted = waitlistService.processPromotionsForAsset(ASSET_ID);
+
+        assertThat(promoted)
+                .as(
+                        "both e2 (S2) and e1 (S1, after S1 freed) must be promoted; see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(2);
+        assertThat(e2.getStatus())
+                .as("e2 on initially free S2 must be promoted first; see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(WaitlistStatus.PROMOTED);
+        assertThat(e1.getStatus())
+                .as(
+                        "e1 must beat e3 in strict FIFO order once S1 frees mid-promotion; see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(WaitlistStatus.PROMOTED);
+        assertThat(e3.getStatus())
+                .as(
+                        "later waiter e3 on S1 must stay WAITING instead of jumping ahead of e1; see WaitlistService.processPromotionsForAsset")
+                .isEqualTo(WaitlistStatus.WAITING);
+    }
+
+    @Test
+    @DisplayName(
+            "processPromotionsForAsset re-peeks instead of promoting out of FIFO order when an earlier slot frees between peek and lock (#349)")
+    void processPromotionsForAsset_retriesWhenEarlierHeadFreesBetweenPeekAndLock() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime s1Start = slotStart;
+        LocalDateTime s1End = slotEnd;
+        LocalDateTime s2Start = slotEnd;
+        LocalDateTime s2End = slotEnd.plusHours(2);
+
+        WaitlistEntry e1 = new WaitlistEntry(ASSET_ID, USER_1_ID, s1Start, s1End, now.minusMinutes(15));
+        ReflectionTestUtils.setField(e1, "id", 1L);
+        WaitlistEntry e2 = new WaitlistEntry(ASSET_ID, USER_2_ID, s2Start, s2End, now.minusMinutes(10));
+        ReflectionTestUtils.setField(e2, "id", 2L);
+        List<WaitlistEntry> queue = List.of(e1, e2);
+
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(waitlistEntryRepository.findByAssetIdAndStatusOrderByCreatedAtAscIdAsc(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(queue);
+        when(waitlistEntryRepository.findByAssetIdAndStatusForUpdate(ASSET_ID, WaitlistStatus.WAITING))
+                .thenReturn(queue);
+        when(userApi.findActiveRole(USER_1_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_2_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                        any(), eq(ReservationStatus.ACTIVE_STATUSES)))
+                .thenReturn(0L);
+        when(reservationHoldRepository.existsActiveOverlap(eq(ASSET_ID), any(), any(), any(), eq(null), any()))
+                .thenReturn(false);
+
+        // First peek sees S1 occupied (picks USER_2); before lock step checks S1, S1 frees!
+        boolean[] s1Occupied = {true};
+        boolean[] s2Occupied = {false};
+        int[] s1Checks = {0};
+        when(reservationRepository.existsOverlap(ASSET_ID, s1Start, s1End, ReservationService.NO_RESERVATION_ID))
+                .thenAnswer(inv -> {
+                    s1Checks[0]++;
+                    if (s1Checks[0] == 1) {
+                        // First check (peek): occupied, then frees right away before the write transaction checks it
+                        s1Occupied[0] = false;
+                        return true;
+                    }
+                    return s1Occupied[0];
+                });
+        when(reservationRepository.existsOverlap(ASSET_ID, s2Start, s2End, ReservationService.NO_RESERVATION_ID))
+                .thenAnswer(inv -> s2Occupied[0]);
+
+        List<Long> promotedUserOrder = new java.util.ArrayList<>();
+        long[] nextReservationId = {2000L};
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            ReflectionTestUtils.setField(r, "id", nextReservationId[0]++);
+            promotedUserOrder.add(r.getUserId());
+            if (r.getStartTime().equals(s1Start)) {
+                s1Occupied[0] = true;
+            } else {
+                s2Occupied[0] = true;
+            }
+            return r;
+        });
+
+        int promoted = waitlistService.processPromotionsForAsset(ASSET_ID);
+
+        assertThat(promoted).isEqualTo(2);
+        assertThat(promotedUserOrder)
+                .as(
+                        "when e1 frees between peek and lock, step must retry and promote USER_1 before USER_2 in strict FIFO order; "
+                                + "see WaitlistService.processNextPromotionStep")
+                .containsExactly(USER_1_ID, USER_2_ID);
     }
 }

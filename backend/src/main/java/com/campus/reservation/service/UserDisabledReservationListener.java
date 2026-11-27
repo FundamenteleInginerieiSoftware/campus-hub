@@ -25,8 +25,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       Holding {@code lockUserQuota} here acts as a barrier draining any in-flight {@code joinWaitlist}
  *       before Step 2 scans {@code waitlist_entries}, closing the orphan-{@code WAITING} race (#349).</li>
  *   <li>Step 2 cancels {@code WAITING} waitlist entries in its own {@code REQUIRES_NEW} transaction
- *       without {@code lockUserQuota} so it never deadlocks with waitlist promotion and cannot roll back
- *       Step 1's booking cancellations.</li>
+ *       (following {@code Quota -> Waitlist} inside {@code cancelWaitingEntriesForUser}) so a waitlist
+ *       failure cannot roll back Step 1's booking cancellations.</li>
  * </ol>
  * Deliberately not {@code @Async}: the audit actor comes from {@code CurrentUser}, which is bound
  * to the HTTP request thread.
@@ -98,9 +98,9 @@ public class UserDisabledReservationListener {
             return;
         }
 
-        // Step 2: cancel WAITING waitlist entries in a separate REQUIRES_NEW transaction (no lockUserQuota)
-        // so waitlist rows never share a transaction with lockUserQuota (avoiding a lock-order deadlock
-        // with waitlist promotion) and a waitlist failure cannot roll back Step 1 (#349).
+        // Step 2: cancel WAITING waitlist entries in a separate REQUIRES_NEW transaction (following the
+        // global Quota -> Waitlist DAG inside cancelWaitingEntriesForUser) so a waitlist failure cannot
+        // roll back Step 1's reservation cancellations (#349, #370).
         try {
             requiresNewTx.executeWithoutResult(status -> {
                 int cancelledWaitlist = waitlistService.cancelWaitingEntriesForUser(event.userId());
