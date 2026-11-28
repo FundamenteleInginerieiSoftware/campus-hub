@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-28
-**Branch / PR:** `feat/desk-scan-any-pass` (#TBD)
+**Branch / PR:** `feat/desk-scan-any-pass` (#377)
 **See also:** `26-reservations-desk-page.md` (#138), `51-pickup-pass-backend.md` (#283), `52-pickup-pass-pages.md` (#284), `58-pickup-pass-qr.md` (#318)
 
 ---
