@@ -289,6 +289,7 @@ A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `
 | `GET /api/v1/reservations/me` | Logged in | – | `200` + `PageResponse<ReservationResponse>` | `400 VALIDATION_FAILED`, `400 INVALID_PARAMETER`, `401 UNAUTHORIZED` (accepts optional `status` filter, supporting single or multiple statuses e.g. `status=CONFIRMED&status=CHECKED_OUT`) |
 | `GET /api/v1/reservations/me/summary` | Logged in | – | `200` + `ReservationSummaryResponse` | `401 UNAUTHORIZED` |
 | `GET /api/v1/reservations/availability?assetId=...&startTime=...&endTime=...` | Logged in | – | `200` + `AvailabilityResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND` (including `RETIRED` assets for non-admin callers), `409 MISSING_PARAMETER`, `409 CONFLICTING_PARAMETERS`, `409 INVALID_TIME_RANGE`, `409 SLOT_NOT_ALIGNED`, `409 INVALID_DURATION`, `409 BOOKING_IN_PAST`, `409 OUTSIDE_OPENING_HOURS`, `409 BOOKING_TOO_FAR_AHEAD` (for single-asset checks, if `available` is `false`, `availableAssetIds` lists free same-model substitute IDs sorted same-room first) |
+| `GET /api/v1/reservations/next-free-slots?assetId=...&from=&durationMinutes=60&limit=5` | Logged in | – | `200` + `NextFreeSlotsResponse` | `400 INVALID_PARAMETER`, `401 UNAUTHORIZED`, `404 ASSET_NOT_FOUND`, `409 INVALID_DURATION` (`durationMinutes` 30–240 step 30, default 60; `limit` 1–10, default 5; `from` optional local date-time without offset; returns `404 ASSET_NOT_FOUND` for students on `RETIRED` assets, and `bookable: false, slots: []` for `UNDER_MAINTENANCE` or admin queries on `RETIRED`) |
 | `GET /api/v1/reservations/{id}` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND` (404 on others' IDs) |
 | `POST /api/v1/reservations/{id}/cancel` | Owner or Admin | – | `200` + `ReservationResponse` | `404 RESERVATION_NOT_FOUND`, `409 CANCELLATION_NOT_ALLOWED`, `409 INVALID_RESERVATION_STATUS_TRANSITION` |
 
@@ -449,6 +450,21 @@ A **failure** is an incident that was not `REJECTED`; `severeFailures` are the `
 }
 
 `conflictReason`: `null` when `available` is `true`. When `false`: `RESERVATION_CONFLICT` (asset has overlapping active booking), `ASSET_NOT_BOOKABLE` (asset is `UNDER_MAINTENANCE`, or `RETIRED` for admins; non-admin requests on `RETIRED` assets receive `404 ASSET_NOT_FOUND`), or `NO_ASSETS_AVAILABLE` (no free assets remain in the queried category or unknown category).
+```
+
+Next free slots recommender (`GET /api/v1/reservations/next-free-slots?assetId=1&from=&durationMinutes=60&limit=5`, authenticated, `#61`):
+- Query parameters: `assetId` (required), `durationMinutes` (`30`–`240`, step `30`, default `60`), `limit` (`1`–`10`, default `5`), `from` (optional campus local date-time without timezone offset, e.g. `2026-11-10T10:00:00`; `Z`/`+02:00` → `400 INVALID_PARAMETER`).
+- Scans weekdays `08:00`–`20:00` aligned to `:00`/`:30` up to 14 days ahead, skipping active bookings (`OVERDUE` blocks open-endedly) and foreign active holds while ignoring the caller's own hold. Returns `404 ASSET_NOT_FOUND` for students on `RETIRED` assets (matching `GET /api/v1/assets/{id}`), and `bookable: false, slots: []` for `UNDER_MAINTENANCE` (or admin queries on `RETIRED`).
+```json
+{
+  "assetId": 1,
+  "durationMinutes": 60,
+  "bookable": true,
+  "slots": [
+    { "startTime": "2026-11-10T10:00:00", "endTime": "2026-11-10T11:00:00" },
+    { "startTime": "2026-11-10T10:30:00", "endTime": "2026-11-10T11:30:00" }
+  ]
+}
 ```
 
 ---

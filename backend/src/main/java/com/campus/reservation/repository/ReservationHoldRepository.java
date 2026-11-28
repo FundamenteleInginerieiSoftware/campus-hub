@@ -52,6 +52,8 @@ public interface ReservationHoldRepository extends JpaRepository<ReservationHold
             @Param("endTime") LocalDateTime endTime,
             @Param("now") LocalDateTime now);
 
+    List<ReservationHold> findByAssetIdAndStatusAndExpiresAtAfter(Long assetId, HoldStatus status, LocalDateTime now);
+
     long countByUserIdAndStatusAndExpiresAtAfter(Long userId, HoldStatus status, LocalDateTime now);
 
     @Query("""

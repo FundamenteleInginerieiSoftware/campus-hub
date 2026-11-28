@@ -184,4 +184,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
           and (r.returnedAt is null or r.returnedAt > :from)
         """)
     List<Reservation> findCheckedOutOverlapping(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    List<Reservation> findByAssetIdAndStatusInOrderByStartTimeAsc(Long assetId, Collection<ReservationStatus> statuses);
 }

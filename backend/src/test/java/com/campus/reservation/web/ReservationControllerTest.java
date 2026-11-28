@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.campus.common.error.BusinessRuleException;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.GlobalExceptionHandler;
+import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.paging.PageResponse;
 import com.campus.common.security.CurrentUser;
@@ -20,6 +21,7 @@ import com.campus.config.SecurityConfig;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.domain.TransferStatus;
 import com.campus.reservation.service.IdempotencyService;
+import com.campus.reservation.service.NextFreeSlotsService;
 import com.campus.reservation.service.ReservationService;
 import com.campus.reservation.service.TransferService;
 import java.time.LocalDateTime;
@@ -56,6 +58,9 @@ class ReservationControllerTest {
 
     @MockitoBean
     private IdempotencyService idempotencyService;
+
+    @MockitoBean
+    private NextFreeSlotsService nextFreeSlotsService;
 
     @BeforeEach
     void setUpIdempotency() {
@@ -587,5 +592,83 @@ class ReservationControllerTest {
         mockMvc.perform(post("/api/v1/reservations/transfers/500/cancel"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots returns 200 OK with recommended slots")
+    void nextFreeSlotsReturns200() throws Exception {
+        NextFreeSlotsResponse response = new NextFreeSlotsResponse(
+                1L,
+                60,
+                true,
+                List.of(new FreeSlotOption(
+                        LocalDateTime.of(2026, 11, 10, 10, 0), LocalDateTime.of(2026, 11, 10, 11, 0))));
+        when(nextFreeSlotsService.getNextFreeSlots(eq(1L), isNull(), eq(60), eq(5)))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots").param("assetId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assetId").value(1))
+                .andExpect(jsonPath("$.durationMinutes").value(60))
+                .andExpect(jsonPath("$.bookable").value(true))
+                .andExpect(jsonPath("$.slots[0].startTime").value("2026-11-10T10:00:00"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots with Z offset returns 400 INVALID_PARAMETER")
+    void nextFreeSlotsWithZOffsetReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots")
+                        .param("assetId", "1")
+                        .param("from", "2026-11-10T10:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots with +02:00 offset returns 400 INVALID_PARAMETER")
+    void nextFreeSlotsWithOffsetReturns400() throws Exception {
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots")
+                        .param("assetId", "1")
+                        .param("from", "2026-11-10T10:00:00+02:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots returns 400 INVALID_PARAMETER on out-of-range limit")
+    void nextFreeSlotsInvalidLimitReturns400() throws Exception {
+        when(nextFreeSlotsService.getNextFreeSlots(1L, null, 60, 0))
+                .thenThrow(new InvalidParameterException("limit must be between 1 and 10"));
+
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots")
+                        .param("assetId", "1")
+                        .param("limit", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots returns 404 ASSET_NOT_FOUND when asset is missing")
+    void nextFreeSlotsMissingAssetReturns404() throws Exception {
+        when(nextFreeSlotsService.getNextFreeSlots(999L, null, 60, 5))
+                .thenThrow(new NotFoundException("ASSET_NOT_FOUND", "Asset not found: 999"));
+
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots").param("assetId", "999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ASSET_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/reservations/next-free-slots returns 409 INVALID_DURATION for invalid duration")
+    void nextFreeSlotsInvalidDurationReturns409() throws Exception {
+        when(nextFreeSlotsService.getNextFreeSlots(1L, null, 45, 5))
+                .thenThrow(new BusinessRuleException(
+                        "INVALID_DURATION", "Duration must be a multiple of 30 minutes between 30 and 240"));
+
+        mockMvc.perform(get("/api/v1/reservations/next-free-slots")
+                        .param("assetId", "1")
+                        .param("durationMinutes", "45"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_DURATION"));
     }
 }
