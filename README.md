@@ -1,6 +1,6 @@
 # Campus Equipment & Incident Hub
 
-> **[Project Progress & Team Contributions](PROGRESS.md)** · **[Wiki](https://github.com/FundamenteleInginerieiSoftware/campus-hub/wiki)** · **[What's Left](docs/whats-left.md)** · **[Contributing](CONTRIBUTING.md)**
+> **[Project Progress & Team Contributions](PROGRESS.md)** · **[Wiki](https://github.com/FundamenteleInginerieiSoftware/campus-hub/wiki)** · **[What's Left](docs/whats-left.md)** · **[Template Blueprint](docs/reusable-template-blueprint.md)** · **[Contributing](CONTRIBUTING.md)**
 
 University project for **Fundamentele Ingineriei Software (FIS)**.
 Students reserve shared lab equipment by time slot and report broken equipment with a photo.
