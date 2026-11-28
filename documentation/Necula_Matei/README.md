@@ -94,6 +94,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 66 | [66-beyond-crud-motivation.md](66-beyond-crud-motivation.md) | "Why This Isn't a Simple CRUD App" motivation in `README.md` and `PROGRESS.md`, 2 SVG sketches (`progress-beyond-crud`, `progress-lock-hierarchy`), `#310`/`#312` race sequence diagram, 6 real bugs caught, and live CLI + browser demos | #360 |
 | 67 | [67-sketch-color-semantics.md](67-sketch-color-semantics.md) | Semantic color alignment in `progress-beyond-crud.svg` (strict Red → Emerald polarity + color key) and `progress-lock-hierarchy.svg` (1-to-1 band-to-bug colors, `BAND` badges, and header legend) | #361 |
 | 68 | [68-audit-platform-fixes.md](68-audit-platform-fixes.md) | Audit fixes: dedicated `campus-ses-` pool, whole-second prod `LiveEvent.at`, public calendar feed in OpenAPI, `ProjectDetailsPage` DST horizon, `docker image prune -f` in `campus-deploy` | #366 |
+| 70 | [70-change-password-endpoint.md](70-change-password-endpoint.md) | Self-service password change `PUT /api/v1/users/me/password` (`ChangePasswordRequest`, `UserService.changePassword`, 72-byte BCrypt + oracle-safe check order, `USER_PASSWORD_CHANGED` audit row, `ChangePasswordIT`) | #379 |
 
 **Team docs:**
 - [PROGRESS.md](../../PROGRESS.md): what each of us has done, ownership map, timeline and contribution visuals
