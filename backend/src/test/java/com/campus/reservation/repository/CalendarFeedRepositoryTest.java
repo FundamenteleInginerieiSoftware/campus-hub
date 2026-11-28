@@ -87,4 +87,28 @@ class CalendarFeedRepositoryTest {
                         "calendar_feeds.user_id UNIQUE constraint must allow at most one feed row per user; see V2026_11_16_2205__reservation_create_calendar_feeds.sql")
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    void upsertTokenInsertsAndReplacesInPlace() {
+        calendarFeedRepository.upsertToken(USER_ONE_ID, HASH_ONE, NOW);
+        CalendarFeed initial = calendarFeedRepository.findByUserId(USER_ONE_ID).orElseThrow();
+        assertThat(initial.getTokenHash())
+                .as("first upsertToken must insert the row; see CalendarFeedRepository.upsertToken")
+                .isEqualTo(HASH_ONE);
+
+        LocalDateTime later = NOW.plusMinutes(5);
+        calendarFeedRepository.upsertToken(USER_ONE_ID, HASH_TWO, later);
+
+        CalendarFeed updated = calendarFeedRepository.findByUserId(USER_ONE_ID).orElseThrow();
+        assertThat(updated.getId())
+                .as(
+                        "second upsertToken must update the same calendar_feeds row in place; see CalendarFeedRepository.upsertToken")
+                .isEqualTo(initial.getId());
+        assertThat(updated.getTokenHash())
+                .as("upsertToken must replace token_hash on conflict; see CalendarFeedRepository.upsertToken")
+                .isEqualTo(HASH_TWO);
+        assertThat(updated.getCreatedAt())
+                .as("upsertToken must refresh created_at on conflict; see CalendarFeedRepository.upsertToken")
+                .isEqualTo(later);
+    }
 }

@@ -1,6 +1,8 @@
 package com.campus.catalog.api;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Public facade of the catalog module.
@@ -16,18 +18,26 @@ public interface CatalogApi {
     AssetSummary getAsset(Long assetId);
 
     /**
+     * Loads summaries for all existing assets in {@code assetIds} in a single query, keyed by asset ID.
+     * Missing IDs are omitted from the returned map; an empty or {@code null} collection returns an empty map.
+     */
+    Map<Long, AssetSummary> findAssetsByIds(Collection<Long> assetIds);
+
+    /**
      * Returns {@code true} if the asset exists and its operational status is {@link AssetStatus#AVAILABLE}.
      */
     boolean isBookable(Long assetId);
 
     /**
-     * Finds all {@link AssetStatus#AVAILABLE} assets sharing the same model, excluding the damaged asset.
+     * Finds all {@link AssetStatus#AVAILABLE} assets sharing the same model, optionally excluding
+     * {@code excludeAssetId} (when {@code null}, all available assets of that model are returned).
      * Used by Calin's {@code SameModelStrategy} during automatic reassignment.
      */
     List<AssetSummary> findAvailableByModel(String model, Long excludeAssetId);
 
     /**
-     * Finds all {@link AssetStatus#AVAILABLE} assets in the given category, excluding the damaged asset.
+     * Finds all {@link AssetStatus#AVAILABLE} assets in the given category, optionally excluding
+     * {@code excludeAssetId} (when {@code null}, all available assets in that category are returned).
      * Used by Calin's {@code SameCategoryStrategy} when no same-model substitute is free.
      */
     List<AssetSummary> findAvailableByCategory(Long categoryId, Long excludeAssetId);

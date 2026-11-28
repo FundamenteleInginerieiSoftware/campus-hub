@@ -2,6 +2,8 @@ package com.campus.reservation.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -64,7 +66,6 @@ class CalendarTokenServiceTest {
     @Test
     void createReturnsAPathWithA43CharToken() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(calendarFeedRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
 
         CalendarFeedCreatedResponse response = service.create();
 
@@ -77,23 +78,19 @@ class CalendarTokenServiceTest {
     @Test
     void createSavesOnlyTheHash() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(calendarFeedRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
 
         CalendarFeedCreatedResponse response = service.create();
         String token = extractToken(response);
 
-        ArgumentCaptor<CalendarFeed> captor = ArgumentCaptor.forClass(CalendarFeed.class);
-        verify(calendarFeedRepository).save(captor.capture());
-        CalendarFeed saved = captor.getValue();
+        ArgumentCaptor<String> hashCaptor = ArgumentCaptor.forClass(String.class);
+        verify(calendarFeedRepository).upsertToken(eq(USER_ID), hashCaptor.capture(), eq(LocalDateTime.now(clock)));
+        String persistedHash = hashCaptor.getValue();
 
-        assertThat(saved.getTokenHash())
+        assertThat(persistedHash)
                 .as("persisted tokenHash must equal SHA-256 hex of the returned token; see CalendarTokenService.create")
                 .isEqualTo(CalendarTokenService.hash(token))
                 .matches("[0-9a-f]{64}")
                 .doesNotContain(token);
-        assertThat(saved.getUserId())
-                .as("saved CalendarFeed must belong to currentUser.id(); see CalendarTokenService.create")
-                .isEqualTo(USER_ID);
     }
 
     @Test
@@ -102,12 +99,20 @@ class CalendarTokenServiceTest {
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
 
         AtomicReference<CalendarFeed> stored = new AtomicReference<>();
-        when(calendarFeedRepository.findByUserId(USER_ID)).thenAnswer(inv -> Optional.ofNullable(stored.get()));
-        when(calendarFeedRepository.save(any(CalendarFeed.class))).thenAnswer(inv -> {
-            CalendarFeed feed = inv.getArgument(0);
-            stored.set(feed);
-            return feed;
-        });
+        doAnswer(inv -> {
+                    Long uid = inv.getArgument(0);
+                    String hash = inv.getArgument(1);
+                    LocalDateTime ts = inv.getArgument(2);
+                    CalendarFeed existing = stored.get();
+                    if (existing != null) {
+                        existing.replaceToken(hash, ts);
+                    } else {
+                        stored.set(new CalendarFeed(uid, hash, ts));
+                    }
+                    return null;
+                })
+                .when(calendarFeedRepository)
+                .upsertToken(eq(USER_ID), any(String.class), any(LocalDateTime.class));
         when(calendarFeedRepository.findByTokenHash(any())).thenAnswer(inv -> {
             String requestedHash = inv.getArgument(0);
             CalendarFeed feed = stored.get();
@@ -120,7 +125,7 @@ class CalendarTokenServiceTest {
 
         assertThat(stored.get())
                 .as(
-                        "second create() must update the existing CalendarFeed row in place; see CalendarTokenService.create")
+                        "second create() must upsert the existing CalendarFeed row in place; see CalendarTokenService.create")
                 .isSameAs(firstFeed);
         assertThat(service.findActiveUserId(firstToken))
                 .as("first token must stop working once replaced by second create; see CalendarTokenService.create")
@@ -133,7 +138,6 @@ class CalendarTokenServiceTest {
     @Test
     void twoCreatesGiveDifferentTokens() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(calendarFeedRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
 
         String first = extractToken(service.create());
         String second = extractToken(service.create());
@@ -170,11 +174,12 @@ class CalendarTokenServiceTest {
         when(currentUser.id()).thenReturn(USER_ID);
         AtomicReference<CalendarFeed> stored = new AtomicReference<>();
         when(calendarFeedRepository.findByUserId(USER_ID)).thenAnswer(inv -> Optional.ofNullable(stored.get()));
-        when(calendarFeedRepository.save(any(CalendarFeed.class))).thenAnswer(inv -> {
-            CalendarFeed feed = inv.getArgument(0);
-            stored.set(feed);
-            return feed;
-        });
+        doAnswer(inv -> {
+                    stored.set(new CalendarFeed(inv.getArgument(0), inv.getArgument(1), inv.getArgument(2)));
+                    return null;
+                })
+                .when(calendarFeedRepository)
+                .upsertToken(eq(USER_ID), any(String.class), any(LocalDateTime.class));
 
         assertThat(service.status().enabled())
                 .as("status must be false before a calendar link is created; see CalendarTokenService.status")
@@ -252,7 +257,6 @@ class CalendarTokenServiceTest {
     @Test
     void createWritesAudit() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(calendarFeedRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
 
         service.create();
 

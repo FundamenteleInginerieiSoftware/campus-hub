@@ -158,7 +158,7 @@ public class ReassignmentService {
             throw new InvalidParameterException("Page offset exceeds maximum supported value");
         }
         Pageable pageable = PageRequest.of(page, size);
-        Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
+        Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDescIdDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);
     }
 }

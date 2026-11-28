@@ -106,7 +106,7 @@ class ReservationServiceRulesTest {
     @Test
     void anEmptyStatusListReturnsAllMyReservations() {
         when(currentUser.id()).thenReturn(USER_ID);
-        when(reservationRepository.findByUserIdOrderByStartTimeAsc(eq(USER_ID), any()))
+        when(reservationRepository.findByUserIdOrderByStartTimeAscIdAsc(eq(USER_ID), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         PageResponse<ReservationResponse> page = reservationService.getMyReservations(List.of(), 0, 10);

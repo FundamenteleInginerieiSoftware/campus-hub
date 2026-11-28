@@ -90,6 +90,10 @@ public class Asset {
             throw new InvalidStateTransitionException(
                     "ASSET_RETIRED", "Cannot mark a retired asset as under maintenance");
         }
+        // True no-op when already under maintenance so updatedAt and @Version are not bumped unnecessarily (#363).
+        if (this.status == AssetStatus.UNDER_MAINTENANCE) {
+            return;
+        }
         this.status = AssetStatus.UNDER_MAINTENANCE;
         this.updatedAt = now;
     }
@@ -97,6 +101,10 @@ public class Asset {
     public void markAvailable(LocalDateTime now) {
         if (this.status == AssetStatus.RETIRED) {
             throw new InvalidStateTransitionException("ASSET_RETIRED", "Cannot mark a retired asset as available");
+        }
+        // True no-op when already available so updatedAt and @Version are not bumped unnecessarily (#363).
+        if (this.status == AssetStatus.AVAILABLE) {
+            return;
         }
         this.status = AssetStatus.AVAILABLE;
         this.updatedAt = now;

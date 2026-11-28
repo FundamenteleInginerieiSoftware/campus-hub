@@ -328,4 +328,33 @@ class ReassignmentBookingProcessorTest {
                 .isInstanceOf(RuntimeException.class);
         verify(reservationApi, never()).forceCancel(any(), any(), any());
     }
+
+    @Test
+    @DisplayName(
+            "processSingleBooking aborts transient retry loop when interrupted during backoff and preserves interrupt flag (#370 follow-up)")
+    void processSingleBookingAbortsRetryWhenInterruptedDuringBackoff() {
+        AssetSummary candidate = new AssetSummary(20L, "Scope 1", "DS1054Z", 1L, 101L, AssetStatus.AVAILABLE);
+        when(strategy1.findCandidates(booking, damagedAsset)).thenReturn(List.of(candidate));
+        when(reservationApi.moveToAsset(50L, 10L, 20L, "Incident #100")).thenAnswer(inv -> {
+            Thread.currentThread().interrupt();
+            throw new CannotAcquireLockException("Transient lock contention");
+        });
+
+        try {
+            assertThatThrownBy(() -> processor.processSingleBooking(event, booking, damagedAsset))
+                    .as("interrupted retry backoff must abort immediately instead of running another attempt; "
+                            + "see ReassignmentBookingProcessor.backoffBeforeRetry")
+                    .isInstanceOf(CannotAcquireLockException.class);
+
+            assertThat(Thread.currentThread().isInterrupted())
+                    .as("interrupt flag must stay restored after aborting retry backoff; "
+                            + "see ReassignmentBookingProcessor.backoffBeforeRetry")
+                    .isTrue();
+            verify(reservationApi, times(1)).moveToAsset(50L, 10L, 20L, "Incident #100");
+            verify(reservationApi, never()).forceCancel(any(), any(), any());
+        } finally {
+            // Clear interrupt status so subsequent JUnit tests on this worker thread are unaffected.
+            Thread.interrupted();
+        }
+    }
 }

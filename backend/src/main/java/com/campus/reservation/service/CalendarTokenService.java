@@ -68,14 +68,8 @@ public class CalendarTokenService {
         String tokenHash = hash(token);
         LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 
-        CalendarFeed feed = calendarFeedRepository
-                .findByUserId(userId)
-                .map(existing -> {
-                    existing.replaceToken(tokenHash, now);
-                    return existing;
-                })
-                .orElseGet(() -> new CalendarFeed(userId, tokenHash, now));
-        calendarFeedRepository.save(feed);
+        // Atomic upsert prevents SQLState 23505 on concurrent double-clicks (#362 §3).
+        calendarFeedRepository.upsertToken(userId, tokenHash, now);
 
         auditService.record(userId, "CALENDAR_FEED_CREATED", "USER", userId, "Created private calendar feed link");
         return new CalendarFeedCreatedResponse("/api/v1/calendar/" + token + ".ics");

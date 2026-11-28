@@ -137,17 +137,19 @@ public class HoldService {
         }
 
         // 1. Lock Quota FIRST in ascending userId order when an admin confirms another user's hold,
-        // and verify active status for all callers including admins (#362 §1.1, §1.2, §3).
+        // and verify active status + fresh DB role for all callers including admins (#362 §1.1, §1.2, §3).
+        Role callerRole;
         Role holdOwnerRole;
         if (callerId.equals(studentId)) {
             reservationRepository.lockUserQuota(studentId);
             holdOwnerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
+            callerRole = holdOwnerRole;
         } else {
             Long firstUserId = Math.min(callerId, studentId);
             Long secondUserId = Math.max(callerId, studentId);
             reservationRepository.lockUserQuota(firstUserId);
             reservationRepository.lockUserQuota(secondUserId);
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, callerId);
+            callerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, callerId);
             holdOwnerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
         }
 
@@ -159,7 +161,8 @@ public class HoldService {
                 .findByIdForUpdate(holdId)
                 .orElseThrow(() -> new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found"));
 
-        if (!hold.getUserId().equals(callerId) && !currentUser.isAdmin()) {
+        // Check fresh DB role (not stale JWT claim) so an admin demoted mid-flight cannot confirm another user's hold.
+        if (!hold.getUserId().equals(callerId) && callerRole != Role.ADMIN) {
             throw new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found");
         }
 

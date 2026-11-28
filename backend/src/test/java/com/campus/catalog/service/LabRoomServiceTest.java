@@ -19,6 +19,7 @@ import com.campus.common.error.ConflictException;
 import com.campus.common.error.InvalidParameterException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -85,9 +86,12 @@ class LabRoomServiceTest {
 
     @Test
     void createRejectsDuplicateCodeOnConcurrentRace() {
-        when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false, true);
+        when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false);
+        org.hibernate.exception.ConstraintViolationException pgUnique =
+                new org.hibernate.exception.ConstraintViolationException(
+                        "duplicate key", new SQLException("duplicate key", "23505"), "uq_lab_rooms_code_lower");
         when(labRoomRepository.saveAndFlush(any(LabRoom.class)))
-                .thenThrow(new DataIntegrityViolationException("unique index constraint"));
+                .thenThrow(new DataIntegrityViolationException("unique index constraint", pgUnique));
 
         ConflictException ex = assertThrows(
                 ConflictException.class,
@@ -100,7 +104,8 @@ class LabRoomServiceTest {
     void createRethrowsDataIntegrityViolationWhenCodeNotTaken() {
         when(labRoomRepository.existsByCodeIgnoreCase("B204")).thenReturn(false);
         when(labRoomRepository.saveAndFlush(any(LabRoom.class)))
-                .thenThrow(new DataIntegrityViolationException("other constraint"));
+                .thenThrow(
+                        new DataIntegrityViolationException("other constraint", new SQLException("not null", "23502")));
 
         assertThrows(
                 DataIntegrityViolationException.class,
@@ -179,11 +184,15 @@ class LabRoomServiceTest {
         LabRoom existing = new LabRoom("OLD1", "Old Lab", "Building A");
         String exact20Code = "B".repeat(20);
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(existing));
-        when(labRoomRepository.existsByCodeIgnoreCaseAndIdNot(exact20Code, 2L))
-                .thenReturn(false, false, true, false, false);
+        when(labRoomRepository.existsByCodeIgnoreCaseAndIdNot(exact20Code, 2L)).thenReturn(false);
+        org.hibernate.exception.ConstraintViolationException pgUnique =
+                new org.hibernate.exception.ConstraintViolationException(
+                        "duplicate key", new SQLException("duplicate key", "23505"), "lab_rooms_code_key");
         when(labRoomRepository.saveAndFlush(existing))
                 .thenReturn(existing)
-                .thenThrow(new DataIntegrityViolationException("unique constraint"));
+                .thenThrow(new DataIntegrityViolationException("unique constraint", pgUnique))
+                .thenThrow(
+                        new DataIntegrityViolationException("other constraint", new SQLException("not null", "23502")));
         when(currentUser.id()).thenReturn(3L);
 
         LabRoomResponse ok = labRoomService.update(2L, new LabRoomRequest(exact20Code, "Electronics Lab", "EC"));

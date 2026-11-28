@@ -34,6 +34,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -180,12 +181,14 @@ class AssetServiceTest {
 
     @Test
     void createRejectsDuplicateSerialOnConcurrentRace() {
-        // First check returns false, but concurrent insert causes the second check in the catch block to return true.
-        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false, true);
+        when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
+        org.hibernate.exception.ConstraintViolationException pgUnique =
+                new org.hibernate.exception.ConstraintViolationException(
+                        "duplicate key", new SQLException("duplicate key", "23505"), "assets_serial_number_key");
         when(assetRepository.saveAndFlush(any(Asset.class)))
-                .thenThrow(new DataIntegrityViolationException("unique index constraint"));
+                .thenThrow(new DataIntegrityViolationException("unique index constraint", pgUnique));
 
         ConflictException ex = assertThrows(
                 ConflictException.class,
@@ -198,12 +201,14 @@ class AssetServiceTest {
 
     @Test
     void createRethrowsDataIntegrityViolationWhenSerialNotTaken() {
-        // Serial is NOT taken, meaning the DataIntegrityViolationException is a FK constraint failure (#167).
+        // Non-unique SQLState (23503 FK violation) must propagate untouched instead of mapping to SERIAL_NUMBER_TAKEN
+        // (#167, #363).
         when(assetRepository.existsBySerialNumberIgnoreCase("DS1ZA-001")).thenReturn(false);
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(labRoomRepository.findById(2L)).thenReturn(Optional.of(labRoom));
         when(assetRepository.saveAndFlush(any(Asset.class)))
-                .thenThrow(new DataIntegrityViolationException("foreign key violation on category_id"));
+                .thenThrow(new DataIntegrityViolationException(
+                        "foreign key violation on category_id", new SQLException("fk violation", "23503")));
 
         assertThrows(
                 DataIntegrityViolationException.class,

@@ -19,6 +19,7 @@ import com.campus.common.audit.AuditService;
 import com.campus.common.error.ConflictException;
 import com.campus.common.error.NotFoundException;
 import com.campus.common.security.CurrentUser;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -86,9 +87,12 @@ class CategoryServiceTest {
 
     @Test
     void createRejectsDuplicateNameOnConcurrentRace() {
-        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false, true);
+        when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
+        org.hibernate.exception.ConstraintViolationException pgUnique =
+                new org.hibernate.exception.ConstraintViolationException(
+                        "duplicate key", new SQLException("duplicate key", "23505"), "uq_categories_name_lower");
         when(categoryRepository.saveAndFlush(any(Category.class)))
-                .thenThrow(new DataIntegrityViolationException("unique index constraint"));
+                .thenThrow(new DataIntegrityViolationException("unique index constraint", pgUnique));
 
         ConflictException ex = assertThrows(
                 ConflictException.class, () -> categoryService.create(new CategoryRequest("Oscilloscopes", "Desc")));
@@ -101,7 +105,8 @@ class CategoryServiceTest {
     void createRethrowsDataIntegrityViolationWhenNameNotTaken() {
         when(categoryRepository.existsByNameIgnoreCase("Oscilloscopes")).thenReturn(false);
         when(categoryRepository.saveAndFlush(any(Category.class)))
-                .thenThrow(new DataIntegrityViolationException("other constraint"));
+                .thenThrow(
+                        new DataIntegrityViolationException("other constraint", new SQLException("not null", "23502")));
 
         assertThrows(
                 DataIntegrityViolationException.class,
@@ -158,9 +163,14 @@ class CategoryServiceTest {
     void updateHandlesConcurrentRaceAndRethrowsOtherConstraintViolations() {
         Category existing = new Category("Old Name", "Old Desc");
         when(categoryRepository.findById(5L)).thenReturn(Optional.of(existing));
-        when(categoryRepository.existsByNameIgnoreCaseAndIdNot("Cameras", 5L)).thenReturn(false, true, false, false);
+        when(categoryRepository.existsByNameIgnoreCaseAndIdNot("Cameras", 5L)).thenReturn(false);
+        org.hibernate.exception.ConstraintViolationException pgUnique =
+                new org.hibernate.exception.ConstraintViolationException(
+                        "duplicate key", new SQLException("duplicate key", "23505"), "categories_name_key");
         when(categoryRepository.saveAndFlush(existing))
-                .thenThrow(new DataIntegrityViolationException("unique constraint"));
+                .thenThrow(new DataIntegrityViolationException("unique constraint", pgUnique))
+                .thenThrow(
+                        new DataIntegrityViolationException("other constraint", new SQLException("not null", "23502")));
 
         ConflictException raceEx = assertThrows(
                 ConflictException.class, () -> categoryService.update(5L, new CategoryRequest("Cameras", "Video")));

@@ -36,3 +36,4 @@
 | 23 | [23-live-toasts-frontend.md](23-live-toasts-frontend.md) | Live notifications PR 2: SSE fetch client (`live.ts`) and floating Mantine toast stack (`LiveToasts.tsx`) (Refs #290) |
 | 24 | [24-live-notifications-push.md](24-live-notifications-push.md) | Live notifications PR 3: push from `LoggingNotificationService`, `UserDisabledLiveStreamListener`, and end-to-end `LiveStreamIT` (Refs #290) |
 | 25 | [25-live-notifications-review-polish.md](25-live-notifications-review-polish.md) | Live notifications review polish: `LiveToasts` `aria-live` + pure updater, disable-vs-open race check, and real disable `LiveStreamIT` (Refs #290) |
+| 26 | [26-catalog-363-backend-fixes.md](26-catalog-363-backend-fixes.md) | Backend audit fixes (#363 PR 1): `CatalogPersistence` SQLState `23505` race fix + `CatalogConcurrencyIT`, `null` `excludeAssetId` parity, `findAssetsByIds`, true no-op status transitions, and `globalErrors` |

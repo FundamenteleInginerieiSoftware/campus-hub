@@ -15,7 +15,6 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 /**
  * Represents a temporary hold on a lab equipment time slot.
@@ -26,7 +25,6 @@ import lombok.Setter;
 @Entity
 @Table(name = "reservation_holds")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ReservationHold {
 
@@ -83,7 +81,9 @@ public class ReservationHold {
             throw new InvalidStateTransitionException(
                     "INVALID_HOLD_STATUS_TRANSITION", "Cannot confirm hold in status " + this.status);
         }
-        if (now.isAfter(this.expiresAt)) {
+        // Match existsActiveOverlap (expiresAt > now) and expire (!now.isBefore(expiresAt)):
+        // at the exact expiry second (now == expiresAt) the hold is already expired (#362 §4).
+        if (!now.isBefore(this.expiresAt)) {
             // Do not mutate status before throwing: the outer transaction rolls back anyway,
             // and the 1-minute sweep persists EXPIRED holds.
             throw new ConflictException("HOLD_EXPIRED", "The reservation hold has expired");
