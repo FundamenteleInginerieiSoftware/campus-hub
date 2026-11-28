@@ -40,8 +40,13 @@ for v in DB_URL DB_USERNAME DB_PASSWORD JWT_SECRET AWS_REGION PHOTO_BUCKET MAIL_
 done
 
 # Replace the running container. A few seconds of downtime; fine for a course project.
+# Bug fixed: `docker rm -f` sends SIGKILL immediately, cutting off in-flight requests and
+# defeating both Spring Boot's graceful shutdown and the 10-second shutdown wait on the
+# `campus-ses-` email pool (AsyncConfig.java, #366). `docker stop -t 15` sends SIGTERM first
+# and waits up to 15 s before `docker rm -f` cleans up the container.
 # --memory: the JVM sizes its heap from this limit (Dockerfile MaxRAMPercentage=75, ~1.1 GB),
 # leaving the rest of the 2 GB for the OS, Docker and the SSM agent.
+docker stop -t 15 campus-hub 2>/dev/null || true
 docker rm -f campus-hub 2>/dev/null || true
 docker run -d --name campus-hub --restart unless-stopped \
   --env-file /etc/campus.env -p 8080:8080 --memory 1536m \
