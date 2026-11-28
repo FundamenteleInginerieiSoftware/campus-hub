@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth  
 **Date:** 2026-11-28  
-**Branch / PR:** `docs/template-blueprint-report-runbook` (#TBD)  
+**Branch / PR:** `docs/template-blueprint-report-runbook` (#378)  
 **See also:** `31-security-chapter.md`, `32-component-deployment-diagrams.md`, `54-terraform-deploy.md`, `56-rds-auto-start-alert.md`, `59-deploy-workflow.md`, `68-audit-platform-fixes.md`
 
 ---
