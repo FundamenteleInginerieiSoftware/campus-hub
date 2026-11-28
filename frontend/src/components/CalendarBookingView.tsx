@@ -413,12 +413,13 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
       : holdError instanceof ApiError
         ? holdError.code
         : null
-  const showWaitlistPanel =
+  const hasSlotConflict =
     (!availability.checking &&
       !isSlotAvailable &&
       availability.data?.conflictReason === 'RESERVATION_CONFLICT') ||
     conflictErrorCode === 'RESERVATION_CONFLICT' ||
     conflictErrorCode === 'SLOT_HELD'
+  const showWaitlistPanel = hasSlotConflict
 
   async function handleJoinWaitlist() {
     setWaitlistLoading(true)
@@ -473,14 +474,6 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     substituteAssets.length,
   )
 
-  const hasSlotConflict =
-    (!availability.checking &&
-      Boolean(availability.data) &&
-      !availability.data!.available &&
-      availability.data!.conflictReason === 'RESERVATION_CONFLICT') ||
-    conflictErrorCode === 'RESERVATION_CONFLICT' ||
-    conflictErrorCode === 'SLOT_HELD'
-
   const nextSlotsKey = hasSlotConflict ? `${asset.id}:${startIso}:${effectiveDuration}:${availabilityTick}` : ''
 
   useEffect(() => {
@@ -506,7 +499,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   const nextFreeSlots = nextSlotsKey && nextSlotsState.key === nextSlotsKey ? nextSlotsState.items : []
 
   function handleSelectRecommendedSlot(slot: FreeSlotOption) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     const parsedStart = parseCampusLocalDateTime(slot.startTime)
     const parsedEnd = parseCampusLocalDateTime(slot.endTime)
     const hhmm = `${String(parsedStart.getHours()).padStart(2, '0')}:${String(parsedStart.getMinutes()).padStart(2, '0')}`
@@ -1008,7 +1001,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         color="blue"
                         justify="space-between"
                         fullWidth
-                        disabled={holdLoading || bookingLoading}
+                        disabled={holdLoading || bookingLoading || waitlistLoading}
                         onClick={() => handleSelectRecommendedSlot(slot)}
                       >
                         {formatSlotDate(slot.startTime)} • {formatSlotTime(slot.startTime, slot.endTime)}
