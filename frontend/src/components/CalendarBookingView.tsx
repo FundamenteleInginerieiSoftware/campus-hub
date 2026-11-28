@@ -473,13 +473,6 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     substituteAssets.length,
   )
 
-  const conflictErrorCode =
-    bookingError instanceof ApiError
-      ? bookingError.code
-      : holdError instanceof ApiError
-        ? holdError.code
-        : null
-
   const hasSlotConflict =
     (!availability.checking &&
       Boolean(availability.data) &&
