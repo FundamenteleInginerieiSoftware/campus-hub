@@ -44,6 +44,26 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
             @Param("end") LocalDateTime end,
             @Param("ignoreId") long ignoreId);
 
+    @Query("""
+        select count(r) > 0 from Reservation r
+        where r.assetId = :assetId
+          and r.userId = :userId
+          and (
+            (r.status in (
+                com.campus.reservation.api.ReservationStatus.CONFIRMED,
+                com.campus.reservation.api.ReservationStatus.CHECKED_OUT)
+              and r.startTime < :end and r.endTime > :start)
+            or
+            (r.status = com.campus.reservation.api.ReservationStatus.OVERDUE
+              and r.startTime < :end)
+          )
+        """)
+    boolean existsUserOverlapOnAsset(
+            @Param("assetId") Long assetId,
+            @Param("userId") Long userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
     long countByUserIdAndStatusIn(Long userId, Collection<ReservationStatus> statuses);
 
     // Bug fixed (#240): count distinct booking sessions instead of raw rows.

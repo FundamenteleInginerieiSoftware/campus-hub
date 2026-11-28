@@ -7,6 +7,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.annotation.Async;
@@ -45,6 +47,9 @@ class UserDisabledReservationListenerTest {
     private UserApi userApi;
 
     @Mock
+    private WaitlistService waitlistService;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     private UserDisabledReservationListener listener;
@@ -53,8 +58,9 @@ class UserDisabledReservationListenerTest {
     void setUp() {
         TransactionStatus txStatus = mock(TransactionStatus.class);
         lenient().when(transactionManager.getTransaction(any())).thenReturn(txStatus);
-        listener =
-                new UserDisabledReservationListener(reservationApi, reservationRepository, userApi, transactionManager);
+        lenient().when(userApi.findActiveRole(42L)).thenReturn(Optional.empty());
+        listener = new UserDisabledReservationListener(
+                reservationApi, reservationRepository, userApi, waitlistService, transactionManager);
     }
 
     @Test
@@ -88,37 +94,42 @@ class UserDisabledReservationListenerTest {
 
     @Test
     @DisplayName(
-            "UserDisabledReservationListener (#229, #362): locks quota, confirms user is still disabled, and cancels upcoming reservations")
-    void onUserDisabledCancelsUpcomingReservations() {
-        when(userApi.findActiveRole(42L)).thenReturn(Optional.empty());
+            "UserDisabledReservationListener (#229, #349): cancels upcoming reservations (draining lockUserQuota) before waitlist entries in separate transactions")
+    void onUserDisabledCancelsUpcomingReservationsThenWaitlist() {
         when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
                 .thenReturn(2);
+        when(waitlistService.cancelWaitingEntriesForUser(42L)).thenReturn(1);
 
         listener.onUserDisabled(new UserDisabledEvent(42L, 3L));
 
-        var order = inOrder(reservationRepository, userApi, reservationApi);
+        InOrder order = inOrder(reservationRepository, userApi, reservationApi, waitlistService);
         order.verify(reservationRepository).lockUserQuota(42L);
         order.verify(userApi).findActiveRole(42L);
         order.verify(reservationApi)
                 .cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON);
+        order.verify(waitlistService).cancelWaitingEntriesForUser(42L);
+        verify(transactionManager, times(2)).commit(any());
     }
 
     @Test
     @DisplayName(
-            "UserDisabledReservationListener (#362 §3): skips cancellation when user was re-enabled before listener ran")
-    void onUserDisabledSkipsWhenUserAlreadyReEnabled() {
+            "UserDisabledReservationListener (#349, #362 §3): skips both reservation and waitlist cancellation when user was already re-enabled")
+    void onUserDisabledSkipsCancellationWhenUserReEnabled() {
         when(userApi.findActiveRole(42L)).thenReturn(Optional.of(Role.STUDENT));
 
         listener.onUserDisabled(new UserDisabledEvent(42L, 3L));
 
-        var order = inOrder(reservationRepository, userApi);
+        InOrder order = inOrder(reservationRepository, userApi);
         order.verify(reservationRepository).lockUserQuota(42L);
         order.verify(userApi).findActiveRole(42L);
         verify(reservationApi, never()).cancelUpcomingReservationsForUser(any(), any());
+        verify(waitlistService, never()).cancelWaitingEntriesForUser(any());
+        verify(transactionManager, times(1)).commit(any());
     }
 
     @Test
-    @DisplayName("UserDisabledReservationListener (#229): catches and logs exceptions so disable never fails")
+    @DisplayName(
+            "UserDisabledReservationListener (#229, #349): catches reservation cancellation errors and still runs waitlist cleanup")
     void onUserDisabledSwallowsRuntimeException() {
         when(userApi.findActiveRole(42L)).thenReturn(Optional.empty());
         when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
@@ -128,7 +139,25 @@ class UserDisabledReservationListenerTest {
                 .as("listener must catch and log errors so disabling an account never fails; "
                         + "see UserDisabledReservationListener.onUserDisabled")
                 .doesNotThrowAnyException();
-        verify(transactionManager).rollback(any());
-        verify(transactionManager, never()).commit(any());
+        verify(waitlistService).cancelWaitingEntriesForUser(42L);
+        verify(transactionManager, times(1)).rollback(any());
+        verify(transactionManager, times(1)).commit(any());
+    }
+
+    @Test
+    @DisplayName(
+            "UserDisabledReservationListener (#349): waitlist cancellation failure does not roll back already-committed reservation cancellations")
+    void onUserDisabledWaitlistFailureDoesNotRollBackUpcomingReservations() {
+        when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
+                .thenReturn(1);
+        when(waitlistService.cancelWaitingEntriesForUser(42L)).thenThrow(new IllegalStateException("waitlist boom"));
+
+        assertThatCode(() -> listener.onUserDisabled(new UserDisabledEvent(42L, 3L)))
+                .as("waitlist cleanup failure must not roll back upcoming reservation cancellations; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .doesNotThrowAnyException();
+        verify(reservationApi).cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON);
+        verify(transactionManager, times(1)).commit(any());
+        verify(transactionManager, times(1)).rollback(any());
     }
 }

@@ -87,7 +87,7 @@ cd backend
 ./gradlew test --tests "com.campus.reservation.web.*"
 
 # Integration tests on real PostgreSQL:
-./gradlew test --tests "com.campus.reservation.repository.ReservationRepositoryTest"
+./gradlew test --tests "com.campus.reservation.repository.*" --tests "com.campus.reservation.service.*IT"
 ```
 
 ---
@@ -161,6 +161,16 @@ Students can generate a private subscription link to sync their bookings with ex
 - **`CalendarFeedService`:** Loads the user's reservations overlapping `[campusNow - 30d, campusNow + 30d]` via `ReservationRepository.findByUserIdOverlappingRange`, keeps visible statuses (`CONFIRMED`, `CHECKED_OUT`, `OVERDUE`, `RETURNED`) so cancelled/no-show bookings disappear from subscribed calendars, caches `CatalogApi.getAsset(assetId)` lookups once per asset (falling back to `Equipment #<id>` if missing), and prefixes `OVERDUE` summaries.
 - **`IcsWriter`:** Pure RFC 5545 serializer emitting `VCALENDAR`/`VEVENT` text with strict `CRLF` endings, text escaping, 75-byte UTF-8 safe line folding, and `Europe/Bucharest` → UTC timestamp conversion.
 - **`CalendarFeedController`:** Exposes `GET /api/v1/calendar/{token}.ics` returning `text/calendar;charset=UTF-8` with `Cache-Control: no-store` (or `404 CALENDAR_FEED_NOT_FOUND`).
+
+---
+
+## 13. FIFO Equipment Waitlist (`#59`)
+
+Students can queue for occupied slots (`waitlist_entries` table, partial unique index `uq_waitlist_active_slot` on `(asset_id, user_id, start_time, end_time) WHERE status = 'WAITING'`, `CHECK (end_time > start_time)`):
+- **`POST /api/v1/reservations/waitlist` (`WaitlistController` / `WaitlistService.joinWaitlist`):** Validates slot rules, acquires `lockUserQuota(userId)` FIRST + `requireActiveUserAfterLock` then `catalogApi.lockForBooking(assetId)` SECOND (global `Quota -> Reservation -> Asset -> Transfer -> Waitlist -> Hold` DAG, #370), hides `RETIRED` assets from students with `404 ASSET_NOT_FOUND` (`Asset <id> was not found`, matching `AssetService`), checks bookability and `OWN_RESERVATION_CONFLICT` under both locks, verifies `WAITLIST_ALREADY_JOINED` before the 5-entry `WAITLIST_LIMIT_REACHED` cap, rejects uncontested slots with `409 SLOT_ALREADY_FREE`, and persists a `WAITING` entry.
+- **`GET /api/v1/reservations/waitlist/me`:** Returns a `PageResponse<WaitlistEntryResponse>` ordered newest first.
+- **`DELETE /api/v1/reservations/waitlist/{id}`:** Owner (or admin) cancellation (`404 WAITLIST_ENTRY_NOT_FOUND` for foreign entries, `409 INVALID_WAITLIST_STATUS_TRANSITION` if not `WAITING`).
+- **FIFO Promotion & Disable Cleanup:** `WaitlistService.processPromotionsForAsset` peeks the next promotable FIFO candidate in a lock-free read-only `REQUIRES_NEW` transaction and then executes at most one promotion/skip/disable step per write `REQUIRES_NEW` transaction in strict global DAG order (`Quota -> Asset -> Waitlist -> Hold`), re-peeking if an earlier FIFO entry frees between peek and lock (never skipping newly freed earlier slots via a visited set). It expires past-start or disabled-user entries (`EXPIRED`), marks 2-booking-limit students `SKIPPED_QUOTA_FULL`, locks & confirms overlapping owned holds (`FOR UPDATE ORDER BY id ASC`), promotes the first eligible waiter to `CONFIRMED` with system audit (`actorId = null`), and notifies after commit. `UserDisabledReservationListener` runs two separate `REQUIRES_NEW` transactions: Step 1 locks `Quota -> Reservation` to cancel upcoming reservations (skipping if re-enabled); Step 2 locks `Quota -> Waitlist` inside `cancelWaitingEntriesForUser` so a waitlist error cannot roll back Step 1 and neither step can deadlock with bookings or promotions. `WaitlistEntryRepository.expireOldEntries` uses an ordered `FOR UPDATE SKIP LOCKED` subquery so sweeps cannot deadlock with FIFO row locks.
 
 
 

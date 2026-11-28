@@ -25,6 +25,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Slf4j
 final class ReservationServiceSupport {
 
+    static final int MAX_ACTIVE_RESERVATIONS = 2;
+
     private ReservationServiceSupport() {}
 
     // Bug fixed (#123): whole seconds, like the contract format (2026-11-03T14:00:00), so POST and GET
@@ -132,8 +134,8 @@ final class ReservationServiceSupport {
             return;
         }
         // Lock overlapping own holds FOR UPDATE ORDER BY id ASC (last in Quota -> Reservation -> Asset -> Transfer ->
-        // Hold)
-        // so concurrent releaseHold waits instead of tripping @Version and partial-overlap holds are confirmed (#362).
+        // Waitlist -> Hold) so concurrent releaseHold waits instead of tripping @Version and partial-overlap holds
+        // are confirmed cleanly (#349, #362).
         reservationHoldRepository
                 .findActiveOverlappingForUserAndAssetsForUpdate(userId, assetIds, start, end, now)
                 .stream()
