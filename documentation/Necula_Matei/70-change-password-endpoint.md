@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-28
-**Branch / PR:** `feat/user-change-password` (#TBD)
+**Branch / PR:** `feat/user-change-password` (#379)
 **See also:** `13-auth-register-login.md` (register/login + JWT), `17-users-me.md` (`GET /api/v1/users/me`), `47-login-hardening.md` (72-byte BCrypt rule), `docs/api-contract.md` §3
 
 ---
