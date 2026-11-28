@@ -45,11 +45,19 @@ export default function RegisterPage() {
     try {
       // The backend always creates a STUDENT; admins are only added by an admin.
       await register(email, password, fullName)
+    } catch (err) {
+      setError(err)
+      setSubmitting(false)
+      return
+    }
+    try {
       // Log straight in with the same credentials, so the new student lands on the start page.
       await login(email, password)
       navigate('/', { replace: true })
-    } catch (err) {
-      setError(err)
+    } catch {
+      // #364: the account exists now, so showing the error on this form would make the student register
+      // again and get EMAIL_TAKEN. Send them to the login page instead, where they can simply try again.
+      navigate('/login', { replace: true, state: { registeredEmail: email } })
     } finally {
       setSubmitting(false)
     }

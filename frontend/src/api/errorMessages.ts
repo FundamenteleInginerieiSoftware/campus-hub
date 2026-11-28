@@ -59,6 +59,21 @@ const MESSAGES: Record<string, string> = {
   CATEGORY_IN_USE: 'Cannot delete this category because equipment is currently assigned to it.',
   LAB_ROOM_IN_USE: 'Cannot delete this lab room because equipment is currently located in it.',
 
+  // Codes other modules throw that had no text yet (#364 audit)
+  USER_DISABLED: 'Your account is disabled. Ask an admin to enable it again.',
+  BUNDLE_NOT_FOUND: 'This group of bookings was not found.',
+  CONFLICTING_PARAMETERS: 'Pick either one piece of equipment or a category, not both.',
+  CALENDAR_FEED_NOT_FOUND: 'This calendar link is no longer valid. Create a new one from My reservations.',
+  PROJECT_NOT_FOUND: 'This project was not found.',
+  PICKUP_CODE_INVALID: 'The pickup code is wrong or has expired.',
+  LIVE_STREAM_LIMIT: 'Too many tabs are open for this account. Close some and reload the page.',
+  HOLD_COOLDOWN_ACTIVE: 'You held this slot a moment ago. Wait a little before holding it again, or book it directly.',
+  TRANSFER_LIMIT_REACHED: 'This booking has reached the limit of transfer offers for the last 24 hours.',
+  BUNDLE_EXTEND_NOT_ALLOWED: 'Items booked together cannot be extended one by one.',
+  BUNDLE_TRANSFER_NOT_ALLOWED: 'Items booked together cannot be transferred one by one.',
+  INVALID_BUNDLE_SIZE: 'A group booking has too few or too many items.',
+  CONCURRENT_IDEMPOTENT_REQUEST: 'This booking is already being processed. Wait a moment and check My reservations.',
+
   // Generic codes from the error handler (api-contract §5) that pages can hit (#171)
   INVALID_PARAMETER: 'Some values in the request are not valid. Please check them and try again.',
   MALFORMED_REQUEST: 'The request could not be read. Please check the form and try again.',

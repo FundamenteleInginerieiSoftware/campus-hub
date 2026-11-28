@@ -32,9 +32,15 @@ export default function AdminUsersPage() {
 
   const [pageData, setPageData] = useState<PageResponse<AdminUser> | null>(null)
   const [pageNumber, setPageNumber] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [reloadToken, setReloadToken] = useState(0)
+  // Bug fixed (#364): loading was a flag set on every keystroke and cleared when a search came back. Typing a
+  // letter and deleting it within 300 ms left the debounced text unchanged, so no search ran and the table
+  // spun forever. Now loading is worked out: the table waits while the text is still settling, or while the
+  // answer on screen is for other filters than the current ones.
+  const requestKey = `${debouncedQ}|${role}|${status}|${pageNumber}|${reloadToken}`
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const loading = q !== debouncedQ || loadedKey !== requestKey
   const [notice, setNotice] = useState<string | null>(null)
 
   const [pending, setPending] = useState<Pending | null>(null)
@@ -58,18 +64,17 @@ export default function AdminUsersPage() {
         if (!ignore) setError(err)
       })
       .finally(() => {
-        if (!ignore) setLoading(false)
+        if (!ignore) setLoadedKey(requestKey)
       })
     return () => {
       ignore = true
     }
-  }, [debouncedQ, role, status, pageNumber, reloadToken])
+  }, [debouncedQ, role, status, pageNumber, reloadToken, requestKey])
 
   // A new filter starts again from the first page.
   function changeFilter(apply: () => void) {
     apply()
     setPageNumber(0)
-    setLoading(true)
     setNotice(null)
   }
 
@@ -80,7 +85,6 @@ export default function AdminUsersPage() {
     try {
       const updated = await action()
       setNotice(done(updated))
-      setLoading(true)
       setReloadToken((t) => t + 1)
     } catch (err) {
       setError(err)
@@ -255,7 +259,6 @@ export default function AdminUsersPage() {
         rowKey={(u) => u.id}
         onPageChange={(next) => {
           if (next === pageNumber) return
-          setLoading(true)
           setPageNumber(next)
         }}
         loading={loading}
