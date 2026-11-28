@@ -187,7 +187,9 @@ class ReassignmentBookingProcessor {
                                     attempt + 1,
                                     MAX_TRANSIENT_CONCURRENCY_RETRIES + 1,
                                     e);
-                            backoffBeforeRetry(attempt);
+                            if (!backoffBeforeRetry(attempt)) {
+                                throw e;
+                            }
                             continue;
                         }
                         throw e;
@@ -224,11 +226,13 @@ class ReassignmentBookingProcessor {
         return requiresNewTx.execute(status -> action.get());
     }
 
-    private static void backoffBeforeRetry(int attempt) {
+    private static boolean backoffBeforeRetry(int attempt) {
         try {
             Thread.sleep(RETRY_BACKOFF_BASE_MS * (attempt + 1L));
+            return true;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 

@@ -719,4 +719,28 @@ class ReservationHoldServiceTest {
         verify(reservationHoldRepository, never()).findByIdForUpdate(anyLong());
         verify(reservationRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName(
+            "confirmHold: rejects admin demoted in DB (stale ADMIN JWT) trying to confirm another student's hold (#370 follow-up)")
+    void confirmHold_rejectsDemotedAdminConfirmingOtherUsersHold() {
+        Long adminId = 99L;
+        ReservationHold studentHold = new ReservationHold(ASSET_ID, USER_ID, START, END, NOW.plusMinutes(1), NOW);
+        ReflectionTestUtils.setField(studentHold, "id", 88L);
+
+        when(currentUser.id()).thenReturn(adminId);
+        when(currentUser.isAdmin()).thenReturn(true);
+        stubHoldTarget(88L, ASSET_ID, USER_ID);
+        when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.STUDENT));
+        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationHoldRepository.findByIdForUpdate(88L)).thenReturn(Optional.of(studentHold));
+
+        assertThatThrownBy(() -> holdService.confirmHold(88L))
+                .as("admin demoted in DB must not confirm another student's hold using stale JWT ADMIN claim; "
+                        + "see HoldService.confirmHold")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "HOLD_NOT_FOUND");
+
+        verify(reservationRepository, never()).save(any());
+    }
 }

@@ -56,11 +56,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -557,7 +555,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 14, 0),
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
-        when(reservationRepository.findByUserIdOrderByStartTimeAsc(eq(USER_ID), any()))
+        when(reservationRepository.findByUserIdOrderByStartTimeAscIdAsc(eq(USER_ID), any()))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
 
         PageResponse<ReservationResponse> result =
@@ -565,7 +563,7 @@ class ReservationServiceTest {
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).userId()).isEqualTo(USER_ID);
-        verify(reservationRepository).findByUserIdOrderByStartTimeAsc(eq(USER_ID), any());
+        verify(reservationRepository).findByUserIdOrderByStartTimeAscIdAsc(eq(USER_ID), any());
     }
 
     @Test
@@ -578,7 +576,7 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 14, 0),
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
-        when(reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(
+        when(reservationRepository.findByUserIdAndStatusOrderByStartTimeAscIdAsc(
                         eq(USER_ID), eq(ReservationStatus.CONFIRMED), any()))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
 
@@ -587,7 +585,7 @@ class ReservationServiceTest {
 
         assertThat(result.content()).hasSize(1);
         verify(reservationRepository)
-                .findByUserIdAndStatusOrderByStartTimeAsc(eq(USER_ID), eq(ReservationStatus.CONFIRMED), any());
+                .findByUserIdAndStatusOrderByStartTimeAscIdAsc(eq(USER_ID), eq(ReservationStatus.CONFIRMED), any());
     }
 
     @Test
@@ -601,13 +599,13 @@ class ReservationServiceTest {
                 LocalDateTime.of(2026, 11, 2, 16, 0),
                 LocalDateTime.of(2026, 11, 2, 10, 0));
         List<ReservationStatus> statuses = List.of(ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_OUT);
-        when(reservationRepository.findByUserIdAndStatusInOrderByStartTimeAsc(eq(USER_ID), eq(statuses), any()))
+        when(reservationRepository.findByUserIdAndStatusInOrderByStartTimeAscIdAsc(eq(USER_ID), eq(statuses), any()))
                 .thenReturn(new PageImpl<>(List.of(r), PageRequest.of(0, 10), 1));
 
         PageResponse<ReservationResponse> result = reservationService.getMyReservations(statuses, 0, 10);
 
         assertThat(result.content()).hasSize(1);
-        verify(reservationRepository).findByUserIdAndStatusInOrderByStartTimeAsc(eq(USER_ID), eq(statuses), any());
+        verify(reservationRepository).findByUserIdAndStatusInOrderByStartTimeAscIdAsc(eq(USER_ID), eq(statuses), any());
     }
 
     @Test
@@ -1834,7 +1832,7 @@ class ReservationServiceTest {
                 .hasMessageContaining("Page offset exceeds maximum supported value");
 
         // Valid boundaries: size = 1, size = 100, page * size == Integer.MAX_VALUE
-        when(reservationRepository.findByUserIdOrderByStartTimeAsc(anyLong(), any(Pageable.class)))
+        when(reservationRepository.findByUserIdOrderByStartTimeAscIdAsc(anyLong(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(reservationRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -1876,7 +1874,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_success() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(20L, 10L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(20L, 10L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
@@ -1914,7 +1912,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_rejectsIfOneAssetOverlaps() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
@@ -1936,7 +1934,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_rejectsIfLessThanTwoAssets() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L), start, end);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -1949,7 +1947,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateMultiAssetReservationRequest req =
-                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
+                new CreateMultiAssetReservationRequest(List.of(10L, 20L, 30L, 40L, 50L, 60L), start, end);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -2025,7 +2023,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateMultiAssetReservationRequest req =
-                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L), start, end);
+                new CreateMultiAssetReservationRequest(List.of(10L, 20L, 30L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2043,7 +2041,7 @@ class ReservationServiceTest {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
         CreateMultiAssetReservationRequest req =
-                new CreateMultiAssetReservationRequest(Set.of(10L, 20L, 30L, 40L, 50L), start, end);
+                new CreateMultiAssetReservationRequest(List.of(10L, 20L, 30L, 40L, 50L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2472,7 +2470,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_boundaryQuota_activeCountOneAllows() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2494,7 +2492,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_boundaryQuota_activeCountTwoRejects() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(anyLong())).thenReturn(true);
@@ -2511,7 +2509,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_validatesSlotRules() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 20, 30); // 20:30 outside opening hours
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 21, 30);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -2874,11 +2872,11 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("Extend: rejects extension if new end time exceeds the 14-day booking horizon")
-    void extendReservation_rejectsIfBeyondHorizon() {
-        // Clock is 2026-11-02T10:00 (Bucharest).
-        // 14-day horizon boundary is 2026-11-16T10:00.
-        // Start is at 09:30 on day 14, but newEnd at 10:30 exceeds the 14-day mark.
+    @DisplayName(
+            "Extend: allows extension when start is within 14-day horizon even if newEnd crosses 14-day mark (#362 §4)")
+    void extendReservation_allowsWhenStartWithin14DayHorizon() {
+        // Clock is 2026-11-02T10:00 (Bucharest). 14-day horizon boundary is 2026-11-16T10:00.
+        // Start is 09:30 <= 10:00, so extending to 10:30 matches validateSlotRules consistently.
         LocalDateTime start = LocalDateTime.of(2026, 11, 16, 9, 30);
         LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 16, 10, 0);
         LocalDateTime newEnd = LocalDateTime.of(2026, 11, 16, 10, 30);
@@ -2887,12 +2885,37 @@ class ReservationServiceTest {
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.existsOverlap(ASSET_ID, oldEnd, newEnd, 100L))
+                .thenReturn(false);
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReservationResponse response = reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd));
+
+        assertThat(response.endTime())
+                .as("booking horizon: day-14 extension with start <= now+14d must succeed; "
+                        + "see ReservationSlotValidator.validateExtensionRules")
+                .isEqualTo(newEnd);
+    }
+
+    @Test
+    @DisplayName("Extend: rejects extension if start time exceeds the 14-day booking horizon (#362 §4)")
+    void extendReservation_rejectsIfBeyondHorizon() {
+        // Clock is 2026-11-02T10:00 (Bucharest); start 2026-11-16T10:30 is beyond now + 14 days.
+        LocalDateTime start = LocalDateTime.of(2026, 11, 16, 10, 30);
+        LocalDateTime oldEnd = LocalDateTime.of(2026, 11, 16, 11, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 11, 16, 11, 30);
+        Reservation r = new Reservation(USER_ID, ASSET_ID, start, oldEnd, LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(r, "id", 100L);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reservationService.extendReservation(100L, new ExtendReservationRequest(newEnd)))
-                .as(
-                        "booking horizon: extension cannot exceed the 14-day booking horizon; see ReservationService.extendReservation")
+                .as("booking horizon: start beyond 14 days must fail with BOOKING_TOO_FAR_AHEAD; "
+                        + "see ReservationSlotValidator.validateExtensionRules")
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("cannot be made more than 14 days in advance");
+                .hasFieldOrPropertyWithValue("code", "BOOKING_TOO_FAR_AHEAD");
     }
 
     @Test
@@ -3269,7 +3292,7 @@ class ReservationServiceTest {
     void createMultiAssetReservation_rejectsIfAssetHeldByAnotherStudent() {
         LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
         LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         when(currentUser.id()).thenReturn(USER_ID);
         when(catalogApi.isBookable(10L)).thenReturn(true);
@@ -3298,7 +3321,7 @@ class ReservationServiceTest {
         LocalDateTime start =
                 now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime end = start.plusHours(2);
-        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(Set.of(10L, 20L), start, end);
+        CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(List.of(10L, 20L), start, end);
 
         ReservationHold matchingHold =
                 new ReservationHold(10L, USER_ID, start, end, now.plusMinutes(1), now.minusMinutes(1));
@@ -3353,7 +3376,7 @@ class ReservationServiceTest {
         LocalDateTime start =
                 now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime end = start.plusHours(2);
-        Set<Long> idsWithNull = new HashSet<>();
+        List<Long> idsWithNull = new ArrayList<>();
         idsWithNull.add(10L);
         idsWithNull.add(null);
         CreateMultiAssetReservationRequest req = new CreateMultiAssetReservationRequest(idsWithNull, start, end);
@@ -3365,6 +3388,27 @@ class ReservationServiceTest {
                         "bundle validation: null asset ID in bundle must throw INVALID_BUNDLE_SIZE; see ReservationService.createMultiAssetReservation")
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("Multi-asset booking must include between 2 and 5 assets");
+    }
+
+    @Test
+    @DisplayName(
+            "Bundle: rejects duplicate asset IDs via HTTP DTO List<Long> with DUPLICATE_ASSET_IN_BUNDLE (#362, #371)")
+    void createMultiAssetReservation_rejectsDuplicateAssetIds() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime start =
+                now.plusDays(1).withHour(14).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+        CreateMultiAssetReservationRequest req =
+                new CreateMultiAssetReservationRequest(List.of(10L, 10L, 20L), start, end);
+
+        when(currentUser.id()).thenReturn(USER_ID);
+
+        assertThatThrownBy(() -> reservationService.createMultiAssetReservation(req))
+                .as(
+                        "bundle validation: duplicate asset IDs in HTTP request list must throw DUPLICATE_ASSET_IN_BUNDLE instead of silent deduplication; "
+                                + "see ReservationService.validateBundleAssetIds")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "DUPLICATE_ASSET_IN_BUNDLE");
     }
 
     @Test
@@ -4208,5 +4252,180 @@ class ReservationServiceTest {
         order.verify(userApi).findActiveRole(USER_ID);
         verify(reservationRepository, never()).findByIdForUpdate(anyLong());
         verify(catalogApi, never()).lockForBooking(anyLong());
+    }
+
+    @Test
+    @DisplayName("bookBundle: rejects duplicate asset IDs with DUPLICATE_ASSET_IN_BUNDLE (#362 §3)")
+    void bookBundle_rejectsDuplicateAssetIds() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+
+        assertThatThrownBy(() -> reservationService.bookBundle(USER_ID, List.of(10L, 10L), start, end))
+                .as("duplicate asset IDs in bookBundle must throw DUPLICATE_ASSET_IN_BUNDLE; "
+                        + "see ReservationService.validateBundleAssetIds")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "DUPLICATE_ASSET_IN_BUNDLE");
+
+        verify(reservationRepository, never()).lockUserQuota(anyLong());
+        verify(catalogApi, never()).lockForBooking(anyLong());
+    }
+
+    @Test
+    @DisplayName("checkOutReservation: rejects 30-minute booking at exact endTime (10:00-10:30 at 10:30:00) (#362 §3)")
+    void checkOutReservation_rejectsThirtyMinuteSlotAtExactEndTime() {
+        // Clock is 2026-11-02T10:00:00 (Bucharest); booking is 09:30-10:00 so start+30m == endTime == now.
+        Reservation thirtyMinBooking = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 1, 10, 0));
+        ReflectionTestUtils.setField(thirtyMinBooking, "id", 109L);
+        when(reservationRepository.findByIdForUpdate(109L)).thenReturn(Optional.of(thirtyMinBooking));
+
+        assertThatThrownBy(() -> reservationService.checkOutReservation(109L))
+                .as("check-out at exact endTime of a 30-minute slot must be rejected with CHECKOUT_WINDOW_CLOSED; "
+                        + "see ReservationService.checkOutReservation")
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("code", "CHECKOUT_WINDOW_CLOSED");
+
+        verify(catalogApi, never()).lockForBooking(anyLong());
+    }
+
+    @Test
+    @DisplayName(
+            "checkOutReservation: allows 30-minute booking strictly before endTime (09:30-10:00 at 09:59:59) (#362 §3)")
+    void checkOutReservation_allowsThirtyMinuteSlotOneSecondBeforeEndTime() {
+        // 07:59:59Z == 09:59:59 Europe/Bucharest (1 second before 10:00:00 endTime)
+        Clock oneSecondBeforeEnd = Clock.fixed(Instant.parse("2026-11-02T07:59:59Z"), ZoneId.of("Europe/Bucharest"));
+        ReservationService serviceAtBoundary = new ReservationService(
+                reservationRepository,
+                catalogApi,
+                currentUser,
+                auditService,
+                notificationService,
+                oneSecondBeforeEnd,
+                transferService,
+                userApi,
+                reservationHoldRepository);
+
+        Reservation thirtyMinBooking = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 9, 30),
+                LocalDateTime.of(2026, 11, 2, 10, 0),
+                LocalDateTime.of(2026, 11, 1, 10, 0));
+        ReflectionTestUtils.setField(thirtyMinBooking, "id", 110L);
+        when(reservationRepository.findByIdForUpdate(110L)).thenReturn(Optional.of(thirtyMinBooking));
+        when(catalogApi.isBookable(ASSET_ID)).thenReturn(true);
+        when(reservationRepository.findFirstByAssetIdAndStatusInOrderByStartTimeDesc(eq(ASSET_ID), any()))
+                .thenReturn(Optional.empty());
+        when(currentUser.id()).thenReturn(1L);
+
+        ReservationResponse response = serviceAtBoundary.checkOutReservation(110L);
+
+        assertThat(response.status())
+                .as("check-out 1 second before endTime of a 30-minute slot must succeed; "
+                        + "see ReservationService.checkOutReservation")
+                .isEqualTo(ReservationStatus.CHECKED_OUT);
+    }
+
+    @Test
+    @DisplayName("checkAvailability: hides RETIRED asset from student with 404 ASSET_NOT_FOUND (#362 §4)")
+    void checkAvailability_hidesRetiredAssetFromStudentWith404() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary retired = new AssetSummary(ASSET_ID, "Old Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(retired);
+        when(currentUser.isAdmin()).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.checkAvailability(ASSET_ID, null, start, end))
+                .as(
+                        "non-admin checking availability on a RETIRED asset must get 404 ASSET_NOT_FOUND matching AssetService; "
+                                + "see ReservationService.checkAvailability")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "ASSET_NOT_FOUND")
+                .hasMessage("Asset " + ASSET_ID + " was not found");
+    }
+
+    @Test
+    @DisplayName("checkAvailability: admin still sees RETIRED asset as ASSET_NOT_BOOKABLE (#362 §4)")
+    void checkAvailability_adminSeesRetiredAssetAsNotBookable() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 14, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 11, 2, 16, 0);
+        AssetSummary retired = new AssetSummary(ASSET_ID, "Old Scope", "DS1054Z", 1L, 1L, AssetStatus.RETIRED);
+
+        when(catalogApi.getAsset(ASSET_ID)).thenReturn(retired);
+        when(currentUser.isAdmin()).thenReturn(true);
+
+        AvailabilityResponse response = reservationService.checkAvailability(ASSET_ID, null, start, end);
+
+        assertThat(response.available())
+                .as(
+                        "admin checking a RETIRED asset must receive available=false; see ReservationService.checkAvailability")
+                .isFalse();
+        assertThat(response.conflictReason())
+                .as("admin checking a RETIRED asset must receive conflictReason=ASSET_NOT_BOOKABLE; "
+                        + "see ReservationService.checkAvailability")
+                .isEqualTo("ASSET_NOT_BOOKABLE");
+    }
+
+    @Test
+    @DisplayName("cancelBundle: throws 409 CANCELLATION_NOT_ALLOWED when zero items are CONFIRMED (#362 §4)")
+    void cancelBundle_throwsConflictWhenZeroItemsConfirmed() {
+        UUID bundleId = UUID.randomUUID();
+        Reservation alreadyCancelled = new Reservation(
+                USER_ID,
+                10L,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(alreadyCancelled, "id", 101L);
+        alreadyCancelled.assignBundle(bundleId);
+        alreadyCancelled.cancel(LocalDateTime.of(2026, 11, 2, 10, 5), "Already cancelled");
+
+        when(currentUser.id()).thenReturn(USER_ID);
+        when(currentUser.isAdmin()).thenReturn(false);
+        when(reservationRepository.findByBundleIdAndUserIdForUpdate(bundleId, USER_ID))
+                .thenReturn(List.of(alreadyCancelled));
+
+        assertThatThrownBy(() -> reservationService.cancelBundle(bundleId, "Second attempt"))
+                .as("cancelBundle with zero CONFIRMED items must throw 409 CANCELLATION_NOT_ALLOWED instead of 200 OK; "
+                        + "see ReservationService.cancelBundle")
+                .isInstanceOf(ConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "CANCELLATION_NOT_ALLOWED");
+
+        verify(notificationService, never()).notifyUser(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName(
+            "extendReservation: rejects admin demoted in DB (stale ADMIN JWT) extending another student's booking (#370 follow-up)")
+    void extendReservation_rejectsDemotedAdminExtendingOtherUsersBooking() {
+        Long adminId = 99L;
+        Reservation studentBooking = new Reservation(
+                USER_ID,
+                ASSET_ID,
+                LocalDateTime.of(2026, 11, 2, 14, 0),
+                LocalDateTime.of(2026, 11, 2, 16, 0),
+                LocalDateTime.of(2026, 11, 2, 10, 0));
+        ReflectionTestUtils.setField(studentBooking, "id", 202L);
+
+        when(currentUser.id()).thenReturn(adminId);
+        // Lenient because extendReservation must ignore the stale JWT claim and rely solely on DB findActiveRole.
+        lenient().when(currentUser.isAdmin()).thenReturn(true);
+        when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationRepository.findByIdForUpdate(202L)).thenReturn(Optional.of(studentBooking));
+
+        assertThatThrownBy(() -> reservationService.extendReservation(
+                        202L, new ExtendReservationRequest(LocalDateTime.of(2026, 11, 2, 17, 0))))
+                .as("admin demoted in DB must not extend another student's booking using stale JWT ADMIN claim; "
+                        + "see ReservationService.extendReservation")
+                .isInstanceOf(NotFoundException.class)
+                .hasFieldOrPropertyWithValue("code", "RESERVATION_NOT_FOUND");
+
+        verify(catalogApi, never()).lockForBooking(anyLong());
+        verify(reservationRepository, never()).save(any());
     }
 }

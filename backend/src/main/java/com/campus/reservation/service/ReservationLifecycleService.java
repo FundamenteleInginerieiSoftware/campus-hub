@@ -146,7 +146,7 @@ public class ReservationLifecycleService {
         // transition block above. If an asset was still missing 1 hour later, upcoming bookings starting
         // then were never moved because findCheckedOutPastEnd only returns CHECKED_OUT rows.
         // Fix: run the preventive check for EVERY asset currently unreturned (status OVERDUE) on every sweep.
-        // Since moveToAsset returns false when nothing changes, re-evaluating active OVERDUE assets is safe.
+        // Since moveToAsset returns Optional.empty() when nothing changes, re-evaluating active OVERDUE assets is safe.
         List<Reservation> currentOverdue = reservationRepository.findByStatus(ReservationStatus.OVERDUE);
         LocalDateTime cascadeHorizon = now.plusMinutes(PREVENTIVE_CASCADE_HORIZON_MINUTES);
         Set<Long> overdueAssetIds = new HashSet<>();
