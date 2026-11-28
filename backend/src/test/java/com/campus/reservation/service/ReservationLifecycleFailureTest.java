@@ -131,7 +131,7 @@ class ReservationLifecycleFailureTest {
         when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
                 .thenThrow(new SubstituteNoLongerFreeException("taken"));
         when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(21L), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(106L));
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
 
@@ -155,7 +155,7 @@ class ReservationLifecycleFailureTest {
     void aFailingEmailNeverBreaksTheSweep() {
         threatenedBookingWithTwoSubstitutes();
         when(reservationService.moveToAsset(eq(6L), eq(ASSET_ID), eq(20L), any()))
-                .thenReturn(true);
+                .thenReturn(Optional.of(106L));
         doThrow(new RuntimeException("SES down")).when(notificationService).notifyUser(anyLong(), any(), any());
 
         LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();

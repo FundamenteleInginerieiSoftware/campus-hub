@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.campus.common.error.NotFoundException;
+import com.campus.config.AsyncConfig;
 import com.campus.notification.web.LiveEvent;
 import com.campus.user.api.Role;
 import com.campus.user.api.UserApi;
@@ -91,13 +92,37 @@ class SesNotificationServiceTest {
         verifyNoInteractions(ses);
     }
 
-    // #171: the e-mail goes out on a background thread, so a slow SES never holds up Calin's engine.
+    // #171 + pool isolation: e-mails run on the dedicated mailTaskExecutor (campus-ses-),
+    // so slow SES calls never starve LiveStreams.send or Calin's reassignment listeners.
     @Test
-    void notifyUserRunsInTheBackground() throws Exception {
-        assertThat(SesNotificationService.class
-                        .getMethod("notifyUser", Long.class, String.class, String.class)
-                        .isAnnotationPresent(Async.class))
-                .isTrue();
+    void notifyUserRunsOnDedicatedMailExecutor() throws Exception {
+        Async async = SesNotificationService.class
+                .getMethod("notifyUser", Long.class, String.class, String.class)
+                .getAnnotation(Async.class);
+        assertThat(async)
+                .as("SesNotificationService.notifyUser must run @Async; see SesNotificationService")
+                .isNotNull();
+        assertThat(async.value())
+                .as(
+                        "SES must use the dedicated mailTaskExecutor pool so slow mail cannot starve campus-async-; see AsyncConfig")
+                .isEqualTo(AsyncConfig.MAIL_EXECUTOR);
+    }
+
+    // Whole-second contract: LiveEvent.at must match LoggingNotificationService and the API contract.
+    @Test
+    void livePushTimestampIsTruncatedToWholeSeconds() {
+        Clock nanoClock = Clock.fixed(Instant.parse("2026-11-20T10:00:05.987654321Z"), ZoneId.of("Europe/Bucharest"));
+        SesNotificationService nanoService =
+                new SesNotificationService(ses, userApi, liveStreams, nanoClock, "noreply@campus.test");
+
+        nanoService.notifyUser(1L, "Subject", "Body");
+
+        ArgumentCaptor<LiveEvent> sent = ArgumentCaptor.forClass(LiveEvent.class);
+        verify(liveStreams).send(eq(1L), sent.capture());
+        assertThat(sent.getValue().at())
+                .as(
+                        "prod live event timestamp must be truncated to whole seconds; see SesNotificationService.notifyUser")
+                .isEqualTo(LocalDateTime.of(2026, 11, 20, 12, 0, 5));
     }
 
     // #290: an open tab gets the notification at once, before the (possibly slow) SES call.

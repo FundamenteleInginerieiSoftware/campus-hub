@@ -146,7 +146,7 @@ public class ReservationLifecycleService {
         // transition block above. If an asset was still missing 1 hour later, upcoming bookings starting
         // then were never moved because findCheckedOutPastEnd only returns CHECKED_OUT rows.
         // Fix: run the preventive check for EVERY asset currently unreturned (status OVERDUE) on every sweep.
-        // Since moveToAsset returns false when nothing changes, re-evaluating active OVERDUE assets is safe.
+        // Since moveToAsset returns Optional.empty() when nothing changes, re-evaluating active OVERDUE assets is safe.
         List<Reservation> currentOverdue = reservationRepository.findByStatus(ReservationStatus.OVERDUE);
         LocalDateTime cascadeHorizon = now.plusMinutes(PREVENTIVE_CASCADE_HORIZON_MINUTES);
         Set<Long> overdueAssetIds = new HashSet<>();
@@ -205,20 +205,23 @@ public class ReservationLifecycleService {
                 continue;
             }
             try {
-                boolean moved = reservationService.moveToAsset(
+                // Notify the owner read under FOR UPDATE inside moveToAsset rather than the stale unlocked
+                // snapshot (handles concurrent P2P transfer acceptance before cascade, #362 §2.1).
+                Optional<Long> movedOwnerId = reservationService.moveToAsset(
                         threatened.getId(),
                         overdueAssetId,
                         sub.id(),
                         "Preventive cascade reassignment: previous holder on asset #" + overdueAssetId + " is OVERDUE");
-                if (moved) {
+                if (movedOwnerId.isPresent()) {
                     notifySafely(
-                            threatened.getUserId(),
+                            movedOwnerId.get(),
                             "Proactive Reservation Reassignment",
                             "Because the previous holder has not yet returned asset #" + overdueAssetId
                                     + ", your upcoming reservation #" + threatened.getId()
                                     + " has been proactively moved to substitute asset " + sub.name() + ".");
+                    return true;
                 }
-                return moved;
+                return false;
             } catch (SubstituteNoLongerFreeException e) {
                 log.warn(
                         "Substitute {} became busy during preventive cascade for reservation #{}",

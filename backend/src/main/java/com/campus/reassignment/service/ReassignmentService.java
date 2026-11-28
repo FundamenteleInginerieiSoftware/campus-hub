@@ -107,15 +107,17 @@ public class ReassignmentService {
 
                 if (resultOpt.isPresent()) {
                     ReassignmentBookingProcessor.ReassignmentExecutionResult result = resultOpt.get();
+                    // Notify the owner read under FOR UPDATE inside moveToAsset/forceCancel rather than the
+                    // stale unlocked snapshot (handles concurrent P2P transfer acceptance, #362 §2.1).
+                    Long ownerUserId = result.ownerUserId();
                     if (result.outcome() == ReassignmentOutcome.REASSIGNED) {
                         sendNotificationSafely(
-                                booking.userId(),
+                                ownerUserId,
                                 "Reservation Reassigned",
                                 reassignedMessage.apply(booking, result.substituteAssetName()));
                     } else {
                         // The only other outcome is FORCE_CANCELLED.
-                        sendNotificationSafely(
-                                booking.userId(), "Reservation Cancelled", cancelledMessage.apply(booking));
+                        sendNotificationSafely(ownerUserId, "Reservation Cancelled", cancelledMessage.apply(booking));
                     }
                 }
             } catch (RuntimeException e) {
@@ -156,7 +158,7 @@ public class ReassignmentService {
             throw new InvalidParameterException("Page offset exceeds maximum supported value");
         }
         Pageable pageable = PageRequest.of(page, size);
-        Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDesc(pageable);
+        Page<ReassignmentLog> logPage = reassignmentLogRepository.findAllByOrderByCreatedAtDescIdDesc(pageable);
         return PageResponse.from(logPage, ReassignmentLogResponse::from);
     }
 }

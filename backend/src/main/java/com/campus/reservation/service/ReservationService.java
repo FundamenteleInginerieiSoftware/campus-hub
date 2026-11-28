@@ -16,7 +16,6 @@ import com.campus.reservation.api.ReservationApi;
 import com.campus.reservation.api.ReservationStatus;
 import com.campus.reservation.api.ReservationSummary;
 import com.campus.reservation.api.SubstituteNoLongerFreeException;
-import com.campus.reservation.domain.HoldStatus;
 import com.campus.reservation.domain.Reservation;
 import com.campus.reservation.repository.ReservationHoldRepository;
 import com.campus.reservation.repository.ReservationRepository;
@@ -79,10 +78,8 @@ public class ReservationService implements ReservationApi {
     private final ReservationHoldRepository reservationHoldRepository;
 
     /**
-     * Creates a new reservation adhering to strict locking order and business rule validations.
-     *
-     * <p>Concurrency note: Acquires a pessimistic row lock on the asset in catalog FIRST before
-     * checking overlaps, ensuring simultaneous requests cannot double-book the same asset slot.
+     * Creates a new reservation adhering to the global lock DAG ({@code Quota -> Asset -> Hold})
+     * and business rule validations (#362 §1.1).
      */
     @Transactional
     public ReservationResponse createReservation(CreateReservationRequest req) {
@@ -90,6 +87,13 @@ public class ReservationService implements ReservationApi {
         LocalDateTime now = now();
 
         ReservationSlotValidator.validateSlotRules(req.startTime(), req.endTime(), now);
+
+        // Bug fixed (#362 §1.1, §3): acquire lockUserQuota FIRST (before Asset) for ALL callers, including
+        // admins, so every path follows the strict global DAG Quota -> Reservation -> Asset -> Transfer -> Hold
+        // and disabled admins cannot race past the active-account check.
+        reservationRepository.lockUserQuota(userId);
+        Role activeRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+
         ReservationSlotValidator.lockAndValidateSlotFree(
                 catalogApi,
                 reservationRepository,
@@ -101,20 +105,17 @@ public class ReservationService implements ReservationApi {
                 null,
                 userId);
 
-        // Active limit check for students (admins bypass this rule).
-        // Lock userId with a transaction-scoped advisory lock before counting so two simultaneous requests
-        // for different assets cannot both pass the < 2 check. Lock order is always asset row -> user lock.
-        if (!currentUser.isAdmin()) {
-            reservationRepository.lockUserQuota(userId);
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
-            if (reservationRepository.countBookingSessionsByUserIdAndStatusIn(userId, ReservationStatus.ACTIVE_STATUSES)
-                    >= 2) {
-                throw new ConflictException(
-                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
-            }
+        // Active limit check for students (admins bypass the >= 2 count cap only).
+        if (activeRole != Role.ADMIN
+                && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                                userId, ReservationStatus.ACTIVE_STATUSES)
+                        >= 2) {
+            throw new ConflictException(
+                    "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
         }
 
-        confirmOwnedHoldsForSlots(userId, List.of(req.assetId()), req.startTime(), req.endTime(), now);
+        ReservationServiceSupport.confirmOwnedHoldsForSlots(
+                reservationHoldRepository, userId, List.of(req.assetId()), req.startTime(), req.endTime(), now);
 
         Reservation reservation = new Reservation(userId, req.assetId(), req.startTime(), req.endTime(), now);
         Reservation saved = reservationRepository.save(reservation);
@@ -168,40 +169,45 @@ public class ReservationService implements ReservationApi {
                     "INVALID_BUNDLE_SIZE",
                     "Multi-asset booking must include between " + minSize + " and " + maxSize + " assets");
         }
+        // Bug fixed (#362 §3): reject duplicate asset IDs (possible via bookBundle(List<Long>)) before
+        // locking/persisting so a kit never inserts two overlapping reservations on the same asset.
+        if (Set.copyOf(assetIds).size() != assetIds.size()) {
+            throw new BusinessRuleException(
+                    "DUPLICATE_ASSET_IN_BUNDLE", "Multi-asset booking cannot contain duplicate asset IDs");
+        }
     }
 
     private MultiAssetReservationResponse executeBundleBooking(
             Long userId, Collection<Long> assetIds, LocalDateTime start, LocalDateTime end, LocalDateTime now) {
         List<Long> sortedAssetIds = assetIds.stream().sorted().toList();
 
-        // 1. Pessimistic lock on all assets in deterministic ID order (deadlock-free)
+        // 1. Acquire per-user quota lock FIRST (Quota -> Asset -> Hold, #362 §1.1) and verify the account is
+        // still active for ALL users including admins (#362 §3).
+        reservationRepository.lockUserQuota(userId);
+        Role role = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+
+        // 2. Pessimistic lock on all assets in deterministic ID order (deadlock-free)
         for (Long assetId : sortedAssetIds) {
             catalogApi.lockForBooking(assetId);
         }
 
-        // 2. Bookable check on all assets
+        // 3. Bookable check on all assets
         for (Long assetId : sortedAssetIds) {
             ReservationSlotValidator.ensureBookable(
                     catalogApi, assetId, "Asset " + assetId + " is not available for booking");
         }
 
-        // 3. User quota check for students (entire multi-asset bundle counts as 1 lab session slot).
-        // Bug fixed (#229, #310): acquire lockUserQuota BEFORE calling userApi.findActiveRole so
-        // Hibernate never returns a stale L1-cached User loaded earlier in the same transaction.
-        if (!ReservationServiceSupport.isCurrentUserAdmin(currentUser, userId)) {
-            reservationRepository.lockUserQuota(userId);
-            Role role = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
-            if (role != Role.ADMIN) {
-                long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
-                        userId, ReservationStatus.ACTIVE_STATUSES);
-                if (activeCount + 1 > 2) {
-                    throw new ConflictException(
-                            "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
-                }
+        // 4. User quota check for students (entire multi-asset bundle counts as 1 lab session slot).
+        if (role != Role.ADMIN) {
+            long activeCount = reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                    userId, ReservationStatus.ACTIVE_STATUSES);
+            if (activeCount + 1 > 2) {
+                throw new ConflictException(
+                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
             }
         }
 
-        // 4. Overlap check on all assets (all-or-nothing atomicity against reservations and holds)
+        // 5. Overlap check on all assets (all-or-nothing atomicity against reservations and holds)
         for (Long assetId : sortedAssetIds) {
             ReservationSlotValidator.ensureNoSlotConflict(
                     reservationRepository,
@@ -216,7 +222,7 @@ public class ReservationService implements ReservationApi {
                     "Asset " + assetId + " is temporarily held by another student");
         }
 
-        // 5. Persist all reservations sharing a bundle UUID
+        // 6. Persist all reservations sharing a bundle UUID
         UUID bundleId = UUID.randomUUID();
         List<Reservation> savedList = new ArrayList<>();
         for (Long assetId : sortedAssetIds) {
@@ -225,8 +231,9 @@ public class ReservationService implements ReservationApi {
             savedList.add(reservationRepository.save(r));
         }
 
-        // Confirm any active holds the student already placed on these slots, matching single-asset booking.
-        confirmOwnedHoldsForSlots(userId, sortedAssetIds, start, end, now);
+        // Confirm any overlapping active holds the student already placed on these slots (locked FOR UPDATE).
+        ReservationServiceSupport.confirmOwnedHoldsForSlots(
+                reservationHoldRepository, userId, sortedAssetIds, start, end, now);
 
         auditService.record(
                 userId,
@@ -244,18 +251,6 @@ public class ReservationService implements ReservationApi {
         List<ReservationResponse> responses =
                 savedList.stream().map(ReservationResponse::from).toList();
         return new MultiAssetReservationResponse(bundleId, start, end, responses.size(), responses);
-    }
-
-    private void confirmOwnedHoldsForSlots(
-            Long userId, Collection<Long> assetIds, LocalDateTime start, LocalDateTime end, LocalDateTime now) {
-        reservationHoldRepository.findByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now).stream()
-                .filter(h -> assetIds.contains(h.getAssetId())
-                        && h.getStartTime().equals(start)
-                        && h.getEndTime().equals(end))
-                .forEach(h -> {
-                    h.confirm(now);
-                    reservationHoldRepository.save(h);
-                });
     }
 
     /**
@@ -288,6 +283,7 @@ public class ReservationService implements ReservationApi {
 
         List<ReservationResponse> results = new ArrayList<>();
         Set<Long> ownerIds = new HashSet<>();
+        int cancelledCount = 0;
         for (Reservation r : items) {
             if (r.getStatus() == ReservationStatus.CONFIRMED) {
                 if (currentUser.isAdmin()) {
@@ -306,8 +302,16 @@ public class ReservationService implements ReservationApi {
                                 + " was cancelled because the bundle was cancelled.");
                 auditService.record(userId, "CANCEL_RESERVATION", "Reservation", r.getId(), "Bundle " + bundleId);
                 ownerIds.add(r.getUserId());
+                cancelledCount++;
             }
             results.add(ReservationResponse.from(r));
+        }
+
+        // Bug fixed (#362 §4): do not return 200 OK when 0 items were CONFIRMED (e.g. already cancelled or checked
+        // out).
+        if (cancelledCount == 0) {
+            throw new ConflictException(
+                    "CANCELLATION_NOT_ALLOWED", "No CONFIRMED reservations remain in this bundle to cancel");
         }
 
         // Notify each owner of the cancelled items (fixes notifying admin on admin cancel, #228 point 12)
@@ -360,13 +364,13 @@ public class ReservationService implements ReservationApi {
 
         Page<Reservation> reservationPage;
         if (statuses == null || statuses.isEmpty()) {
-            reservationPage = reservationRepository.findByUserIdOrderByStartTimeAsc(userId, pageable);
+            reservationPage = reservationRepository.findByUserIdOrderByStartTimeAscIdAsc(userId, pageable);
         } else if (statuses.size() == 1) {
-            reservationPage = reservationRepository.findByUserIdAndStatusOrderByStartTimeAsc(
+            reservationPage = reservationRepository.findByUserIdAndStatusOrderByStartTimeAscIdAsc(
                     userId, statuses.getFirst(), pageable);
         } else {
             reservationPage =
-                    reservationRepository.findByUserIdAndStatusInOrderByStartTimeAsc(userId, statuses, pageable);
+                    reservationRepository.findByUserIdAndStatusInOrderByStartTimeAscIdAsc(userId, statuses, pageable);
         }
 
         return PageResponse.from(reservationPage, ReservationResponse::from);
@@ -443,13 +447,18 @@ public class ReservationService implements ReservationApi {
     /**
      * Extends the duration of an active reservation (CONFIRMED or CHECKED_OUT).
      *
-     * <p>Locks the reservation row first, then the asset row, the same order as check-out, return and
-     * markOverdue, so these can't deadlock each other.
+     * <p>Follows the global lock DAG ({@code Quota -> Reservation -> Asset -> Transfer}, #362 §1.1 & §3):
+     * locks caller quota and verifies the account is active before locking the reservation and asset rows.
      */
     @Transactional
     public ReservationResponse extendReservation(Long id, ExtendReservationRequest req) {
-        Reservation reservation =
-                ReservationServiceSupport.loadOwnedOrAdminForUpdate(reservationRepository, currentUser, id);
+        Long callerId = currentUser.id();
+        reservationRepository.lockUserQuota(callerId);
+        // Use fresh DB role (not stale JWT claim) so an admin demoted mid-flight cannot extend another user's booking.
+        Role callerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, callerId);
+
+        Reservation reservation = ReservationServiceSupport.loadOwnedOrAdminForUpdate(
+                reservationRepository, callerId, callerRole == Role.ADMIN, id);
         LocalDateTime now = now();
 
         if (reservation.getStatus() != ReservationStatus.CONFIRMED
@@ -577,6 +586,11 @@ public class ReservationService implements ReservationApi {
         if (assetId != null) {
             // Reuse asset.status() from getAsset(assetId) to avoid a second SELECT via catalogApi.isBookable().
             AssetSummary asset = catalogApi.getAsset(assetId);
+            // Match Liviu's GET /assets/{id} (#278) and NextFreeSlotsService (#353): hide RETIRED assets
+            // from students with 404 ASSET_NOT_FOUND so non-admins cannot probe retired asset IDs (#362).
+            if (asset.status() == AssetStatus.RETIRED && !currentUser.isAdmin()) {
+                throw new NotFoundException("ASSET_NOT_FOUND", "Asset " + assetId + " was not found");
+            }
             String conflictReason = null;
             if (asset.status() != AssetStatus.AVAILABLE) {
                 conflictReason = "ASSET_NOT_BOOKABLE";
@@ -690,15 +704,14 @@ public class ReservationService implements ReservationApi {
     // SubstituteNoLongerFreeException and moves on to the next substitute.
     @Override
     @Transactional(noRollbackFor = SubstituteNoLongerFreeException.class)
-    public boolean moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason) {
-        // Lock the reservation row before the substitute asset (reservation -> asset order, #270) so two
-        // concurrent handlers (e.g. HIGH incident + retire, #319) serialize and the second one sees the
-        // updated assetId instead of logging a duplicate move.
+    public Optional<Long> moveToAsset(Long reservationId, Long expectedSourceAssetId, Long newAssetId, String reason) {
+        // Lock the reservation row before the substitute asset (Reservation -> Asset -> Transfer, #270, #362)
+        // so concurrent incident/retire handlers serialize and return the current locked owner userId (#362 §2.1).
         Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
         if (r == null
                 || r.getStatus() != ReservationStatus.CONFIRMED
                 || (expectedSourceAssetId != null && !expectedSourceAssetId.equals(r.getAssetId()))) {
-            return false;
+            return Optional.empty();
         }
 
         catalogApi.lockForBooking(newAssetId);
@@ -718,19 +731,19 @@ public class ReservationService implements ReservationApi {
                         + reservationId
                         + " was cancelled due to equipment reassignment.");
         auditService.record(null, "REASSIGN_RESERVATION", "Reservation", r.getId(), reason);
-        return true;
+        return Optional.of(r.getUserId());
     }
 
     @Override
     @Transactional
-    public boolean forceCancel(Long reservationId, Long expectedSourceAssetId, String reason) {
+    public Optional<Long> forceCancel(Long reservationId, Long expectedSourceAssetId, String reason) {
         // Lock the reservation row so a stale concurrent handler cannot force-cancel a booking that
-        // another handler just moved to a healthy substitute (#319).
+        // another handler just moved to a healthy substitute (#319), and return the locked owner userId (#362 §2.1).
         Reservation r = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
         if (r == null
                 || r.getStatus() != ReservationStatus.CONFIRMED
                 || (expectedSourceAssetId != null && !expectedSourceAssetId.equals(r.getAssetId()))) {
-            return false;
+            return Optional.empty();
         }
 
         LocalDateTime now = now();
@@ -744,7 +757,7 @@ public class ReservationService implements ReservationApi {
                         + reservationId
                         + " was cancelled due to equipment force cancellation.");
         auditService.record(null, "FORCE_CANCEL_RESERVATION", "Reservation", r.getId(), reason);
-        return true;
+        return Optional.of(r.getUserId());
     }
 
     @Override
@@ -889,10 +902,12 @@ public class ReservationService implements ReservationApi {
         LocalDateTime windowStart = reservation.getStartTime().minusMinutes(15);
         LocalDateTime windowEnd = reservation.getStartTime().plusMinutes(30);
 
-        if (now.isBefore(windowStart) || now.isAfter(windowEnd)) {
+        // Bug fixed (#362 §3): for a 30-minute slot (e.g. 10:00-10:30), startTime + 30m equals endTime;
+        // checking out at exact endTime must be rejected so we never create a CHECKED_OUT row that already ended.
+        if (now.isBefore(windowStart) || now.isAfter(windowEnd) || !now.isBefore(reservation.getEndTime())) {
             throw new BusinessRuleException(
                     "CHECKOUT_WINDOW_CLOSED",
-                    "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start");
+                    "Check-out is only allowed between 15 minutes before slot start and 30 minutes after slot start (and before slot end)");
         }
 
         // Lock the asset row SECOND to serialize simultaneous desk check-outs on the same physical equipment

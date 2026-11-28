@@ -35,10 +35,15 @@ public interface AssetRepository extends JpaRepository<Asset, Long>, JpaSpecific
     @Query("SELECT a FROM Asset a WHERE a.id = :id")
     Optional<Asset> findByIdForUpdate(@Param("id") Long id);
 
+    List<Asset> findByModelAndStatus(String model, AssetStatus status);
+
     List<Asset> findByModelAndStatusAndIdNot(String model, AssetStatus status, Long excludeId);
 
     // Explicit JPQL on a.category.id filters directly on the assets.category_id foreign key column
     // without an unnecessary LEFT OUTER JOIN on the categories table (#160).
+    @Query("SELECT a FROM Asset a WHERE a.category.id = :categoryId AND a.status = :status")
+    List<Asset> findByCategoryIdAndStatus(@Param("categoryId") Long categoryId, @Param("status") AssetStatus status);
+
     @Query("SELECT a FROM Asset a WHERE a.category.id = :categoryId AND a.status = :status AND a.id <> :excludeId")
     List<Asset> findByCategoryIdAndStatusAndIdNot(
             @Param("categoryId") Long categoryId,

@@ -261,4 +261,27 @@ class UserDisabledReservationListenerIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(0));
     }
+
+    @Test
+    @DisplayName("Disable -> re-enable race (#362 §3): listener skips cancellation when user is already active in DB")
+    void reEnabledUserBeforeListenerRunsKeepsUpcomingBookingConfirmed() {
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+        Reservation upcoming = reservationRepository.save(new Reservation(
+                studentId,
+                asset1Id,
+                now.plusDays(1).withHour(14),
+                now.plusDays(1).withHour(16),
+                now));
+
+        // Publish UserDisabledEvent while users.enabled = true (simulating an admin re-enabling the
+        // account before the AFTER_COMMIT listener acquires lockUserQuota and re-checks findActiveRole).
+        transactionTemplate.executeWithoutResult(
+                status -> eventPublisher.publishEvent(new UserDisabledEvent(studentId, adminId)));
+
+        Reservation reloaded = reservationRepository.findById(upcoming.getId()).orElseThrow();
+        assertThat(reloaded.getStatus())
+                .as("listener must skip cancellation when user is active under lockUserQuota; "
+                        + "see UserDisabledReservationListener.onUserDisabled")
+                .isEqualTo(ReservationStatus.CONFIRMED);
+    }
 }

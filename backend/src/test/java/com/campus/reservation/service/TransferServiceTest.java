@@ -311,7 +311,7 @@ class TransferServiceTest {
     }
 
     @Test
-    @DisplayName("Transfer: admin accepting transfer bypasses active quota check")
+    @DisplayName("Transfer: admin accepting transfer locks quota for active check and bypasses student count (#362)")
     void acceptTransfer_adminBypassesQuota() {
         Long adminId = 999L;
         Reservation r = new Reservation(USER_ID, ASSET_ID, slotStart, slotEnd, now);
@@ -321,9 +321,9 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(adminId);
-        when(currentUser.isAdmin()).thenReturn(true);
         when(userApi.findActiveRole(adminId)).thenReturn(Optional.of(Role.ADMIN));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
+        when(reservationTransferRepository.findReservationIdById(500L)).thenReturn(Optional.of(100L));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
 
@@ -331,7 +331,11 @@ class TransferServiceTest {
 
         assertThat(response.status()).isEqualTo(TransferStatus.ACCEPTED);
         assertThat(r.getUserId()).isEqualTo(adminId);
-        verify(reservationRepository, never()).lockUserQuota(adminId);
+        var order = inOrder(reservationRepository, reservationTransferRepository);
+        order.verify(reservationRepository).lockUserQuota(adminId);
+        order.verify(reservationRepository).findByIdForUpdate(100L);
+        order.verify(reservationTransferRepository).findByIdForUpdate(500L);
+        verify(reservationRepository, never()).countBookingSessionsByUserIdAndStatusIn(any(), any());
     }
 
     @Test
@@ -345,6 +349,7 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(r));
@@ -362,6 +367,7 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.empty());
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
 
@@ -371,36 +377,24 @@ class TransferServiceTest {
     }
 
     @Test
-    @DisplayName("Transfer: rejects accept if recipient is disabled while waiting on quota lock (#229)")
+    @DisplayName("Transfer: rejects accept if recipient is disabled while waiting on quota lock (#229, #362)")
     void acceptTransfer_rejectsRecipientDisabledAfterLockingQuota() {
         Long recipientId = 99L;
-        ReservationTransfer transfer =
-                new ReservationTransfer(100L, USER_ID, recipientId, LocalDateTime.of(2026, 11, 2, 11, 0));
-        ReflectionTestUtils.setField(transfer, "id", 500L);
-        Reservation reservation = new Reservation(
-                USER_ID,
-                10L,
-                LocalDateTime.of(2026, 11, 2, 14, 0),
-                LocalDateTime.of(2026, 11, 2, 16, 0),
-                LocalDateTime.of(2026, 11, 2, 9, 0));
-        ReflectionTestUtils.setField(reservation, "id", 100L);
 
         when(currentUser.id()).thenReturn(recipientId);
-        when(currentUser.isAdmin()).thenReturn(false);
-        when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(userApi.findActiveRole(recipientId)).thenReturn(Optional.empty());
-        when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
-        when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(reservation));
 
         assertThatThrownBy(() -> transferService.acceptTransfer(500L))
-                .as("recipient disabled while waiting on lockUserQuota must be rejected with 403 USER_DISABLED; "
-                        + "see TransferService.acceptTransfer")
+                .as(
+                        "recipient disabled while waiting on lockUserQuota must be rejected with 403 USER_DISABLED before row locks; "
+                                + "see TransferService.acceptTransfer")
                 .isInstanceOf(ForbiddenException.class)
                 .hasFieldOrPropertyWithValue("code", "USER_DISABLED");
 
         var order = inOrder(reservationRepository, userApi);
         order.verify(reservationRepository).lockUserQuota(recipientId);
         order.verify(userApi).findActiveRole(recipientId);
+        verify(reservationTransferRepository, never()).findByIdForUpdate(any());
         verify(reservationRepository, never()).save(any());
     }
 
@@ -619,6 +613,7 @@ class TransferServiceTest {
     @DisplayName("Transfer: acceptTransfer throws 404 TRANSFER_NOT_FOUND when transfer does not exist")
     void acceptTransfer_transferNotFound_throws404() {
         when(currentUser.id()).thenReturn(99L);
+        when(userApi.findActiveRole(99L)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transferService.acceptTransfer(500L))
@@ -636,6 +631,7 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(transfer, "id", 500L);
 
         when(currentUser.id()).thenReturn(recipientId);
+        when(userApi.findActiveRole(recipientId)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationTransferRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(transfer));
         when(userApi.findActiveRole(USER_ID)).thenReturn(Optional.of(Role.STUDENT));
         when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.empty());

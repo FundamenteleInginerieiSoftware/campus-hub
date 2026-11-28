@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.annotations.servers.Server;
+import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.IntegerSchema;
@@ -45,7 +46,8 @@ public class OpenApiConfig {
      * every endpoint. springdoc calls this once, after it has read all the controllers:
      *
      * <ul>
-     *   <li>/api/v1/auth/** loses the lock icon (no token needed);
+     *   <li>public paths ({@code /api/v1/auth/**} and {@code GET /api/v1/calendar/*}) lose the lock
+     *       icon (no token needed, matching {@link SecurityConfig});
      *   <li>every other endpoint gets a 401, and /api/v1/admin/** also a 403 (a hand-written one is
      *       kept);
      *   <li>every 4xx/5xx shows the ProblemDetail body. springdoc would otherwise copy the success
@@ -58,9 +60,9 @@ public class OpenApiConfig {
         return openApi -> {
             openApi.getComponents().addSchemas("ProblemDetail", problemDetailSchema());
             openApi.getPaths()
-                    .forEach((path, item) -> item.readOperations().forEach(operation -> {
+                    .forEach((path, item) -> item.readOperationsMap().forEach((httpMethod, operation) -> {
                         ApiResponses responses = operation.getResponses();
-                        if (path.startsWith("/api/v1/auth/")) {
+                        if (isPublicEndpoint(path, httpMethod)) {
                             operation.setSecurity(List.of()); // an empty list overrides the global bearerAuth
                         } else {
                             responses.putIfAbsent(
@@ -85,6 +87,13 @@ public class OpenApiConfig {
                         operation.setResponses(sorted);
                     }));
         };
+    }
+
+    // Mirrors SecurityConfig: /api/v1/auth/** and GET /api/v1/calendar/* are permitAll and ignore
+    // Bearer tokens, so Swagger must not show a lock icon or 401 response for them.
+    private static boolean isPublicEndpoint(String path, PathItem.HttpMethod httpMethod) {
+        return path.startsWith("/api/v1/auth/")
+                || (httpMethod == PathItem.HttpMethod.GET && path.startsWith("/api/v1/calendar/"));
     }
 
     private static Content problemContent() {

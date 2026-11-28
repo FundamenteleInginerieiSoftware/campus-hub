@@ -27,13 +27,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out main repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: repo
           persist-credentials: false
 
       - name: Check out wiki repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.repository }}.wiki
           token: ${{ secrets.GITHUB_TOKEN }}

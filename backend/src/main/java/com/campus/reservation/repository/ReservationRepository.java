@@ -73,12 +73,12 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long>,
 
     long countByUserIdAndOriginalAssetIdIsNotNull(Long userId);
 
-    Page<Reservation> findByUserIdOrderByStartTimeAsc(Long userId, Pageable pageable);
+    Page<Reservation> findByUserIdOrderByStartTimeAscIdAsc(Long userId, Pageable pageable);
 
-    Page<Reservation> findByUserIdAndStatusOrderByStartTimeAsc(
+    Page<Reservation> findByUserIdAndStatusOrderByStartTimeAscIdAsc(
             Long userId, ReservationStatus status, Pageable pageable);
 
-    Page<Reservation> findByUserIdAndStatusInOrderByStartTimeAsc(
+    Page<Reservation> findByUserIdAndStatusInOrderByStartTimeAscIdAsc(
             Long userId, Collection<ReservationStatus> statuses, Pageable pageable);
 
     Optional<Reservation> findFirstByAssetIdAndStatusInOrderByStartTimeDesc(

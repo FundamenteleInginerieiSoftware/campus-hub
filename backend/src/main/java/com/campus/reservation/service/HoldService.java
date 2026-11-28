@@ -45,8 +45,9 @@ public class HoldService {
     /**
      * Temporarily holds a lab asset time slot for 1 minute.
      *
-     * <p>Concurrency note: Acquires a pessimistic row lock on the asset in catalog FIRST before
-     * checking overlaps, ensuring simultaneous requests cannot double-hold the same asset slot.
+     * <p>Concurrency note (#362 §1.1, §3): Acquires {@code lockUserQuota(userId)} FIRST (for all callers,
+     * including admins) and verifies the account is active before locking the asset row, strictly matching
+     * the global DAG ({@code Quota -> Reservation -> Asset -> Transfer -> Hold}).
      */
     @Transactional
     public ReservationHoldResponse createHold(CreateHoldRequest req) {
@@ -54,6 +55,11 @@ public class HoldService {
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
 
         ReservationSlotValidator.validateSlotRules(req.startTime(), req.endTime(), now);
+
+        // Lock Quota FIRST before Asset and re-check active status for ALL users including admins (#362).
+        reservationRepository.lockUserQuota(userId);
+        Role activeRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
+
         ReservationSlotValidator.lockAndValidateSlotFree(
                 catalogApi,
                 reservationRepository,
@@ -65,7 +71,7 @@ public class HoldService {
                 null,
                 userId);
 
-        if (!currentUser.isAdmin()) {
+        if (activeRole != Role.ADMIN) {
             // Anti-hoarding hold cooldown guard (#240 point 4):
             // Prevent repeated hold -> release -> hold loops across overlapping windows by requiring a 2-minute
             // cooldown.
@@ -76,9 +82,6 @@ public class HoldService {
                         "HOLD_COOLDOWN_ACTIVE",
                         "You recently held an overlapping slot on this equipment. Please wait before holding it again or book it directly.");
             }
-
-            reservationRepository.lockUserQuota(userId);
-            ReservationServiceSupport.requireActiveUserAfterLock(userApi, userId);
 
             long activeHolds =
                     reservationHoldRepository.countByUserIdAndStatusAndExpiresAtAfter(userId, HoldStatus.ACTIVE, now);
@@ -113,26 +116,62 @@ public class HoldService {
 
     /**
      * Confirms an active reservation hold and converts it into a confirmed reservation.
+     *
+     * <p>Bug fixed (#362 §1.2): previously locked {@code Hold -> Asset -> Quota}, forming a 2-way AB-BA
+     * deadlock with {@code createReservation}/{@code executeBundleBooking} ({@code Asset -> Hold}).
+     * Fix: reads {@code (assetId, userId)} via a lightweight scalar query first, then acquires locks in
+     * strict global DAG order {@code Quota -> Asset -> Hold}.
      */
     @Transactional
     public ReservationResponse confirmHold(Long holdId) {
-        Long userId = currentUser.id();
+        Long callerId = currentUser.id();
         LocalDateTime now = ReservationServiceSupport.truncatedNow(clock);
 
+        ReservationHoldRepository.HoldLockTarget target = reservationHoldRepository
+                .findLockTargetById(holdId)
+                .orElseThrow(() -> new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found"));
+
+        Long studentId = target.getUserId();
+        if (!studentId.equals(callerId) && !currentUser.isAdmin()) {
+            throw new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found");
+        }
+
+        // 1. Lock Quota FIRST in ascending userId order when an admin confirms another user's hold,
+        // and verify active status + fresh DB role for all callers including admins (#362 §1.1, §1.2, §3).
+        Role callerRole;
+        Role holdOwnerRole;
+        if (callerId.equals(studentId)) {
+            reservationRepository.lockUserQuota(studentId);
+            holdOwnerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
+            callerRole = holdOwnerRole;
+        } else {
+            Long firstUserId = Math.min(callerId, studentId);
+            Long secondUserId = Math.max(callerId, studentId);
+            reservationRepository.lockUserQuota(firstUserId);
+            reservationRepository.lockUserQuota(secondUserId);
+            callerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, callerId);
+            holdOwnerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
+        }
+
+        // 2. Lock Asset SECOND before locking the Hold row (Quota -> Asset -> Hold).
+        catalogApi.lockForBooking(target.getAssetId());
+
+        // 3. Lock Hold LAST.
         ReservationHold hold = reservationHoldRepository
                 .findByIdForUpdate(holdId)
                 .orElseThrow(() -> new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found"));
 
-        if (!hold.getUserId().equals(userId) && !currentUser.isAdmin()) {
+        // Check fresh DB role (not stale JWT claim) so an admin demoted mid-flight cannot confirm another user's hold.
+        if (!hold.getUserId().equals(callerId) && callerRole != Role.ADMIN) {
             throw new NotFoundException("HOLD_NOT_FOUND", "Reservation hold not found");
         }
 
         hold.confirm(now);
 
-        // Re-validate slot rules at confirmation time to prevent past-start confirmations (#228 point 9)
+        // Re-validate slot rules at confirmation time to prevent past-start confirmations (#228 point 9).
         ReservationSlotValidator.validateSlotRules(hold.getStartTime(), hold.getEndTime(), now);
-        ReservationSlotValidator.lockAndValidateSlotFree(
-                catalogApi,
+        ReservationSlotValidator.ensureBookable(catalogApi, hold.getAssetId(), "Asset is not available for booking");
+        ReservationSlotValidator.ensureNoSlotConflict(
                 reservationRepository,
                 reservationHoldRepository,
                 hold.getAssetId(),
@@ -140,23 +179,17 @@ public class HoldService {
                 hold.getEndTime(),
                 now,
                 hold.getId(),
-                hold.getUserId());
+                hold.getUserId(),
+                "Requested slot overlaps with an existing reservation",
+                "This time slot is temporarily held by another student");
 
-        Long studentId = hold.getUserId();
         // Enforce quota whenever the hold owner is a student, including when confirmed by an admin (#228 point 9).
-        // Bug fixed (#229, #310): acquire lockUserQuota BEFORE calling userApi.findActiveRole so
-        // Hibernate never serves a stale L1-cached User loaded earlier in the same transaction.
-        boolean adminConfirmingOwnHold = studentId.equals(userId) && currentUser.isAdmin();
-        if (!adminConfirmingOwnHold) {
-            reservationRepository.lockUserQuota(studentId);
-            Role holdOwnerRole = ReservationServiceSupport.requireActiveUserAfterLock(userApi, studentId);
-            if (holdOwnerRole == Role.STUDENT
-                    && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
-                                    studentId, ReservationStatus.ACTIVE_STATUSES)
-                            >= 2) {
-                throw new ConflictException(
-                        "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
-            }
+        if (holdOwnerRole == Role.STUDENT
+                && reservationRepository.countBookingSessionsByUserIdAndStatusIn(
+                                studentId, ReservationStatus.ACTIVE_STATUSES)
+                        >= 2) {
+            throw new ConflictException(
+                    "RESERVATION_LIMIT_REACHED", "Student cannot have more than 2 active reservations");
         }
 
         reservationHoldRepository.save(hold);
@@ -166,7 +199,7 @@ public class HoldService {
         Reservation savedReservation = reservationRepository.save(reservation);
 
         auditService.record(
-                userId,
+                callerId,
                 "CREATE_RESERVATION",
                 "Reservation",
                 savedReservation.getId(),
