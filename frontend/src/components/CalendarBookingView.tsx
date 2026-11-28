@@ -93,7 +93,7 @@ function addMinutesToTimeString(timeStr: string, minutes: number): string {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`
 }
 
-function findFirstValidSlotForDay(targetDay: Date, today: Date): string {
+function findFirstValidSlotForDay(targetDay: Date, today: Date): string | null {
   const isToday = formatDateKey(targetDay) === formatDateKey(today)
   if (!isToday) {
     return DEFAULT_START_TIME
@@ -106,7 +106,9 @@ function findFirstValidSlotForDay(targetDay: Date, today: Date): string {
       return step
     }
   }
-  return DEFAULT_START_TIME
+  // Bug fixed (#362 §3): after 19:30 Bucharest no future slot remains today; return null
+  // instead of falling back to 09:00 in the past.
+  return null
 }
 
 function getInitialSchedule(today: Date): { day: string; time: string; monday: Date } {
@@ -146,7 +148,7 @@ function getInitialSchedule(today: Date): { day: string; time: string; monday: D
 
   return {
     day: formatDateKey(today),
-    time: findFirstValidSlotForDay(today, today),
+    time: findFirstValidSlotForDay(today, today) ?? DEFAULT_START_TIME,
     monday: getMonday(today),
   }
 }
@@ -311,13 +313,19 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
     const firstValidDay = parseCampusLocalDateTime(initialSchedule.day)
     const targetDay = prevSel >= firstValidDay ? prevSel : firstValidDay
-    const targetKey = formatDateKey(targetDay)
+    let targetKey = formatDateKey(targetDay)
     let targetTime = selectedStartTime
     if (targetKey === formatDateKey(today)) {
       const currentTotalMins = today.getHours() * 60 + today.getMinutes()
       const [selH, selM] = selectedStartTime.split(':').map(Number)
       if (selH * 60 + selM <= currentTotalMins) {
-        targetTime = findFirstValidSlotForDay(today, today)
+        const firstTodaySlot = findFirstValidSlotForDay(today, today)
+        if (firstTodaySlot !== null) {
+          targetTime = firstTodaySlot
+        } else {
+          targetKey = initialSchedule.day
+          targetTime = initialSchedule.time
+        }
       }
     }
     selectSlot(targetKey, targetTime)
@@ -578,6 +586,8 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 // Check the day's first slot (08:00) for the header; each 30-min cell checks its exact timestamp.
                 const isOutOfHorizon = toSlotDate(d, OPENING_TIME) > maxBookingDate
                 const isToday = formatDateKey(d) === formatDateKey(today)
+                const firstTodaySlot = isToday ? findFirstValidSlotForDay(d, today) : DEFAULT_START_TIME
+                const isHeaderDisabled = isPast || isOutOfHorizon || firstTodaySlot === null
 
                 return (
                   <Box
@@ -592,17 +602,18 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         : isToday
                           ? 'var(--mantine-color-blue-light-hover)'
                           : 'var(--mantine-color-body)',
-                      cursor: isPast || isOutOfHorizon ? 'not-allowed' : 'pointer',
-                      opacity: isPast || isOutOfHorizon ? 0.5 : 1,
+                      cursor: isHeaderDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isHeaderDisabled ? 0.5 : 1,
                     }}
                     onClick={() => {
-                      if (!isPast && !isOutOfHorizon) {
+                      if (!isHeaderDisabled) {
                         let newTime = selectedStartTime
-                        if (dayKey === formatDateKey(today)) {
+                        if (isToday) {
                           const currentTotalMins = today.getHours() * 60 + today.getMinutes()
                           const [selH, selM] = selectedStartTime.split(':').map(Number)
                           if (selH * 60 + selM <= currentTotalMins) {
-                            newTime = findFirstValidSlotForDay(d, today)
+                            if (firstTodaySlot === null) return
+                            newTime = firstTodaySlot
                           }
                         }
                         if (toSlotDate(d, newTime) > maxBookingDate) {
