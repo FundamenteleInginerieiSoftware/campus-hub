@@ -11,5 +11,5 @@ Added the **Maintenance simulator** page inside the admin dashboard (`/admin/mai
 | File | Change |
 |---|---|
 | `frontend/src/api/reassignments.ts` | Added `SimulateMaintenanceRequest`, `SimulatedBookingImpact`, `MaintenanceImpactResponse`, and `simulateMaintenanceImpact`. |
-| `frontend/src/pages/MaintenanceSimulatorPage.tsx` | Admin dry-run simulator form (explicit unit selection over up to 100 `AVAILABLE` units, weekday default window skipping Fri/Sat, client-side `end > start` and `<= 90 days` validation, KPI summary cards, and `"Would move"` / `"Would cancel"` per-booking outcome table). |
+| `frontend/src/pages/MaintenanceSimulatorPage.tsx` | Admin dry-run simulator form (explicit unit selection over up to 100 `AVAILABLE` units, weekday default window skipping Sat/Sun, client-side `end > start` and `<= 90 days` validation, KPI summary cards, and `"Would move"` / `"Would cancel"` per-booking outcome table). |
 | `frontend/src/App.tsx`, `frontend/src/layout/navigation.ts` | Registered `/admin/maintenance-simulator` under `<RequireAdmin />` and added the **Maintenance simulator** sidebar link in `ADMIN_MENU`. |
