@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -67,11 +68,12 @@ function parseLocalDateTimeUtcMs(value: string): number {
  * Admin dashboard page for simulating planned maintenance impact (#58) without mutating bookings.
  */
 export default function MaintenanceSimulatorPage() {
-  const defaults = defaultWindowInputs()
+  // Lazy-initialize once on mount so nowInBucharest() / Intl.DateTimeFormat isn't recreated every render (#352 nit).
+  const [initialDefaults] = useState(defaultWindowInputs)
   const [assets, setAssets] = useState<Asset[]>([])
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
-  const [windowStart, setWindowStart] = useState(defaults.start)
-  const [windowEnd, setWindowEnd] = useState(defaults.end)
+  const [windowStart, setWindowStart] = useState(initialDefaults.start)
+  const [windowEnd, setWindowEnd] = useState(initialDefaults.end)
   const [loadingAssets, setLoadingAssets] = useState(true)
   const [simulating, setSimulating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -161,9 +163,11 @@ export default function MaintenanceSimulatorPage() {
               value={selectedAssetId}
               onChange={(val) => {
                 setSelectedAssetId(val)
+                setResult(null)
+                setError(null)
                 setValidationError(null)
               }}
-              disabled={loadingAssets}
+              disabled={loadingAssets || simulating}
             />
             <TextInput
               label="Maintenance window start"
@@ -171,8 +175,11 @@ export default function MaintenanceSimulatorPage() {
               value={windowStart}
               onChange={(e) => {
                 setWindowStart(e.currentTarget.value)
+                setResult(null)
+                setError(null)
                 setValidationError(null)
               }}
+              disabled={simulating}
             />
             <TextInput
               label="Maintenance window end"
@@ -180,8 +187,11 @@ export default function MaintenanceSimulatorPage() {
               value={windowEnd}
               onChange={(e) => {
                 setWindowEnd(e.currentTarget.value)
+                setResult(null)
+                setError(null)
                 setValidationError(null)
               }}
+              disabled={simulating}
             />
           </SimpleGrid>
 
@@ -200,6 +210,11 @@ export default function MaintenanceSimulatorPage() {
 
       {result && (
         <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Simulated window for <b>{result.assetName}</b>: {formatCampusDateTime(result.windowStart)} →{' '}
+            {formatCampusDateTime(result.windowEnd)}
+          </Text>
+
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
             <Card withBorder padding="sm" radius="md" bg="var(--app-surface)">
               <Group justify="space-between">
@@ -265,7 +280,7 @@ export default function MaintenanceSimulatorPage() {
                   variant="light"
                   color={result.disruptionScore === 0 ? 'teal' : result.forceCancelledCount > 0 ? 'red' : 'orange'}
                 >
-                  <IconCheck size={20} />
+                  {result.disruptionScore === 0 ? <IconCheck size={20} /> : <IconAlertTriangle size={20} />}
                 </ThemeIcon>
               </Group>
             </Card>
@@ -309,7 +324,9 @@ export default function MaintenanceSimulatorPage() {
                         </Table.Td>
                         <Table.Td>
                           {b.substituteAssetId ? (
-                            <Link to={`/catalog/${b.substituteAssetId}`}>{b.substituteAssetName}</Link>
+                            <Anchor component={Link} to={`/catalog/${b.substituteAssetId}`} size="sm">
+                              {b.substituteAssetName}
+                            </Anchor>
                           ) : (
                             <Text size="xs" c="dimmed">
                               None free

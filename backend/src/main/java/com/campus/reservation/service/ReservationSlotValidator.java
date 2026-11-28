@@ -38,7 +38,8 @@ final class ReservationSlotValidator {
     static void validateExtensionRules(LocalDateTime start, LocalDateTime newEnd, LocalDateTime now) {
         validateSlotAlignment(start, newEnd);
         validateDuration(start, newEnd);
-        validateHorizon(newEnd, now);
+        // Check horizon against start (same as validateSlotRules, #362 §4) so day-14 extensions remain consistent.
+        validateHorizon(start, now);
         validateOpeningHours(start, newEnd);
     }
 

@@ -3,6 +3,7 @@ package com.campus.reservation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -10,8 +11,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campus.reservation.api.ReservationApi;
+import com.campus.reservation.repository.ReservationRepository;
+import com.campus.user.api.Role;
+import com.campus.user.api.UserApi;
 import com.campus.user.api.UserDisabledEvent;
 import java.lang.reflect.Method;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,6 +39,12 @@ class UserDisabledReservationListenerTest {
     private ReservationApi reservationApi;
 
     @Mock
+    private ReservationRepository reservationRepository;
+
+    @Mock
+    private UserApi userApi;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     private UserDisabledReservationListener listener;
@@ -42,7 +53,8 @@ class UserDisabledReservationListenerTest {
     void setUp() {
         TransactionStatus txStatus = mock(TransactionStatus.class);
         lenient().when(transactionManager.getTransaction(any())).thenReturn(txStatus);
-        listener = new UserDisabledReservationListener(reservationApi, transactionManager);
+        listener =
+                new UserDisabledReservationListener(reservationApi, reservationRepository, userApi, transactionManager);
     }
 
     @Test
@@ -75,19 +87,40 @@ class UserDisabledReservationListenerTest {
     }
 
     @Test
-    @DisplayName("UserDisabledReservationListener (#229): cancels upcoming reservations for the disabled user")
+    @DisplayName(
+            "UserDisabledReservationListener (#229, #362): locks quota, confirms user is still disabled, and cancels upcoming reservations")
     void onUserDisabledCancelsUpcomingReservations() {
+        when(userApi.findActiveRole(42L)).thenReturn(Optional.empty());
         when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
                 .thenReturn(2);
 
         listener.onUserDisabled(new UserDisabledEvent(42L, 3L));
 
-        verify(reservationApi).cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON);
+        var order = inOrder(reservationRepository, userApi, reservationApi);
+        order.verify(reservationRepository).lockUserQuota(42L);
+        order.verify(userApi).findActiveRole(42L);
+        order.verify(reservationApi)
+                .cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON);
+    }
+
+    @Test
+    @DisplayName(
+            "UserDisabledReservationListener (#362 §3): skips cancellation when user was re-enabled before listener ran")
+    void onUserDisabledSkipsWhenUserAlreadyReEnabled() {
+        when(userApi.findActiveRole(42L)).thenReturn(Optional.of(Role.STUDENT));
+
+        listener.onUserDisabled(new UserDisabledEvent(42L, 3L));
+
+        var order = inOrder(reservationRepository, userApi);
+        order.verify(reservationRepository).lockUserQuota(42L);
+        order.verify(userApi).findActiveRole(42L);
+        verify(reservationApi, never()).cancelUpcomingReservationsForUser(any(), any());
     }
 
     @Test
     @DisplayName("UserDisabledReservationListener (#229): catches and logs exceptions so disable never fails")
     void onUserDisabledSwallowsRuntimeException() {
+        when(userApi.findActiveRole(42L)).thenReturn(Optional.empty());
         when(reservationApi.cancelUpcomingReservationsForUser(42L, UserDisabledReservationListener.DEFAULT_REASON))
                 .thenThrow(new IllegalStateException("DB timeout"));
 

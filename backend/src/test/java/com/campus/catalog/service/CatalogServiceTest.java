@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.campus.catalog.api.AssetStatus;
@@ -136,5 +137,42 @@ class CatalogServiceTest {
         assertTrue(catalogService.isBookable(1L));
         asset.markUnderMaintenance(FIXED_NOW);
         assertFalse(catalogService.isBookable(1L));
+    }
+
+    @Test
+    void findAvailableWithNullExcludeAssetIdUsesNonExcludingQueries() {
+        Asset asset = new Asset("Osciloscop #2", "DS1054Z", "OSC-102", "Descriere", category, labRoom, FIXED_NOW);
+        when(assetRepository.findByModelAndStatus("DS1054Z", AssetStatus.AVAILABLE))
+                .thenReturn(List.of(asset));
+        when(assetRepository.findByCategoryIdAndStatus(10L, AssetStatus.AVAILABLE))
+                .thenReturn(List.of(asset));
+
+        List<AssetSummary> byModel = catalogService.findAvailableByModel("DS1054Z", null);
+        List<AssetSummary> byCategory = catalogService.findAvailableByCategory(10L, null);
+
+        assertEquals(1, byModel.size());
+        assertEquals(1, byCategory.size());
+    }
+
+    @Test
+    void findAssetsByIdsReturnsEmptyMapWithoutQueryingWhenEmptyOrNull() {
+        assertTrue(catalogService.findAssetsByIds(null).isEmpty());
+        assertTrue(catalogService.findAssetsByIds(List.of()).isEmpty());
+        verifyNoInteractions(assetRepository);
+    }
+
+    @Test
+    void markAvailableAndMarkUnderMaintenanceAreTrueNoOpsWhenAlreadyInTargetStatus() {
+        LocalDateTime later = FIXED_NOW.plusHours(2);
+        Asset asset = new Asset("Osciloscop", "DS1054Z", "OSC-101", "Descriere", category, labRoom, FIXED_NOW);
+
+        asset.markAvailable(later);
+        assertEquals(FIXED_NOW, asset.getUpdatedAt());
+
+        asset.markUnderMaintenance(later);
+        assertEquals(later, asset.getUpdatedAt());
+
+        asset.markUnderMaintenance(later.plusHours(1));
+        assertEquals(later, asset.getUpdatedAt());
     }
 }

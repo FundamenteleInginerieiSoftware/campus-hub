@@ -12,5 +12,5 @@ public interface ReassignmentLogRepository extends JpaRepository<ReassignmentLog
 
     List<ReassignmentLog> findByIncidentId(Long incidentId);
 
-    Page<ReassignmentLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
+    Page<ReassignmentLog> findAllByOrderByCreatedAtDescIdDesc(Pageable pageable);
 }

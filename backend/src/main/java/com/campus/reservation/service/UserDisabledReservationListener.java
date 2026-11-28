@@ -1,6 +1,8 @@
 package com.campus.reservation.service;
 
 import com.campus.reservation.api.ReservationApi;
+import com.campus.reservation.repository.ReservationRepository;
+import com.campus.user.api.UserApi;
 import com.campus.user.api.UserDisabledEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * retry log line ({@code POST /api/v1/admin/reservations/users/{userId}/cancel-upcoming}). Deliberately
  * not {@code @Async}: the audit actor comes from {@code CurrentUser}, which is bound to the HTTP request
  * thread.
+ *
+ * <p>Bug fixed (#362 §3): acquires {@code lockUserQuota(userId)} and re-checks {@code userApi.findActiveRole}
+ * before cancelling so an immediate disable -> re-enable race never wipes bookings of a re-enabled account.
  */
 @Slf4j
 @Service
@@ -28,11 +33,18 @@ public class UserDisabledReservationListener {
     static final String DEFAULT_REASON = "Account disabled by administrator";
 
     private final ReservationApi reservationApi;
+    private final ReservationRepository reservationRepository;
+    private final UserApi userApi;
     private final TransactionTemplate requiresNewTx;
 
     public UserDisabledReservationListener(
-            ReservationApi reservationApi, PlatformTransactionManager transactionManager) {
+            ReservationApi reservationApi,
+            ReservationRepository reservationRepository,
+            UserApi userApi,
+            PlatformTransactionManager transactionManager) {
         this.reservationApi = reservationApi;
+        this.reservationRepository = reservationRepository;
+        this.userApi = userApi;
         TransactionTemplate tt = new TransactionTemplate(transactionManager);
         tt.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.requiresNewTx = tt;
@@ -42,6 +54,15 @@ public class UserDisabledReservationListener {
     public void onUserDisabled(UserDisabledEvent event) {
         try {
             requiresNewTx.executeWithoutResult(status -> {
+                // Lock user quota first so any in-flight booking drains before we check active status
+                // and skip cancellation if an admin already re-enabled the account (#362 §3).
+                reservationRepository.lockUserQuota(event.userId());
+                if (userApi.findActiveRole(event.userId()).isPresent()) {
+                    log.info(
+                            "Skipping reservation cancellation for user #{} because account was re-enabled before listener ran",
+                            event.userId());
+                    return;
+                }
                 int cancelled = reservationApi.cancelUpcomingReservationsForUser(event.userId(), DEFAULT_REASON);
                 log.info(
                         "Cancelled {} upcoming reservation(s) for disabled user #{} (disabled by admin #{})",

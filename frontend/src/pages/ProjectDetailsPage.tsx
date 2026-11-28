@@ -62,9 +62,18 @@ function minutesOf(time: string) {
 
 // "now" is the campus wall clock as a browser-local Date (Calin's nowInBucharest), so comparing it
 // with new Date(y, m, d, h, min) compares campus times, whatever the browser's time zone is.
+// Bug fixed: adding 14 * 86400s in milliseconds drifted ±1 hour across DST switches; calendar-day
+// addition matches the backend's LocalDateTime.plusDays(14).
 function startTimesFor(day: string, now: Date): string[] {
   const [y, m, d] = day.split('-').map(Number)
-  const latest = new Date(now.getTime() + MAX_DAYS_AHEAD * 24 * 60 * 60 * 1000)
+  const latest = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + MAX_DAYS_AHEAD,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+  )
   const times: string[] = []
   for (let t = OPEN_MINUTES; t + STEP <= CLOSE_MINUTES; t += STEP) {
     const start = new Date(y, m - 1, d, Math.floor(t / 60), t % 60)

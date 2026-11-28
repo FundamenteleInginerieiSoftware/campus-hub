@@ -124,7 +124,7 @@ public class ReservationController {
                     @RequestParam(required = false)
                     Long categoryId,
             @Parameter(
-                            description = "Slot start time (must be aligned to :00 or :30, future weekday 09:00-20:00)",
+                            description = "Slot start time (must be aligned to :00 or :30, future weekday 08:00-20:00)",
                             example = "2026-11-10T14:00:00")
                     @RequestParam
                     @DateTimeFormat(pattern = "yyyy-MM-dd'T'HH:mm[:ss]")
@@ -211,7 +211,8 @@ public class ReservationController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Bundle reservations cancelled"),
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user")
+        @ApiResponse(responseCode = "404", description = "Bundle not found or belongs to another user"),
+        @ApiResponse(responseCode = "409", description = "No CONFIRMED items remaining in bundle to cancel")
     })
     @PostMapping("/bundle/{bundleId}/cancel")
     public ResponseEntity<List<ReservationResponse>> cancelBundle(

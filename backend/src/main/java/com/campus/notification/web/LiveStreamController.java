@@ -1,7 +1,9 @@
 package com.campus.notification.web;
 
+import com.campus.common.error.UnauthorizedException;
 import com.campus.common.security.CurrentUser;
 import com.campus.notification.service.LiveStreams;
+import com.campus.user.api.UserApi;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -29,6 +31,7 @@ public class LiveStreamController {
 
     private final LiveStreams liveStreams;
     private final CurrentUser currentUser;
+    private final UserApi userApi;
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(
@@ -39,11 +42,28 @@ public class LiveStreamController {
                             + "and emits 'notification' events as JSON payloads. At most 5 concurrent streams per user are allowed.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "SSE stream opened (stays open)"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized (missing or invalid JWT)"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized (missing/invalid JWT or account disabled)"),
         @ApiResponse(responseCode = "409", description = "Too many open tabs for this account (LIVE_STREAM_LIMIT)")
     })
     public SseEmitter stream(HttpServletResponse response) {
+        Long userId = currentUser.id();
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
-        return liveStreams.open(currentUser.id());
+        SseEmitter emitter = liveStreams.open(userId);
+        // Close the tiny race where an admin disables the account right after the JWT filter
+        // checked it and before liveStreams.open() registered this emitter (so the disable
+        // listener already ran). Dropping only this emitter in finally also prevents leaking a
+        // never-started emitter (which has no async timeout) if the DB lookup itself throws.
+        boolean active = false;
+        try {
+            active = userApi.findActiveRole(userId).isPresent();
+        } finally {
+            if (!active) {
+                liveStreams.close(userId, emitter);
+            }
+        }
+        if (!active) {
+            throw new UnauthorizedException("Account is disabled");
+        }
+        return emitter;
     }
 }

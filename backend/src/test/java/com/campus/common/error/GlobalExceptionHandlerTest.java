@@ -23,6 +23,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -85,6 +86,8 @@ class GlobalExceptionHandlerTest {
                 .thenReturn(List.of(
                         new FieldError("registerRequest", "email", "must be a well-formed email address"),
                         new FieldError("registerRequest", "password", "size must be between 8 and 72")));
+        when(bindingResult.getGlobalErrors())
+                .thenReturn(List.of(new ObjectError("registerRequest", "end time must be after start time")));
 
         ProblemDetail problem = handler.handleValidation(ex);
 
@@ -94,7 +97,8 @@ class GlobalExceptionHandlerTest {
         assertEquals(
                 List.of(
                         new FieldErrorItem("email", "must be a well-formed email address"),
-                        new FieldErrorItem("password", "size must be between 8 and 72")),
+                        new FieldErrorItem("password", "size must be between 8 and 72"),
+                        new FieldErrorItem("registerRequest", "end time must be after start time")),
                 problem.getProperties().get("errors"));
     }
 
