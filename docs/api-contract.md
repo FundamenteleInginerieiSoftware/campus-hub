@@ -68,6 +68,7 @@ Checks that run **before** the rules above (the token checks only when a token i
 | `POST /api/v1/auth/register` | public | `{"email","password","fullName"}` | `201` + `UserResponse`. Always creates a **`STUDENT`**; admins can never self-register |
 | `POST /api/v1/auth/login` | public | `{"email","password"}` | `200` + `LoginResponse` |
 | `GET /api/v1/users/me` | logged in | – | `200` + `UserResponse` of the token's user (`401 UNAUTHORIZED` without a token, or if the account was disabled or deleted: the token check runs before the controller since #128) |
+| `PUT /api/v1/users/me/password` | logged in | `{"currentPassword","newPassword"}` | `204` No Content (+ audit row `USER_PASSWORD_CHANGED`, entity `USER`). Wrong current password → `401 INVALID_CREDENTIALS`; same password → `409 PASSWORD_UNCHANGED`; invalid new password (not 8–72 chars or > 72 UTF-8 bytes) → `400 VALIDATION_FAILED` |
 
 ```json
 // LoginResponse
@@ -177,6 +178,7 @@ The frontend shows a message per `code` (fall back to `detail`). Never put stack
 |---|---|---|
 | `EMAIL_TAKEN` | 409 | Matei |
 | `INVALID_CREDENTIALS` | 401 | Matei |
+| `PASSWORD_UNCHANGED` | 409 | Matei |
 | `USER_NOT_FOUND` | 404 | Stefania |
 | `CANNOT_MODIFY_SELF` | 409 | Stefania |
 | `LAST_ADMIN_REQUIRED` | 409 | Stefania |

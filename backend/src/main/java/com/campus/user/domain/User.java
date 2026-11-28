@@ -62,6 +62,14 @@ public class User {
         this.createdAt = createdAt.truncatedTo(ChronoUnit.SECONDS);
     }
 
+    /**
+     * Replaces the stored password hash after the caller has verified the current password and
+     * encoded the new one.
+     */
+    public void changePassword(String encodedPasswordHash) {
+        this.passwordHash = encodedPasswordHash;
+    }
+
     // ---- user admin (Stefania, user.admin) ----------------------------------------------------
     // Only AdminUserService calls these, after its checks (not yourself, never the last admin).
 

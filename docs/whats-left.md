@@ -55,6 +55,7 @@ Open issues: **#140** (Matei, Projects: left: the app-wide RO/EN choice, Stefani
 | W11–W12 | ~~Deployment + component diagrams~~ (✅ #186; update the AWS one after the deploy) · ~~security chapter~~ (✅ #185) · CI/CD description · runbook · demo on AWS + local fallback + video · `terraform destroy` after grading | – |
 | W8 | ~~**Scheduler pool**~~ (written, #347): `@Scheduled` jobs run on 3 threads (`campus-sched-`) instead of 1, so Liviu's SSE heartbeat is not delayed by Calin's sweeps (CloudFront closes idle streams after 30 s) | – |
 | W8 | ~~**Platform audit fixes**~~ (written, #366): dedicated `campus-ses-` mail pool (`AsyncConfig`), whole-second `LiveEvent.at` in `SesNotificationService`, public `GET /api/v1/calendar/*` in `OpenApiConfig`, DST-safe 14-day horizon in `ProjectDetailsPage`, `docker image prune -f` in `user-data.sh.tftpl`, `actions/checkout@v7` in `sync-wiki.yml` | – |
+| W8 | ~~**Change password endpoint**~~ (written, #TBD): `PUT /api/v1/users/me/password` (`ChangePasswordRequest`, `UserService.changePassword`, 72-byte BCrypt & oracle-safe check order, `USER_PASSWORD_CHANGED` audit row, `ChangePasswordIT`; Stefania wires the frontend UI) | – |
 
 ## 5. Liviu Nedelcu: catalog + shared services
 
