@@ -52,6 +52,12 @@ public interface WaitlistEntryRepository extends JpaRepository<WaitlistEntry, Lo
     boolean existsByAssetIdAndUserIdAndStartTimeAndEndTimeAndStatus(
             Long assetId, Long userId, LocalDateTime startTime, LocalDateTime endTime, WaitlistStatus status);
 
+    @Query("""
+        SELECT DISTINCT w.assetId FROM WaitlistEntry w
+        WHERE w.status = :status
+        """)
+    List<Long> findDistinctAssetIdsByStatus(@Param("status") WaitlistStatus status);
+
     // Lock expired rows in FIFO order with SKIP LOCKED so concurrent promotion/disable row locks
     // (ORDER BY created_at ASC, id ASC FOR UPDATE) cannot deadlock (40P01) with the expiry sweep (#349).
     @Modifying(clearAutomatically = true, flushAutomatically = true)

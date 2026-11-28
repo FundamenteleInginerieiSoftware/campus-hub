@@ -48,6 +48,9 @@ class ReservationLifecycleServiceTest {
     private HoldService holdService;
 
     @Mock
+    private WaitlistService waitlistService;
+
+    @Mock
     private CatalogApi catalogApi;
 
     @Mock
@@ -61,7 +64,13 @@ class ReservationLifecycleServiceTest {
         // 2026-11-02T10:00:00 Europe/Bucharest
         clock = Clock.fixed(Instant.parse("2026-11-02T08:00:00Z"), ZoneId.of("Europe/Bucharest"));
         lifecycleService = new ReservationLifecycleService(
-                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock);
+                reservationRepository,
+                reservationService,
+                holdService,
+                waitlistService,
+                catalogApi,
+                notificationService,
+                clock);
     }
 
     @Test
@@ -123,6 +132,7 @@ class ReservationLifecycleServiceTest {
         assertThat(summary.preventivelyReassignedCount()).isEqualTo(1);
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(33L);
 
+        verify(waitlistService).expireStaleEntries();
         verify(reservationService).moveToAsset(eq(33L), eq(ASSET_ID), eq(SUB_ASSET_ID), any());
         verify(holdService, never()).sweepExpiredHolds(any());
         verify(notificationService).notifyUser(eq(101L), eq("Reservation Marked as No-Show"), any());
@@ -352,7 +362,13 @@ class ReservationLifecycleServiceTest {
         // --- Sweep 2: at 11:00 (60 minutes later, equipment still OVERDUE) ---
         Clock clock2 = Clock.fixed(Instant.parse("2026-11-02T09:00:00Z"), ZoneId.of("Europe/Bucharest"));
         ReservationLifecycleService service2 = new ReservationLifecycleService(
-                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock2);
+                reservationRepository,
+                reservationService,
+                holdService,
+                waitlistService,
+                catalogApi,
+                notificationService,
+                clock2);
 
         LocalDateTime now2 = LocalDateTime.now(clock2); // 11:00
         when(reservationRepository.findConfirmedBeforeCutoff(now2.minusMinutes(30)))
@@ -573,5 +589,21 @@ class ReservationLifecycleServiceTest {
                 .isEqualTo(1);
         verify(notificationService).notifyUser(eq(205L), eq("Proactive Reservation Reassignment"), any());
         verify(notificationService, never()).notifyUser(eq(103L), any(), any());
+    }
+
+    @Test
+    @DisplayName("runLifecycleSweep triggers waitlist promotion for assets that still have WAITING entries (#350)")
+    void runLifecycleSweepPromotesAssetsWithWaitingEntries() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        when(reservationRepository.findConfirmedBeforeCutoff(now.minusMinutes(30)))
+                .thenReturn(List.of());
+        when(reservationRepository.findCheckedOutPastEnd(now)).thenReturn(List.of());
+        when(waitlistService.findAssetIdsWithWaitingEntries()).thenReturn(List.of(ASSET_ID, SUB_ASSET_ID));
+
+        lifecycleService.runLifecycleSweep();
+
+        verify(waitlistService).expireStaleEntries();
+        verify(waitlistService).processPromotionsForAsset(ASSET_ID);
+        verify(waitlistService).processPromotionsForAsset(SUB_ASSET_ID);
     }
 }

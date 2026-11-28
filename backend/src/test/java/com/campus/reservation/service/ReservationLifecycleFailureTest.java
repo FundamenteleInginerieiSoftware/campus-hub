@@ -53,6 +53,9 @@ class ReservationLifecycleFailureTest {
     private HoldService holdService;
 
     @Mock
+    private WaitlistService waitlistService;
+
+    @Mock
     private CatalogApi catalogApi;
 
     @Mock
@@ -63,7 +66,13 @@ class ReservationLifecycleFailureTest {
     @BeforeEach
     void setUp() {
         lifecycleService = new ReservationLifecycleService(
-                reservationRepository, reservationService, holdService, catalogApi, notificationService, clock);
+                reservationRepository,
+                reservationService,
+                holdService,
+                waitlistService,
+                catalogApi,
+                notificationService,
+                clock);
     }
 
     private Reservation reservation(long id, long userId, int startHour, int endHour) {
@@ -162,5 +171,37 @@ class ReservationLifecycleFailureTest {
 
         // The booking was moved, so it is counted even though the student could not be told by e-mail.
         assertThat(summary.preventivelyReassignedReservationIds()).containsExactly(6L);
+    }
+
+    @Test
+    void waitlistExpirationFailureNeverSkipsNoShowOrOverdueSweep() {
+        Reservation unclaimed = reservation(7L, 107L, 9, 11);
+        when(waitlistService.expireStaleEntries()).thenThrow(new RuntimeException("waitlist db hiccup"));
+        when(reservationRepository.findConfirmedBeforeCutoff(any())).thenReturn(List.of(unclaimed));
+        when(reservationService.markNoShow(7L)).thenReturn(Optional.of(107L));
+
+        LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
+
+        assertThat(summary.noShowReleasedCount())
+                .as(
+                        "waitlist expiration failure must be logged and never skip no-show/overdue sweep; see ReservationLifecycleService.runLifecycleSweep")
+                .isEqualTo(1);
+    }
+
+    @Test
+    void waitlistSweepPromotionFailureOnOneAssetStillPromotesOthersAndRunsNoShowSweep() {
+        Reservation unclaimed = reservation(8L, 108L, 9, 11);
+        when(waitlistService.findAssetIdsWithWaitingEntries()).thenReturn(List.of(10L, 20L));
+        doThrow(new RuntimeException("lock timeout")).when(waitlistService).processPromotionsForAsset(10L);
+        when(reservationRepository.findConfirmedBeforeCutoff(any())).thenReturn(List.of(unclaimed));
+        when(reservationService.markNoShow(8L)).thenReturn(Optional.of(108L));
+
+        LifecycleSweepSummary summary = lifecycleService.runLifecycleSweep();
+
+        verify(waitlistService).processPromotionsForAsset(20L);
+        assertThat(summary.noShowReleasedCount())
+                .as("waitlist promotion failure on one asset must not stop remaining assets or the no-show sweep; "
+                        + "see ReservationLifecycleService.runLifecycleSweep")
+                .isEqualTo(1);
     }
 }

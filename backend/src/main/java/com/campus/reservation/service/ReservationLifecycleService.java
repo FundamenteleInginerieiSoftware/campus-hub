@@ -44,6 +44,7 @@ public class ReservationLifecycleService {
     private final ReservationRepository reservationRepository;
     private final ReservationService reservationService;
     private final HoldService holdService;
+    private final WaitlistService waitlistService;
     private final CatalogApi catalogApi;
     private final NotificationService notificationService;
     private final Clock clock;
@@ -62,12 +63,37 @@ public class ReservationLifecycleService {
             initialDelayString = "${app.reservation.lifecycle-initial-delay-ms:60000}")
     public LifecycleSweepSummary runLifecycleSweep() {
         LocalDateTime now = now();
+        try {
+            waitlistService.expireStaleEntries();
+        } catch (RuntimeException e) {
+            log.warn("Waitlist stale entry expiration failed during lifecycle sweep: {}", e.getMessage());
+        }
+        promoteWaitingAssets();
         int noShowCount = processNoShows(now);
         List<Long> cascadedIds = new ArrayList<>();
         int overdueCount = processOverdueAndCascade(now, cascadedIds);
         // Expired holds are swept by the dedicated 1-minute sweepExpiredHolds() job below.
 
         return new LifecycleSweepSummary(now, noShowCount, overdueCount, cascadedIds.size(), cascadedIds);
+    }
+
+    // Promotes waiters on assets repaired back to AVAILABLE (markAvailable publishes no cross-module event)
+    // and recovers any promotion missed by a transient listener error (#350).
+    private void promoteWaitingAssets() {
+        List<Long> waitingAssetIds;
+        try {
+            waitingAssetIds = waitlistService.findAssetIdsWithWaitingEntries();
+        } catch (RuntimeException e) {
+            log.warn("Failed to query waiting waitlist assets during lifecycle sweep: {}", e.getMessage());
+            return;
+        }
+        for (Long assetId : waitingAssetIds) {
+            try {
+                waitlistService.processPromotionsForAsset(assetId);
+            } catch (RuntimeException e) {
+                log.warn("Waitlist sweep promotion failed for asset #{}: {}", assetId, e.getMessage());
+            }
+        }
     }
 
     /**

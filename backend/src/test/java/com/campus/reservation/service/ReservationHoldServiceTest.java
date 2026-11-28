@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -76,6 +77,9 @@ class ReservationHoldServiceTest {
     @Mock
     private UserApi userApi;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private Clock clock;
     private HoldService holdService;
 
@@ -90,7 +94,8 @@ class ReservationHoldServiceTest {
                 auditService,
                 notificationService,
                 userApi,
-                clock);
+                clock,
+                eventPublisher);
         lenient().when(userApi.findActiveRole(anyLong())).thenReturn(Optional.of(Role.STUDENT));
     }
 
@@ -289,6 +294,7 @@ class ReservationHoldServiceTest {
                 .as("release hold: released hold must transition to RELEASED; see HoldService.releaseHold")
                 .isEqualTo(HoldStatus.RELEASED);
         verify(auditService).record(eq(USER_ID), eq("HOLD_RELEASED"), eq("ReservationHold"), eq(1L), any());
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(ASSET_ID));
     }
 
     @Test
@@ -316,8 +322,9 @@ class ReservationHoldServiceTest {
     }
 
     @Test
-    @DisplayName("sweepExpiredHolds: calls expireOldHolds on repository")
+    @DisplayName("sweepExpiredHolds: calls expireOldHolds and publishes SlotFreedEvent per affected asset")
     void sweepExpiredHolds_callsRepository() {
+        when(reservationHoldRepository.findExpiredActiveHoldAssetIds(NOW)).thenReturn(List.of(ASSET_ID, 200L));
         when(reservationHoldRepository.expireOldHolds(any())).thenReturn(3);
 
         int count = holdService.sweepExpiredHolds(NOW);
@@ -327,6 +334,8 @@ class ReservationHoldServiceTest {
                         "sweep expired holds: must return count of expired rows reported by repository; see HoldService.sweepExpiredHolds")
                 .isEqualTo(3);
         verify(reservationHoldRepository).expireOldHolds(NOW);
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(ASSET_ID));
+        verify(eventPublisher).publishEvent(new SlotFreedEvent(200L));
     }
 
     @Test

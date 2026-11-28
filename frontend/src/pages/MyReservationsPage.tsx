@@ -28,9 +28,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import {
   acceptTransfer,
+  cancelWaitlistEntry,
   fetchAssetSummary,
   fetchMyReservations,
   fetchMyReservationSummary,
+  fetchMyWaitlist,
   fetchPendingTransfers,
   nowInBucharest,
   parseCampusLocalDateTime,
@@ -40,6 +42,8 @@ import {
   type ReservationStatus,
   type ReservationSummary,
   type ReservationTransferResponse,
+  type WaitlistEntry,
+  type WaitlistStatus,
 } from '../api/reservations.ts'
 import type { PageResponse } from '../api/types.ts'
 import { useAuth } from '../auth/useAuth.ts'
@@ -57,6 +61,14 @@ import CancelReservationModal from '../components/reservation/CancelReservationM
 import ExtendReservationModal from '../components/reservation/ExtendReservationModal.tsx'
 import { formatSlotDate, formatSlotTime } from '../components/reservation/reservationFormatters.ts'
 import TransferReservationModal from '../components/reservation/TransferReservationModal.tsx'
+
+const WAITLIST_BADGE_COLOR: Record<WaitlistStatus, string> = {
+  WAITING: 'blue',
+  PROMOTED: 'green',
+  CANCELLED: 'gray',
+  EXPIRED: 'gray',
+  SKIPPED_QUOTA_FULL: 'orange',
+}
 
 function statusColor(status: ReservationStatus): string {
   switch (status) {
@@ -156,11 +168,17 @@ export default function MyReservationsPage() {
   const [pendingTransfers, setPendingTransfers] = useState<ReservationTransferResponse[]>([])
   const [transferRespondingId, setTransferRespondingId] = useState<number | null>(null)
   const [transferActionError, setTransferActionError] = useState<unknown>(null)
-  // A later success elsewhere on the page hides an old transfer error.
+
+  // Waitlist entries (#59)
+  const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
+  const [waitlistCancellingId, setWaitlistCancellingId] = useState<number | null>(null)
+  const [waitlistActionError, setWaitlistActionError] = useState<unknown>(null)
+  // A later success elsewhere on the page hides old transfer/waitlist errors.
   function setActionNotice(notice: string | null) {
     setActionNoticeState(notice)
     if (notice) {
       setTransferActionError(null)
+      setWaitlistActionError(null)
     }
   }
 
@@ -187,6 +205,30 @@ export default function MyReservationsPage() {
       })
       .catch(() => {
         // Non-blocking fallback if transfer queue is temporarily unreachable
+      })
+
+    fetchMyWaitlist()
+      .then(async (page) => {
+        if (ignore) return
+        const entries = page.content
+        setWaitlistEntries(entries)
+        const missingIds = [...new Set(entries.map((e) => e.assetId).filter((id) => !assetCacheRef.current[id]))]
+        if (missingIds.length > 0) {
+          const fetched = await Promise.all(missingIds.map((id) => fetchAssetSummary(id).catch(() => null)))
+          if (!ignore) {
+            const added: Record<number, AssetSummary> = {}
+            for (const item of fetched) {
+              if (item) added[item.id] = item
+            }
+            if (Object.keys(added).length > 0) {
+              assetCacheRef.current = { ...assetCacheRef.current, ...added }
+              setAssetCache((prev) => ({ ...prev, ...added }))
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // Non-blocking fallback if waitlist is unavailable
       })
 
     return () => {
@@ -610,6 +652,65 @@ export default function MyReservationsPage() {
           </Group>
         </Alert>
       ))}
+
+      {/* FIFO Waitlist Entries (#59) */}
+      <ErrorAlert error={waitlistActionError} />
+      {waitlistEntries.length > 0 && (
+        <Card withBorder padding="sm" radius="md" bg="var(--app-surface)" mb="md">
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" fw={700}>
+              My Waitlist ({waitlistEntries.filter((w) => w.status === 'WAITING').length} waiting)
+            </Text>
+          </Group>
+          {waitlistEntries.map((w) => {
+            const assetName = assetCache[w.assetId]?.name ?? `Asset #${w.assetId}`
+            return (
+              <Group key={w.id} justify="space-between" wrap="wrap" py={4}>
+                <Group gap="xs" wrap="wrap">
+                  <Badge size="xs" color={WAITLIST_BADGE_COLOR[w.status]}>
+                    {w.status}
+                  </Badge>
+                  <Text size="xs" fw={600}>
+                    {assetName}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {formatSlotDate(w.startTime)} • {formatSlotTime(w.startTime, w.endTime)}
+                  </Text>
+                  {w.promotedReservationId && (
+                    <Text size="xs" c="teal">
+                      → Reservation #{w.promotedReservationId}
+                    </Text>
+                  )}
+                </Group>
+                {w.status === 'WAITING' && (
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    loading={waitlistCancellingId === w.id}
+                    disabled={waitlistCancellingId !== null && waitlistCancellingId !== w.id}
+                    onClick={async () => {
+                      setWaitlistCancellingId(w.id)
+                      setWaitlistActionError(null)
+                      try {
+                        await cancelWaitlistEntry(w.id)
+                        setActionNotice(`Waitlist entry #${w.id} cancelled.`)
+                        reloadReservations()
+                      } catch (err) {
+                        setWaitlistActionError(err)
+                      } finally {
+                        setWaitlistCancellingId(null)
+                      }
+                    }}
+                  >
+                    Leave waitlist
+                  </Button>
+                )}
+              </Group>
+            )
+          })}
+        </Card>
+      )}
 
       <ErrorAlert error={error} />
 

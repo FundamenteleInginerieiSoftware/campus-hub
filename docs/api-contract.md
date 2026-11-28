@@ -471,6 +471,7 @@ Waitlist endpoints (`/api/v1/reservations/waitlist`, authenticated student/admin
 - `POST /api/v1/reservations/waitlist` → `201 Created` (`WaitlistEntryResponse`) for an occupied slot (`ASSET_NOT_FOUND` 404 for missing assets or `RETIRED` assets queried by students, `SLOT_ALREADY_FREE` 409 if free, `WAITLIST_ALREADY_JOINED` 409 if already `WAITING`, `WAITLIST_LIMIT_REACHED` 409 at 5 active entries, `OWN_RESERVATION_CONFLICT` 409 if caller already booked the slot, `MALFORMED_REQUEST` 400 on timezone offset).
 - `GET /api/v1/reservations/waitlist/me?page=0&size=20` → `200 OK` (`PageResponse<WaitlistEntryResponse>`, newest first).
 - `DELETE /api/v1/reservations/waitlist/{id}` → `204 No Content` (`WAITLIST_ENTRY_NOT_FOUND` 404 for non-owners, `INVALID_WAITLIST_STATUS_TRANSITION` 409 if not `WAITING`).
+- Automatic promotion: when an occupied slot opens up (cancel, bundle/disable cancel, desk return including overdue items, auto-no-show, hold release/expiry, or lifecycle sweep after an asset returns from `UNDER_MAINTENANCE` to `AVAILABLE`), `WAITING` entries on that asset are evaluated in strict FIFO order (`createdAt`, `id`): past-start or disabled-user entries become `EXPIRED`, students at the 2-active-booking limit become `SKIPPED_QUOTA_FULL`, and the first eligible waiter becomes `PROMOTED` with a new `CONFIRMED` reservation and an after-commit notification.
 
 ---
 

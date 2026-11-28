@@ -33,6 +33,7 @@ import {
   createReservation,
   fetchAssetSummary,
   fetchNextFreeSlots,
+  joinWaitlist,
   nowInBucharest,
   parseCampusLocalDateTime,
   type AssetSummary,
@@ -211,6 +212,9 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
+  const [waitlistLoading, setWaitlistLoading] = useState(false)
+  const [waitlistError, setWaitlistError] = useState<unknown>(null)
+  const [waitlistJoined, setWaitlistJoined] = useState<{ key: string; entryId: number } | null>(null)
 
   // Compute the 5 weekdays for the active week view.
   const weekDays = useMemo(() => {
@@ -280,20 +284,22 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }, [asset.id, startIso, endIso, availabilityTick])
 
   function selectSlot(day: string, time: string) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     discardActiveHold()
     setSelectedDay(day)
     setSelectedStartTime(time)
     setBookingError(null)
+    setWaitlistError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     setAvailabilityTick((t) => t + 1)
   }
 
   function handleDurationChange(val: number) {
-    if (holdLoading || bookingLoading || val === durationMinutes) return
+    if (holdLoading || bookingLoading || waitlistLoading || val === durationMinutes) return
     discardActiveHold()
     setDurationMinutes(val)
     setBookingError(null)
+    setWaitlistError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     // Increment availabilityTick so changing duration when endIso stays capped at 20:00 still finishes re-checking.
     setAvailabilityTick((t) => t + 1)
@@ -311,7 +317,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     ) > maxBookingDate
 
   function handlePrevWeek() {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     if (isPrevWeekDisabled) return
     const prevMon = new Date(currentMonday)
     prevMon.setDate(prevMon.getDate() - 7)
@@ -343,7 +349,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleNextWeek() {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     if (isNextWeekDisabled) return
     const nextMon = new Date(currentMonday)
     nextMon.setDate(nextMon.getDate() + 7)
@@ -362,7 +368,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
 
   // Recompute from a fresh Bucharest 'now' so weekends and late evenings jump to the next valid weekday slot.
   function handleToday() {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     const freshToday = nowInBucharest()
     const schedule = getInitialSchedule(freshToday)
     setToday(freshToday)
@@ -399,6 +405,38 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   const isSlotAvailable = availability.data?.available === true
+  const currentSlotKey = `${asset.id}:${startIso}:${endIso}`
+  const hasJoinedWaitlistForSlot = waitlistJoined?.key === currentSlotKey
+  const conflictErrorCode =
+    bookingError instanceof ApiError
+      ? bookingError.code
+      : holdError instanceof ApiError
+        ? holdError.code
+        : null
+  const hasSlotConflict =
+    (!availability.checking &&
+      !isSlotAvailable &&
+      availability.data?.conflictReason === 'RESERVATION_CONFLICT') ||
+    conflictErrorCode === 'RESERVATION_CONFLICT' ||
+    conflictErrorCode === 'SLOT_HELD'
+  const showWaitlistPanel = hasSlotConflict
+
+  async function handleJoinWaitlist() {
+    setWaitlistLoading(true)
+    setWaitlistError(null)
+    try {
+      const entry = await joinWaitlist({
+        assetId: asset.id,
+        startTime: startIso,
+        endTime: endIso,
+      })
+      setWaitlistJoined({ key: currentSlotKey, entryId: entry.id })
+    } catch (err) {
+      setWaitlistError(err)
+    } finally {
+      setWaitlistLoading(false)
+    }
+  }
 
   const substituteKey =
     !availability.checking && availability.data && !availability.data.available
@@ -436,21 +474,6 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     substituteAssets.length,
   )
 
-  const conflictErrorCode =
-    bookingError instanceof ApiError
-      ? bookingError.code
-      : holdError instanceof ApiError
-        ? holdError.code
-        : null
-
-  const hasSlotConflict =
-    (!availability.checking &&
-      Boolean(availability.data) &&
-      !availability.data!.available &&
-      availability.data!.conflictReason === 'RESERVATION_CONFLICT') ||
-    conflictErrorCode === 'RESERVATION_CONFLICT' ||
-    conflictErrorCode === 'SLOT_HELD'
-
   const nextSlotsKey = hasSlotConflict ? `${asset.id}:${startIso}:${effectiveDuration}:${availabilityTick}` : ''
 
   useEffect(() => {
@@ -476,7 +499,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   const nextFreeSlots = nextSlotsKey && nextSlotsState.key === nextSlotsKey ? nextSlotsState.items : []
 
   function handleSelectRecommendedSlot(slot: FreeSlotOption) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     const parsedStart = parseCampusLocalDateTime(slot.startTime)
     const parsedEnd = parseCampusLocalDateTime(slot.endTime)
     const hhmm = `${String(parsedStart.getHours()).padStart(2, '0')}:${String(parsedStart.getMinutes()).padStart(2, '0')}`
@@ -487,9 +510,10 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
   }
 
   function handleSwitchToSubstitute(sub: AssetSummary) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || waitlistLoading) return
     discardActiveHold()
     setBookingError(null)
+    setWaitlistError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
     setSwitchedAsset(sub.id === initialAsset.id ? null : { baseAssetId: initialAsset.id, selected: sub })
   }
@@ -550,7 +574,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="lg"
                   onClick={handlePrevWeek}
-                  disabled={isPrevWeekDisabled || holdLoading || bookingLoading}
+                  disabled={isPrevWeekDisabled || holdLoading || bookingLoading || waitlistLoading}
                   aria-label="Previous week"
                 >
                   <IconChevronLeft size={18} />
@@ -559,7 +583,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="xs"
                   onClick={handleToday}
-                  disabled={holdLoading || bookingLoading}
+                  disabled={holdLoading || bookingLoading || waitlistLoading}
                 >
                   Today
                 </Button>
@@ -567,7 +591,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                   variant="default"
                   size="lg"
                   onClick={handleNextWeek}
-                  disabled={isNextWeekDisabled || holdLoading || bookingLoading}
+                  disabled={isNextWeekDisabled || holdLoading || bookingLoading || waitlistLoading}
                   aria-label="Next week"
                 >
                   <IconChevronRight size={18} />
@@ -589,7 +613,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                 </Text>
                 <Group gap={4}>
                   {BOOKING_DURATIONS.map((dur) => {
-                    const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading
+                    const isDisabled = dur.value > maxAvailableMins || holdLoading || bookingLoading || waitlistLoading
                     const isSelected = effectiveDuration === dur.value
                     return (
                       <Tooltip
@@ -837,7 +861,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     <Button
                       size="xs"
                       variant="subtle"
-                      disabled={holdLoading || bookingLoading}
+                      disabled={holdLoading || bookingLoading || waitlistLoading}
                       onClick={() => handleSwitchToSubstitute(initialAsset)}
                     >
                       Back to {initialAsset.name}
@@ -947,7 +971,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                           size="xs"
                           variant="light"
                           color="teal"
-                          disabled={holdLoading || bookingLoading}
+                          disabled={holdLoading || bookingLoading || waitlistLoading}
                           onClick={() => handleSwitchToSubstitute(sub)}
                         >
                           Switch unit
@@ -977,12 +1001,48 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         color="blue"
                         justify="space-between"
                         fullWidth
-                        disabled={holdLoading || bookingLoading}
+                        disabled={holdLoading || bookingLoading || waitlistLoading}
                         onClick={() => handleSelectRecommendedSlot(slot)}
                       >
                         {formatSlotDate(slot.startTime)} • {formatSlotTime(slot.startTime, slot.endTime)}
                       </Button>
                     ))}
+                  </Stack>
+                </Paper>
+              )}
+
+              {showWaitlistPanel && (
+                <Paper withBorder p="xs" radius="sm">
+                  <Stack gap={6}>
+                    <Text size="xs" fw={600}>
+                      Need this exact slot?
+                    </Text>
+                    <ErrorAlert error={waitlistError} />
+                    {hasJoinedWaitlistForSlot ? (
+                      <Alert color="blue" variant="light" p="xs">
+                        <Group justify="space-between" gap="xs" wrap="wrap">
+                          <Text size="xs">
+                            Added to FIFO waitlist (#{waitlistJoined?.entryId}). You will be promoted automatically if
+                            the slot opens up.
+                          </Text>
+                          <Button size="xs" variant="subtle" onClick={() => navigate('/reservations')}>
+                            View in My reservations
+                          </Button>
+                        </Group>
+                      </Alert>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="blue"
+                        fullWidth
+                        loading={waitlistLoading}
+                        disabled={holdLoading || bookingLoading}
+                        onClick={() => void handleJoinWaitlist()}
+                      >
+                        Waitlist
+                      </Button>
+                    )}
                   </Stack>
                 </Paper>
               )}
@@ -1033,7 +1093,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       leftSection={<IconCheck size={14} />}
                       onClick={handleConfirmBooking}
                       loading={bookingLoading}
-                      disabled={holdLoading}
+                      disabled={holdLoading || waitlistLoading}
                     >
                       Confirm reservation
                     </Button>
@@ -1042,7 +1102,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       variant="default"
                       leftSection={<IconLockOpen size={14} />}
                       onClick={handleReleaseHold}
-                      disabled={bookingLoading || holdLoading}
+                      disabled={bookingLoading || holdLoading || waitlistLoading}
                     >
                       Release hold
                     </Button>
@@ -1061,7 +1121,9 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                       void handleAcquireHold()
                     }}
                     loading={holdLoading}
-                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || bookingLoading}
+                    disabled={
+                      !isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || bookingLoading || waitlistLoading
+                    }
                   >
                     Lock slot (1-min hold)
                   </Button>
@@ -1071,7 +1133,9 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                     fullWidth
                     onClick={handleConfirmBooking}
                     loading={bookingLoading}
-                    disabled={!isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || holdLoading}
+                    disabled={
+                      !isSlotAvailable || availability.checking || asset.status !== 'AVAILABLE' || holdLoading || waitlistLoading
+                    }
                   >
                     Confirm booking
                   </Button>

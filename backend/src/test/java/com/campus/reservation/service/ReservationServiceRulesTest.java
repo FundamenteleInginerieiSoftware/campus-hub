@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -75,6 +76,9 @@ class ReservationServiceRulesTest {
     @Mock
     private ReservationHoldRepository reservationHoldRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private ReservationService reservationService;
 
     @BeforeEach
@@ -88,7 +92,8 @@ class ReservationServiceRulesTest {
                 clock,
                 transferService,
                 userApi,
-                reservationHoldRepository);
+                reservationHoldRepository,
+                eventPublisher);
     }
 
     private Reservation reservation(long id, LocalDateTime start, LocalDateTime end) {
