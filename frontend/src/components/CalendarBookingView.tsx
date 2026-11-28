@@ -26,15 +26,18 @@ import {
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ApiError } from '../api/client.ts'
 import {
   checkAvailability,
   confirmHold,
   createReservation,
   fetchAssetSummary,
+  fetchNextFreeSlots,
   nowInBucharest,
   parseCampusLocalDateTime,
   type AssetSummary,
   type AvailabilityResponse,
+  type FreeSlotOption,
   type Reservation,
 } from '../api/reservations.ts'
 import ErrorAlert from './ErrorAlert.tsx'
@@ -53,7 +56,7 @@ import {
   SLOT_STEP_MINUTES,
   TIME_STEPS,
 } from './reservation/bookingRules.ts'
-import { formatSlotDate, MONTH_NAMES } from './reservation/reservationFormatters.ts'
+import { formatSlotDate, formatSlotTime, MONTH_NAMES } from './reservation/reservationFormatters.ts'
 import { useSlotHold } from './reservation/useSlotHold.ts'
 
 type Props = {
@@ -172,6 +175,10 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     key: string
     items: AssetSummary[]
   }>({ key: '', items: [] })
+  const [nextSlotsState, setNextSlotsState] = useState<{
+    key: string
+    items: FreeSlotOption[]
+  }>({ key: '', items: [] })
   const [today, setToday] = useState(() => nowInBucharest())
   const initialSchedule = useMemo(() => getInitialSchedule(today), [today])
   const maxBookingDate = useMemo(
@@ -200,6 +207,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     data: AvailabilityResponse | null
     error: unknown
   }>({ checking: true, data: null, error: null })
+  const [availabilityTick, setAvailabilityTick] = useState(0)
 
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState<unknown>(null)
@@ -269,7 +277,7 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     return () => {
       cancelled = true
     }
-  }, [asset.id, startIso, endIso])
+  }, [asset.id, startIso, endIso, availabilityTick])
 
   function selectSlot(day: string, time: string) {
     if (holdLoading || bookingLoading) return
@@ -278,14 +286,17 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     setSelectedStartTime(time)
     setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+    setAvailabilityTick((t) => t + 1)
   }
 
   function handleDurationChange(val: number) {
-    if (holdLoading || bookingLoading) return
+    if (holdLoading || bookingLoading || val === durationMinutes) return
     discardActiveHold()
     setDurationMinutes(val)
     setBookingError(null)
     setAvailability((prev) => ({ ...prev, checking: true, error: null }))
+    // Increment availabilityTick so changing duration when endIso stays capped at 20:00 still finishes re-checking.
+    setAvailabilityTick((t) => t + 1)
   }
 
   const isPrevWeekDisabled = currentMonday.getTime() <= initialSchedule.monday.getTime()
@@ -424,6 +435,56 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
     availability.data?.availableAssetIds.length ?? 0,
     substituteAssets.length,
   )
+
+  const conflictErrorCode =
+    bookingError instanceof ApiError
+      ? bookingError.code
+      : holdError instanceof ApiError
+        ? holdError.code
+        : null
+
+  const hasSlotConflict =
+    (!availability.checking &&
+      Boolean(availability.data) &&
+      !availability.data!.available &&
+      availability.data!.conflictReason === 'RESERVATION_CONFLICT') ||
+    conflictErrorCode === 'RESERVATION_CONFLICT' ||
+    conflictErrorCode === 'SLOT_HELD'
+
+  const nextSlotsKey = hasSlotConflict ? `${asset.id}:${startIso}:${effectiveDuration}:${availabilityTick}` : ''
+
+  useEffect(() => {
+    if (!nextSlotsKey) return
+    let cancelled = false
+    fetchNextFreeSlots(asset.id, startIso, effectiveDuration, 4)
+      .then((res) => {
+        if (!cancelled) {
+          setNextSlotsState({ key: nextSlotsKey, items: res.bookable ? res.slots : [] })
+        }
+      })
+      .catch(() => {
+        // Non-blocking recommendation helper; clear any stale items for this key on failure.
+        if (!cancelled) {
+          setNextSlotsState({ key: nextSlotsKey, items: [] })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [nextSlotsKey, asset.id, startIso, effectiveDuration])
+
+  const nextFreeSlots = nextSlotsKey && nextSlotsState.key === nextSlotsKey ? nextSlotsState.items : []
+
+  function handleSelectRecommendedSlot(slot: FreeSlotOption) {
+    if (holdLoading || bookingLoading) return
+    const parsedStart = parseCampusLocalDateTime(slot.startTime)
+    const parsedEnd = parseCampusLocalDateTime(slot.endTime)
+    const hhmm = `${String(parsedStart.getHours()).padStart(2, '0')}:${String(parsedStart.getMinutes()).padStart(2, '0')}`
+    const slotDuration = Math.round((parsedEnd.getTime() - parsedStart.getTime()) / 60000)
+    setCurrentMonday(getMonday(parsedStart))
+    setDurationMinutes(slotDuration)
+    selectSlot(formatDateKey(parsedStart), hhmm)
+  }
 
   function handleSwitchToSubstitute(sub: AssetSummary) {
     if (holdLoading || bookingLoading) return
@@ -898,6 +959,30 @@ export default function CalendarBookingView({ asset: initialAsset, onBack, onSuc
                         Showing the first {substituteAssets.length} of {totalAvailableSubstitutes} free units.
                       </Text>
                     )}
+                  </Stack>
+                </Paper>
+              )}
+
+              {!availability.checking && hasSlotConflict && nextFreeSlots.length > 0 && (
+                <Paper withBorder p="xs" radius="sm" bg="var(--mantine-color-blue-light)">
+                  <Stack gap={6}>
+                    <Text size="xs" fw={700} c="blue">
+                      Next free slots on this unit:
+                    </Text>
+                    {nextFreeSlots.map((slot) => (
+                      <Button
+                        key={slot.startTime}
+                        size="xs"
+                        variant="light"
+                        color="blue"
+                        justify="space-between"
+                        fullWidth
+                        disabled={holdLoading || bookingLoading}
+                        onClick={() => handleSelectRecommendedSlot(slot)}
+                      >
+                        {formatSlotDate(slot.startTime)} • {formatSlotTime(slot.startTime, slot.endTime)}
+                      </Button>
+                    ))}
                   </Stack>
                 </Paper>
               )}
