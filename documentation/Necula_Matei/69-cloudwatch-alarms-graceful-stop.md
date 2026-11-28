@@ -2,7 +2,7 @@
 
 **Role:** Member 1, Cloud, Security & Auth
 **Date:** 2026-11-28
-**Branch / PR:** `infra/alerts-and-graceful-stop` (#TBD)
+**Branch / PR:** `infra/alerts-and-graceful-stop` (#376)
 **See also:** `54-terraform-deploy.md`, `56-rds-auto-start-alert.md`, `59-deploy-workflow.md`, `68-audit-platform-fixes.md`
 
 ---

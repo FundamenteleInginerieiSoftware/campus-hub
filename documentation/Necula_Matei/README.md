@@ -94,7 +94,7 @@ Each PR I push comes with one numbered note here (`NN-topic.md`). Every note sta
 | 66 | [66-beyond-crud-motivation.md](66-beyond-crud-motivation.md) | "Why This Isn't a Simple CRUD App" motivation in `README.md` and `PROGRESS.md`, 2 SVG sketches (`progress-beyond-crud`, `progress-lock-hierarchy`), `#310`/`#312` race sequence diagram, 6 real bugs caught, and live CLI + browser demos | #360 |
 | 67 | [67-sketch-color-semantics.md](67-sketch-color-semantics.md) | Semantic color alignment in `progress-beyond-crud.svg` (strict Red → Emerald polarity + color key) and `progress-lock-hierarchy.svg` (1-to-1 band-to-bug colors, `BAND` badges, and header legend) | #361 |
 | 68 | [68-audit-platform-fixes.md](68-audit-platform-fixes.md) | Audit fixes: dedicated `campus-ses-` pool, whole-second prod `LiveEvent.at`, public calendar feed in OpenAPI, `ProjectDetailsPage` DST horizon, `docker image prune -f` in `campus-deploy` | #366 |
-| 69 | [69-cloudwatch-alarms-graceful-stop.md](69-cloudwatch-alarms-graceful-stop.md) | 5 free-tier CloudWatch operational alarms (EC2 status/CPU, RDS storage/CPU, app ERROR logs) on `campus-hub-alerts`, plus `docker stop -t 15` graceful shutdown in `campus-deploy` | #TBD |
+| 69 | [69-cloudwatch-alarms-graceful-stop.md](69-cloudwatch-alarms-graceful-stop.md) | 5 free-tier CloudWatch operational alarms (EC2 status/CPU, RDS storage/CPU, app ERROR logs) on `campus-hub-alerts`, plus `docker stop -t 15` graceful shutdown in `campus-deploy` | #376 |
 
 **Team docs:**
 - [PROGRESS.md](../../PROGRESS.md): what each of us has done, ownership map, timeline and contribution visuals
