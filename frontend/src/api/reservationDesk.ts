@@ -7,6 +7,7 @@ import type { PageResponse } from './types.ts'
 
 export type DeskSearch = {
   status?: ReservationStatus
+  userId?: number
   date?: string // "YYYY-MM-DD": bookings that overlap this day
   page?: number
   size?: number
@@ -17,9 +18,10 @@ export type DeskSearch = {
  * The backend takes one status at a time. The desk always asks for start time ascending
  * (sortDir=asc, Calin's #172), so the earliest booking is first across all pages.
  */
-export function searchReservations({ status, date, page = 0, size = 20 }: DeskSearch) {
+export function searchReservations({ status, userId, date, page = 0, size = 20 }: DeskSearch) {
   const params = new URLSearchParams({ page: String(page), size: String(size), sortDir: 'asc' })
   if (status) params.set('status', status)
+  if (userId !== undefined) params.set('userId', String(userId))
   if (date) params.set('date', date)
   return apiFetch<PageResponse<Reservation>>(`/api/v1/admin/reservations?${params.toString()}`)
 }

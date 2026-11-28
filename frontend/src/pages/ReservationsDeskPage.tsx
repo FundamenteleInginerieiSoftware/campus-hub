@@ -13,8 +13,9 @@ import {
   TextInput,
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
-import { IconAlertTriangle, IconCheck, IconRefresh } from '@tabler/icons-react'
+import { IconAlertTriangle, IconCheck, IconCircleCheckFilled, IconQrcode, IconRefresh } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
+import { fetchAdminUser, type AdminUser } from '../api/adminUsers.ts'
 import { errorMessage } from '../api/errorMessages.ts'
 import { checkOutReservation, returnReservation, searchReservations } from '../api/reservationDesk.ts'
 import type { VerifiedStudent } from '../api/pickupPass.ts'
@@ -26,6 +27,7 @@ import PagedTable, { type Column } from '../components/PagedTable.tsx'
 import { VerifiedMark, VerifyStudentDialog } from './ReservationsDeskParts.tsx'
 
 type Tab = 'pickup' | 'out' | 'overdue'
+type VerifyDialogTarget = { kind: 'any' } | { kind: 'student'; userId: number }
 
 // Each tab is one status. Only "To pick up" uses the chosen day: equipment that is out or overdue
 // has to come back whatever day it was booked for, so those tabs show all of it.
@@ -54,9 +56,10 @@ function dayOf(iso: string): string {
   return `${day}.${month}.${year}`
 }
 
-function searchFor(tab: Tab, date: string, page: number) {
+function searchFor(tab: Tab, date: string, page: number, userId?: number) {
   return searchReservations({
     status: TAB_STATUS[tab],
+    userId,
     date: tab === 'pickup' ? date : undefined,
     page,
     size: PAGE_SIZE,
@@ -70,10 +73,12 @@ export default function ReservationsDeskPage() {
   const [pageData, setPageData] = useState<PageResponse<Reservation> | null>(null)
   const [counts, setCounts] = useState<Record<Tab, number | null>>({ pickup: null, out: null, overdue: null })
   const [assets, setAssets] = useState<Record<number, AssetSummary>>({})
-  // Ids of assets already loaded or being loaded. A ref, not state: the list effect reads it after an
-  // await, and a ref always gives the current set there (a state value would be the one from the render
-  // that started the request).
+  const [users, setUsers] = useState<Record<number, AdminUser>>({})
+  // Ids of assets and users already loaded or being loaded. Refs, not state: the list effect reads
+  // them after an await, and a ref always gives the current set there (a state value would be the
+  // one from the render that started the request).
   const requestedAssetIds = useRef(new Set<number>())
+  const requestedUserIds = useRef(new Set<number>())
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown>(null)
 
@@ -84,7 +89,10 @@ export default function ReservationsDeskPage() {
 
   // Students whose pickup code was checked at the desk, by user id (kept until the page is left).
   const [verified, setVerified] = useState<Record<number, VerifiedStudent>>({})
-  const [verifyingUserId, setVerifyingUserId] = useState<number | null>(null)
+  const [verifyTarget, setVerifyTarget] = useState<VerifyDialogTarget | null>(null)
+  // Set after a top-bar "Scan student pass" succeeds: narrows both the table and the three tab counts.
+  const [filteredStudent, setFilteredStudent] = useState<VerifiedStudent | null>(null)
+  const filteredUserId = filteredStudent?.userId
 
   // Adding 1 re-runs both effects below (after an action or a click on "Refresh").
   const [reloadToken, setReloadToken] = useState(0)
@@ -95,10 +103,10 @@ export default function ReservationsDeskPage() {
   // The rows of the open tab.
   useEffect(() => {
     // "ignore" drops the answer of a request the user has already moved away from
-    // (other tab or day), so a slow old answer can't overwrite the new list.
+    // (other tab, day, or scanned student), so a slow old answer can't overwrite the new list.
     let ignore = false
     let steppingBack = false
-    searchFor(tab, date, pageNumber)
+    searchFor(tab, date, pageNumber, filteredUserId)
       .then(async (response) => {
         if (ignore) return
 
@@ -119,30 +127,63 @@ export default function ReservationsDeskPage() {
         setPageData(response)
         setLoadError(null)
 
-        // Asset names come from Liviu's public GET /api/v1/assets/{id}, one call per asset on the page.
-        // If one fails, that row just shows "Asset #id".
+        // Asset names come from Liviu's public GET /api/v1/assets/{id} and student names from Stefania's
+        // GET /api/v1/admin/users/{id}, one call per uncached id on the page. If one fails, that row
+        // falls back to "Asset #id" / "Student #id" and the id is removed from the requested set so the
+        // next load tries it again.
         // Bug fixed (#166): every tab switch, day change or refresh fetched every asset on the page again,
-        // even the ones we already had. Fix: only fetch ids not asked for yet. A failed one is removed from
-        // the set, so the next load tries it again. The names are kept even if the user has moved on
-        // meanwhile: they are already marked as asked for, so no later load would fetch them.
-        const ids = [...new Set(response.content.map((r) => r.assetId))].filter((id) => !requestedAssetIds.current.has(id))
-        ids.forEach((id) => requestedAssetIds.current.add(id))
-        const found = await Promise.all(
-          ids.map((id) =>
-            fetchAssetSummary(id).catch(() => {
-              requestedAssetIds.current.delete(id)
-              return null
-            }),
-          ),
+        // even the ones we already had. Fix: only fetch ids not asked for yet, and keep completed names
+        // even if the user has moved on meanwhile (those ids are already marked as asked for, so no later
+        // load would fetch them).
+        const assetIds = [...new Set(response.content.map((r) => r.assetId))].filter(
+          (id) => !requestedAssetIds.current.has(id),
         )
-        if (found.length === 0) return
-        setAssets((prev) => {
-          const next = { ...prev }
-          for (const asset of found) {
-            if (asset) next[asset.id] = asset
-          }
-          return next
-        })
+        const userIds = [...new Set(response.content.map((r) => r.userId))].filter(
+          (id) => !requestedUserIds.current.has(id),
+        )
+        assetIds.forEach((id) => requestedAssetIds.current.add(id))
+        userIds.forEach((id) => requestedUserIds.current.add(id))
+
+        const [foundAssets, foundUsers] = await Promise.all([
+          Promise.all(
+            assetIds.map((id) =>
+              fetchAssetSummary(id).catch(() => {
+                requestedAssetIds.current.delete(id)
+                return null
+              }),
+            ),
+          ),
+          Promise.all(
+            userIds.map((id) =>
+              fetchAdminUser(id).catch(() => {
+                requestedUserIds.current.delete(id)
+                return null
+              }),
+            ),
+          ),
+        ])
+
+        const validAssets = foundAssets.filter((a): a is AssetSummary => a !== null)
+        if (validAssets.length > 0) {
+          setAssets((prev) => {
+            const next = { ...prev }
+            for (const asset of validAssets) {
+              next[asset.id] = asset
+            }
+            return next
+          })
+        }
+
+        const validUsers = foundUsers.filter((u): u is AdminUser => u !== null)
+        if (validUsers.length > 0) {
+          setUsers((prev) => {
+            const next = { ...prev }
+            for (const user of validUsers) {
+              next[user.id] = user
+            }
+            return next
+          })
+        }
       })
       .catch((err) => {
         if (!ignore) setLoadError(err)
@@ -155,14 +196,21 @@ export default function ReservationsDeskPage() {
     return () => {
       ignore = true
     }
-  }, [tab, date, pageNumber, reloadToken])
+  }, [tab, date, filteredUserId, pageNumber, reloadToken])
 
   // The numbers on the three tabs: size=1 is enough, we only read totalElements.
   useEffect(() => {
     let ignore = false
     const tabs: Tab[] = ['pickup', 'out', 'overdue']
     Promise.all(
-      tabs.map((t) => searchReservations({ status: TAB_STATUS[t], date: t === 'pickup' ? date : undefined, size: 1 })),
+      tabs.map((t) =>
+        searchReservations({
+          status: TAB_STATUS[t],
+          userId: filteredUserId,
+          date: t === 'pickup' ? date : undefined,
+          size: 1,
+        }),
+      ),
     )
       .then(([pickup, out, overdue]) => {
         if (!ignore) setCounts({ pickup: pickup.totalElements, out: out.totalElements, overdue: overdue.totalElements })
@@ -173,7 +221,7 @@ export default function ReservationsDeskPage() {
     return () => {
       ignore = true
     }
-  }, [date, reloadToken])
+  }, [date, filteredUserId, reloadToken])
 
   // Each change below that re-runs the list effect also sets loading = true. Each one first checks
   // that something really changed: if the effect didn't run, nothing would set loading back to false.
@@ -207,6 +255,32 @@ export default function ReservationsDeskPage() {
   function reload() {
     setLoading(true)
     setReloadToken((t) => t + 1)
+  }
+
+  function handleVerified(student: VerifiedStudent, filterToStudent: boolean) {
+    setVerified((prev) => ({ ...prev, [student.userId]: student }))
+    if (!filterToStudent) return
+
+    const sameStudent = filteredStudent?.userId === student.userId
+    setFilteredStudent(student)
+    setNotice(null)
+    setActionError(null)
+    setPageNumber(0)
+    setPageData(null)
+    setLoading(true)
+    if (sameStudent) {
+      // Re-scanning the already filtered student leaves filteredUserId unchanged; bump reloadToken
+      // so both effects still run and clear loading.
+      setReloadToken((t) => t + 1)
+    }
+  }
+
+  function clearStudentFilter() {
+    if (!filteredStudent) return
+    setFilteredStudent(null)
+    setPageNumber(0)
+    setPageData(null)
+    setLoading(true)
   }
 
   async function runAction(reservation: Reservation, action: 'checkout' | 'return') {
@@ -264,12 +338,26 @@ export default function ReservationsDeskPage() {
       },
     },
     {
-      // Only the id until the desk verifies the student's pickup code: there is no admin endpoint
-      // to look up another user's name.
+      // Student names come from Stefania's GET /api/v1/admin/users/{id} (cached per id); once the desk
+      // verifies the student's pickup pass, VerifiedMark adds the green check on top.
       header: 'Student',
       render: (r) => {
         const student = verified[r.userId]
-        return student ? <VerifiedMark student={student} /> : <Text>Student #{r.userId}</Text>
+        if (student) return <VerifiedMark student={student} />
+        const user = users[r.userId]
+        if (user) {
+          return (
+            <div>
+              <Text fw={500} title={user.email}>
+                {user.fullName}
+              </Text>
+              <Text size="xs" c="dimmed">
+                #{r.userId}
+              </Text>
+            </div>
+          )
+        }
+        return <Text>Student #{r.userId}</Text>
       },
     },
     {
@@ -283,7 +371,7 @@ export default function ReservationsDeskPage() {
           return (
             <Group gap="xs" justify="flex-end" wrap="nowrap">
               {!verified[r.userId] && (
-                <Button size="xs" variant="default" onClick={() => setVerifyingUserId(r.userId)}>
+                <Button size="xs" variant="default" onClick={() => setVerifyTarget({ kind: 'student', userId: r.userId })}>
                   Verify
                 </Button>
               )}
@@ -316,8 +404,17 @@ export default function ReservationsDeskPage() {
     },
   ]
 
-  const emptyText =
-    tab === 'pickup' ? 'No pick-ups left for this day.' : tab === 'out' ? 'No equipment is out right now.' : 'Nothing is overdue.'
+  const emptyText = filteredStudent
+    ? tab === 'pickup'
+      ? `No pick-ups for ${filteredStudent.fullName} on this day.`
+      : tab === 'out'
+        ? `${filteredStudent.fullName} has no equipment out right now.`
+        : `${filteredStudent.fullName} has nothing overdue.`
+    : tab === 'pickup'
+      ? 'No pick-ups left for this day.'
+      : tab === 'out'
+        ? 'No equipment is out right now.'
+        : 'Nothing is overdue.'
 
   const tabLabel = (label: string, t: Tab) => (counts[t] === null ? label : `${label} (${counts[t]})`)
 
@@ -327,9 +424,14 @@ export default function ReservationsDeskPage() {
         title="Reservations desk"
         description="Hand out equipment when a student comes to pick it up, and take it back when they return it."
         actions={
-          <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={reload} loading={loading}>
-            Refresh
-          </Button>
+          <Group gap="xs">
+            <Button leftSection={<IconQrcode size={16} />} onClick={() => setVerifyTarget({ kind: 'any' })}>
+              Scan student pass
+            </Button>
+            <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={reload} loading={loading}>
+              Refresh
+            </Button>
+          </Group>
         }
       />
 
@@ -351,6 +453,23 @@ export default function ReservationsDeskPage() {
         </Alert>
       )}
       <ErrorAlert error={loadError} />
+
+      {filteredStudent && (
+        <Alert color="teal" icon={<IconCircleCheckFilled size={18} />} mb="md">
+          <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+            <Text size="sm">
+              Filtered to{' '}
+              <Text span fw={600}>
+                {filteredStudent.fullName}
+              </Text>{' '}
+              ({filteredStudent.email}) · #{filteredStudent.userId}
+            </Text>
+            <Button size="xs" variant="light" color="teal" onClick={clearStudentFilter}>
+              Show all students
+            </Button>
+          </Group>
+        </Alert>
+      )}
 
       <Group justify="space-between" align="flex-end" mb="sm" wrap="wrap">
         <SegmentedControl
@@ -385,11 +504,12 @@ export default function ReservationsDeskPage() {
         />
       )}
 
-      {verifyingUserId !== null && (
+      {verifyTarget !== null && (
         <VerifyStudentDialog
-          userId={verifyingUserId}
-          onClose={() => setVerifyingUserId(null)}
-          onVerified={(student) => setVerified((prev) => ({ ...prev, [student.userId]: student }))}
+          userId={verifyTarget.kind === 'student' ? verifyTarget.userId : undefined}
+          studentName={verifyTarget.kind === 'student' ? users[verifyTarget.userId]?.fullName : undefined}
+          onClose={() => setVerifyTarget(null)}
+          onVerified={(student) => handleVerified(student, verifyTarget.kind === 'any')}
         />
       )}
     </>
