@@ -1,10 +1,10 @@
 @startuml component
 ' UML component diagram of the backend modules (com.campus.<module>).
-' Every "requires" arrow comes from a real import on main (5 Nov 2026); the grep that produced
-' them is in documentation/Necula_Matei/32-component-deployment-diagrams.md.
+' Every "requires" arrow comes from a real import on main (545e334, 28 Nov 2026).
+' Verified via cross-module import grep in documentation/Necula_Matei/74-template-blueprint-report-runbook.md.
 ' Render from the repo root: java -jar plantuml.jar -tpng docs/diagrams/component.puml
 
-title Campus Equipment & Incident Hub: UML component diagram\n(backend modules, state of main on 5 Nov 2026)
+title Campus Equipment & Incident Hub: UML component diagram\n(backend modules, state of main at 545e334, 28 Nov 2026)
 
 skinparam componentStyle uml2
 skinparam shadowing false
@@ -34,31 +34,36 @@ skinparam note {
   BorderColor #C8B560
 }
 
-component "React SPA\n(frontend/, React + Vite + TypeScript)" as spa
+component "React SPA\n(frontend/, React + Vite + TypeScript,\n20 pages + LiveToasts SSE client)" as spa
 
-interface "REST API /api/v1/**" as rest
+interface "REST API /api/v1/**\n+ SSE /api/v1/live/stream" as rest
 
-package "Spring Boot application  (backend/, base package com.campus)" as app {
-  component "config\n(SecurityConfig: JWT check,\n/api/v1/admin/** = ADMIN;\nAsyncConfig, AwsConfig, SpaConfig)" as config <<module>>
+package "Spring Boot 4.1 application  (backend/, base package com.campus)" as app {
+  component "config\n(SecurityConfig, SecurityErrorHandler,\nOpenApiConfig, AsyncConfig,\nAwsConfig, SpaConfig)" as config <<module>>
 
-  component "reassignment\n(engine: Strategy)" as reassignment <<module>>
-  component "incident" as incident <<module>>
+  component "project (#140)\n(bilingual RO/EN search,\n10 kits, Reserve all)" as project <<module>>
+
+  component "reassignment\n(Strategy engine +\nMaintenanceImpactSimulator)" as reassignment <<module>>
+
+  component "incident\n(triage, photo upload #210,\nReliabilityCalculator #291)" as incident <<module>>
 
   interface "AssetDamagedEvent" as AssetDamagedEvent <<event>>
+  interface "AssetRetiredEvent" as AssetRetiredEvent <<event>>
+  interface "UserDisabledEvent" as UserDisabledEvent <<event>>
 
-  component "reservation" as reservation <<module>>
+  component "reservation\n(bookings, bundles, holds, transfers,\nidempotency, .ics feed, next-free-slots)" as reservation <<module>>
   interface "ReservationApi" as ReservationApi
 
-  component "catalog" as catalog <<module>>
+  component "catalog\n(categories, lab rooms, assets,\nretire + lockForBooking)" as catalog <<module>>
   interface "CatalogApi" as CatalogApi
 
-  component "notification" as notification <<module>>
+  component "notification\n(dev log / prod SES +\nLiveStreams SSE #317/#332/#340)" as notification <<module>>
   interface "NotificationService" as NotificationService
 
-  component "storage" as storage <<module>>
+  component "storage\n(Local / S3 + StorageValidation)" as storage <<module>>
   interface "StorageService" as StorageService
 
-  component "user" as user <<module>>
+  component "user\n(auth/JWT, user/admin #206/#302,\nPickupPassService #283/#318)" as user <<module>>
   interface "UserApi" as UserApi
 
   component "common" as common <<module>> {
@@ -71,17 +76,23 @@ package "Spring Boot application  (backend/, base package com.campus)" as app {
   interface "AuditService" as AuditService
 }
 
-database "PostgreSQL 18" as pg <<external>>
+database "PostgreSQL 18\n(12 tables, 18 Flyway migrations)" as pg <<external>>
 component "Amazon SES" as ses <<external>>
 component "Amazon S3" as s3 <<external>>
 
 ' ---- client ----
-spa ..> rest : HTTPS + JSON\nBearer JWT
+spa ..> rest : HTTPS + JSON (Bearer JWT)\n+ SSE text/event-stream
 rest -down- app
 
-' ---- Observer: incident publishes, reassignment listens ----
+' ---- Observer events ----
 incident -- AssetDamagedEvent : publishes
+catalog -- AssetRetiredEvent : publishes (#280)
+user -- UserDisabledEvent : publishes (#302)
+
 reassignment ..> AssetDamagedEvent : <<listens>>\nAFTER_COMMIT, @Async
+reassignment ..> AssetRetiredEvent : <<listens>>\nAFTER_COMMIT, @Async (#311)
+reservation ..> UserDisabledEvent : <<listens>>\nAFTER_COMMIT, REQUIRES_NEW (#330)
+notification ..> UserDisabledEvent : <<listens>>\nAFTER_COMMIT, close SSE (#340)
 
 ' ---- provided interfaces (each module's api package) ----
 reservation -up- ReservationApi
@@ -91,76 +102,92 @@ storage -up- StorageService
 user -up- UserApi
 caudit -up- AuditService
 
-' ---- required interfaces, from the imports ----
+' ---- required interfaces (exact cross-module imports on main) ----
+project ..> CatalogApi
+project ..> ReservationApi : bookBundle / isAssetFree
 reassignment ..> ReservationApi
 reassignment ..> CatalogApi
 reassignment ..> NotificationService
 incident ..> CatalogApi
+incident ..> ReservationApi : usedMinutesByAsset (#298)
+incident ..> StorageService : photos (#210)
+incident ..> AuditService
 reservation ..> CatalogApi
 reservation ..> NotificationService
-reservation ..> UserApi : dev seeder
+reservation ..> UserApi : findActiveRole (#310) + seeder
 reservation ..> AuditService
 catalog ..> AuditService
-notification ..> UserApi : prod (SES)
-config ..> UserApi : findActiveRole
+user ..> AuditService : pickup pass + user admin
+notification ..> UserApi : prod SES + SSE active check
+notification ..> config : AsyncConfig.MAIL_EXECUTOR (#366)
+config ..> UserApi : findActiveRole (#117/#312)
 
 ' ---- external systems ----
 app ..> pg : JDBC (Spring Data JPA, Flyway)
-notification ..> ses : prod
+notification ..> ses : prod (campus-ses- pool)
 storage ..> s3 : prod
 
 note top of reassignment
   <b>Strategy</b>: ReassignmentBookingProcessor
-  tries each SubstituteStrategy in @Order:
-  1. SameModelStrategy
-  2. SameCategoryStrategy
+  tries SubstituteStrategy in @Order:
+  1. SameModelStrategy (same lab room first)
+  2. SameCategoryStrategy (same lab room first)
   none free -> ReservationApi.forceCancel.
-  No api package: no module calls it.
+  Also runs dry-run MaintenanceImpactSimulator (#351).
+  No api package: leaf module.
 end note
 
-note bottom of AssetDamagedEvent
-  <b>Observer</b>: IncidentService publishes the
-  event with Spring's ApplicationEventPublisher;
-  LocalAssetDamagedListener (reassignment)
-  receives it after the commit. incident never
-  imports reassignment.
+note right of project
+  <b>Leaf module (#140)</b>: no DB tables, no api.
+  Loads 10 bilingual RO/EN JSON kits at startup;
+  atomic "Reserve all" calls ReservationApi.bookBundle.
+end note
+
+note bottom of UserDisabledEvent
+  <b>Observer (#302/#330/#335/#340)</b>:
+  UserDisabledEvent listeners are synchronous
+  AFTER_COMMIT (not @Async): reservation cancels
+  upcoming CONFIRMED bookings in REQUIRES_NEW,
+  and notification drops open LiveStreams SSE tabs.
+end note
+
+note right of notification
+  <b>Live notifications (#290)</b>:
+  GET /api/v1/live/stream (LiveStreams, 20 s :hb
+  on 3-thread campus-sched- pool #347, max 5/user).
+  dev: LoggingNotificationService -> LiveStreams
+  prod: SesNotificationService -> LiveStreams + SES (#332)
 end note
 
 note right of storage
-  Used by incident for the photo
-  (POST/GET /incidents/{id}/photo, #210).
+  Used by incident for photos (#210).
   dev: LocalStorageService -> uploads/
-  prod: S3StorageService
-end note
-
-note bottom of notification
-  dev: LoggingNotificationService
-  prod: SesNotificationService
+  prod: S3StorageService -> private S3 bucket
 end note
 
 legend right
-  <b>Module rules</b> (AGENTS.md §5), checked by ArchUnit in
-  backend/src/test/java/com/campus/architecture/:
-  * another module may import only a module's <b>api</b> package
-    (plus common and config);
-  * catalog must not use reservation, incident, reassignment;
-  * reservation must not use incident, reassignment;
-  * incident must not use reassignment; no cycles.
+  <b>Module rules</b> (AGENTS.md §5), enforced by 28 ArchUnit @ArchTest rules
+  in backend/src/test/java/com/campus/architecture/:
+  * other modules may import only a module's <b>api</b> package (+ common, config);
+  * no default methods on ..api.. interfaces (#336);
+  * catalog must not use reservation, incident, reassignment, project;
+  * reservation must not use incident, reassignment, project;
+  * incident must not use reassignment; project uses only catalog.api + reservation.api;
+  * no dependency cycles.
 
-  <b>REST API</b>: each module's web/ package has its own
-  @RestController; config/SecurityConfig checks every request.
+  <b>Pickup pass (#283/#318)</b>:
+  PickupPassService + PickupCodes live inside user/ (30 s rotating 6-digit/QR,
+  GET /users/me/pickup-pass + POST /admin/pickup-pass/verify).
 
   <b>Notation</b>
-  ()--  provided interface (lives in the module's api package)
-  ..>   requires / uses (one arrow per real import)
+  ()--  provided interface (module's api package)
+  ..>   requires / uses (verified against real imports on main 545e334)
   <<event>>  Spring application event (Observer pattern)
 
-  <b>Not drawn</b> (would cross every module):
-  common.error and common.paging are used by all modules;
-  CurrentUser (common.security) by user, catalog,
-  reservation, incident; the Clock bean (common.time)
-  by user, catalog, reservation, incident, reassignment, audit.
-  messaging (SQS bridge) is an empty stretch-goal package.
+  <b>Not drawn as arrows</b> (shared across nearly every module):
+  common.error, common.paging, CurrentUser (common.security),
+  and the shared Clock bean (common.time, Europe/Bucharest).
+  messaging/ (SQS stretch goal) contains only package-info.java.
 endlegend
 
 @enduml

@@ -1,12 +1,12 @@
 @startuml deployment-aws
-' UML deployment diagram of the PLANNED production setup on AWS (not deployed yet).
-' Sources: docs/adr/002, 003, 005, Dockerfile, backend/src/main/resources/application-prod.yml,
-' backend/src/main/java/com/campus/config/AwsConfig.java,
-' documentation/Necula_Matei/23-s3-ses-adapters.md and 29-s3-ses-hardening.md.
-' Same picture as docs/diagrams/aws-architecture.drawio, in UML notation.
+' UML deployment diagram of the LIVE production setup on AWS (deployed 17 Nov 2026 #304;
+' RDS alert #309; OIDC deploy.yml applied & proved 22 Nov #320; paused between demos).
+' Sources: infra/*.tf, .github/workflows/deploy.yml, Dockerfile, application-prod.yml,
+' backend/src/main/java/com/campus/config/{AwsConfig,AsyncConfig,SecurityConfig,SpaConfig}.java.
+' Same architecture as docs/diagrams/aws-architecture.drawio, in UML notation.
 ' Render from the repo root: java -jar plantuml.jar -tpng docs/diagrams/deployment-aws.puml
 
-title Campus Equipment & Incident Hub: UML deployment diagram\nproduction on AWS, <b>PLANNED (W7–W9), not deployed yet</b>
+title Campus Equipment & Incident Hub: UML deployment diagram\nproduction on AWS (live since 17 Nov 2026; OIDC deploy.yml proved 22 Nov; paused between demos)
 
 skinparam shadowing false
 skinparam defaultFontName Helvetica
@@ -41,65 +41,68 @@ skinparam note {
 
 node "Student / admin device" as client <<device>> {
   node "Web browser" as browser <<executionEnvironment>> {
-    artifact "React SPA\n(index.html + JS bundle)" as spa
+    artifact "React SPA\n(index.html + JS bundle\n+ SSE LiveToasts)" as spa
   }
 }
 
 node "GitHub Actions runner" as gha <<device>> {
-  artifact "deploy.yml\n(after a green ci on main;\nOIDC role campus-hub-github-deploy)" as deploy
+  artifact "deploy.yml (#320)\n(after green ci on main, or rollback sha;\nOIDC role campus-hub-github-deploy)" as deploy
 }
 
 rectangle "AWS account mateinpunct" as aws {
 
-  node "Amazon CloudFront\n(*.cloudfront.net, free HTTPS;\nno caching for /api/*)" as cf <<cdn>>
+  node "Amazon CloudFront\n(*.cloudfront.net, PriceClass_100, free HTTPS;\nHSTS, Authorization-keyed pass-through,\norigin_read_timeout = 30 s)" as cf <<cdn>>
 
   rectangle "Region eu-central-1 (Frankfurt)" as region {
 
-    rectangle "VPC (no NAT gateway)" as vpc {
+    rectangle "VPC 10.0.0.0/16 (no NAT gateway)" as vpc {
 
-      rectangle "Public subnet\nSG: :8080 only from the CloudFront\norigin-facing prefix list; no SSH" as pub {
-        node "EC2 t3.small\nAmazon Linux 2023, Elastic IP" as ec2 <<device>> {
-          node "Docker Engine" as docker <<executionEnvironment>> {
-            node "Container campus-hub:<commit SHA>\nJRE 25 (temurin alpine), user app\nSPRING_PROFILES_ACTIVE=prod, :8080" as ctr <<container>> {
-              artifact "app.jar\n(Spring Boot API +\nReact build in static/)" as jar
+      rectangle "Public subnet 10.0.1.0/24\nSG campus-hub-app: :8080 only from CloudFront\nmanaged prefix list; no SSH port" as pub {
+        node "EC2 t3.small (x86)\nAL2023, Elastic IP, IMDSv2 hop=2,\nencrypted 20 GB gp3, cpu_credits=standard" as ec2 <<device>> {
+          node "Docker Engine\n(--memory 1536m, awslogs)" as docker <<executionEnvironment>> {
+            node "Container campus-hub:<commit SHA>\nJRE 25 Alpine (apk upgrade, user app)\nSPRING_PROFILES_ACTIVE=prod, :8080" as ctr <<container>> {
+              artifact "app.jar\n(Spring Boot 4.1 API +\nReact build in static/)" as jar
             }
           }
-          artifact "env file (chmod 600)\nfilled from /campus/*" as envfile
-          artifact "IAM instance role\n(temporary credentials,\nno AWS keys on the server)" as role <<IAM role>>
-          node "SSM Agent" as agent <<executionEnvironment>>
+          artifact "/etc/campus.env (chmod 600)\n9 vars from /campus/*" as envfile
+          artifact "IAM instance profile\ncampus-hub-app\n(IMDSv2 temp credentials)" as role <<IAM role>>
+          node "SSM Agent\n(Session Manager + /usr/local/bin/campus-deploy)" as agent <<executionEnvironment>>
         }
       }
 
-      rectangle "Private DB subnets (2 AZs)\nSG: :5432 only from the EC2 SG" as priv {
-        node "Amazon RDS\nPostgreSQL 18, db.t4g.micro\nsingle-AZ, encrypted, not public" as rds <<executionEnvironment>> {
-          database "campus\n(tables by Flyway)" as db
+      rectangle "Private DB subnets (2 AZs: 10.0.11/12.0/24)\nSG campus-hub-db: :5432 only from EC2 SG;\nzero egress, no internet route" as priv {
+        node "Amazon RDS (campus-hub)\nPostgreSQL 18, db.t4g.micro\n20 GB gp3 encrypted, 1-day backup" as rds <<executionEnvironment>> {
+          database "campus\n(12 tables, 18 Flyway migrations)" as db
         }
       }
     }
 
-    node "Amazon S3\nprivate photos bucket\n(PHOTO_BUCKET)" as s3 <<service>>
-    node "Amazon SES\n(sandbox, MAIL_FROM)" as ses <<service>>
-    node "SSM Parameter Store\n/campus/* SecureString\n+ Run Command" as ssm <<service>>
-    node "Amazon ECR\nimages tagged by commit SHA" as ecr <<service>>
-    node "CloudWatch Logs\n(7 days)" as cw <<service>>
+    node "Amazon S3\nprivate photos bucket\n(SSE-AES256, PublicAccessBlock)" as s3 <<service>>
+    node "Amazon SES\n(sandbox, verified MAIL_FROM)" as ses <<service>>
+    node "SSM Parameter Store\n/campus/* SecureString + String\n+ Run Command" as ssm <<service>>
+    node "Amazon ECR\ncampus-hub (immutable SHA tags,\nscan_on_push, lifecycle keep 10)" as ecr <<service>>
+    node "CloudWatch Logs\n/campus-hub/app\n(7-day retention)" as cw <<service>>
+    node "Amazon SNS (#309)\ncampus-hub-alerts\n(RDS-EVENT-0154 7-day auto-start)" as sns <<service>>
   }
 }
 
 ' ---- user traffic ----
-browser -down-> cf : HTTPS :443
+browser -down-> cf : HTTPS :443\n(REST + SSE)
 cf -down-> ctr : HTTP :8080\n(origin = Elastic IP)
-jar -down-> db : JDBC :5432\n(DB_URL, DB_USERNAME, DB_PASSWORD)
+jar -down-> db : JDBC/SSL :5432\n(sslmode=require)
 
 ' ---- the app calls AWS APIs with the instance role (AWS SDK v2, AwsConfig) ----
-jar -down-> s3 : HTTPS :443\nPut/Get/DeleteObject
-jar -down-> ses : HTTPS :443\nSendEmail (SES v2)
-docker -down-> cw : HTTPS :443\ncontainer logs
+jar -down-> s3 : HTTPS :443\nPut/Get/DeleteObject + ListBucket
+jar -down-> ses : HTTPS :443\nSendEmail (campus-ses- pool)
+docker -down-> cw : HTTPS :443\ncontainer stdout/stderr
+rds -down-> sns : RDS event sub\n(RDS-EVENT-0154)
 
-' ---- deploy (deploy.yml, W8; ADR-002 / ADR-003) ----
+' ---- deploy (deploy.yml, #320; ADR-002 / ADR-003) ----
 deploy -down-> ecr : 1. docker push\n(HTTPS, OIDC role)
-deploy -down-> ssm : 2. Run Command\n(HTTPS, OIDC role)
-ssm -down-> agent : campus-deploy <sha>
-agent -down-> envfile : writes secrets\n(GetParameters)
+deploy -down-> ssm : 2. SendCommand\n(HTTPS, OIDC role)
+deploy -down-> cf : 3. GET /actuator/health\n(HTTPS :443 verify UP)
+ssm -down-> agent : campus-deploy <sha>\n(+ docker image prune -f)
+agent -down-> envfile : writes secrets\n(GetParametersByPath)
 docker -down-> ecr : docker pull\n(HTTPS :443)
 docker ..> envfile : docker run --env-file
 
@@ -109,25 +112,25 @@ priv -[hidden]down- s3
 priv -[hidden]down- ecr
 
 legend right
-  <b>Instance role permissions</b> (ADR-002):
-  s3:PutObject/GetObject/DeleteObject on bucket/*,
-  s3:ListBucket on the bucket (missing photo = 404),
-  ses:SendEmail, ssm:GetParameters on /campus/*,
-  ECR pull, CloudWatch Logs write.
-  The SDK finds the role by itself (AwsConfig),
-  10 s per attempt / 20 s per call timeouts.
+  <b>Live status (28 Nov 2026)</b>:
+  Terraform parts 1-3 (#249, #250, #304), RDS alert (#309) and GitHub OIDC (#320)
+  are all applied and verified live (17 Nov + 22 Nov); EC2 & RDS are paused between
+  demos (~$0.25/day vs ~$1.20/day running; see docs/runbook.md).
 
-  <b>Prod environment variables</b> (application-prod.yml):
-  DB_URL, DB_USERNAME, DB_PASSWORD, JWT_SECRET,
-  AWS_REGION=eu-central-1, PHOTO_BUCKET, MAIL_FROM;
-  optional ADMIN_EMAIL / ADMIN_PASSWORD (first admin),
-  SQS_QUEUE_URL (stretch goal, not drawn).
-  Secrets live in SSM (ADR-003), never in Git or the image.
-  Shell access: SSM Session Manager (no SSH port).
+  <b>EC2 instance role (campus-hub-app)</b>:
+  s3:Put/Get/DeleteObject on bucket/*, s3:ListBucket on bucket (404 not 403),
+  ses:SendEmail, ssm:GetParameter* on /campus + /campus/*, ECR pull,
+  CloudWatch /campus-hub/app write, SSM core (no SSH).
+  SDK timeouts: 10 s/attempt, 20 s total; SES isolated on campus-ses- pool (#366).
 
-  <b>Notation</b>: <<device>> = machine, <<executionEnvironment>> /
-  <<container>> = software that runs other software, artifact = deployed file,
-  arrow = communication path (protocol :port).
+  <b>GitHub OIDC deploy role (campus-hub-github-deploy)</b>:
+  Restricted by immutable repo subject on refs/heads/main only;
+  zero static AWS keys in GitHub; skips cleanly when EC2 is paused.
+
+  <b>Prod env vars (/campus/* in SSM)</b>:
+  DB_URL (sslmode=require), DB_USERNAME, DB_PASSWORD*, JWT_SECRET*,
+  AWS_REGION, PHOTO_BUCKET, MAIL_FROM, ADMIN_EMAIL, ADMIN_PASSWORD*.
+  (* = KMS SecureString; SQS_QUEUE_URL optional stretch goal).
 endlegend
 
 @enduml

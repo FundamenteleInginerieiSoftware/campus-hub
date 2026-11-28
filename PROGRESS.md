@@ -542,12 +542,31 @@ All `12` PostgreSQL 18 tables are managed strictly through Flyway migrations (`d
 
 ---
 
-## 10. Everyone & Further Reading
+## 11. Reusable Template Blueprint (Post-Defense)
+
+Roughly **70%** of this codebase—PostgreSQL 18 lock ordering, `Idempotency-Key` replay protection, `AFTER_COMMIT` Observer reassignment, live SSE (`LiveStreams`), fail-closed JWT + scalar active-role verification, 30-second rotating QR pickup passes, magic-byte file storage, `28` ArchUnit rules, and Terraform/OIDC cloud delivery—is already **domain-agnostic**. Only **3 small seams** tie it to university labs (`catalog/` `lab_rooms` & `model`, `ReservationSlotValidator`/quota constants, and `SubstituteStrategy` + optional `project/` kits).
+
+We intentionally keep the campus schema and naming stable through the `v1.0.0` FIS defense, then extract it into a reusable GitHub Template Repository (~3–5 days of work). The same core engine maps cleanly onto four other industries:
+
+| Target Domain | Bookable Resource (`assets`) | Location (`locations`) | Substitute Group | Outage / Reassignment Trigger |
+|---|---|---|---|---|
+| **Hospital Medical Devices** | Infusion pump, portable ultrasound, ECG | Ward / wing (`ICU-2`) | Certified device class + firmware | Calibration failure, sterilization lock, fault |
+| **Film / AV Studio Gear** | Cinema camera, prime lens, boom kit | Equipment cage / stage | Mount / camera body line (`FX6`) | Sensor/lens damage, missing battery pack |
+| **University Fleet / Vehicles** | Lab van, EV shuttle, field-trip minibus | Parking lot / campus gate | Vehicle class + license tier | Check-engine fault, flat tire, inspection due |
+| **Coworking / Study Rooms** | Quiet pod, whiteboard room, booth | Building & floor (`Hub-3F`) | Seat capacity + AV tier (`6-seat-4K`) | Projector/AC outage, facility maintenance |
+
+Full layer split, domain comparison, and 7-step extraction checklist: **[`docs/reusable-template-blueprint.md`](docs/reusable-template-blueprint.md)**.
+
+---
+
+## 12. Everyone & Further Reading
 
 **Open team items:** only two items remain open in [`docs/decisions.md`](docs/decisions.md): the recurring weekly meeting time (`⏳`) and the exact defense date (to be announced by the professor).
 
 - **What is still to do:** [`docs/whats-left.md`](docs/whats-left.md)
+- **Reusable template blueprint (post-defense):** [`docs/reusable-template-blueprint.md`](docs/reusable-template-blueprint.md)
 - **Architecture & UML diagrams:** [`docs/diagrams/README.md`](docs/diagrams/README.md)
+- **Final report chapters & operational runbook:** [`docs/report/security.md`](docs/report/security.md) · [`docs/report/aws-and-cicd.md`](docs/report/aws-and-cicd.md) · [`docs/runbook.md`](docs/runbook.md)
 - **REST API & error contract:** [`docs/api-contract.md`](docs/api-contract.md)
 - **Team decision log:** [`docs/decisions.md`](docs/decisions.md)
 - **Defense playbook:** [`docs/testing/defense-playbook.md`](docs/testing/defense-playbook.md)
