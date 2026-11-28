@@ -4342,7 +4342,8 @@ class ReservationServiceTest {
                 oneSecondBeforeEnd,
                 transferService,
                 userApi,
-                reservationHoldRepository);
+                reservationHoldRepository,
+                eventPublisher);
 
         Reservation thirtyMinBooking = new Reservation(
                 USER_ID,
